@@ -1,4 +1,5 @@
 use crate::{RenderCache, derive_settings};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInt, SimdInto, mask8x16, u8x16, u16x16};
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -23,6 +24,7 @@ use vello_cpu::{
 
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
+    level: Level,
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
     pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
@@ -34,7 +36,7 @@ pub(crate) struct Renderer {
 enum ImagePixelFormat {
     Luma,
     Rgb,
-    Rgba,
+    PremultipliedRgba,
 }
 
 struct SolidColorImage {
@@ -100,6 +102,7 @@ impl Renderer {
     ) -> Self {
         Self {
             ctx: RenderContext::new_with(width, height, settings),
+            level: settings.level,
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
             outline_cache: cache.outline_cache.clone(),
@@ -150,6 +153,7 @@ impl Renderer {
                     self.ctx.height(),
                     derive_settings(self.ctx.render_settings()),
                 ),
+                level: self.level,
                 inside_pattern: false,
                 soft_mask_cache: FxHashMap::default(),
                 outline_cache: self.outline_cache.clone(),
@@ -210,16 +214,23 @@ impl Renderer {
                     scaler.plan_rgb_resampling(source_size, target_size)
                 },
             ),
-            ImagePixelFormat::Rgba => self.resize_image_data_impl::<4>(
-                data,
-                src_width,
-                src_height,
-                new_width,
-                new_height,
-                |scaler, source_size, target_size| {
-                    scaler.plan_rgba_resampling(source_size, target_size, true)
-                },
-            ),
+            ImagePixelFormat::PremultipliedRgba => {
+                let mut resized = self.resize_image_data_impl::<4>(
+                    data,
+                    src_width,
+                    src_height,
+                    new_width,
+                    new_height,
+                    |scaler, source_size, target_size| {
+                        scaler.plan_rgba_resampling(source_size, target_size, false)
+                    },
+                );
+
+                // Filtering can cause color channels to become larger than the
+                // alpha, so we need to clamp.
+                clamp_premultiplied_rgba(self.level, &mut resized);
+                resized
+            }
         }
     }
 
@@ -296,6 +307,7 @@ impl Renderer {
 
         // For luma images without alpha, we can resize as single-channel and
         // expand to RGBA afterwards, which is ~4x faster.
+        let mut needs_premultiplication = has_alpha;
         let mut rgba_data = if matches!(&image_data, RenderImageData::Solid(_)) && has_alpha {
             let RenderImageData::Solid(solid) = image_data else {
                 unreachable!()
@@ -442,7 +454,7 @@ impl Renderer {
                 }
             };
 
-            let rgba_data = match alpha_data {
+            let mut rgba_data = match alpha_data {
                 None => rgb_data
                     .chunks_exact(3)
                     .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
@@ -457,13 +469,16 @@ impl Renderer {
             if !needs_resize {
                 rgba_data
             } else {
+                premultiply_rgba(self.level, &mut rgba_data);
+
+                needs_premultiplication = false;
                 let resized = self.resize_image_data(
                     rgba_data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    ImagePixelFormat::Rgba,
+                    ImagePixelFormat::PremultipliedRgba,
                 );
                 additional_transform = Affine::scale_non_uniform(
                     img_width as f64 / new_width as f64,
@@ -475,14 +490,8 @@ impl Renderer {
             }
         };
 
-        if has_alpha {
-            let (chunks, _) = rgba_data.as_chunks_mut::<4>();
-            for chunk in chunks {
-                *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
-                    .premultiply()
-                    .to_rgba8()
-                    .to_u8_array();
-            }
+        if needs_premultiplication {
+            premultiply_rgba(self.level, &mut rgba_data);
         }
 
         // The problem is that by default, when applying a bilinear or bicubic scaling, we will
@@ -721,6 +730,7 @@ impl Renderer {
                                 pix_height,
                                 derive_settings(self.ctx.render_settings()),
                             ),
+                            level: self.level,
                             inside_pattern: true,
                             soft_mask_cache: FxHashMap::default(),
                             outline_cache: self.outline_cache.clone(),
@@ -952,6 +962,7 @@ impl<'a> Device<'a> for Renderer {
                                             height,
                                             derive_settings(self.ctx.render_settings()),
                                         ),
+                                        level: self.level,
                                         inside_pattern: false,
                                         soft_mask_cache: FxHashMap::default(),
                                         outline_cache: self.outline_cache.clone(),
@@ -1163,6 +1174,7 @@ fn render_shading_texture(
 fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
+        level: settings.level,
         inside_pattern: false,
         soft_mask_cache: FxHashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
@@ -1275,4 +1287,83 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     };
 
     peniko::BlendMode::new(mix, Compose::SrcOver)
+}
+
+trait Splat4thExt {
+    fn splat_4th(self) -> Self;
+}
+
+impl<S: Simd> Splat4thExt for u8x16<S> {
+    #[inline(always)]
+    fn splat_4th(self) -> Self {
+        [
+            self[3], self[3], self[3], self[3], self[7], self[7], self[7], self[7], self[11],
+            self[11], self[11], self[11], self[15], self[15], self[15], self[15],
+        ]
+        .simd_into(self.simd)
+    }
+}
+
+fn premultiply_rgba(level: Level, data: &mut [u8]) {
+    let simd_len = data.len() / 16 * 16;
+    let (simd_data, tail) = data.split_at_mut(simd_len);
+
+    #[inline(always)]
+    fn premultiply_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
+        let alpha_lanes =
+            mask8x16::from_slice(simd, &[0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1]);
+        for chunk in data.chunks_exact_mut(16) {
+            let rgba = u8x16::from_slice(simd, chunk);
+            let alphas = rgba.splat_4th();
+            let premultiplied = (simd.widen_u8x16(rgba) * simd.widen_u8x16(alphas)).div_255();
+            let premultiplied = simd.narrow_u16x16(premultiplied);
+            alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
+        }
+    }
+
+    fearless_simd::dispatch!(level, simd => premultiply_rgba_simd(simd, simd_data));
+
+    for pixel in tail.chunks_exact_mut(4) {
+        let alpha = u16::from(pixel[3]);
+        pixel[0] = div_255(u16::from(pixel[0]) * alpha) as u8;
+        pixel[1] = div_255(u16::from(pixel[1]) * alpha) as u8;
+        pixel[2] = div_255(u16::from(pixel[2]) * alpha) as u8;
+    }
+}
+
+fn clamp_premultiplied_rgba(level: Level, data: &mut [u8]) {
+    let simd_len = data.len() / 16 * 16;
+    let (simd_data, tail) = data.split_at_mut(simd_len);
+
+    #[inline(always)]
+    fn clamp_premultiplied_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
+        for chunk in data.chunks_exact_mut(16) {
+            let rgba = u8x16::from_slice(simd, chunk);
+            rgba.min(rgba.splat_4th()).store_slice(chunk);
+        }
+    }
+
+    fearless_simd::dispatch!(level, simd => clamp_premultiplied_rgba_simd(simd, simd_data));
+
+    for pixel in tail.chunks_exact_mut(4) {
+        pixel[0] = pixel[0].min(pixel[3]);
+        pixel[1] = pixel[1].min(pixel[3]);
+        pixel[2] = pixel[2].min(pixel[3]);
+    }
+}
+
+trait Div255Ext {
+    fn div_255(self) -> Self;
+}
+
+impl<S: Simd> Div255Ext for u16x16<S> {
+    #[inline(always)]
+    fn div_255(self) -> Self {
+        (self + Self::splat(self.simd, 255)) >> 8
+    }
+}
+
+#[inline(always)]
+const fn div_255(value: u16) -> u16 {
+    (value + 255) >> 8
 }
