@@ -72,7 +72,7 @@ impl Indexed {
         self.base.convert(&indexed, output)
     }
 
-    fn u8_lookup(&self) -> Option<&[[u8; 3]]> {
+    fn u8_lookup(&self) -> Option<&[[u8; 3]; 256]> {
         self.lookup
             .get_or_init(|input, output| self.convert_inner(input, output))
     }
