@@ -1,4 +1,4 @@
-use super::ToRgb;
+use super::{ColorComponent, ToRgb};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, WHITE_POINT};
 
@@ -25,8 +25,8 @@ impl CalGray {
 }
 
 impl ToRgb for CalGray {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        for (input, output) in input.iter().copied().zip(output.chunks_exact_mut(3)) {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
             let g = self.gamma;
             let (_xw, yw, _zw) = {
                 let wp = self.white_point;
@@ -37,7 +37,7 @@ impl ToRgb for CalGray {
                 (bp[0], bp[1], bp[2])
             };
 
-            let a = input;
+            let a = input.to_f32() / T::MAX_F32;
             let ag = a.powf(g);
             let l = yw * ag;
             let val = (0.0_f32.max(295.8 * l.powf(0.333_333_34) - 40.8) + 0.5) as u8;

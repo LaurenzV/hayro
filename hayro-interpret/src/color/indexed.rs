@@ -1,11 +1,11 @@
-use super::{ColorSpace, ToRgb};
+use super::{ColorComponent, ColorSpace, ToRgb};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Indexed {
-    values: Vec<Vec<f32>>,
+    values: Vec<Vec<u8>>,
     hival: u8,
     base: Box<ColorSpace>,
 }
@@ -36,7 +36,7 @@ impl Indexed {
                 let mut temp = vec![];
 
                 for _ in 0..num_components {
-                    temp.push(byte_iter.next()? as f32 / 255.0);
+                    temp.push(byte_iter.next()?);
                 }
 
                 vals.push(temp);
@@ -51,21 +51,24 @@ impl Indexed {
             base: Box::new(base_color_space),
         })
     }
+
+    pub(super) fn hival(&self) -> u8 {
+        self.hival
+    }
 }
 
 impl ToRgb for Indexed {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let mut indexed = vec![0.0; input.len() * self.base.num_components() as usize];
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        let mut indexed = vec![0; input.len() * self.base.num_components() as usize];
 
         for (input, output) in input
             .iter()
-            .copied()
             .zip(indexed.chunks_exact_mut(self.base.num_components() as usize))
         {
-            let idx = (input.clamp(0.0, self.hival as f32) + 0.5) as usize;
+            let idx = (input.to_f32() * self.hival as f32 / T::MAX_F32 + 0.5) as usize;
             output.copy_from_slice(&self.values[idx]);
         }
 
-        self.base.convert_f32(&indexed, output, true)
+        self.base.convert(&indexed, output)
     }
 }

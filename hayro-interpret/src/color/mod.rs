@@ -36,6 +36,69 @@ use std::sync::Arc;
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
+pub(crate) enum ColorComponentSlice<'a> {
+    U8(&'a [u8]),
+    U16(&'a [u16]),
+}
+
+pub(crate) trait ColorComponent: Copy {
+    const MAX_F32: f32;
+
+    fn to_f32(self) -> f32;
+    fn from_unit(value: f32) -> Self;
+    fn to_u8(self) -> u8;
+    fn inverted(self) -> Self;
+    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_>;
+}
+
+impl ColorComponent for u8 {
+    const MAX_F32: f32 = Self::MAX as f32;
+
+    fn to_f32(self) -> f32 {
+        self as f32
+    }
+
+    fn from_unit(value: f32) -> Self {
+        (value * Self::MAX_F32 + 0.5) as Self
+    }
+
+    fn to_u8(self) -> u8 {
+        self
+    }
+
+    fn inverted(self) -> Self {
+        Self::MAX - self
+    }
+
+    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_> {
+        ColorComponentSlice::U8(values)
+    }
+}
+
+impl ColorComponent for u16 {
+    const MAX_F32: f32 = Self::MAX as f32;
+
+    fn to_f32(self) -> f32 {
+        self as f32
+    }
+
+    fn from_unit(value: f32) -> Self {
+        (value * Self::MAX_F32 + 0.5) as Self
+    }
+
+    fn to_u8(self) -> u8 {
+        ((self as u32 * u8::MAX as u32 + Self::MAX as u32 / 2) / Self::MAX as u32) as u8
+    }
+
+    fn inverted(self) -> Self {
+        Self::MAX - self
+    }
+
+    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_> {
+        ColorComponentSlice::U16(values)
+    }
+}
+
 /// An RGB color with an alpha channel.
 #[derive(Debug, Copy, Clone)]
 pub struct AlphaColor {
@@ -301,6 +364,39 @@ impl ColorSpace {
             .collect()
     }
 
+    pub(crate) fn component_ranges(&self) -> SmallVec<[(f32, f32); 4]> {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk(_) => smallvec![(0.0, 1.0); 4],
+            ColorSpaceType::DeviceGray(_) => smallvec![(0.0, 1.0)],
+            ColorSpaceType::DeviceRgb(_) => smallvec![(0.0, 1.0); 3],
+            ColorSpaceType::ICCBased(i) => smallvec![(0.0, 1.0); i.number_components()],
+            ColorSpaceType::CalGray(_) => smallvec![(0.0, 1.0)],
+            ColorSpaceType::CalRgb(_) => smallvec![(0.0, 1.0); 3],
+            ColorSpaceType::Lab(_) => {
+                smallvec![(0.0, 100.0), (-128.0, 127.0), (-128.0, 127.0)]
+            }
+            ColorSpaceType::Indexed(i) => smallvec![(0.0, i.hival() as f32)],
+            ColorSpaceType::Separation(_) => smallvec![(0.0, 1.0)],
+            ColorSpaceType::Pattern(pattern) => pattern.color_space().component_ranges(),
+            ColorSpaceType::DeviceN(d) => smallvec![(0.0, 1.0); d.num_components as usize],
+        }
+    }
+
+    pub(crate) fn convert_values(&self, input: &[f32], output: &mut [u8]) -> Option<()> {
+        let converted = self.encode_values::<u8>(input);
+        self.convert(&converted, output)
+    }
+
+    pub(crate) fn encode_values<T: ColorComponent>(&self, input: &[f32]) -> SmallVec<[T; 4]> {
+        let ranges = match self.0.as_ref() {
+            ColorSpaceType::ICCBased(icc) if icc.is_lab() => {
+                smallvec![(0.0, 100.0), (-128.0, 127.0), (-128.0, 127.0)]
+            }
+            _ => self.component_ranges(),
+        };
+        encode_components(input, &ranges)
+    }
+
     /// Get the initial color of the color space.
     pub(crate) fn initial_color(&self) -> ColorComponents {
         match self.0.as_ref() {
@@ -350,7 +446,7 @@ impl ColorSpace {
 
     /// Turn the given component values and opacity into an RGBA color.
     #[inline]
-    pub fn to_rgba(&self, c: &[f32], opacity: f32, manual_scale: bool) -> AlphaColor {
+    pub fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor {
         let alpha = f32_to_u8(opacity);
 
         match self.0.as_ref() {
@@ -373,66 +469,51 @@ impl ColorSpace {
                 ];
                 let mut output = [0; 3];
 
-                if device_cmyk.convert_u8(&input, &mut output).is_some() {
+                if device_cmyk.convert(&input, &mut output).is_some() {
                     AlphaColor::from_rgba8(output[0], output[1], output[2], alpha)
                 } else {
                     AlphaColor::BLACK
                 }
             }
-            _ => self
-                .to_alpha_color(c, opacity, manual_scale)
-                .unwrap_or(AlphaColor::BLACK),
+            _ => self.to_alpha_color(c, opacity).unwrap_or(AlphaColor::BLACK),
         }
+    }
+
+    fn to_alpha_color(&self, input: &[f32], mut opacity: f32) -> Option<AlphaColor> {
+        let mut output = [0; 3];
+        self.convert_values(input, &mut output)?;
+
+        // For separation color spaces:
+        // "The special colourant name None shall not produce any visible output.
+        // Painting operations in a Separation space with this colourant name
+        // shall have no effect on the current page."
+        if self.is_none() {
+            opacity = 0.0;
+        }
+
+        Some(AlphaColor::from_rgba8(
+            output[0],
+            output[1],
+            output[2],
+            (opacity * 255.0 + 0.5) as u8,
+        ))
     }
 }
 
 impl ToRgb for ColorSpace {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         match self.0.as_ref() {
-            ColorSpaceType::DeviceCmyk(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::DeviceGray(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::DeviceRgb(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::Pattern(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::Indexed(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::ICCBased(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::CalGray(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::CalRgb(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::Lab(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::Separation(i) => i.convert_f32(input, output, manual_scale),
-            ColorSpaceType::DeviceN(i) => i.convert_f32(input, output, manual_scale),
-        }
-    }
-
-    fn supports_u8(&self) -> bool {
-        match self.0.as_ref() {
-            ColorSpaceType::DeviceCmyk(i) => i.supports_u8(),
-            ColorSpaceType::DeviceGray(i) => i.supports_u8(),
-            ColorSpaceType::DeviceRgb(i) => i.supports_u8(),
-            ColorSpaceType::Pattern(i) => i.supports_u8(),
-            ColorSpaceType::Indexed(i) => i.supports_u8(),
-            ColorSpaceType::ICCBased(i) => i.supports_u8(),
-            ColorSpaceType::CalGray(i) => i.supports_u8(),
-            ColorSpaceType::CalRgb(i) => i.supports_u8(),
-            ColorSpaceType::Lab(i) => i.supports_u8(),
-            ColorSpaceType::Separation(i) => i.supports_u8(),
-            ColorSpaceType::DeviceN(i) => i.supports_u8(),
-        }
-    }
-
-    #[inline]
-    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        match self.0.as_ref() {
-            ColorSpaceType::DeviceCmyk(i) => i.convert_u8(input, output),
-            ColorSpaceType::DeviceGray(i) => i.convert_u8(input, output),
-            ColorSpaceType::DeviceRgb(i) => i.convert_u8(input, output),
-            ColorSpaceType::Pattern(i) => i.convert_u8(input, output),
-            ColorSpaceType::Indexed(i) => i.convert_u8(input, output),
-            ColorSpaceType::ICCBased(i) => i.convert_u8(input, output),
-            ColorSpaceType::CalGray(i) => i.convert_u8(input, output),
-            ColorSpaceType::CalRgb(i) => i.convert_u8(input, output),
-            ColorSpaceType::Lab(i) => i.convert_u8(input, output),
-            ColorSpaceType::Separation(i) => i.convert_u8(input, output),
-            ColorSpaceType::DeviceN(i) => i.convert_u8(input, output),
+            ColorSpaceType::DeviceCmyk(i) => i.convert(input, output),
+            ColorSpaceType::DeviceGray(i) => i.convert(input, output),
+            ColorSpaceType::DeviceRgb(i) => i.convert(input, output),
+            ColorSpaceType::Pattern(i) => i.convert(input, output),
+            ColorSpaceType::Indexed(i) => i.convert(input, output),
+            ColorSpaceType::ICCBased(i) => i.convert(input, output),
+            ColorSpaceType::CalGray(i) => i.convert(input, output),
+            ColorSpaceType::CalRgb(i) => i.convert(input, output),
+            ColorSpaceType::Lab(i) => i.convert(input, output),
+            ColorSpaceType::Separation(i) => i.convert(input, output),
+            ColorSpaceType::DeviceN(i) => i.convert(input, output),
         }
     }
 
@@ -470,8 +551,7 @@ impl Color {
     /// Return the color as an RGBA color.
     #[inline]
     pub fn to_rgba(&self) -> AlphaColor {
-        self.color_space
-            .to_rgba(&self.components, self.opacity, false)
+        self.color_space.to_rgba(&self.components, self.opacity)
     }
 
     /// Create a color from RGBA.
@@ -487,57 +567,20 @@ impl Color {
 }
 
 pub(crate) trait ToRgb {
-    fn convert_sample(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
-        // We prefer using the u8 variant for single samples, which is especially
-        // important for ICC profiles to avoid constructing the (more expensive)
-        // f32 variant.
-        if self.supports_u8() {
-            let converted = input
-                .iter()
-                .copied()
-                .map(f32_to_u8)
-                .collect::<SmallVec<[u8; 4]>>();
-
-            if self.convert_u8(&converted, output).is_some() {
-                return Some(());
-            }
-        }
-
-        self.convert_f32(input, output, manual_scale)
-    }
-
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()>;
-    fn supports_u8(&self) -> bool {
-        false
-    }
-    fn convert_u8(&self, _: &[u8], _: &mut [u8]) -> Option<()> {
-        unimplemented!();
-    }
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()>;
     fn is_none(&self) -> bool {
         false
     }
-    fn to_alpha_color(
-        &self,
-        input: &[f32],
-        mut opacity: f32,
-        manual_scale: bool,
-    ) -> Option<AlphaColor> {
-        let mut output = [0; 3];
-        self.convert_sample(input, &mut output, manual_scale)?;
+}
 
-        // For separation color spaces:
-        // "The special colourant name None shall not produce any visible output.
-        // Painting operations in a Separation space with this colourant name
-        // shall have no effect on the current page."
-        if self.is_none() {
-            opacity = 0.0;
-        }
-
-        Some(AlphaColor::from_rgba8(
-            output[0],
-            output[1],
-            output[2],
-            (opacity * 255.0 + 0.5) as u8,
-        ))
-    }
+#[inline]
+fn encode_components<T: ColorComponent>(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[T; 4]> {
+    input
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let (min, max) = ranges[index % ranges.len()];
+            T::from_unit((*value - min) / (max - min))
+        })
+        .collect()
 }
