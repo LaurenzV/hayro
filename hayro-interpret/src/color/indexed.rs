@@ -1,4 +1,4 @@
-use super::{ColorComponent, ColorComponentSlice, ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
@@ -58,14 +58,14 @@ impl Indexed {
         self.hival
     }
 
-    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         let mut indexed = vec![0; input.len() * self.base.num_components() as usize];
 
         for (input, output) in input
             .iter()
             .zip(indexed.chunks_exact_mut(self.base.num_components() as usize))
         {
-            let idx = (input.to_f32() * self.hival as f32 / T::MAX_F32 + 0.5) as usize;
+            let idx = (*input).min(self.hival) as usize;
             output.copy_from_slice(&self.values[idx]);
         }
 
@@ -79,13 +79,9 @@ impl Indexed {
 }
 
 impl ToRgb for Indexed {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
-        if let ColorComponentSlice::U8(input) = T::as_slice(input) {
-            apply_u8_lookup(input, output, self.u8_lookup()?);
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        apply_u8_lookup(input, output, self.u8_lookup()?);
 
-            Some(())
-        } else {
-            self.convert_inner(input, output)
-        }
+        Some(())
     }
 }

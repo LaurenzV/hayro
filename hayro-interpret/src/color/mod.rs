@@ -36,21 +36,6 @@ use std::sync::{Arc, OnceLock};
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
-pub(crate) enum ColorComponentSlice<'a> {
-    U8(&'a [u8]),
-    U16(&'a [u16]),
-}
-
-pub(crate) trait ColorComponent: Copy {
-    const MAX_F32: f32;
-
-    fn to_f32(self) -> f32;
-    fn from_unit(value: f32) -> Self;
-    fn to_u8(self) -> u8;
-    fn inverted(self) -> Self;
-    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_>;
-}
-
 #[derive(Clone, Default)]
 pub(super) struct U8Lookup(Arc<OnceLock<Option<Vec<[u8; 3]>>>>);
 
@@ -85,54 +70,6 @@ impl U8Lookup {
 pub(super) fn apply_u8_lookup(input: &[u8], output: &mut [u8], lookup: &[[u8; 3]]) {
     for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
         output.copy_from_slice(&lookup[*input as usize]);
-    }
-}
-
-impl ColorComponent for u8 {
-    const MAX_F32: f32 = Self::MAX as f32;
-
-    fn to_f32(self) -> f32 {
-        self as f32
-    }
-
-    fn from_unit(value: f32) -> Self {
-        (value * Self::MAX_F32 + 0.5) as Self
-    }
-
-    fn to_u8(self) -> u8 {
-        self
-    }
-
-    fn inverted(self) -> Self {
-        Self::MAX - self
-    }
-
-    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_> {
-        ColorComponentSlice::U8(values)
-    }
-}
-
-impl ColorComponent for u16 {
-    const MAX_F32: f32 = Self::MAX as f32;
-
-    fn to_f32(self) -> f32 {
-        self as f32
-    }
-
-    fn from_unit(value: f32) -> Self {
-        (value * Self::MAX_F32 + 0.5) as Self
-    }
-
-    fn to_u8(self) -> u8 {
-        ((self as u32 * u8::MAX as u32 + Self::MAX as u32 / 2) / Self::MAX as u32) as u8
-    }
-
-    fn inverted(self) -> Self {
-        Self::MAX - self
-    }
-
-    fn as_slice(values: &[Self]) -> ColorComponentSlice<'_> {
-        ColorComponentSlice::U16(values)
     }
 }
 
@@ -370,6 +307,14 @@ impl ColorSpace {
         matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
     }
 
+    pub(crate) fn indexed_hival(&self) -> Option<u8> {
+        match self.0.as_ref() {
+            ColorSpaceType::Indexed(indexed) => Some(indexed.hival()),
+            ColorSpaceType::Pattern(pattern) => pattern.color_space().indexed_hival(),
+            _ => None,
+        }
+    }
+
     /// Get the default decode array for the color space.
     pub(crate) fn default_decode_arr(&self, n: f32) -> SmallVec<[(f32, f32); 4]> {
         match self.0.as_ref() {
@@ -420,11 +365,18 @@ impl ColorSpace {
     }
 
     pub(crate) fn convert_values(&self, input: &[f32], output: &mut [u8]) -> Option<()> {
-        let converted = self.encode_values::<u8>(input);
+        let converted = self.encode_values(input);
         self.convert(&converted, output)
     }
 
-    pub(crate) fn encode_values<T: ColorComponent>(&self, input: &[f32]) -> SmallVec<[T; 4]> {
+    pub(crate) fn encode_values(&self, input: &[f32]) -> SmallVec<[u8; 4]> {
+        if let Some(hival) = self.indexed_hival() {
+            return input
+                .iter()
+                .map(|value| (*value + 0.5).clamp(0.0, hival as f32) as u8)
+                .collect();
+        }
+
         let ranges = match self.0.as_ref() {
             ColorSpaceType::ICCBased(icc) if icc.is_lab() => {
                 smallvec![(0.0, 100.0), (-128.0, 127.0), (-128.0, 127.0)]
@@ -538,7 +490,7 @@ impl ColorSpace {
 }
 
 impl ToRgb for ColorSpace {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk(i) => i.convert(input, output),
             ColorSpaceType::DeviceGray(i) => i.convert(input, output),
@@ -604,20 +556,20 @@ impl Color {
 }
 
 pub(crate) trait ToRgb {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()>;
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()>;
     fn is_none(&self) -> bool {
         false
     }
 }
 
 #[inline]
-fn encode_components<T: ColorComponent>(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[T; 4]> {
+fn encode_components(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[u8; 4]> {
     input
         .iter()
         .enumerate()
         .map(|(index, value)| {
             let (min, max) = ranges[index % ranges.len()];
-            T::from_unit((*value - min) / (max - min))
+            (((*value - min) / (max - min)) * 255.0 + 0.5) as u8
         })
         .collect()
 }

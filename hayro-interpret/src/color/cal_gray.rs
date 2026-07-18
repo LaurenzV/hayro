@@ -1,4 +1,4 @@
-use super::{ColorComponent, ColorComponentSlice, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ToRgb, U8Lookup, apply_u8_lookup};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, WHITE_POINT};
 
@@ -25,7 +25,7 @@ impl CalGray {
         })
     }
 
-    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
             let g = self.gamma;
             let (_xw, yw, _zw) = {
@@ -37,7 +37,7 @@ impl CalGray {
                 (bp[0], bp[1], bp[2])
             };
 
-            let a = input.to_f32() / T::MAX_F32;
+            let a = *input as f32 / 255.0;
             let ag = a.powf(g);
             let l = yw * ag;
             let val = (0.0_f32.max(295.8 * l.powf(0.333_333_34) - 40.8) + 0.5) as u8;
@@ -55,13 +55,9 @@ impl CalGray {
 }
 
 impl ToRgb for CalGray {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
-        if let ColorComponentSlice::U8(input) = T::as_slice(input) {
-            apply_u8_lookup(input, output, self.u8_lookup()?);
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        apply_u8_lookup(input, output, self.u8_lookup()?);
 
-            Some(())
-        } else {
-            self.convert_inner(input, output)
-        }
+        Some(())
     }
 }

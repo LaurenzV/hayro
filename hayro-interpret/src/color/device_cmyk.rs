@@ -1,12 +1,12 @@
+use super::ToRgb;
 use super::icc::ICCProfile;
-use super::{ColorComponent, ToRgb};
 use std::sync::LazyLock;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceCmyk;
 
 impl ToRgb for DeviceCmyk {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         CMYK_TRANSFORM.convert(input, output)
     }
 }

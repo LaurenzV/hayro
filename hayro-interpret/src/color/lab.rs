@@ -1,5 +1,5 @@
+use super::ToRgb;
 use super::icc::ICCProfile;
-use super::{ColorComponent, ToRgb};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{BLACK_POINT, RANGE, WHITE_POINT};
 use moxcms::{ColorProfile, Xyzd};
@@ -34,7 +34,7 @@ impl Lab {
 }
 
 impl ToRgb for Lab {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         self.profile.convert(input, output)
     }
 }
