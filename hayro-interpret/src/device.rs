@@ -1,5 +1,5 @@
 use crate::font::Glyph;
-use crate::soft_mask::SoftMask;
+use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
 use kurbo::{Affine, BezPath, Rect, Shape};

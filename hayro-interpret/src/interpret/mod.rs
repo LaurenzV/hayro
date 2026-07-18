@@ -12,9 +12,7 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
 use crate::util::{OptionLog, RectExt};
-use crate::x_object::{
-    FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
-};
+use crate::x_object::{FormXObject, ImageXObject, XObject};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, MCID, N, OC, RECT};
@@ -204,7 +202,7 @@ pub fn interpret_page<'a>(
                 context.pre_concat_affine(affine);
                 context.push_root_transform();
 
-                draw_form_xobject(resources, &apx, context, device);
+                apx.draw(resources, context, device);
                 context.pop_root_transform();
                 context.restore_state(device);
             }
@@ -674,7 +672,7 @@ pub fn interpret<'a>(
                         transfer_function.clone(),
                     )
                 }) {
-                    draw_xobject(&x_object, resources, context, device);
+                    x_object.draw(resources, context, device);
                 }
             }
             TypedInstruction::InlineImage(i) => {
@@ -686,10 +684,9 @@ pub fn interpret<'a>(
                     |name| context.get_color_space(resources, name),
                     &warning_sink,
                     &cache,
-                    false,
                     transfer_function,
                 ) {
-                    draw_image_xobject(&x_object, context, device);
+                    x_object.draw(context, device);
                 }
             }
             TypedInstruction::TextRise(t) => {
