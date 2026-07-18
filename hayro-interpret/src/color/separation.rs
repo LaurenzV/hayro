@@ -1,4 +1,4 @@
-use super::{ColorComponent, ColorComponentSlice, ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
@@ -32,17 +32,17 @@ impl Separation {
         })
     }
 
-    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         let evaluated = input
             .iter()
             .flat_map(|n| {
                 let values = self
                     .tint_transform
-                    .eval(smallvec![n.to_f32() / T::MAX_F32])
+                    .eval(smallvec![*n as f32 / 255.0])
                     .unwrap_or(self.alternate_space.initial_color());
-                self.alternate_space.encode_values::<T>(&values)
+                self.alternate_space.encode_values(&values)
             })
-            .collect::<Vec<T>>();
+            .collect::<Vec<u8>>();
         self.alternate_space.convert(&evaluated, output)
     }
 
@@ -53,14 +53,10 @@ impl Separation {
 }
 
 impl ToRgb for Separation {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
-        if let ColorComponentSlice::U8(input) = T::as_slice(input) {
-            apply_u8_lookup(input, output, self.u8_lookup()?);
+    fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        apply_u8_lookup(input, output, self.u8_lookup()?);
 
-            Some(())
-        } else {
-            self.convert_inner(input, output)
-        }
+        Some(())
     }
 
     fn is_none(&self) -> bool {

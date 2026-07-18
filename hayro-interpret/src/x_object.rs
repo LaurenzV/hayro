@@ -1,5 +1,5 @@
 use crate::cache::Cache;
-use crate::color::{ColorComponent, ColorComponents, ColorSpace, ToRgb};
+use crate::color::{ColorComponents, ColorSpace, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
@@ -585,18 +585,25 @@ fn decode_raster(
             unreachable!()
         }
     } else {
-        let mut components = get_native_components(
+        let mut components = get_u8_components(
             &ctx.decoded.data,
             ctx.width,
             height,
             &ctx.color_space,
             ctx.bits_per_component,
+            &ctx.decode_arr,
         )?;
 
-        components.fix_image_length(ctx.width, &mut height, &ctx.color_space)?;
-        components.apply_decode(&ctx.color_space, ctx.bits_per_component, &ctx.decode_arr)?;
+        fix_image_length(
+            components.to_mut(),
+            ctx.width,
+            &mut height,
+            0,
+            &ctx.color_space,
+        )?;
 
-        let mut rgb_data = components.get_rgb_data(
+        let mut rgb_data = get_rgb_data(
+            &components,
             ctx.width,
             height,
             ctx.scale_factors,
@@ -868,8 +875,8 @@ fn unpremultiply(image: &mut ImageData, alpha: &[u8], matte_rgb: &[u8]) {
     }
 }
 
-fn get_rgb_data<T: ColorComponent>(
-    decoded: &[T],
+fn get_rgb_data(
+    decoded: &[u8],
     width: u32,
     height: u32,
     scale_factors: (f32, f32),
@@ -928,122 +935,77 @@ fn fix_image_length<T: Copy>(
     }
 }
 
-enum NativeComponents<'a> {
-    U8(Cow<'a, [u8]>),
-    U16(Vec<u16>),
-}
-
-impl NativeComponents<'_> {
-    fn fix_image_length(
-        &mut self,
-        width: u32,
-        height: &mut u32,
-        color_space: &ColorSpace,
-    ) -> Option<()> {
-        match self {
-            Self::U8(data) => {
-                let expected =
-                    width as usize * *height as usize * color_space.num_components() as usize;
-
-                if data.len() == expected {
-                    (width != 0 && *height != 0).then_some(())
-                } else {
-                    fix_image_length(data.to_mut(), width, height, 0, color_space)
-                }
-            }
-            Self::U16(data) => fix_image_length(data, width, height, 0, color_space),
-        }
-    }
-
-    fn apply_decode(
-        &mut self,
-        color_space: &ColorSpace,
-        bits_per_component: u8,
-        decode: &[(f32, f32)],
-    ) -> Option<()> {
-        match self {
-            Self::U8(data) => {
-                if decode_is_identity::<u8>(color_space, bits_per_component, decode) {
-                    Some(())
-                } else {
-                    apply_decode_array(data.to_mut(), color_space, bits_per_component, decode)
-                }
-            }
-            Self::U16(data) => apply_decode_array(data, color_space, bits_per_component, decode),
-        }
-    }
-
-    fn get_rgb_data(
-        &self,
-        width: u32,
-        height: u32,
-        scale_factors: (f32, f32),
-        color_space: &ColorSpace,
-        interpolate: bool,
-    ) -> Option<RgbData> {
-        match self {
-            Self::U8(data) => {
-                get_rgb_data(data, width, height, scale_factors, color_space, interpolate)
-            }
-            Self::U16(data) => {
-                get_rgb_data(data, width, height, scale_factors, color_space, interpolate)
-            }
-        }
-    }
-}
-
-fn get_native_components<'a>(
+fn get_u8_components<'a>(
     data: &'a [u8],
     width: u32,
     height: u32,
     color_space: &ColorSpace,
     bits_per_component: u8,
-) -> Option<NativeComponents<'a>> {
+    decode: &[(f32, f32)],
+) -> Option<Cow<'a, [u8]>> {
+    if decode_is_identity(color_space, bits_per_component, decode) {
+        return Some(Cow::Borrowed(data));
+    }
+
     let num_components = color_space.num_components() as usize;
     let capacity = width as usize * height as usize * num_components;
+    let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
+    let ranges = color_space.component_ranges();
+    let indexed_hival = color_space.indexed_hival();
+
+    let decode_component = |value: u32, index: usize| {
+        let component_index = index % num_components;
+        let (decode_min, decode_max) = *decode.get(component_index)?;
+        let decoded = interpolate(value as f32, 0.0, source_max, decode_min, decode_max);
+
+        if let Some(hival) = indexed_hival {
+            Some((decoded + 0.5).clamp(0.0, hival as f32) as u8)
+        } else {
+            let (range_min, range_max) = *ranges.get(component_index)?;
+            let normalized = if range_min == range_max {
+                0.0
+            } else {
+                (decoded - range_min) / (range_max - range_min)
+            };
+            Some((normalized * 255.0 + 0.5) as u8)
+        }
+    };
 
     match bits_per_component {
-        1..8 => {
+        1..8 | 9..16 => {
             let mut buf = Vec::with_capacity(capacity);
             let mut reader = BitReader::new(data);
+            let mut index = 0;
 
             for _ in 0..height {
                 for _ in 0..width {
                     for _ in 0..num_components {
                         // See `stream_ccit_not_enough_data`, some images seemingly don't have
                         // enough data, so we just pad with zeroes in this case.
-                        buf.push(reader.read(bits_per_component).unwrap_or(0) as u8);
+                        let value = reader.read(bits_per_component).unwrap_or(0);
+                        buf.push(decode_component(value, index)?);
+                        index += 1;
                     }
                 }
 
                 reader.align();
             }
 
-            Some(NativeComponents::U8(Cow::Owned(buf)))
+            Some(Cow::Owned(buf))
         }
-        8 => Some(NativeComponents::U8(Cow::Borrowed(data))),
-        9..16 => {
-            let mut buf = Vec::with_capacity(capacity);
-            let mut reader = BitReader::new(data);
-
-            for _ in 0..height {
-                for _ in 0..width {
-                    for _ in 0..num_components {
-                        // See `stream_ccit_not_enough_data`, some images seemingly don't have
-                        // enough data, so we just pad with zeroes in this case.
-                        buf.push(reader.read(bits_per_component).unwrap_or(0) as u16);
-                    }
-                }
-
-                reader.align();
-            }
-
-            Some(NativeComponents::U16(buf))
-        }
-        16 => Some(NativeComponents::U16(
+        8 => Some(Cow::Owned(
+            data.iter()
+                .enumerate()
+                .map(|(index, value)| decode_component(*value as u32, index))
+                .collect::<Option<Vec<_>>>()?,
+        )),
+        16 => Some(Cow::Owned(
             data.chunks_exact(2)
-                .map(|value| u16::from_be_bytes([value[0], value[1]]))
-                .collect(),
+                .enumerate()
+                .map(|(index, value)| {
+                    decode_component(u16::from_be_bytes([value[0], value[1]]) as u32, index)
+                })
+                .collect::<Option<Vec<_>>>()?,
         )),
         _ => {
             warn!("unsupported bits per component: {bits_per_component}");
@@ -1059,59 +1021,46 @@ fn get_components(
     color_space: &ColorSpace,
     bits_per_component: u8,
 ) -> Option<Vec<u16>> {
-    match get_native_components(data, width, height, color_space, bits_per_component)? {
-        NativeComponents::U8(data) => Some(data.iter().map(|value| *value as u16).collect()),
-        NativeComponents::U16(data) => Some(data),
+    let num_components = color_space.num_components() as usize;
+    let capacity = width as usize * height as usize * num_components;
+
+    match bits_per_component {
+        1..8 | 9..16 => {
+            let mut buf = Vec::with_capacity(capacity);
+            let mut reader = BitReader::new(data);
+
+            for _ in 0..height {
+                for _ in 0..width {
+                    for _ in 0..num_components {
+                        // See `stream_ccit_not_enough_data`, some images seemingly don't have
+                        // enough data, so we just pad with zeroes in this case.
+                        buf.push(reader.read(bits_per_component).unwrap_or(0) as u16);
+                    }
+                }
+
+                reader.align();
+            }
+
+            Some(buf)
+        }
+        8 => Some(data.iter().map(|value| *value as u16).collect()),
+        16 => Some(
+            data.chunks_exact(2)
+                .map(|value| u16::from_be_bytes([value[0], value[1]]))
+                .collect(),
+        ),
+        _ => {
+            warn!("unsupported bits per component: {bits_per_component}");
+            None
+        }
     }
 }
 
-fn decode_is_identity<T: ColorComponent>(
+fn decode_is_identity(
     color_space: &ColorSpace,
     bits_per_component: u8,
     decode: &[(f32, f32)],
 ) -> bool {
     let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
-    source_max == T::MAX_F32 && decode == color_space.component_ranges().as_slice()
-}
-
-fn apply_decode_array<T: ColorComponent>(
-    components: &mut [T],
-    color_space: &ColorSpace,
-    bits_per_component: u8,
-    decode: &[(f32, f32)],
-) -> Option<()> {
-    if decode_is_identity::<T>(color_space, bits_per_component, decode) {
-        return Some(());
-    }
-
-    let ranges = color_space.component_ranges();
-    let inverted_ranges = ranges
-        .iter()
-        .map(|(min, max)| (*max, *min))
-        .collect::<SmallVec<[(f32, f32); 4]>>();
-    let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
-
-    if source_max == T::MAX_F32 && decode == inverted_ranges.as_slice() {
-        for component in components {
-            *component = component.inverted();
-        }
-
-        return Some(());
-    }
-
-    let num_components = color_space.num_components() as usize;
-    for (index, component) in components.iter_mut().enumerate() {
-        let component_index = index % num_components;
-        let (decode_min, decode_max) = *decode.get(component_index)?;
-        let (range_min, range_max) = *ranges.get(component_index)?;
-        let decoded = interpolate(component.to_f32(), 0.0, source_max, decode_min, decode_max);
-        let normalized = if range_min == range_max {
-            0.0
-        } else {
-            (decoded - range_min) / (range_max - range_min)
-        };
-        *component = T::from_unit(normalized);
-    }
-
-    Some(())
+    source_max == u8::MAX as f32 && decode == color_space.component_ranges().as_slice()
 }
