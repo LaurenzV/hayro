@@ -31,7 +31,7 @@ use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
@@ -49,6 +49,43 @@ pub(crate) trait ColorComponent: Copy {
     fn to_u8(self) -> u8;
     fn inverted(self) -> Self;
     fn as_slice(values: &[Self]) -> ColorComponentSlice<'_>;
+}
+
+#[derive(Clone, Default)]
+pub(super) struct U8Lookup(Arc<OnceLock<Option<Vec<[u8; 3]>>>>);
+
+impl std::fmt::Debug for U8Lookup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("U8Lookup")
+    }
+}
+
+impl U8Lookup {
+    pub(super) fn get_or_init(
+        &self,
+        convert: impl FnOnce(&[u8], &mut [u8]) -> Option<()>,
+    ) -> Option<&[[u8; 3]]> {
+        self.0
+            .get_or_init(|| {
+                let input: [u8; 256] = core::array::from_fn(|index| index as u8);
+                let mut output = vec![0; 256 * 3];
+                convert(&input, &mut output)?;
+
+                Some(
+                    output
+                        .chunks_exact(3)
+                        .map(|rgb| [rgb[0], rgb[1], rgb[2]])
+                        .collect(),
+                )
+            })
+            .as_deref()
+    }
+}
+
+pub(super) fn apply_u8_lookup(input: &[u8], output: &mut [u8], lookup: &[[u8; 3]]) {
+    for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
+        output.copy_from_slice(&lookup[*input as usize]);
+    }
 }
 
 impl ColorComponent for u8 {

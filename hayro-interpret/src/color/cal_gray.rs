@@ -1,4 +1,4 @@
-use super::{ColorComponent, ToRgb};
+use super::{ColorComponent, ColorComponentSlice, ToRgb, U8Lookup, apply_u8_lookup};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, WHITE_POINT};
 
@@ -7,6 +7,7 @@ pub(crate) struct CalGray {
     white_point: [f32; 3],
     black_point: [f32; 3],
     gamma: f32,
+    lookup: U8Lookup,
 }
 
 // See <https://github.com/mozilla/pdf.js/blob/06f44916c8936b92f464d337fe3a0a6b2b78d5b4/src/core/colorspace.js#L752>
@@ -20,12 +21,11 @@ impl CalGray {
             white_point,
             black_point,
             gamma,
+            lookup: U8Lookup::default(),
         })
     }
-}
 
-impl ToRgb for CalGray {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
             let g = self.gamma;
             let (_xw, yw, _zw) = {
@@ -46,5 +46,22 @@ impl ToRgb for CalGray {
         }
 
         Some(())
+    }
+
+    fn u8_lookup(&self) -> Option<&[[u8; 3]]> {
+        self.lookup
+            .get_or_init(|input, output| self.convert_inner(input, output))
+    }
+}
+
+impl ToRgb for CalGray {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        if let ColorComponentSlice::U8(input) = T::as_slice(input) {
+            apply_u8_lookup(input, output, self.u8_lookup()?);
+
+            Some(())
+        } else {
+            self.convert_inner(input, output)
+        }
     }
 }

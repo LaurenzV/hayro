@@ -1,4 +1,4 @@
-use super::{ColorComponent, ColorSpace, ToRgb};
+use super::{ColorComponent, ColorComponentSlice, ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
@@ -8,6 +8,7 @@ pub(crate) struct Indexed {
     values: Vec<Vec<u8>>,
     hival: u8,
     base: Box<ColorSpace>,
+    lookup: U8Lookup,
 }
 
 impl Indexed {
@@ -49,16 +50,15 @@ impl Indexed {
             values,
             hival,
             base: Box::new(base_color_space),
+            lookup: U8Lookup::default(),
         })
     }
 
     pub(super) fn hival(&self) -> u8 {
         self.hival
     }
-}
 
-impl ToRgb for Indexed {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         let mut indexed = vec![0; input.len() * self.base.num_components() as usize];
 
         for (input, output) in input
@@ -70,5 +70,22 @@ impl ToRgb for Indexed {
         }
 
         self.base.convert(&indexed, output)
+    }
+
+    fn u8_lookup(&self) -> Option<&[[u8; 3]]> {
+        self.lookup
+            .get_or_init(|input, output| self.convert_inner(input, output))
+    }
+}
+
+impl ToRgb for Indexed {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        if let ColorComponentSlice::U8(input) = T::as_slice(input) {
+            apply_u8_lookup(input, output, self.u8_lookup()?);
+
+            Some(())
+        } else {
+            self.convert_inner(input, output)
+        }
     }
 }
