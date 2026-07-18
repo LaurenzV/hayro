@@ -49,92 +49,96 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
     }
 
     fn decode_image(&mut self) -> Option<ImageData> {
-        let is_default_decode = self.ctx.decode_arr
-            == self
-                .ctx
-                .color_space
-                .default_decode_arr(self.ctx.bits_per_component as f32);
-        let is_inverted_default_decode = self.ctx.decode_arr
-            == self
-                .ctx
-                .color_space
-                .inverted_default_decode_arr(self.ctx.bits_per_component as f32);
+        let num_components = self.ctx.color_space.num_components() as usize;
 
-        if self.ctx.bits_per_component == 8
-            && (self.ctx.color_space.is_device_gray() || self.ctx.color_space.is_device_rgb())
-            && self.obj.transfer_function.is_none()
-            && (is_default_decode || is_inverted_default_decode)
+        // To prevent a panic when calling the `chunks` method.
+        if num_components == 0 {
+            return None;
+        }
+
+        let component_ranges = self.ctx.color_space.component_ranges();
+        let default_decode = self
+            .ctx
+            .color_space
+            .default_decode_arr(self.ctx.bits_per_component as f32);
+        let inverted_default_decode = self
+            .ctx
+            .color_space
+            .inverted_default_decode_arr(self.ctx.bits_per_component as f32);
+        let inverted_component_ranges = component_ranges
+            .iter()
+            .map(|(min, max)| (*max, *min))
+            .collect::<SmallVec<[(f32, f32); 4]>>();
+        let is_indexed = self.ctx.color_space.is_indexed();
+
+        let direct_invert = if self.ctx.bits_per_component == 8
+            && (self.ctx.decode_arr == component_ranges
+                || is_indexed && self.ctx.decode_arr == default_decode)
         {
-            self.decode_native(is_inverted_default_decode)
+            Some(false)
+        } else if self.ctx.bits_per_component == 8
+            && (self.ctx.decode_arr == inverted_component_ranges
+                || is_indexed && self.ctx.decode_arr == inverted_default_decode)
+        {
+            Some(true)
         } else {
-            self.decode_converted()
-        }
-    }
+            None
+        };
 
-    fn decode_native(&mut self, invert: bool) -> Option<ImageData> {
-        // TODO: Generalize this path.
+        let components = if let Some(invert) = direct_invert {
+            // This is actually the most common case, where the PDF is embedded
+            // in such a way where we don't need to decode. In this case,
+            // we can use the raw decoded component values directly.
+            fix_image_length(
+                self.ctx.decoded.data.to_mut(),
+                self.ctx.width,
+                &mut self.ctx.height,
+                0,
+                num_components,
+            )?;
 
-        // This is actually the most common case, where the PDF is embedded
-        // in such a way where we don't need to decode. In this case,
-        // we can return the raw decoded data, which will already be in
-        // RGB8/gray-scale with values between 0 and 255.
-        fix_image_length(
-            self.ctx.decoded.data.to_mut(),
-            self.ctx.width,
-            &mut self.ctx.height,
-            0,
-            self.ctx.color_space.num_components() as usize,
-        )?;
-
-        if self.color_key_mask.is_some() {
-            self.decoded_color_key_mask = self.decode_color_key_mask();
-        }
-
-        if invert {
-            for b in self.ctx.decoded.data.to_mut() {
-                *b = 255 - *b;
+            if self.color_key_mask.is_some() {
+                self.decoded_color_key_mask = self.decode_color_key_mask();
             }
-        }
 
-        if self.ctx.color_space.is_device_gray() {
-            Some(ImageData::Luma(LumaData {
-                data: core::mem::take(&mut self.ctx.decoded.data).into_owned(),
-                width: self.ctx.width,
-                height: self.ctx.height,
-                interpolate: self.obj.interpolate,
-                scale_factors: self.ctx.scale_factors,
-            }))
-        } else if self.ctx.color_space.is_device_rgb() {
-            Some(ImageData::Rgb(RgbData {
-                data: core::mem::take(&mut self.ctx.decoded.data).into_owned(),
-                width: self.ctx.width,
-                height: self.ctx.height,
-                interpolate: self.obj.interpolate,
-                scale_factors: self.ctx.scale_factors,
-            }))
+            if invert {
+                for value in self.ctx.decoded.data.to_mut() {
+                    *value = 255 - *value;
+                }
+            }
+
+            core::mem::take(&mut self.ctx.decoded.data).into_owned()
         } else {
-            unreachable!()
+            let mut components = decode_u8_samples(
+                &self.ctx.decoded.data,
+                self.ctx.width,
+                self.ctx.height,
+                &self.ctx.color_space,
+                self.ctx.bits_per_component,
+                &self.ctx.decode_arr,
+            )?;
+
+            fix_image_length(
+                &mut components,
+                self.ctx.width,
+                &mut self.ctx.height,
+                0,
+                num_components,
+            )?;
+
+            components
+        };
+
+        // TODO: Apply single transfer functions directly to luma.
+        if self.ctx.color_space.is_device_gray() && self.obj.transfer_function.is_none() {
+            return Some(ImageData::Luma(LumaData {
+                data: components,
+                width: self.ctx.width,
+                height: self.ctx.height,
+                interpolate: self.obj.interpolate,
+                scale_factors: self.ctx.scale_factors,
+            }));
         }
-    }
-
-    fn decode_converted(&mut self) -> Option<ImageData> {
-        let mut components = decode_u8_samples(
-            &self.ctx.decoded.data,
-            self.ctx.width,
-            self.ctx.height,
-            &self.ctx.color_space,
-            self.ctx.bits_per_component,
-            &self.ctx.decode_arr,
-        )?
-        .into_owned();
-
-        fix_image_length(
-            &mut components,
-            self.ctx.width,
-            &mut self.ctx.height,
-            0,
-            self.ctx.color_space.num_components() as usize,
-        )?;
 
         let mut rgb_data = self.convert_to_rgb(components)?;
 
@@ -144,11 +148,6 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
     }
 
     fn convert_to_rgb(&self, mut decoded: Vec<u8>) -> Option<RgbData> {
-        // To prevent a panic when calling the `chunks` method.
-        if self.ctx.color_space.num_components() == 0 {
-            return None;
-        }
-
         if self
             .ctx
             .color_space

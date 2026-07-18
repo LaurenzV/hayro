@@ -13,7 +13,6 @@ use hayro_syntax::object::Array;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::stream::{FilterResult, ImageColorSpace, ImageDecodeParams};
 use smallvec::SmallVec;
-use std::borrow::Cow;
 use std::iter;
 
 struct DecodeContext<'a> {
@@ -141,19 +140,15 @@ fn fix_image_length<T: Copy>(
     }
 }
 
-fn decode_u8_samples<'a>(
-    data: &'a [u8],
+fn decode_u8_samples(
+    data: &[u8],
     width: u32,
     height: u32,
     color_space: &ColorSpace,
     bits_per_component: u8,
     decode: &[(f32, f32)],
-) -> Option<Cow<'a, [u8]>> {
+) -> Option<Vec<u8>> {
     let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
-    if source_max == u8::MAX as f32 && decode == color_space.component_ranges().as_slice() {
-        return Some(Cow::Borrowed(data));
-    }
-
     let num_components = color_space.num_components() as usize;
     let capacity = width as usize * height as usize * num_components;
     let ranges = color_space.component_ranges();
@@ -192,22 +187,22 @@ fn decode_u8_samples<'a>(
                 },
             )?;
 
-            Some(Cow::Owned(buf))
+            Some(buf)
         }
-        8 => Some(Cow::Owned(
+        8 => Some(
             data.iter()
                 .enumerate()
                 .map(|(index, value)| decode_component(*value as u32, index))
                 .collect::<Option<Vec<_>>>()?,
-        )),
-        16 => Some(Cow::Owned(
+        ),
+        16 => Some(
             data.chunks_exact(2)
                 .enumerate()
                 .map(|(index, value)| {
                     decode_component(u16::from_be_bytes([value[0], value[1]]) as u32, index)
                 })
                 .collect::<Option<Vec<_>>>()?,
-        )),
+        ),
         _ => {
             warn!("unsupported bits per component: {bits_per_component}");
             None
