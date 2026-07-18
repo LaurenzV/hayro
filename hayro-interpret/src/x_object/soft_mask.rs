@@ -1,3 +1,4 @@
+pub use super::TransferFunction;
 use super::form::FormXObject;
 use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::{Context, InterpreterCache};
@@ -27,24 +28,6 @@ pub enum MaskType {
     Luminosity,
     /// An alpha mask.
     Alpha,
-}
-
-/// A transfer function to apply to the opacity values of a mask.
-pub struct TransferFunction(Function);
-
-impl TransferFunction {
-    /// Apply the transfer function to the given value.
-    ///
-    /// The input value needs to be between 0 and 1 and the return value is
-    /// guaranteed to be between 0 and 1.
-    #[inline]
-    pub fn apply(&self, val: f32) -> f32 {
-        self.0
-            .eval(smallvec![val])
-            .and_then(|v| v.first().copied())
-            .unwrap_or(0.0)
-            .clamp(0.0, 1.0)
-    }
 }
 
 struct Repr<'a> {
@@ -111,7 +94,7 @@ impl<'a> SoftMask<'a> {
         let transfer_function = dict
             .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
-            .map(TransferFunction);
+            .map(TransferFunction::new);
         let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
                 let color = dict
