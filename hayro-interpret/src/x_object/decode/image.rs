@@ -1,13 +1,11 @@
 use super::mask::decode_mask;
 use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, unpack_samples};
 use crate::color::{ColorComponents, ToRgb};
-use crate::function::Function;
-use crate::interpret::state::ActiveTransferFunction;
 use crate::x_object::image::ImageXObject;
 use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 
 pub(crate) struct DecodedImage {
     pub(crate) image: ImageData,
@@ -173,28 +171,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
 
     fn apply_transfer_function(&self, rgb_data: &mut RgbData) {
         if let Some(transfer_function) = &self.obj.transfer_function {
-            let apply_single = |data: u8, function: &Function| {
-                function
-                    .eval(smallvec![data as f32 / 255.0])
-                    .and_then(|v| v.first().copied())
-                    .map(|v| (v * 255.0 + 0.5) as u8)
-                    .unwrap_or(data)
-            };
-
-            match transfer_function {
-                ActiveTransferFunction::Single(s) => {
-                    for data in &mut rgb_data.data {
-                        *data = apply_single(*data, s);
-                    }
-                }
-                ActiveTransferFunction::Four(f) => {
-                    for data in rgb_data.data.chunks_exact_mut(3) {
-                        data[0] = apply_single(data[0], &f[0]);
-                        data[1] = apply_single(data[1], &f[1]);
-                        data[2] = apply_single(data[2], &f[2]);
-                    }
-                }
-            }
+            transfer_function.apply_to(&mut rgb_data.data);
         }
     }
 

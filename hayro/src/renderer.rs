@@ -1214,17 +1214,18 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     };
 
     if let Some(transfer_function) = mask.transfer_function() {
-        let mut map = Vec::new();
+        // TODO: Allow deconstructing a mask in Vello CPU.
+        let mut map = Vec::with_capacity(
+            usize::from(rendered_mask.width()) * usize::from(rendered_mask.height()),
+        );
 
         for y in 0..rendered_mask.height() {
             for x in 0..rendered_mask.width() {
-                map.push(
-                    (transfer_function.apply(rendered_mask.sample(x, y) as f32 / 255.0) * 255.0
-                        + 0.5) as u8,
-                );
+                map.push(rendered_mask.sample(x, y));
             }
         }
 
+        transfer_function.apply_to(&mut map);
         rendered_mask = Mask::from_parts(map, rendered_mask.width(), rendered_mask.height());
     }
 

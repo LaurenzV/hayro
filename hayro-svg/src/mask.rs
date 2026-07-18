@@ -162,8 +162,12 @@ impl<'a> SvgRenderer<'a> {
 }
 
 fn sampled_transfer_function(transfer_function: &TransferFunction) -> String {
-    (0..=255)
-        .map(|i| transfer_function.apply(i as f32 / 255.0).to_string())
+    let mut samples = (0..=255).collect::<Vec<u8>>();
+    transfer_function.apply_to(&mut samples);
+
+    samples
+        .into_iter()
+        .map(|sample| (sample as f32 / 255.0).to_string())
         .collect::<Vec<_>>()
         .join(" ")
 }
