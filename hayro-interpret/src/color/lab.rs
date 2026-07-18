@@ -1,0 +1,64 @@
+use super::ToRgb;
+use super::icc::ICCProfile;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::dict::keys::{BLACK_POINT, RANGE, WHITE_POINT};
+use moxcms::{ColorProfile, Xyzd};
+
+#[derive(Debug, Clone)]
+pub(crate) struct Lab {
+    pub(super) range: [f32; 4],
+    profile: ICCProfile,
+}
+
+impl Lab {
+    pub(super) fn new(dict: &Dict<'_>) -> Option<Self> {
+        let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
+        // Not sure how this should be used.
+        let _black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
+        let range = dict
+            .get::<[f32; 4]>(RANGE)
+            .unwrap_or([-100.0, 100.0, -100.0, 100.0]);
+
+        let mut profile =
+            ColorProfile::new_from_slice(include_bytes!("../../assets/LAB.icc")).ok()?;
+        profile.white_point = Xyzd::new(
+            white_point[0] as f64,
+            white_point[1] as f64,
+            white_point[2] as f64,
+        );
+
+        let profile = ICCProfile::new_from_src_profile(
+            profile, false,
+            // This flag is only used to scale the values to [0.0, 1.0], but
+            // we already take care of this in the `convert_f32` method.
+            // Therefore, leave this as false, even though this is a LAB profile.
+            false, 3,
+        )?;
+
+        Some(Self { range, profile })
+    }
+}
+
+impl ToRgb for Lab {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+        if !manual_scale {
+            // moxcms expects values between 0.0 and 1.0, so we need to undo
+            // the scaling.
+
+            let input = input
+                .chunks_exact(3)
+                .flat_map(|i| {
+                    let l = i[0] / 100.0;
+                    let a = (i[1] + 128.0) / 255.0;
+                    let b = (i[2] + 128.0) / 255.0;
+
+                    [l, a, b]
+                })
+                .collect::<Vec<_>>();
+
+            self.profile.convert_f32(&input, output, manual_scale)
+        } else {
+            self.profile.convert_f32(input, output, manual_scale)
+        }
+    }
+}
