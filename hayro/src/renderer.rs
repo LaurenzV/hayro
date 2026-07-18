@@ -223,23 +223,16 @@ impl Renderer {
                     scaler.plan_rgb_resampling(source_size, target_size)
                 },
             ),
-            ImagePixelFormat::PremultipliedRgba => {
-                let resized = self.resize_image_data_impl::<4>(
-                    data,
-                    src_width,
-                    src_height,
-                    new_width,
-                    new_height,
-                    |scaler, source_size, target_size| {
-                        scaler.plan_rgba_resampling(source_size, target_size, false)
-                    },
-                );
-
-                // Filtering can cause color channels to become larger than the
-                // alpha, so we need to clamp.
-                // clamp_premultiplied_rgba(self.level, &mut resized);
-                resized
-            }
+            ImagePixelFormat::PremultipliedRgba => self.resize_image_data_impl::<4>(
+                data,
+                src_width,
+                src_height,
+                new_width,
+                new_height,
+                |scaler, source_size, target_size| {
+                    scaler.plan_rgba_resampling(source_size, target_size, false)
+                },
+            ),
         }
     }
 
