@@ -9,4 +9,8 @@ impl ToRgb for DeviceRgb {
 
         Some(())
     }
+
+    fn convert_in_place(&self, _input: &mut [u8]) -> Option<()> {
+        Some(())
+    }
 }

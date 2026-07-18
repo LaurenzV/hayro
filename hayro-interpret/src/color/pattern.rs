@@ -25,4 +25,8 @@ impl ToRgb for Pattern {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         self.0.convert(input, output)
     }
+
+    fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
+        self.0.convert_in_place(input)
+    }
 }

@@ -506,6 +506,22 @@ impl ToRgb for ColorSpace {
         }
     }
 
+    fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk(i) => i.convert_in_place(input),
+            ColorSpaceType::DeviceGray(i) => i.convert_in_place(input),
+            ColorSpaceType::DeviceRgb(i) => i.convert_in_place(input),
+            ColorSpaceType::Pattern(i) => i.convert_in_place(input),
+            ColorSpaceType::Indexed(i) => i.convert_in_place(input),
+            ColorSpaceType::ICCBased(i) => i.convert_in_place(input),
+            ColorSpaceType::CalGray(i) => i.convert_in_place(input),
+            ColorSpaceType::CalRgb(i) => i.convert_in_place(input),
+            ColorSpaceType::Lab(i) => i.convert_in_place(input),
+            ColorSpaceType::Separation(i) => i.convert_in_place(input),
+            ColorSpaceType::DeviceN(i) => i.convert_in_place(input),
+        }
+    }
+
     fn is_none(&self) -> bool {
         match self.0.as_ref() {
             ColorSpaceType::Separation(s) => s.is_none(),
@@ -557,6 +573,9 @@ impl Color {
 
 pub(crate) trait ToRgb {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()>;
+    fn convert_in_place(&self, _input: &mut [u8]) -> Option<()> {
+        None
+    }
     fn is_none(&self) -> bool {
         false
     }

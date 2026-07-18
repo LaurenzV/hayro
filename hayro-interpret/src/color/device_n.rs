@@ -40,8 +40,8 @@ impl DeviceN {
         })
     }
 
-    fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        let evaluated = input
+    fn evaluate(&self, input: &[u8]) -> Vec<u8> {
+        input
             .chunks_exact(self.num_components as usize)
             .flat_map(|n| {
                 let input = n.iter().map(|value| *value as f32 / 255.0).collect();
@@ -51,7 +51,11 @@ impl DeviceN {
                     .unwrap_or(self.alternate_space.initial_color());
                 self.alternate_space.encode_values(&values)
             })
-            .collect::<Vec<u8>>();
+            .collect()
+    }
+
+    fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        let evaluated = self.evaluate(input);
         self.alternate_space.convert(&evaluated, output)
     }
 
@@ -70,6 +74,15 @@ impl ToRgb for DeviceN {
         } else {
             self.convert_inner(input, output)
         }
+    }
+
+    fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
+        if self.num_components != 3 {
+            return None;
+        }
+
+        let evaluated = self.evaluate(input);
+        self.alternate_space.convert(&evaluated, input)
     }
 
     fn is_none(&self) -> bool {

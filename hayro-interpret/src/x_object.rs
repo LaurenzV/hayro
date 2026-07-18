@@ -592,18 +592,14 @@ fn decode_raster(
             &ctx.color_space,
             ctx.bits_per_component,
             &ctx.decode_arr,
-        )?;
+        )?
+        // TODO: Don't allocate
+        .into_owned();
 
-        fix_image_length(
-            components.to_mut(),
-            ctx.width,
-            &mut height,
-            0,
-            &ctx.color_space,
-        )?;
+        fix_image_length(&mut components, ctx.width, &mut height, 0, &ctx.color_space)?;
 
         let mut rgb_data = get_rgb_data(
-            &components,
+            components,
             ctx.width,
             height,
             ctx.scale_factors,
@@ -876,7 +872,7 @@ fn unpremultiply(image: &mut ImageData, alpha: &[u8], matte_rgb: &[u8]) {
 }
 
 fn get_rgb_data(
-    decoded: &[u8],
+    mut decoded: Vec<u8>,
     width: u32,
     height: u32,
     scale_factors: (f32, f32),
@@ -888,11 +884,14 @@ fn get_rgb_data(
         return None;
     }
 
-    let mut output = vec![0; width as usize * height as usize * 3];
-    cs.convert(decoded, &mut output);
+    if cs.convert_in_place(&mut decoded).is_none() {
+        let mut output = vec![0; width as usize * height as usize * 3];
+        cs.convert(&decoded, &mut output)?;
+        decoded = output;
+    }
 
     Some(RgbData {
-        data: output,
+        data: decoded,
         width,
         height,
         interpolate,

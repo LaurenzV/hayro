@@ -136,41 +136,53 @@ impl CalRgb {
         let lms_d65 = Self::to_d65(source_white_point, &lms);
         Self::matrix_product(&Self::BRADFORD_SCALE_INVERSE_MATRIX, &lms_d65)
     }
+
+    fn convert_pixel(&self, input: [u8; 3]) -> [u8; 3] {
+        let input = [
+            input[0] as f32 / 255.0,
+            input[1] as f32 / 255.0,
+            input[2] as f32 / 255.0,
+        ];
+
+        let [r, g, b] = input;
+        let [gr, gg, gb] = self.gamma;
+        let [agr, bgg, cgb] = [
+            if r == 1.0 { 1.0 } else { r.powf(gr) },
+            if g == 1.0 { 1.0 } else { g.powf(gg) },
+            if b == 1.0 { 1.0 } else { b.powf(gb) },
+        ];
+
+        let m = &self.matrix;
+        let x = m[0] * agr + m[3] * bgg + m[6] * cgb;
+        let y = m[1] * agr + m[4] * bgg + m[7] * cgb;
+        let z = m[2] * agr + m[5] * bgg + m[8] * cgb;
+        let xyz = [x, y, z];
+
+        let xyz_flat = self.normalize_white_point_to_flat(&self.white_point, &xyz);
+        let xyz_black = Self::compensate_black_point(&self.black_point, &xyz_flat);
+        let xyz_d65 = self.normalize_white_point_to_d65(&Self::FLAT_WHITEPOINT, &xyz_black);
+        let srgb_xyz = Self::matrix_product(&Self::SRGB_D65_XYZ_TO_RGB_MATRIX, &xyz_d65);
+
+        [
+            (Self::srgb_transfer_function(srgb_xyz[0]) * 255.0 + 0.5) as u8,
+            (Self::srgb_transfer_function(srgb_xyz[1]) * 255.0 + 0.5) as u8,
+            (Self::srgb_transfer_function(srgb_xyz[2]) * 255.0 + 0.5) as u8,
+        ]
+    }
 }
 
 impl ToRgb for CalRgb {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         for (input, output) in input.chunks_exact(3).zip(output.chunks_exact_mut(3)) {
-            let input = [
-                input[0] as f32 / 255.0,
-                input[1] as f32 / 255.0,
-                input[2] as f32 / 255.0,
-            ];
+            output.copy_from_slice(&self.convert_pixel([input[0], input[1], input[2]]));
+        }
 
-            let [r, g, b] = input;
-            let [gr, gg, gb] = self.gamma;
-            let [agr, bgg, cgb] = [
-                if r == 1.0 { 1.0 } else { r.powf(gr) },
-                if g == 1.0 { 1.0 } else { g.powf(gg) },
-                if b == 1.0 { 1.0 } else { b.powf(gb) },
-            ];
+        Some(())
+    }
 
-            let m = &self.matrix;
-            let x = m[0] * agr + m[3] * bgg + m[6] * cgb;
-            let y = m[1] * agr + m[4] * bgg + m[7] * cgb;
-            let z = m[2] * agr + m[5] * bgg + m[8] * cgb;
-            let xyz = [x, y, z];
-
-            let xyz_flat = self.normalize_white_point_to_flat(&self.white_point, &xyz);
-            let xyz_black = Self::compensate_black_point(&self.black_point, &xyz_flat);
-            let xyz_d65 = self.normalize_white_point_to_d65(&Self::FLAT_WHITEPOINT, &xyz_black);
-            let srgb_xyz = Self::matrix_product(&Self::SRGB_D65_XYZ_TO_RGB_MATRIX, &xyz_d65);
-
-            output.copy_from_slice(&[
-                (Self::srgb_transfer_function(srgb_xyz[0]) * 255.0 + 0.5) as u8,
-                (Self::srgb_transfer_function(srgb_xyz[1]) * 255.0 + 0.5) as u8,
-                (Self::srgb_transfer_function(srgb_xyz[2]) * 255.0 + 0.5) as u8,
-            ]);
+    fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
+        for input in input.chunks_exact_mut(3) {
+            input.copy_from_slice(&self.convert_pixel([input[0], input[1], input[2]]));
         }
 
         Some(())
