@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb};
+use super::{ColorComponent, ColorSpace, ToRgb};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
@@ -32,16 +32,18 @@ impl Separation {
 }
 
 impl ToRgb for Separation {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         let evaluated = input
             .iter()
             .flat_map(|n| {
-                self.tint_transform
-                    .eval(smallvec![*n])
-                    .unwrap_or(self.alternate_space.initial_color())
+                let values = self
+                    .tint_transform
+                    .eval(smallvec![n.to_f32() / T::MAX_F32])
+                    .unwrap_or(self.alternate_space.initial_color());
+                self.alternate_space.encode_values::<T>(&values)
             })
-            .collect::<Vec<_>>();
-        self.alternate_space.convert_f32(&evaluated, output, false)
+            .collect::<Vec<T>>();
+        self.alternate_space.convert(&evaluated, output)
     }
 
     fn is_none(&self) -> bool {

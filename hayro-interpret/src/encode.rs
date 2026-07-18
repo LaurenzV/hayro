@@ -169,7 +169,7 @@ impl ShadingPattern {
             .shading
             .background
             .as_ref()
-            .map(|b| color_space.to_rgba(b, 1.0, false))
+            .map(|b| color_space.to_rgba(b, 1.0))
             .unwrap_or(AlphaColor::TRANSPARENT);
 
         EncodedShadingPattern {
@@ -298,7 +298,7 @@ impl EncodedShadingType {
                 } else {
                     let out = function.eval(&smallvec![pos.x as f32, pos.y as f32])?;
                     // TODO: Clamp out-of-range values.
-                    Some(color_space.to_rgba(&out, 1.0, false))
+                    Some(color_space.to_rgba(&out, 1.0))
                 }
             }
             Self::RadialAxial(EncodedRadialAxialShading {
@@ -338,7 +338,7 @@ impl EncodedShadingType {
 
                 let val = function.eval(&smallvec![t])?;
 
-                Some(color_space.to_rgba(&val, 1.0, false))
+                Some(color_space.to_rgba(&val, 1.0))
             }
             Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
@@ -346,9 +346,9 @@ impl EncodedShadingType {
                 if let Some(color) = samples.get(&sample_point) {
                     if let Some(function) = function {
                         let val = function.eval(&color.to_smallvec())?;
-                        Some(color_space.to_rgba(&val, 1.0, false))
+                        Some(color_space.to_rgba(&val, 1.0))
                     } else {
-                        Some(color_space.to_rgba(color, 1.0, false))
+                        Some(color_space.to_rgba(color, 1.0))
                     }
                 } else {
                     Some(bg_color)

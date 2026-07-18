@@ -109,7 +109,7 @@ impl EncodedRadialAxialShading {
         let Some(out) = self.function.eval(&smallvec![t]) else {
             return [0.0, 0.0, 0.0, 0.0];
         };
-        let mut components = pattern.color_space.to_rgba(&out, 1.0, false).components();
+        let mut components = pattern.color_space.to_rgba(&out, 1.0).components();
         components[3] *= pattern.opacity;
 
         if let Some(tf) = &pattern.transfer_function {

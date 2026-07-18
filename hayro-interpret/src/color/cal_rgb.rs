@@ -1,4 +1,4 @@
-use super::ToRgb;
+use super::{ColorComponent, ToRgb};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, MATRIX, WHITE_POINT};
 
@@ -139,12 +139,12 @@ impl CalRgb {
 }
 
 impl ToRgb for CalRgb {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         for (input, output) in input.chunks_exact(3).zip(output.chunks_exact_mut(3)) {
             let input = [
-                input[0].clamp(0.0, 1.0),
-                input[1].clamp(0.0, 1.0),
-                input[2].clamp(0.0, 1.0),
+                input[0].to_f32() / T::MAX_F32,
+                input[1].to_f32() / T::MAX_F32,
+                input[2].to_f32() / T::MAX_F32,
             ];
 
             let [r, g, b] = input;

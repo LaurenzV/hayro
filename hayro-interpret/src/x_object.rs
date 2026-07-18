@@ -1,5 +1,5 @@
 use crate::cache::Cache;
-use crate::color::{ColorComponents, ColorSpace, ToRgb};
+use crate::color::{ColorComponent, ColorComponents, ColorSpace, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
@@ -526,16 +526,17 @@ fn decode_raster(
         == ctx
             .color_space
             .inverted_default_decode_arr(ctx.bits_per_component as f32);
+    let color_key_mask = obj.stream.dict().get::<SmallVec<[u16; 4]>>(MASK);
+    let mut decoded_color_key_mask = None;
 
     let image_data = if ctx.bits_per_component == 8
-        && ctx.color_space.supports_u8()
+        && (ctx.color_space.is_device_gray() || ctx.color_space.is_device_rgb())
         && obj.transfer_function.is_none()
         && (is_default_decode || is_inverted_default_decode)
     {
         // This is actually the most common case, where the PDF is embedded
         // in such a way where we don't need to decode. In this case,
-        // we can prevent the round-trip from f32 back to u8 and just return
-        // the raw decoded data, which will already be in
+        // we can return the raw decoded data, which will already be in
         // RGB8/gray-scale with values between 0 and 255.
         fix_image_length(
             ctx.decoded.data.to_mut(),
@@ -544,6 +545,19 @@ fn decode_raster(
             0,
             &ctx.color_space,
         )?;
+
+        if let Some(color_key_mask) = &color_key_mask {
+            decoded_color_key_mask = decode_color_key_mask(
+                &ctx.decoded.data,
+                color_key_mask,
+                ctx.width,
+                height,
+                &ctx.color_space,
+                ctx.bits_per_component,
+                ctx.scale_factors,
+                obj.interpolate,
+            );
+        }
 
         if is_inverted_default_decode {
             for b in ctx.decoded.data.to_mut() {
@@ -568,20 +582,10 @@ fn decode_raster(
                 scale_factors: ctx.scale_factors,
             }))
         } else {
-            let mut output_buf = vec![0; ctx.width as usize * height as usize * 3];
-            ctx.color_space
-                .convert_u8(&ctx.decoded.data, &mut output_buf)?;
-
-            Some(ImageData::Rgb(RgbData {
-                data: output_buf,
-                width: ctx.width,
-                height,
-                interpolate: obj.interpolate,
-                scale_factors: ctx.scale_factors,
-            }))
+            unreachable!()
         }
     } else {
-        let components = get_components(
+        let mut components = get_native_components(
             &ctx.decoded.data,
             ctx.width,
             height,
@@ -589,17 +593,10 @@ fn decode_raster(
             ctx.bits_per_component,
         )?;
 
-        let mut f32_data = apply_decode_array(
-            &components,
-            &ctx.color_space,
-            ctx.bits_per_component,
-            &ctx.decode_arr,
-        )?;
+        components.fix_image_length(ctx.width, &mut height, &ctx.color_space)?;
+        components.apply_decode(&ctx.color_space, ctx.bits_per_component, &ctx.decode_arr)?;
 
-        fix_image_length(&mut f32_data, ctx.width, &mut height, 0.0, &ctx.color_space)?;
-
-        let mut rgb_data = get_rgb_data(
-            &f32_data,
+        let mut rgb_data = components.get_rgb_data(
             ctx.width,
             height,
             ctx.scale_factors,
@@ -653,7 +650,8 @@ fn decode_raster(
         resolve_alpha(
             obj,
             &mut ctx.decoded,
-            Some(&image),
+            color_key_mask.as_deref(),
+            decoded_color_key_mask,
             &ctx.color_space,
             ctx.bits_per_component,
             ctx.width,
@@ -699,20 +697,19 @@ fn decode_mask_bytes(
             bits_per_component,
         )?;
 
-        let f32_data =
-            apply_decode_array(&components, color_space, bits_per_component, decode_arr)?;
+        let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
+        let mut decoded = Vec::with_capacity(components.len());
 
-        if invert {
-            f32_data
-                .iter()
-                .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
-                .collect()
-        } else {
-            f32_data
-                .iter()
-                .map(|alpha| (*alpha * 255.0 + 0.5) as u8)
-                .collect()
+        for pixel in components.chunks(color_space.num_components() as usize) {
+            for (component, (decode_min, decode_max)) in pixel.iter().zip(decode_arr) {
+                let value =
+                    interpolate(*component as f32, 0.0, source_max, *decode_min, *decode_max);
+                let value = if invert { 1.0 - value } else { value };
+                decoded.push((value * 255.0 + 0.5) as u8);
+            }
         }
+
+        decoded
     };
 
     fix_image_length(&mut data, width, height, 0, color_space)?;
@@ -723,7 +720,8 @@ fn decode_mask_bytes(
 fn resolve_alpha(
     obj: &ImageXObject<'_>,
     decoded: &mut FilterResult<'_>,
-    image_data: Option<&ImageData>,
+    color_key_mask: Option<&[u16]>,
+    decoded_color_key_mask: Option<LumaData>,
     color_space: &ColorSpace,
     bits_per_component: u8,
     width: u32,
@@ -757,44 +755,66 @@ fn resolve_alpha(
         let obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
 
         decode_mask(&obj, target_dimension).map(|decoded| decoded.luma)
-    } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
-        let mut mask_data = vec![];
-
-        // TODO: Make this less ugly.
-        let raw_data = match image_data {
-            Some(ImageData::Luma(d)) if color_space.num_components() == 1 => &d.data,
-            Some(ImageData::Rgb(d)) if color_space.num_components() == 3 => &d.data,
-            _ => decoded.data.as_ref(),
-        };
-
-        let components = get_components(raw_data, width, *height, color_space, bits_per_component)?;
-
-        for pixel in components.chunks_exact(color_space.num_components() as usize) {
-            let mut mask_val = 0;
-
-            for (component, min_max) in pixel.iter().zip(color_key_mask.chunks_exact(2)) {
-                if *component > min_max[1] || *component < min_max[0] {
-                    mask_val = 255;
-                }
-            }
-
-            mask_data.push(mask_val);
-        }
-
-        fix_image_length(&mut mask_data, width, height, 0, &ColorSpace::device_gray())?;
-
-        Some(LumaData {
-            data: mask_data,
-            width,
-            height: *height,
-            interpolate: obj.interpolate,
-            scale_factors,
+    } else if let Some(color_key_mask) = color_key_mask {
+        decoded_color_key_mask.or_else(|| {
+            decode_color_key_mask(
+                &decoded.data,
+                color_key_mask,
+                width,
+                *height,
+                color_space,
+                bits_per_component,
+                scale_factors,
+                obj.interpolate,
+            )
         })
     } else {
         None
     };
 
     Some(alpha)
+}
+
+fn decode_color_key_mask(
+    data: &[u8],
+    color_key_mask: &[u16],
+    width: u32,
+    mut height: u32,
+    color_space: &ColorSpace,
+    bits_per_component: u8,
+    scale_factors: (f32, f32),
+    interpolate: bool,
+) -> Option<LumaData> {
+    let components = get_components(data, width, height, color_space, bits_per_component)?;
+    let mut mask_data = Vec::with_capacity(width as usize * height as usize);
+
+    for pixel in components.chunks_exact(color_space.num_components() as usize) {
+        let mut mask_val = 0;
+
+        for (component, min_max) in pixel.iter().zip(color_key_mask.chunks_exact(2)) {
+            if *component > min_max[1] || *component < min_max[0] {
+                mask_val = 255;
+            }
+        }
+
+        mask_data.push(mask_val);
+    }
+
+    fix_image_length(
+        &mut mask_data,
+        width,
+        &mut height,
+        0,
+        &ColorSpace::device_gray(),
+    )?;
+
+    Some(LumaData {
+        data: mask_data,
+        width,
+        height,
+        interpolate,
+        scale_factors,
+    })
 }
 
 fn resolve_matte(
@@ -813,7 +833,7 @@ fn resolve_matte(
     // In theory, matte needs to be applied in the image's original color space,
     // but we always do it in RGB for now.
     let mut matte_rgb = [0_u8; 3];
-    color_space.convert_f32(&matte, &mut matte_rgb, false);
+    color_space.convert_values(&matte, &mut matte_rgb);
 
     let mask_obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
     let alpha = decode_mask(&mask_obj, target_dimension)?.luma;
@@ -848,8 +868,8 @@ fn unpremultiply(image: &mut ImageData, alpha: &[u8], matte_rgb: &[u8]) {
     }
 }
 
-fn get_rgb_data(
-    decoded: &[f32],
+fn get_rgb_data<T: ColorComponent>(
+    decoded: &[T],
     width: u32,
     height: u32,
     scale_factors: (f32, f32),
@@ -862,7 +882,7 @@ fn get_rgb_data(
     }
 
     let mut output = vec![0; width as usize * height as usize * 3];
-    cs.convert_f32(decoded, &mut output, false);
+    cs.convert(decoded, &mut output);
 
     Some(RgbData {
         data: output,
@@ -908,6 +928,130 @@ fn fix_image_length<T: Copy>(
     }
 }
 
+enum NativeComponents<'a> {
+    U8(Cow<'a, [u8]>),
+    U16(Vec<u16>),
+}
+
+impl NativeComponents<'_> {
+    fn fix_image_length(
+        &mut self,
+        width: u32,
+        height: &mut u32,
+        color_space: &ColorSpace,
+    ) -> Option<()> {
+        match self {
+            Self::U8(data) => {
+                let expected =
+                    width as usize * *height as usize * color_space.num_components() as usize;
+
+                if data.len() == expected {
+                    (width != 0 && *height != 0).then_some(())
+                } else {
+                    fix_image_length(data.to_mut(), width, height, 0, color_space)
+                }
+            }
+            Self::U16(data) => fix_image_length(data, width, height, 0, color_space),
+        }
+    }
+
+    fn apply_decode(
+        &mut self,
+        color_space: &ColorSpace,
+        bits_per_component: u8,
+        decode: &[(f32, f32)],
+    ) -> Option<()> {
+        match self {
+            Self::U8(data) => {
+                if decode_is_identity::<u8>(color_space, bits_per_component, decode) {
+                    Some(())
+                } else {
+                    apply_decode_array(data.to_mut(), color_space, bits_per_component, decode)
+                }
+            }
+            Self::U16(data) => apply_decode_array(data, color_space, bits_per_component, decode),
+        }
+    }
+
+    fn get_rgb_data(
+        &self,
+        width: u32,
+        height: u32,
+        scale_factors: (f32, f32),
+        color_space: &ColorSpace,
+        interpolate: bool,
+    ) -> Option<RgbData> {
+        match self {
+            Self::U8(data) => {
+                get_rgb_data(data, width, height, scale_factors, color_space, interpolate)
+            }
+            Self::U16(data) => {
+                get_rgb_data(data, width, height, scale_factors, color_space, interpolate)
+            }
+        }
+    }
+}
+
+fn get_native_components<'a>(
+    data: &'a [u8],
+    width: u32,
+    height: u32,
+    color_space: &ColorSpace,
+    bits_per_component: u8,
+) -> Option<NativeComponents<'a>> {
+    let num_components = color_space.num_components() as usize;
+    let capacity = width as usize * height as usize * num_components;
+
+    match bits_per_component {
+        1..8 => {
+            let mut buf = Vec::with_capacity(capacity);
+            let mut reader = BitReader::new(data);
+
+            for _ in 0..height {
+                for _ in 0..width {
+                    for _ in 0..num_components {
+                        // See `stream_ccit_not_enough_data`, some images seemingly don't have
+                        // enough data, so we just pad with zeroes in this case.
+                        buf.push(reader.read(bits_per_component).unwrap_or(0) as u8);
+                    }
+                }
+
+                reader.align();
+            }
+
+            Some(NativeComponents::U8(Cow::Owned(buf)))
+        }
+        8 => Some(NativeComponents::U8(Cow::Borrowed(data))),
+        9..16 => {
+            let mut buf = Vec::with_capacity(capacity);
+            let mut reader = BitReader::new(data);
+
+            for _ in 0..height {
+                for _ in 0..width {
+                    for _ in 0..num_components {
+                        // See `stream_ccit_not_enough_data`, some images seemingly don't have
+                        // enough data, so we just pad with zeroes in this case.
+                        buf.push(reader.read(bits_per_component).unwrap_or(0) as u16);
+                    }
+                }
+
+                reader.align();
+            }
+
+            Some(NativeComponents::U16(buf))
+        }
+        16 => Some(NativeComponents::U16(
+            data.chunks_exact(2)
+                .map(|value| u16::from_be_bytes([value[0], value[1]]))
+                .collect(),
+        )),
+        _ => {
+            warn!("unsupported bits per component: {bits_per_component}");
+            None
+        }
+    }
+}
+
 fn get_components(
     data: &[u8],
     width: u32,
@@ -915,65 +1059,59 @@ fn get_components(
     color_space: &ColorSpace,
     bits_per_component: u8,
 ) -> Option<Vec<u16>> {
-    let result = match bits_per_component {
-        1..8 | 9..16 => {
-            let mut buf = vec![];
-            let bpc = bits_per_component;
-            let mut reader = BitReader::new(data);
-
-            for _ in 0..height {
-                for _ in 0..width {
-                    for _ in 0..color_space.num_components() {
-                        // See `stream_ccit_not_enough_data`, some images seemingly don't have
-                        // enough data, so we just pad with zeroes in this case.
-                        let next = reader.read(bpc).unwrap_or(0) as u16;
-
-                        buf.push(next);
-                    }
-                }
-
-                reader.align();
-            }
-
-            buf
-        }
-        8 => data.iter().map(|v| *v as u16).collect(),
-        16 => data
-            .chunks(2)
-            .map(|v| u16::from_be_bytes([v[0], v[1]]))
-            .collect(),
-        _ => {
-            warn!("unsupported bits per component: {bits_per_component}");
-            return None;
-        }
-    };
-
-    Some(result)
+    match get_native_components(data, width, height, color_space, bits_per_component)? {
+        NativeComponents::U8(data) => Some(data.iter().map(|value| *value as u16).collect()),
+        NativeComponents::U16(data) => Some(data),
+    }
 }
 
-fn apply_decode_array(
-    components: &[u16],
+fn decode_is_identity<T: ColorComponent>(
     color_space: &ColorSpace,
     bits_per_component: u8,
     decode: &[(f32, f32)],
-) -> Option<Vec<f32>> {
-    let interpolate = |n: f32, d_min: f32, d_max: f32| {
-        interpolate(
-            n,
-            0.0,
-            2.0_f32.powi(bits_per_component as i32) - 1.0,
-            d_min,
-            d_max,
-        )
-    };
+) -> bool {
+    let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
+    source_max == T::MAX_F32 && decode == color_space.component_ranges().as_slice()
+}
 
-    let mut decoded_arr = vec![];
-
-    for pixel in components.chunks(color_space.num_components() as usize) {
-        for (component, (d_min, d_max)) in pixel.iter().zip(decode) {
-            decoded_arr.push(interpolate(*component as f32, *d_min, *d_max));
-        }
+fn apply_decode_array<T: ColorComponent>(
+    components: &mut [T],
+    color_space: &ColorSpace,
+    bits_per_component: u8,
+    decode: &[(f32, f32)],
+) -> Option<()> {
+    if decode_is_identity::<T>(color_space, bits_per_component, decode) {
+        return Some(());
     }
 
-    Some(decoded_arr)
+    let ranges = color_space.component_ranges();
+    let inverted_ranges = ranges
+        .iter()
+        .map(|(min, max)| (*max, *min))
+        .collect::<SmallVec<[(f32, f32); 4]>>();
+    let source_max = 2.0_f32.powi(bits_per_component as i32) - 1.0;
+
+    if source_max == T::MAX_F32 && decode == inverted_ranges.as_slice() {
+        for component in components {
+            *component = component.inverted();
+        }
+
+        return Some(());
+    }
+
+    let num_components = color_space.num_components() as usize;
+    for (index, component) in components.iter_mut().enumerate() {
+        let component_index = index % num_components;
+        let (decode_min, decode_max) = *decode.get(component_index)?;
+        let (range_min, range_max) = *ranges.get(component_index)?;
+        let decoded = interpolate(component.to_f32(), 0.0, source_max, decode_min, decode_max);
+        let normalized = if range_min == range_max {
+            0.0
+        } else {
+            (decoded - range_min) / (range_max - range_min)
+        };
+        *component = T::from_unit(normalized);
+    }
+
+    Some(())
 }

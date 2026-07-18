@@ -1,6 +1,6 @@
-use super::ToRgb;
+use super::{ColorComponent, ColorComponentSlice, ToRgb};
 use moxcms::{
-    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32Executor,
+    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, Transform16BitExecutor,
     TransformOptions,
 };
 use std::fmt::{Debug, Formatter};
@@ -13,7 +13,7 @@ struct ICCColorRepr {
     is_srgb: bool,
     is_lab: bool,
     transform_u8: Arc<Transform8BitExecutor>,
-    transform_f32: OnceLock<Arc<TransformF32Executor>>,
+    transform_u16: OnceLock<Arc<Transform16BitExecutor>>,
 }
 
 #[derive(Clone)]
@@ -35,17 +35,15 @@ impl ICCProfile {
             .get(52..56)
             .map(|device_model| device_model == SRGB_MARKER)
             .unwrap_or(false);
-        let is_lab = src_profile.color_space == DataColorSpace::Lab;
-
-        Self::new_from_src_profile(src_profile, is_srgb, is_lab, number_components)
+        Self::new_from_src_profile(src_profile, is_srgb, number_components)
     }
 
     pub(super) fn new_from_src_profile(
         src_profile: ColorProfile,
         is_srgb: bool,
-        is_lab: bool,
         number_components: usize,
     ) -> Option<Self> {
+        let is_lab = src_profile.color_space == DataColorSpace::Lab;
         let src_layout = match number_components {
             1 => Layout::Gray,
             3 => Layout::Rgb,
@@ -75,7 +73,7 @@ impl ICCProfile {
             is_srgb,
             is_lab,
             transform_u8,
-            transform_f32: OnceLock::new(),
+            transform_u16: OnceLock::new(),
         })))
     }
 
@@ -87,7 +85,7 @@ impl ICCProfile {
         self.0.is_srgb
     }
 
-    fn is_lab(&self) -> bool {
+    pub(super) fn is_lab(&self) -> bool {
         self.0.is_lab
     }
 
@@ -95,16 +93,14 @@ impl ICCProfile {
         &self.0.transform_u8
     }
 
-    fn transform_f32(&self) -> &Arc<TransformF32Executor> {
-        // From my benchmarking, creating the f32 transforms is usually much
-        // more expensive than u8. Therefore, we only create it lazily when
-        // really needed.
-        self.0.transform_f32.get_or_init(|| {
+    fn transform_u16(&self) -> &Arc<Transform16BitExecutor> {
+        // Most images are 8-bit, so only construct this transform when needed.
+        self.0.transform_u16.get_or_init(|| {
             let dest_profile = ColorProfile::new_srgb();
             self.0
                 .src_profile
                 .clone()
-                .create_transform_f32(
+                .create_transform_16bit(
                     self.0.src_layout,
                     &dest_profile,
                     Layout::Rgb,
@@ -117,44 +113,48 @@ impl ICCProfile {
 }
 
 impl ToRgb for ICCProfile {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let mut temp = vec![0.0_f32; output.len()];
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        match T::as_slice(input) {
+            ColorComponentSlice::U8(input) => {
+                // TODO: Change it so we don't need to copy if it's a no-op.
+                if self.is_srgb() {
+                    output.copy_from_slice(input);
+                } else {
+                    self.transform_u8().transform(input, output).ok()?;
+                }
 
-        if self.is_lab() {
-            // moxcms expects normalized values.
-            let scaled = input
-                .chunks_exact(3)
-                .flat_map(|i| {
-                    [
-                        i[0] * (1.0 / 100.0),
-                        (i[1] + 128.0) * (1.0 / 255.0),
-                        (i[2] + 128.0) * (1.0 / 255.0),
-                    ]
-                })
-                .collect::<Vec<_>>();
-            self.transform_f32().transform(&scaled, &mut temp).ok()?;
-        } else {
-            self.transform_f32().transform(input, &mut temp).ok()?;
-        };
+                Some(())
+            }
+            ColorComponentSlice::U16(input) => {
+                if self.is_srgb() {
+                    for (input, output) in input.iter().zip(output) {
+                        *output = input.to_u8();
+                    }
 
-        for (input, output) in temp.iter().zip(output.iter_mut()) {
-            *output = (input * 255.0 + 0.5) as u8;
+                    return Some(());
+                }
+
+                // TODO: Improve this.
+                const BLOCK_PIXELS: usize = 1024;
+                let input_block_len = self.number_components() * BLOCK_PIXELS;
+                let mut converted = Vec::with_capacity(BLOCK_PIXELS * 3);
+                let mut output_offset = 0;
+
+                for input in input.chunks(input_block_len) {
+                    let pixels = input.len() / self.number_components();
+                    converted.clear();
+                    converted.resize(pixels * 3, 0);
+                    self.transform_u16().transform(input, &mut converted).ok()?;
+
+                    let output = output.get_mut(output_offset..output_offset + converted.len())?;
+                    for (input, output) in converted.iter().zip(output) {
+                        *output = input.to_u8();
+                    }
+                    output_offset += converted.len();
+                }
+
+                Some(())
+            }
         }
-
-        Some(())
-    }
-
-    fn supports_u8(&self) -> bool {
-        true
-    }
-
-    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        if self.is_srgb() {
-            output.copy_from_slice(input);
-        } else {
-            self.transform_u8().transform(input, output).ok()?;
-        }
-
-        Some(())
     }
 }

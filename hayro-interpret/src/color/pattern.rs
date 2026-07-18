@@ -1,4 +1,4 @@
-use super::{ColorComponents, ColorSpace, ToRgb};
+use super::{ColorComponent, ColorComponents, ColorSpace, ToRgb};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Pattern(ColorSpace);
@@ -22,15 +22,7 @@ impl Pattern {
 }
 
 impl ToRgb for Pattern {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
-        self.0.convert_f32(input, output, manual_scale)
-    }
-
-    fn supports_u8(&self) -> bool {
-        self.0.supports_u8()
-    }
-
-    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        self.0.convert_u8(input, output)
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        self.0.convert(input, output)
     }
 }

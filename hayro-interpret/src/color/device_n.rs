@@ -1,8 +1,7 @@
-use super::{ColorSpace, ToRgb};
+use super::{ColorComponent, ColorSpace, ToRgb};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
-use smallvec::ToSmallVec;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceN {
@@ -41,16 +40,19 @@ impl DeviceN {
 }
 
 impl ToRgb for DeviceN {
-    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         let evaluated = input
             .chunks_exact(self.num_components as usize)
             .flat_map(|n| {
-                self.tint_transform
-                    .eval(n.to_smallvec())
-                    .unwrap_or(self.alternate_space.initial_color())
+                let input = n.iter().map(|value| value.to_f32() / T::MAX_F32).collect();
+                let values = self
+                    .tint_transform
+                    .eval(input)
+                    .unwrap_or(self.alternate_space.initial_color());
+                self.alternate_space.encode_values::<T>(&values)
             })
-            .collect::<Vec<_>>();
-        self.alternate_space.convert_f32(&evaluated, output, false)
+            .collect::<Vec<T>>();
+        self.alternate_space.convert(&evaluated, output)
     }
 
     fn is_none(&self) -> bool {
