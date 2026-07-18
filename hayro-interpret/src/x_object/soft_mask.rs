@@ -1,10 +1,10 @@
+use super::form::FormXObject;
 use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
 use crate::function::Function;
 use crate::interpret::state::State;
 use crate::util::hash128;
-use crate::x_object::{FormXObject, draw_form_xobject};
 use crate::{CacheKey, InterpreterSettings};
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;
@@ -158,7 +158,9 @@ impl<'a> SoftMask<'a> {
             state,
             self.0.nesting_depth,
         );
-        draw_form_xobject(&self.0.parent_resources, &self.0.group, &mut ctx, device);
+        self.0
+            .group
+            .draw(&self.0.parent_resources, &mut ctx, device);
     }
 
     /// Return the object identifier of the mask.

@@ -1,9 +1,9 @@
 use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
-use crate::soft_mask::SoftMask;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
+use crate::x_object::soft_mask::SoftMask;
 use hayro_syntax::object::Stream;
 use kurbo::{Affine, BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
@@ -82,7 +82,7 @@ impl RasterImage<'_> {
         func: impl FnOnce(ImageData, Option<LumaData>),
         target_dimension: Option<(u32, u32)>,
     ) {
-        if let Some(decoded) = self.0.decoded_raster(target_dimension) {
+        if let Some(decoded) = self.0.decoded_image(target_dimension) {
             func(decoded.image, decoded.alpha);
         }
     }

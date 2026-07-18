@@ -38,7 +38,6 @@ mod device;
 mod function;
 mod interpret;
 mod ocg;
-mod soft_mask;
 mod types;
 mod x_object;
 
@@ -57,6 +56,6 @@ pub use function::Function;
 pub use hayro_cmap;
 pub use hayro_syntax;
 pub use interpret::*;
-pub use soft_mask::*;
 pub use types::*;
 pub use util::{RectExt, TransformExt};
+pub use x_object::soft_mask::*;
