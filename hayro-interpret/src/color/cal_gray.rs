@@ -42,14 +42,11 @@ impl CalGray {
         (0.0_f32.max(295.8 * l.powf(0.333_333_34) - 40.8) + 0.5) as u8
     }
 
-    fn u8_lookup(&self) -> Option<&[u8]> {
+    fn u8_lookup(&self) -> Option<&[u8; 256]> {
         self.lookup.get_or_init_with(|input| {
-            Some(
-                input
-                    .iter()
-                    .map(|value| self.convert_value(*value))
-                    .collect(),
-            )
+            Some(Box::new(core::array::from_fn(|index| {
+                self.convert_value(input[index])
+            })))
         })
     }
 }

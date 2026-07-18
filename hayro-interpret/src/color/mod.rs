@@ -37,7 +37,7 @@ use std::sync::{Arc, OnceLock};
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
 #[derive(Clone)]
-pub(super) struct U8Lookup<T>(Arc<OnceLock<Option<Vec<T>>>>);
+pub(super) struct U8Lookup<T>(Arc<OnceLock<Option<Box<[T; 256]>>>>);
 
 impl<T> Default for U8Lookup<T> {
     fn default() -> Self {
@@ -54,8 +54,8 @@ impl<T> std::fmt::Debug for U8Lookup<T> {
 impl<T> U8Lookup<T> {
     pub(super) fn get_or_init_with(
         &self,
-        init: impl FnOnce(&[u8]) -> Option<Vec<T>>,
-    ) -> Option<&[T]> {
+        init: impl FnOnce(&[u8; 256]) -> Option<Box<[T; 256]>>,
+    ) -> Option<&[T; 256]> {
         self.0
             .get_or_init(|| {
                 let input: [u8; 256] = core::array::from_fn(|index| index as u8);
@@ -69,17 +69,11 @@ impl U8Lookup<[u8; 3]> {
     pub(super) fn get_or_init(
         &self,
         convert: impl FnOnce(&[u8], &mut [u8]) -> Option<()>,
-    ) -> Option<&[[u8; 3]]> {
+    ) -> Option<&[[u8; 3]; 256]> {
         self.get_or_init_with(|input| {
-            let mut output = vec![0; 256 * 3];
-            convert(input, &mut output)?;
-
-            Some(
-                output
-                    .chunks_exact(3)
-                    .map(|rgb| [rgb[0], rgb[1], rgb[2]])
-                    .collect(),
-            )
+            let mut output = Box::new([[0; 3]; 256]);
+            convert(input, output.as_flattened_mut())?;
+            Some(output)
         })
     }
 }
