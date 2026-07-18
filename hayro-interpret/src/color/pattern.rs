@@ -1,4 +1,4 @@
-use super::{ColorComponents, ColorSpace, ToRgb};
+use super::{ColorComponents, ColorSpace, ToLuma, ToRgb};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Pattern(ColorSpace);
@@ -28,5 +28,11 @@ impl ToRgb for Pattern {
 
     fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
         self.0.convert_in_place(input)
+    }
+}
+
+impl ToLuma for Pattern {
+    fn to_luma(&self, input: &mut [u8]) -> Option<()> {
+        self.0.to_luma(input)
     }
 }

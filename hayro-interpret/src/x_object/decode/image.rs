@@ -1,6 +1,6 @@
 use super::mask::decode_mask;
 use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, unpack_samples};
-use crate::color::{ColorComponents, ToRgb};
+use crate::color::{ColorComponents, ToLuma, ToRgb};
 use crate::x_object::image::ImageXObject;
 use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::object::Stream;
@@ -85,7 +85,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             None
         };
 
-        let components = if let Some(invert) = direct_invert {
+        let mut components = if let Some(invert) = direct_invert {
             // This is actually the most common case, where the PDF is embedded
             // in such a way where we don't need to decode. In this case,
             // we can use the raw decoded component values directly.
@@ -130,7 +130,9 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         };
 
         // TODO: Apply single transfer functions directly to luma.
-        if self.ctx.color_space.is_device_gray() && self.obj.transfer_function.is_none() {
+        if self.obj.transfer_function.is_none()
+            && self.ctx.color_space.to_luma(&mut components).is_some()
+        {
             return Some(ImageData::Luma(LumaData {
                 data: components,
                 width: self.ctx.width,

@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
@@ -9,7 +9,7 @@ pub(crate) struct DeviceN {
     pub(super) num_components: u8,
     tint_transform: Function,
     is_none: bool,
-    lookup: U8Lookup,
+    lookup: U8Lookup<[u8; 3]>,
 }
 
 impl DeviceN {
@@ -68,7 +68,10 @@ impl DeviceN {
 impl ToRgb for DeviceN {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         if self.num_components == 1 {
-            apply_u8_lookup(input, output, self.u8_lookup()?);
+            let lookup = self.u8_lookup()?;
+            for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
+                output.copy_from_slice(&lookup[*input as usize]);
+            }
 
             Some(())
         } else {

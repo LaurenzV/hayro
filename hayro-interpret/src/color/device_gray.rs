@@ -1,4 +1,4 @@
-use super::ToRgb;
+use super::{ToLuma, ToRgb};
 
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceGray;
@@ -9,6 +9,12 @@ impl ToRgb for DeviceGray {
             output.copy_from_slice(&[*gray, *gray, *gray]);
         }
 
+        Some(())
+    }
+}
+
+impl ToLuma for DeviceGray {
+    fn to_luma(&self, _input: &mut [u8]) -> Option<()> {
         Some(())
     }
 }
