@@ -1,4 +1,4 @@
-use super::{ColorComponent, ColorSpace, ToRgb};
+use super::{ColorComponent, ColorComponentSlice, ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
@@ -9,6 +9,7 @@ pub(crate) struct DeviceN {
     pub(super) num_components: u8,
     tint_transform: Function,
     is_none: bool,
+    lookup: U8Lookup,
 }
 
 impl DeviceN {
@@ -35,12 +36,11 @@ impl DeviceN {
             num_components,
             tint_transform,
             is_none: all_none,
+            lookup: U8Lookup::default(),
         })
     }
-}
 
-impl ToRgb for DeviceN {
-    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+    fn convert_inner<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
         let evaluated = input
             .chunks_exact(self.num_components as usize)
             .flat_map(|n| {
@@ -53,6 +53,25 @@ impl ToRgb for DeviceN {
             })
             .collect::<Vec<T>>();
         self.alternate_space.convert(&evaluated, output)
+    }
+
+    fn u8_lookup(&self) -> Option<&[[u8; 3]]> {
+        self.lookup
+            .get_or_init(|input, output| self.convert_inner(input, output))
+    }
+}
+
+impl ToRgb for DeviceN {
+    fn convert<T: ColorComponent>(&self, input: &[T], output: &mut [u8]) -> Option<()> {
+        if self.num_components == 1
+            && let ColorComponentSlice::U8(input) = T::as_slice(input)
+        {
+            apply_u8_lookup(input, output, self.u8_lookup()?);
+
+            Some(())
+        } else {
+            self.convert_inner(input, output)
+        }
     }
 
     fn is_none(&self) -> bool {
