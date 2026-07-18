@@ -36,40 +36,51 @@ use std::sync::{Arc, OnceLock};
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
-#[derive(Clone, Default)]
-pub(super) struct U8Lookup(Arc<OnceLock<Option<Vec<[u8; 3]>>>>);
+#[derive(Clone)]
+pub(super) struct U8Lookup<T>(Arc<OnceLock<Option<Vec<T>>>>);
 
-impl std::fmt::Debug for U8Lookup {
+impl<T> Default for U8Lookup<T> {
+    fn default() -> Self {
+        Self(Arc::new(OnceLock::new()))
+    }
+}
+
+impl<T> std::fmt::Debug for U8Lookup<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("U8Lookup")
     }
 }
 
-impl U8Lookup {
-    pub(super) fn get_or_init(
+impl<T> U8Lookup<T> {
+    pub(super) fn get_or_init_with(
         &self,
-        convert: impl FnOnce(&[u8], &mut [u8]) -> Option<()>,
-    ) -> Option<&[[u8; 3]]> {
+        init: impl FnOnce(&[u8]) -> Option<Vec<T>>,
+    ) -> Option<&[T]> {
         self.0
             .get_or_init(|| {
                 let input: [u8; 256] = core::array::from_fn(|index| index as u8);
-                let mut output = vec![0; 256 * 3];
-                convert(&input, &mut output)?;
-
-                Some(
-                    output
-                        .chunks_exact(3)
-                        .map(|rgb| [rgb[0], rgb[1], rgb[2]])
-                        .collect(),
-                )
+                init(&input)
             })
             .as_deref()
     }
 }
 
-pub(super) fn apply_u8_lookup(input: &[u8], output: &mut [u8], lookup: &[[u8; 3]]) {
-    for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
-        output.copy_from_slice(&lookup[*input as usize]);
+impl U8Lookup<[u8; 3]> {
+    pub(super) fn get_or_init(
+        &self,
+        convert: impl FnOnce(&[u8], &mut [u8]) -> Option<()>,
+    ) -> Option<&[[u8; 3]]> {
+        self.get_or_init_with(|input| {
+            let mut output = vec![0; 256 * 3];
+            convert(input, &mut output)?;
+
+            Some(
+                output
+                    .chunks_exact(3)
+                    .map(|rgb| [rgb[0], rgb[1], rgb[2]])
+                    .collect(),
+            )
+        })
     }
 }
 
@@ -408,10 +419,6 @@ impl ColorSpace {
         }
     }
 
-    pub(crate) fn is_device_gray(&self) -> bool {
-        matches!(self.0.as_ref(), ColorSpaceType::DeviceGray(_))
-    }
-
     /// Get the number of components of the color space.
     pub(crate) fn num_components(&self) -> u8 {
         match self.0.as_ref() {
@@ -527,6 +534,24 @@ impl ToRgb for ColorSpace {
     }
 }
 
+impl ToLuma for ColorSpace {
+    fn to_luma(&self, input: &mut [u8]) -> Option<()> {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceGray(i) => i.to_luma(input),
+            ColorSpaceType::Pattern(i) => i.to_luma(input),
+            ColorSpaceType::ICCBased(i) => i.to_luma(input),
+            ColorSpaceType::CalGray(i) => i.to_luma(input),
+            ColorSpaceType::DeviceCmyk(_)
+            | ColorSpaceType::DeviceRgb(_)
+            | ColorSpaceType::Indexed(_)
+            | ColorSpaceType::CalRgb(_)
+            | ColorSpaceType::Lab(_)
+            | ColorSpaceType::Separation(_)
+            | ColorSpaceType::DeviceN(_) => None,
+        }
+    }
+}
+
 #[inline(always)]
 fn f32_to_u8(val: f32) -> u8 {
     (val * 255.0 + 0.5) as u8
@@ -575,6 +600,10 @@ pub(crate) trait ToRgb {
     fn is_none(&self) -> bool {
         false
     }
+}
+
+pub(crate) trait ToLuma {
+    fn to_luma(&self, input: &mut [u8]) -> Option<()>;
 }
 
 #[inline]

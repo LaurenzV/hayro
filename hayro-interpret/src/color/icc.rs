@@ -1,4 +1,4 @@
-use super::ToRgb;
+use super::{ToLuma, ToRgb};
 use moxcms::{
     ColorProfile, DataColorSpace, InPlaceTransformExecutor, Layout, Transform8BitExecutor,
     TransformOptions,
@@ -14,6 +14,7 @@ struct ICCColorRepr {
     src_layout: Layout,
     transform_u8: OnceLock<Option<Arc<Transform8BitExecutor>>>,
     transform_in_place_u8: Option<Arc<dyn InPlaceTransformExecutor<u8> + Send + Sync>>,
+    transform_in_place_luma_u8: Option<Arc<dyn InPlaceTransformExecutor<u8> + Send + Sync>>,
 }
 
 #[derive(Clone)]
@@ -56,6 +57,19 @@ impl ICCProfile {
         };
 
         let dest_profile = ColorProfile::new_srgb();
+        let transform_in_place_luma_u8 = if src_layout == Layout::Gray {
+            let mut dest_luma_profile = ColorProfile::new_gray_with_gamma(1.0);
+            dest_luma_profile.gray_trc = dest_profile.red_trc.clone();
+            src_profile
+                .create_in_place_transform_8bit(
+                    src_layout,
+                    &dest_luma_profile,
+                    TransformOptions::default(),
+                )
+                .ok()
+        } else {
+            None
+        };
         let transform_in_place_u8 = if src_layout == Layout::Rgb {
             src_profile
                 .create_in_place_transform_8bit(
@@ -89,6 +103,7 @@ impl ICCProfile {
             src_layout,
             transform_u8,
             transform_in_place_u8,
+            transform_in_place_luma_u8,
         })))
     }
 
@@ -140,6 +155,22 @@ impl ToRgb for ICCProfile {
         if !self.is_srgb() {
             self.transform_in_place_u8()?.transform(input).ok()?;
         }
+
+        Some(())
+    }
+}
+
+impl ToLuma for ICCProfile {
+    fn to_luma(&self, input: &mut [u8]) -> Option<()> {
+        if self.number_components() != 1 {
+            return None;
+        }
+
+        self.0
+            .transform_in_place_luma_u8
+            .as_ref()?
+            .transform(input)
+            .ok()?;
 
         Some(())
     }

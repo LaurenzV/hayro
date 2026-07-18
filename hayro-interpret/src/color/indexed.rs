@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
@@ -8,7 +8,7 @@ pub(crate) struct Indexed {
     values: Vec<Vec<u8>>,
     hival: u8,
     base: Box<ColorSpace>,
-    lookup: U8Lookup,
+    lookup: U8Lookup<[u8; 3]>,
 }
 
 impl Indexed {
@@ -80,7 +80,10 @@ impl Indexed {
 
 impl ToRgb for Indexed {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        apply_u8_lookup(input, output, self.u8_lookup()?);
+        let lookup = self.u8_lookup()?;
+        for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
+            output.copy_from_slice(&lookup[*input as usize]);
+        }
 
         Some(())
     }

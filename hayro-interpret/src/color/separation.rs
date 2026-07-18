@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup, apply_u8_lookup};
+use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use crate::function::Function;
 use hayro_syntax::object::{Array, Name, Object};
@@ -9,7 +9,7 @@ pub(crate) struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
     is_none_separation: bool,
-    lookup: U8Lookup,
+    lookup: U8Lookup<[u8; 3]>,
 }
 
 impl Separation {
@@ -54,7 +54,10 @@ impl Separation {
 
 impl ToRgb for Separation {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        apply_u8_lookup(input, output, self.u8_lookup()?);
+        let lookup = self.u8_lookup()?;
+        for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
+            output.copy_from_slice(&lookup[*input as usize]);
+        }
 
         Some(())
     }
