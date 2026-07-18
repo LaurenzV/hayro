@@ -1,7 +1,7 @@
 use super::mask::decode_mask;
 use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, unpack_samples};
 use crate::color::{ColorComponents, ToLuma, ToRgb};
-use crate::x_object::image::ImageXObject;
+use crate::x_object::image::{ImageTransferFunction, ImageXObject};
 use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
@@ -129,10 +129,19 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             components
         };
 
-        // TODO: Apply single transfer functions directly to luma.
-        if self.obj.transfer_function.is_none()
+        if self
+            .obj
+            .transfer_function
+            .as_ref()
+            .is_none_or(|t| matches!(t, ImageTransferFunction::Single(_)))
             && self.ctx.color_space.to_luma(&mut components).is_some()
         {
+            if let Some(transfer_function) =
+                &self.obj.transfer_function
+            {
+                transfer_function.apply_to(&mut components);
+            }
+
             return Some(ImageData::Luma(LumaData {
                 data: components,
                 width: self.ctx.width,
