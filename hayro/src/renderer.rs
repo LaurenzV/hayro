@@ -1,5 +1,5 @@
 use crate::{RenderCache, derive_settings};
-use fearless_simd::{Level, Select, Simd, SimdBase, SimdInt, SimdInto, mask8x16, u8x16, u16x16};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x16, u8x16, u16x16};
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -21,6 +21,15 @@ use vello_cpu::peniko::{ColorStop, Compose, Fill, Gradient, ImageQuality, ImageS
 use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
+
+// Previously, we used `CatmullRom`. The problem with that one is that it
+// can have negative weights. If we pass a premultiplied buffer to
+// `pic-scale`, it can happen that any of the RGB variants end up
+// slightly larger than the alpha channel, leading to pixel artifacts when
+// rendering. In order to avoid having to do another pass over the buffer
+// to clamp, we instead use Hermite, which has similar quality but doesn't
+// have this problem.
+const RESAMPLING_FUNCTION: ResamplingFunction = ResamplingFunction::Hermite;
 
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
@@ -107,7 +116,7 @@ impl Renderer {
             soft_mask_cache: FxHashMap::default(),
             outline_cache: cache.outline_cache.clone(),
             in_type3_glyph: false,
-            scaler: Scaler::new(ResamplingFunction::CatmullRom),
+            scaler: Scaler::new(RESAMPLING_FUNCTION),
         }
     }
 
@@ -215,7 +224,7 @@ impl Renderer {
                 },
             ),
             ImagePixelFormat::PremultipliedRgba => {
-                let mut resized = self.resize_image_data_impl::<4>(
+                let resized = self.resize_image_data_impl::<4>(
                     data,
                     src_width,
                     src_height,
@@ -228,7 +237,7 @@ impl Renderer {
 
                 // Filtering can cause color channels to become larger than the
                 // alpha, so we need to clamp.
-                clamp_premultiplied_rgba(self.level, &mut resized);
+                // clamp_premultiplied_rgba(self.level, &mut resized);
                 resized
             }
         }
@@ -1179,7 +1188,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         soft_mask_cache: FxHashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
         in_type3_glyph: false,
-        scaler: Scaler::new(ResamplingFunction::CatmullRom),
+        scaler: Scaler::new(RESAMPLING_FUNCTION),
     };
 
     let bg_color = mask.background_color().to_rgba();
@@ -1328,27 +1337,6 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
         pixel[0] = div_255(u16::from(pixel[0]) * alpha) as u8;
         pixel[1] = div_255(u16::from(pixel[1]) * alpha) as u8;
         pixel[2] = div_255(u16::from(pixel[2]) * alpha) as u8;
-    }
-}
-
-fn clamp_premultiplied_rgba(level: Level, data: &mut [u8]) {
-    let simd_len = data.len() / 16 * 16;
-    let (simd_data, tail) = data.split_at_mut(simd_len);
-
-    #[inline(always)]
-    fn clamp_premultiplied_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
-        for chunk in data.chunks_exact_mut(16) {
-            let rgba = u8x16::from_slice(simd, chunk);
-            rgba.min(rgba.splat_4th()).store_slice(chunk);
-        }
-    }
-
-    fearless_simd::dispatch!(level, simd => clamp_premultiplied_rgba_simd(simd, simd_data));
-
-    for pixel in tail.chunks_exact_mut(4) {
-        pixel[0] = pixel[0].min(pixel[3]);
-        pixel[1] = pixel[1].min(pixel[3]);
-        pixel[2] = pixel[2].min(pixel[3]);
     }
 }
 
