@@ -1,5 +1,5 @@
 use crate::{RenderCache, derive_settings};
-use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x16, u8x16, u16x16};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x32};
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -1296,30 +1296,37 @@ trait Splat4thExt {
     fn splat_4th(self) -> Self;
 }
 
-impl<S: Simd> Splat4thExt for u8x16<S> {
+impl<S: Simd> Splat4thExt for u8x32<S> {
     #[inline(always)]
     fn splat_4th(self) -> Self {
         [
             self[3], self[3], self[3], self[3], self[7], self[7], self[7], self[7], self[11],
-            self[11], self[11], self[11], self[15], self[15], self[15], self[15],
+            self[11], self[11], self[11], self[15], self[15], self[15], self[15], self[19],
+            self[19], self[19], self[19], self[23], self[23], self[23], self[23], self[27],
+            self[27], self[27], self[27], self[31], self[31], self[31], self[31],
         ]
         .simd_into(self.simd)
     }
 }
 
 fn premultiply_rgba(level: Level, data: &mut [u8]) {
-    let simd_len = data.len() / 16 * 16;
+    let simd_len = data.len() / 32 * 32;
     let (simd_data, tail) = data.split_at_mut(simd_len);
 
     #[inline(always)]
     fn premultiply_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
-        let alpha_lanes =
-            mask8x16::from_slice(simd, &[0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1]);
-        for chunk in data.chunks_exact_mut(16) {
-            let rgba = u8x16::from_slice(simd, chunk);
+        let alpha_lanes = mask8x32::from_slice(
+            simd,
+            &[
+                0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0,
+                0, -1, 0, 0, 0, -1,
+            ],
+        );
+        for chunk in data.chunks_exact_mut(32) {
+            let rgba = u8x32::from_slice(simd, chunk);
             let alphas = rgba.splat_4th();
-            let premultiplied = (simd.widen_u8x16(rgba) * simd.widen_u8x16(alphas)).div_255();
-            let premultiplied = simd.narrow_u16x16(premultiplied);
+            let premultiplied = (simd.widen_u8x32(rgba) * simd.widen_u8x32(alphas)).div_255();
+            let premultiplied = simd.narrow_u16x32(premultiplied);
             alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
         }
     }
@@ -1338,7 +1345,7 @@ trait Div255Ext {
     fn div_255(self) -> Self;
 }
 
-impl<S: Simd> Div255Ext for u16x16<S> {
+impl<S: Simd> Div255Ext for u16x32<S> {
     #[inline(always)]
     fn div_255(self) -> Self {
         (self + Self::splat(self.simd, 255)) >> 8
