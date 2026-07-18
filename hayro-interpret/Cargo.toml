@@ -15,7 +15,7 @@ hayro-syntax = { workspace = true, features = ["std", "images", "unsafe"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true, optional = true }
-moxcms = { workspace = true }
+moxcms = { workspace = true, features = ["in_place"] }
 phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
 yoke = { workspace = true, features = ["derive"]}

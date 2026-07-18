@@ -37,4 +37,8 @@ impl ToRgb for Lab {
     fn convert(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         self.profile.convert(input, output)
     }
+
+    fn convert_in_place(&self, input: &mut [u8]) -> Option<()> {
+        self.profile.convert_in_place(input)
+    }
 }
