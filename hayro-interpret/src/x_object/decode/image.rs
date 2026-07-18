@@ -136,9 +136,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             .is_none_or(|t| matches!(t, ImageTransferFunction::Single(_)))
             && self.ctx.color_space.to_luma(&mut components).is_some()
         {
-            if let Some(transfer_function) =
-                &self.obj.transfer_function
-            {
+            if let Some(transfer_function) = &self.obj.transfer_function {
                 transfer_function.apply_to(&mut components);
             }
 
