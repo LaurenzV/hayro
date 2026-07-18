@@ -1193,5 +1193,9 @@
   {
     "id": "issue1023",
     "file": "pdfs/custom/issue1023.pdf"
+  },
+  {
+    "id": "issue1276",
+    "link": true
   }
 ]
