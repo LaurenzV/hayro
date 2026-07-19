@@ -11,36 +11,87 @@ pub(crate) mod flate {
     use crate::object::Dict;
 
     #[cfg(feature = "unsafe")]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        max_decoded: Option<usize>,
+    ) -> Option<Vec<u8>> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
-        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = ZlibDecoder::new(data);
-            let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
+        /// The result of one flate2 inflate attempt. Distinguishing "too large"
+        /// (a definitive rejection) from "this decoder could not handle the
+        /// stream" (try another) keeps an over-limit stream from falling
+        /// through to the fallback decoder and being inflated a second time.
+        enum Inflated {
+            Ok(Vec<u8>),
+            TooLarge,
+            Failed,
         }
 
-        fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = DeflateDecoder::new(data);
+        // The decoder is capped at one byte past the limit, so an over-limit
+        // stream is detected (and rejected) rather than silently truncated.
+        fn inflate<R: Read>(mut decoder: R, cap: usize) -> Inflated {
             let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
+            match decoder.read_to_end(&mut result) {
+                Ok(_) if result.len() <= cap => Inflated::Ok(result),
+                Ok(_) => Inflated::TooLarge,
+                Err(_) => Inflated::Failed,
+            }
         }
 
-        let decoded = zlib_stream(data)
-            .or_else(|| deflate_stream(data))
-            .or_else(|| {
+        fn zlib_stream(data: &[u8], cap: usize) -> Inflated {
+            inflate(
+                ZlibDecoder::new(data).take(cap.saturating_add(1) as u64),
+                cap,
+            )
+        }
+
+        fn deflate_stream(data: &[u8], cap: usize) -> Inflated {
+            inflate(
+                DeflateDecoder::new(data).take(cap.saturating_add(1) as u64),
+                cap,
+            )
+        }
+
+        let cap = max_decoded.unwrap_or(usize::MAX);
+
+        let mut decoded = None;
+        for attempt in [zlib_stream, deflate_stream] {
+            match attempt(data, cap) {
+                Inflated::Ok(v) => {
+                    decoded = Some(v);
+                    break;
+                }
+                // A definitive rejection: retrying with another decoder would
+                // only hit the same limit, so don't fall through.
+                Inflated::TooLarge => {
+                    debug!("flate stream exceeds the decoded-size limit");
+                    return None;
+                }
+                Inflated::Failed => continue,
+            }
+        }
+
+        let decoded = match decoded {
+            Some(v) => v,
+            None => {
                 warn!("flate stream is broken, decoding with fallback");
+                fallback::decode(data, max_decoded)?
+            }
+        };
 
-                fallback::decode(data)
-            })?;
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
 
     #[cfg(not(feature = "unsafe"))]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
-        let decoded = fallback::decode(data)?;
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        max_decoded: Option<usize>,
+    ) -> Option<Vec<u8>> {
+        let decoded = fallback::decode(data, max_decoded)?;
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
@@ -51,11 +102,11 @@ pub(crate) mod flate {
         use alloc::vec;
         use alloc::vec::Vec;
 
-        pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
-            flate_decode(data)
+        pub(crate) fn decode(data: &[u8], max_decoded: Option<usize>) -> Option<Vec<u8>> {
+            flate_decode(data, max_decoded)
         }
 
-        fn flate_decode(data: &[u8]) -> Option<Vec<u8>> {
+        fn flate_decode(data: &[u8], max_decoded: Option<usize>) -> Option<Vec<u8>> {
             if data.len() >= 2 {
                 let cmf = data[0];
                 let flg = data[1];
@@ -64,12 +115,12 @@ pub(crate) mod flate {
                     && ((cmf as u16) << 8 | flg as u16).is_multiple_of(31)
                     && (flg & 0x20) == 0
                 {
-                    let mut stream = FlateStream::new(&data[2..]);
+                    let mut stream = FlateStream::new(&data[2..], max_decoded);
                     return stream.decode();
                 }
             }
 
-            let mut stream = FlateStream::new(data);
+            let mut stream = FlateStream::new(data, max_decoded);
             stream.decode()
         }
 
@@ -80,10 +131,11 @@ pub(crate) mod flate {
             code_size: u8,
             output: Vec<u8>,
             eof: bool,
+            max_decoded: usize,
         }
 
         impl<'a> FlateStream<'a> {
-            fn new(data: &'a [u8]) -> Self {
+            fn new(data: &'a [u8], max_decoded: Option<usize>) -> Self {
                 FlateStream {
                     data,
                     pos: 0,
@@ -91,12 +143,21 @@ pub(crate) mod flate {
                     code_size: 0,
                     output: Vec::new(),
                     eof: false,
+                    max_decoded: max_decoded.unwrap_or(usize::MAX),
                 }
             }
 
             fn decode(&mut self) -> Option<Vec<u8>> {
                 while !self.eof && self.pos < self.data.len() {
                     self.read_block();
+
+                    // Bound the output against decompression bombs. `read_block`
+                    // appends at most one DEFLATE block, so the peak overshoot
+                    // past the limit is one block.
+                    if self.output.len() > self.max_decoded {
+                        debug!("flate stream exceeds the decoded-size limit");
+                        return None;
+                    }
                 }
 
                 Some(core::mem::take(&mut self.output))
@@ -570,10 +631,14 @@ pub(crate) mod lzw {
     use alloc::vec::Vec;
 
     /// Decode a LZW-encoded stream.
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        max_decoded: Option<usize>,
+    ) -> Option<Vec<u8>> {
         let params = PredictorParams::from_params(params);
 
-        let decoded = decode_impl(data, params.early_change)?;
+        let decoded = decode_impl(data, params.early_change, max_decoded)?;
 
         apply_predictor(decoded, &params)
     }
@@ -583,7 +648,8 @@ pub(crate) mod lzw {
     const MAX_ENTRIES: usize = 4096;
     const INITIAL_SIZE: u16 = 258;
 
-    fn decode_impl(data: &[u8], early_change: bool) -> Option<Vec<u8>> {
+    fn decode_impl(data: &[u8], early_change: bool, max_decoded: Option<usize>) -> Option<Vec<u8>> {
+        let max_decoded = max_decoded.unwrap_or(usize::MAX);
         let mut table = Table::new(early_change);
         let mut bit_size = table.code_length();
         let mut reader = BitReader::new(data);
@@ -591,6 +657,14 @@ pub(crate) mod lzw {
         let mut prev = None;
 
         loop {
+            // Bound the output against decompression bombs. Each iteration
+            // appends at most one table entry, so the peak overshoot past the
+            // limit is one entry.
+            if decoded.len() > max_decoded {
+                debug!("LZW stream exceeds the decoded-size limit");
+                return None;
+            }
+
             let next = match reader.read(bit_size) {
                 Some(code) => code as usize,
                 None => {
@@ -1033,7 +1107,7 @@ mod tests {
     #[test]
     fn decode_lzw() {
         let input = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
-        let decoded = lzw::decode(&input, &Dict::default()).unwrap();
+        let decoded = lzw::decode(&input, &Dict::default(), None).unwrap();
 
         assert_eq!(decoded, vec![45, 45, 45, 45, 45, 65, 45, 45, 45, 66]);
     }
@@ -1044,7 +1118,7 @@ mod tests {
             0x78, 0x9c, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0, 0x5, 0x8c, 0x1, 0xf5,
         ];
 
-        let decoded = flate::decode(&input, &Dict::default()).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), None).unwrap();
         assert_eq!(decoded, b"Hello");
     }
 
@@ -1052,10 +1126,40 @@ mod tests {
     fn decode_flate() {
         let input = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0];
 
-        let decoded = flate::decode(&input, &Dict::default()).unwrap();
+        let decoded = flate::decode(&input, &Dict::default(), None).unwrap();
         assert_eq!(decoded, b"Hello");
     }
-    
+
+    /// `zlib.compress(&[0u8; 128 KiB])` — a 149-byte stream that inflates to
+    /// 128 KiB. Decoding it under a 64 KiB limit must return `None` rather
+    /// than inflating it. Because this is a genuine, valid zlib stream (it
+    /// decodes fine without a limit), a `None` result can only come from the
+    /// limit, never from a malformed input.
+    #[test]
+    fn flate_decode_rejects_decompression_bomb() {
+        const BOMB: &[u8] = &[
+            0x78, 0xda, 0xed, 0xc1, 0x31, 0x01, 0x00, 0x00, 0x00, 0xc2, 0xa0, 0xf5,
+            0x4f, 0xed, 0x61, 0x0d, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x6e, 0x00, 0x1e, 0x00, 0x01,
+        ];
+        assert_eq!(flate::decode(BOMB, &Dict::default(), Some(64 * 1024)), None);
+        assert_eq!(
+            flate::decode(BOMB, &Dict::default(), None).map(|d| d.len()),
+            Some(128 * 1024)
+        );
+    }
+
+
     fn predictor_expected() -> Vec<u8> {
         vec![
             // Row 1

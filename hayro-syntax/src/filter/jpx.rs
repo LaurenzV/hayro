@@ -1,5 +1,6 @@
 use crate::bit_reader::BitWriter;
 use crate::filter::FilterResult;
+use crate::limits::Limits;
 use crate::math::round_f32;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
@@ -18,7 +19,11 @@ impl ImageColorSpace {
     }
 }
 
-pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult<'static>> {
+pub(crate) fn decode(
+    data: &[u8],
+    params: &ImageDecodeParams,
+    limits: Limits,
+) -> Option<FilterResult<'static>> {
     use crate::object::stream::ImageColorSpace;
 
     let settings = DecodeSettings {
@@ -31,6 +36,13 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
 
     let width = image.width();
     let height = image.height();
+
+    // The dimensions come from the JPEG 2000 codestream (which may be tiled),
+    // not the image dictionary, and size the decode buffers below.
+    if !limits.permits_image(width, height) {
+        debug!("JPEG 2000 image {width}x{height} exceeds the configured limits");
+        return None;
+    }
     let bpc = params.bpc.unwrap_or(image.original_bit_depth());
     let cs = match image.color_space() {
         ColorSpace::Gray => ImageColorSpace::Gray,

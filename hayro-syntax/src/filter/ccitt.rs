@@ -1,3 +1,4 @@
+use crate::limits::Limits;
 use crate::object::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
@@ -13,11 +14,21 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    limits: Limits,
 ) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
     let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
+
+    // `columns`/`rows` come from the decode parameters, independent of the
+    // image dictionary's dimensions, and size the output buffer below — so
+    // enforce the limit against them directly.
+    if !limits.permits_image(columns, rows) {
+        debug!("CCITT image {columns}x{rows} exceeds the configured limits");
+        return None;
+    }
+
     let output_len = (columns as usize).checked_mul(rows as usize)?;
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
@@ -170,6 +181,7 @@ pub(crate) fn decode(
 #[cfg(test)]
 mod tests {
     use super::decode;
+    use crate::limits::{Limit, Limits};
     use crate::object::FromBytes;
     use crate::object::dict::Dict;
     use crate::object::stream::ImageDecodeParams;
@@ -178,9 +190,27 @@ mod tests {
     fn issue1258() {
         let params = Dict::from_bytes(b"<< /K 0 /Columns 8 /Rows 1 >>").unwrap();
 
-        let decoded = decode(&[0x35, 0x14], &params, &ImageDecodeParams::default()).unwrap();
+        let decoded = decode(
+            &[0x35, 0x14],
+            &params,
+            &ImageDecodeParams::default(),
+            Limits::default(),
+        )
+        .unwrap();
 
         assert_eq!(decoded.data.as_ref(), &[0; 8]);
         assert_eq!(decoded.image_data.unwrap().height, 1);
+    }
+
+    #[test]
+    fn rejects_oversized_dimensions() {
+        // `columns * rows` sizes the output buffer independently of the image
+        // dictionary, so an absurd /Columns must be refused under a limit.
+        let params = Dict::from_bytes(b"<< /K 0 /Columns 100000 /Rows 100000 >>").unwrap();
+        let limits = Limits {
+            max_image_pixels: Limit::AtMost(1_000_000),
+            ..Limits::default()
+        };
+        assert!(decode(&[0x00], &params, &ImageDecodeParams::default(), limits).is_none());
     }
 }
