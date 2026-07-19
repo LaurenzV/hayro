@@ -31,14 +31,28 @@ use vello_cpu::{
 // have this problem.
 const RESAMPLING_FUNCTION: ResamplingFunction = ResamplingFunction::Hermite;
 
-pub(crate) struct Renderer {
-    pub(crate) ctx: RenderContext,
+pub(crate) struct GlobalState {
     level: Level,
+    outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    scaler: Scaler,
+}
+
+impl GlobalState {
+    pub(crate) fn new(cache: &RenderCache<'_>) -> Self {
+        Self {
+            level: Level::new(),
+            outline_cache: cache.outline_cache.clone(),
+            scaler: Scaler::new(RESAMPLING_FUNCTION),
+        }
+    }
+}
+
+pub(crate) struct Renderer<'a> {
+    global: &'a GlobalState,
+    pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
-    pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     pub(crate) in_type3_glyph: bool,
-    pub(crate) scaler: Scaler,
 }
 
 #[derive(Clone, Copy)]
@@ -102,22 +116,29 @@ impl RenderImageData {
     }
 }
 
-impl Renderer {
+impl<'r> Renderer<'r> {
     pub(crate) fn new(
         width: u16,
         height: u16,
         settings: RenderSettings,
-        cache: &RenderCache<'_>,
+        global: &'r GlobalState,
     ) -> Self {
         Self {
+            global,
             ctx: RenderContext::new_with(width, height, settings),
-            level: Level::new(),
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
-            outline_cache: cache.outline_cache.clone(),
             in_type3_glyph: false,
-            scaler: Scaler::new(RESAMPLING_FUNCTION),
         }
+    }
+
+    fn child(&self, width: u16, height: u16) -> Self {
+        Self::new(
+            width,
+            height,
+            derive_settings(self.ctx.render_settings()),
+            self.global,
+        )
     }
 
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
@@ -156,19 +177,7 @@ impl Renderer {
                     image_data.width() as f64 / alpha_data.width as f64,
                     image_data.height() as f64 / alpha_data.height as f64,
                 );
-            let mut renderer = Self {
-                ctx: RenderContext::new_with(
-                    self.ctx.width(),
-                    self.ctx.height(),
-                    derive_settings(self.ctx.render_settings()),
-                ),
-                level: self.level,
-                inside_pattern: false,
-                soft_mask_cache: FxHashMap::default(),
-                outline_cache: self.outline_cache.clone(),
-                in_type3_glyph: false,
-                scaler: self.scaler,
-            };
+            let mut renderer = self.child(self.ctx.width(), self.ctx.height());
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
                 data: vec![0; alpha_data.width as usize * alpha_data.height as usize * 3],
@@ -257,7 +266,7 @@ impl Renderer {
         let mut dst =
             ImageStoreMut::<u8, N>::from_slice(&mut out, new_width as usize, new_height as usize)
                 .unwrap();
-        let plan = plan(&self.scaler, source_size, target_size).unwrap();
+        let plan = plan(&self.global.scaler, source_size, target_size).unwrap();
         plan.resample(&src, &mut dst).unwrap();
         out
     }
@@ -471,7 +480,7 @@ impl Renderer {
             if !needs_resize {
                 rgba_data
             } else {
-                premultiply_rgba(self.level, &mut rgba_data);
+                premultiply_rgba(self.global.level, &mut rgba_data);
 
                 needs_premultiplication = false;
                 let resized = self.resize_image_data(
@@ -493,7 +502,7 @@ impl Renderer {
         };
 
         if needs_premultiplication {
-            premultiply_rgba(self.level, &mut rgba_data);
+            premultiply_rgba(self.global.level, &mut rgba_data);
         }
 
         // The problem is that by default, when applying a bilinear or bicubic scaling, we will
@@ -564,13 +573,14 @@ impl Renderer {
 
     fn apply_soft_mask(&mut self, mask: Option<&SoftMask<'_>>) {
         let settings = *self.ctx.render_settings();
+        let global = self.global;
         let mask = mask.map(|m| {
             let width = self.ctx.width();
             let height = self.ctx.height();
 
             self.soft_mask_cache
                 .entry(m.cache_key())
-                .or_insert_with(|| draw_soft_mask(m, settings, width, height))
+                .or_insert_with(|| draw_soft_mask(m, settings, width, height, global))
                 .clone()
         });
 
@@ -726,19 +736,8 @@ impl Renderer {
                         let pix_width = x_step.abs().round() as u16;
                         let pix_height = y_step.abs().round() as u16;
 
-                        let mut renderer = Self {
-                            ctx: RenderContext::new_with(
-                                pix_width,
-                                pix_height,
-                                derive_settings(self.ctx.render_settings()),
-                            ),
-                            level: self.level,
-                            inside_pattern: true,
-                            soft_mask_cache: FxHashMap::default(),
-                            outline_cache: self.outline_cache.clone(),
-                            in_type3_glyph: false,
-                            scaler: self.scaler,
-                        };
+                        let mut renderer = self.child(pix_width, pix_height);
+                        renderer.inside_pattern = true;
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
                         t.interpret(&mut renderer, initial_transform, is_stroke);
@@ -865,17 +864,20 @@ impl Renderer {
     fn cached_outline(&self, glyph: &hayro_interpret::font::OutlineGlyph) -> Rc<BezPath> {
         let id = glyph.identifier().cache_key();
 
-        if let Some(path) = self.outline_cache.borrow().get(&id) {
+        if let Some(path) = self.global.outline_cache.borrow().get(&id) {
             return path.clone();
         }
 
         let path = Rc::new(glyph.outline());
-        self.outline_cache.borrow_mut().insert(id, path.clone());
+        self.global
+            .outline_cache
+            .borrow_mut()
+            .insert(id, path.clone());
         path
     }
 }
 
-impl<'a> Device<'a> for Renderer {
+impl<'a, 'r> Device<'a> for Renderer<'r> {
     fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, props: ImageDrawProps<'a>) {
         self.apply_image_props(&props);
         let mut transform = props.transform;
@@ -958,19 +960,7 @@ impl<'a> Device<'a> for Renderer {
                                         interpolate: stencil.interpolate,
                                         scale_factors: stencil.scale_factors,
                                     });
-                                    let mut sub_renderer = Self {
-                                        ctx: RenderContext::new_with(
-                                            width,
-                                            height,
-                                            derive_settings(self.ctx.render_settings()),
-                                        ),
-                                        level: self.level,
-                                        inside_pattern: false,
-                                        soft_mask_cache: FxHashMap::default(),
-                                        outline_cache: self.outline_cache.clone(),
-                                        in_type3_glyph: false,
-                                        scaler: self.scaler,
-                                    };
+                                    let mut sub_renderer = self.child(width, height);
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
@@ -1036,6 +1026,7 @@ impl<'a> Device<'a> for Renderer {
         blend_mode: BlendMode,
     ) {
         let settings = *self.ctx.render_settings();
+        let global = self.global;
         self.ctx.push_layer(
             None,
             Some(convert_blend_mode(blend_mode)),
@@ -1047,7 +1038,7 @@ impl<'a> Device<'a> for Renderer {
 
                 self.soft_mask_cache
                     .entry(m.cache_key())
-                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
+                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height, global))
                     .clone()
             }),
             None,
@@ -1173,16 +1164,14 @@ fn render_shading_texture(
     )
 }
 
-fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
-    let mut renderer = Renderer {
-        ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
-        level: Level::new(),
-        inside_pattern: false,
-        soft_mask_cache: FxHashMap::default(),
-        outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
-        in_type3_glyph: false,
-        scaler: Scaler::new(RESAMPLING_FUNCTION),
-    };
+fn draw_soft_mask(
+    mask: &SoftMask<'_>,
+    settings: RenderSettings,
+    width: u16,
+    height: u16,
+    global: &GlobalState,
+) -> Mask {
+    let mut renderer = Renderer::new(width, height, derive_settings(&settings), global);
 
     let bg_color = mask.background_color().to_rgba();
     let apply_bg = bg_color.to_rgba8() != BLACK.to_rgba8().to_u8_array();
