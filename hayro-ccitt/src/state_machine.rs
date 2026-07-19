@@ -20,12 +20,6 @@ pub(crate) const INVALID: u16 = 0xFFFF;
 pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATING, &WHITE_MAKEUP);
 /// List of states for black color codes.
 pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
-/// List of states for coding modes.
-pub(crate) const MODE_STATES: [State; 9] = {
-    let mut states: [State; 9] = [State::new(); 9];
-    let _ = insert_codes(&mut states, 1, &MODE_CODES);
-    states
-};
 
 #[derive(Clone, Copy)]
 pub(crate) struct State {
@@ -333,17 +327,4 @@ const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (2432, 12, 0b000000011101),
     (2496, 12, 0b000000011110),
     (2560, 12, 0b000000011111),
-];
-
-/// Mode codes for 2D encoding (T.4 Table 4/T.4, T.6 Table 1/T.6).
-const MODE_CODES: [(u16, u8, u16); 9] = [
-    (0, 4, 0b0001),    // Pass
-    (1, 3, 0b001),     // Horizontal
-    (2, 1, 0b1),       // Vertical_0
-    (3, 3, 0b011),     // Vertical_R1
-    (4, 6, 0b000011),  // Vertical_R2
-    (5, 7, 0b0000011), // Vertical_R3
-    (6, 3, 0b010),     // Vertical_L1
-    (7, 6, 0b000010),  // Vertical_L2
-    (8, 7, 0b0000010), // Vertical_L3
 ];
