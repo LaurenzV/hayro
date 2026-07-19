@@ -1,7 +1,5 @@
 use crate::bit_reader::BitReader;
-use crate::state_machine::{
-    BLACK_STATES, INVALID, MODE_STATES, State, TERMINAL, VALUE_MASK, WHITE_STATES,
-};
+use crate::state_machine::{BLACK_STATES, INVALID, State, TERMINAL, VALUE_MASK, WHITE_STATES};
 use crate::{Color, DecodeError, Result};
 
 /// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
@@ -45,8 +43,7 @@ impl BitReader<'_> {
                 total = total.checked_add(len).ok_or(DecodeError::Overflow)?;
 
                 // For decoding black/white runs, less than 64 means we have
-                // a terminating code. For mode decoding, all values are less
-                // than 64 anyway, so this condition can be used for all methods.
+                // a terminating code.
                 if len < 64 {
                     return Ok(total);
                 }
@@ -88,19 +85,38 @@ impl BitReader<'_> {
     /// Decode a 2D mode code.
     #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Result<Mode> {
-        let mode_value = self.decode_run_inner(&MODE_STATES)?;
+        if self.read_bit()? == 1 {
+            return Ok(Mode::Vertical(0));
+        }
 
-        Ok(match mode_value {
-            0 => Mode::Pass,
-            1 => Mode::Horizontal,
-            2 => Mode::Vertical(0),
-            3 => Mode::Vertical(1),
-            4 => Mode::Vertical(2),
-            5 => Mode::Vertical(3),
-            6 => Mode::Vertical(-1),
-            7 => Mode::Vertical(-2),
-            8 => Mode::Vertical(-3),
-            _ => return Err(DecodeError::InvalidCode),
+        match self.read_bits(2)? {
+            0b01 => return Ok(Mode::Horizontal),
+            0b11 => return Ok(Mode::Vertical(1)),
+            0b10 => return Ok(Mode::Vertical(-1)),
+            0b00 => {}
+            _ => unreachable!(),
+        }
+
+        if self.read_bit()? == 1 {
+            return Ok(Mode::Pass);
+        }
+
+        if self.read_bit()? == 1 {
+            return Ok(if self.read_bit()? == 1 {
+                Mode::Vertical(2)
+            } else {
+                Mode::Vertical(-2)
+            });
+        }
+
+        if self.read_bit()? == 0 {
+            return Err(DecodeError::InvalidCode);
+        }
+
+        Ok(if self.read_bit()? == 1 {
+            Mode::Vertical(3)
+        } else {
+            Mode::Vertical(-3)
         })
     }
 
