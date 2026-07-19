@@ -64,6 +64,14 @@ fn decode_context<'a>(
         })
         .unwrap_or((obj.width, obj.height));
 
+    // For codec-driven formats the decoded dimensions come from the codestream
+    // rather than the (already-checked) image dictionary, and they size the
+    // sample buffers below. Enforce the limit against the actual dimensions.
+    if !obj.stream.limits().permits_image(width, height) {
+        debug!("decoded image {width}x{height} exceeds the configured limits");
+        return None;
+    }
+
     let color_space = color_space
         .or_else(|| {
             decoded
