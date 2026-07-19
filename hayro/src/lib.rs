@@ -33,7 +33,7 @@ This crate has one optional feature:
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use crate::renderer::Renderer;
+use crate::renderer::{GlobalState, Renderer};
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
@@ -143,7 +143,8 @@ pub fn render<'a>(
         num_threads: 0,
     };
 
-    let mut device = Renderer::new(pix_width, pix_height, vc_settings, cache);
+    let global = GlobalState::new(cache);
+    let mut device = Renderer::new(pix_width, pix_height, vc_settings, &global);
 
     device.ctx.set_paint(render_settings.bg_color);
     device
