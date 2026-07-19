@@ -50,18 +50,6 @@ pub(crate) fn decode(
         }
 
         impl BitPackDecoder {
-            fn push_bit(&mut self, white: bool) {
-                let bit = if white { 1 } else { 0 };
-                self.buffer = (self.buffer << 1) | bit;
-                self.bit_count += 1;
-
-                if self.bit_count == 8 {
-                    self.output.push(self.buffer);
-                    self.buffer = 0;
-                    self.bit_count = 0;
-                }
-            }
-
             fn flush(&mut self) {
                 if self.bit_count > 0 {
                     let padded = self.buffer << (8 - self.bit_count);
@@ -73,14 +61,39 @@ pub(crate) fn decode(
         }
 
         impl Decoder for BitPackDecoder {
-            fn push_pixel(&mut self, white: bool) {
-                self.push_bit(white);
-            }
+            fn push_pixels(&mut self, white: bool, mut count: u32) {
+                if self.bit_count > 0 {
+                    let head = count.min(u32::from(8 - self.bit_count)) as u8;
+                    self.buffer <<= head;
+                    if white {
+                        self.buffer |= ((1_u16 << head) - 1) as u8;
+                    }
+                    self.bit_count += head;
+                    count -= u32::from(head);
 
-            fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-                let byte = if white { 0xFF } else { 0x00 };
-                self.output
-                    .extend(iter::repeat_n(byte, chunk_count as usize));
+                    if self.bit_count == 8 {
+                        self.output.push(self.buffer);
+                        self.buffer = 0;
+                        self.bit_count = 0;
+                    }
+                }
+
+                let full_bytes = count / 8;
+                if full_bytes > 0 {
+                    let byte = if white { 0xFF } else { 0x00 };
+                    self.output
+                        .extend(iter::repeat_n(byte, full_bytes as usize));
+                    count %= 8;
+                }
+
+                if count > 0 {
+                    self.buffer = if white {
+                        ((1_u16 << count) - 1) as u8
+                    } else {
+                        0
+                    };
+                    self.bit_count = count as u8;
+                }
             }
 
             fn next_line(&mut self) {
@@ -113,16 +126,8 @@ pub(crate) fn decode(
         }
 
         impl Decoder for Luma8Decoder {
-            fn push_pixel(&mut self, white: bool) {
-                if !white {
-                    self.output[self.idx] = 0x00;
-                }
-
-                self.idx += 1;
-            }
-
-            fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-                let len = chunk_count as usize * 8;
+            fn push_pixels(&mut self, white: bool, count: u32) {
+                let len = count as usize;
 
                 if !white {
                     self.output[self.idx..self.idx + len].fill(0x00);

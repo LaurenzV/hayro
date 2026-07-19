@@ -6,9 +6,7 @@ use libfuzzer_sys::fuzz_target;
 struct Decoder;
 
 impl hayro_ccitt::Decoder for Decoder {
-    fn push_pixel(&mut self, _white: bool) {}
-
-    fn push_pixel_chunk(&mut self, _white: bool, _chunk_count: u32) {}
+    fn push_pixels(&mut self, _white: bool, _count: u32) {}
 
     fn next_line(&mut self) {}
 }
