@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup};
+use super::{ColorSpace, ToLuma, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
@@ -9,6 +9,7 @@ pub(crate) struct Indexed {
     hival: u8,
     base: Box<ColorSpace>,
     lookup: U8Lookup<[u8; 3]>,
+    luma_lookup: U8Lookup<u8>,
 }
 
 impl Indexed {
@@ -51,6 +52,7 @@ impl Indexed {
             hival,
             base: Box::new(base_color_space),
             lookup: U8Lookup::default(),
+            luma_lookup: U8Lookup::default(),
         })
     }
 
@@ -76,6 +78,20 @@ impl Indexed {
         self.lookup
             .get_or_init(|input, output| self.convert_inner(input, output))
     }
+
+    fn u8_luma_lookup(&self) -> Option<&[u8; 256]> {
+        self.luma_lookup.get_or_init_with(|_| {
+            let rgb = self.u8_lookup()?;
+            if rgb
+                .iter()
+                .any(|pixel| pixel[0] != pixel[1] || pixel[0] != pixel[2])
+            {
+                return None;
+            }
+
+            Some(Box::new(core::array::from_fn(|index| rgb[index][0])))
+        })
+    }
 }
 
 impl ToRgb for Indexed {
@@ -83,6 +99,18 @@ impl ToRgb for Indexed {
         let lookup = self.u8_lookup()?;
         for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
             output.copy_from_slice(&lookup[*input as usize]);
+        }
+
+        Some(())
+    }
+}
+
+impl ToLuma for Indexed {
+    fn to_luma(&self, input: &mut [u8]) -> Option<()> {
+        let lookup = self.u8_luma_lookup()?;
+
+        for value in input {
+            *value = lookup[*value as usize];
         }
 
         Some(())

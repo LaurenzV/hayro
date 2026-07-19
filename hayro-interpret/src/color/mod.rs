@@ -533,11 +533,11 @@ impl ToLuma for ColorSpace {
         match self.0.as_ref() {
             ColorSpaceType::DeviceGray(i) => i.to_luma(input),
             ColorSpaceType::Pattern(i) => i.to_luma(input),
+            ColorSpaceType::Indexed(i) => i.to_luma(input),
             ColorSpaceType::ICCBased(i) => i.to_luma(input),
             ColorSpaceType::CalGray(i) => i.to_luma(input),
             ColorSpaceType::DeviceCmyk(_)
             | ColorSpaceType::DeviceRgb(_)
-            | ColorSpaceType::Indexed(_)
             | ColorSpaceType::CalRgb(_)
             | ColorSpaceType::Lab(_)
             | ColorSpaceType::Separation(_)
