@@ -111,7 +111,7 @@ impl Renderer {
     ) -> Self {
         Self {
             ctx: RenderContext::new_with(width, height, settings),
-            level: settings.level,
+            level: Level::new(),
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
             outline_cache: cache.outline_cache.clone(),
@@ -1176,7 +1176,7 @@ fn render_shading_texture(
 fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
-        level: settings.level,
+        level: Level::new(),
         inside_pattern: false,
         soft_mask_cache: FxHashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
@@ -1315,13 +1315,11 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
 
     #[inline(always)]
     fn premultiply_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
-        let alpha_lanes = mask8x32::from_slice(
-            simd,
-            &[
-                0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0,
-                0, -1, 0, 0, 0, -1,
-            ],
-        );
+        let alpha_lanes: mask8x32<S> = [
+            0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0,
+            -1, 0, 0, 0, -1,
+        ]
+        .simd_into(simd);
         for chunk in data.chunks_exact_mut(32) {
             let rgba = u8x32::from_slice(simd, chunk);
             let alphas = rgba.splat_4th();
