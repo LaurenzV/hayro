@@ -112,17 +112,8 @@ pub struct DecodeSettings {
 
 /// A decoder for CCITT images.
 pub trait Decoder {
-    /// Push a single pixel with the given color.
-    fn push_pixel(&mut self, white: bool);
-    /// Push multiple chunks of 8 pixels of the same color.
-    ///
-    /// The `chunk_count` parameter indicates how many 8-pixel chunks to push.
-    /// For example, if this method is called with `white = true` and
-    /// `chunk_count = 10`, 80 white pixels are pushed (10 × 8 = 80).
-    ///
-    /// You can assume that this method is only called if the number of already
-    /// pushed pixels is a multiple of 8 (i.e. byte-aligned).
-    fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32);
+    /// Push a run of pixels of the same color.
+    fn push_pixels(&mut self, white: bool, count: u32);
     /// Called when a row has been completed.
     fn next_line(&mut self);
 }
@@ -457,27 +448,7 @@ impl DecoderContext {
         // Make sure we don't have too many pixels (for invalid files).
         let count = count.min(self.line_width - self.pixels_decoded);
         let white = self.color.is_white() ^ self.invert_black;
-        let mut remaining = count;
-
-        // Push individual pixels until we reach an 8-pixel boundary.
-        let pixels_to_boundary = (8 - (self.pixels_decoded % 8)) % 8;
-        let unaligned_pixels = remaining.min(pixels_to_boundary);
-        for _ in 0..unaligned_pixels {
-            decoder.push_pixel(white);
-            remaining -= 1;
-        }
-
-        // Push full chunks of 8 pixels.
-        let full_chunks = remaining / 8;
-        if full_chunks > 0 {
-            decoder.push_pixel_chunk(white, full_chunks);
-            remaining %= 8;
-        }
-
-        // Push remaining individual pixels.
-        for _ in 0..remaining {
-            decoder.push_pixel(white);
-        }
+        decoder.push_pixels(white, count);
 
         // Track the color change:
         // - At start of line (no previous changes): only add if color differs from

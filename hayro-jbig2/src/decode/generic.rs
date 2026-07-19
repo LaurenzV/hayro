@@ -177,10 +177,6 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
         y: u32,
         /// Precomputed start index into `bitmap.data` for the current row.
         row_start: usize,
-        /// Accumulator for pixels emitted by `push_pixel`.
-        buf: u8,
-        /// Number of bits accumulated in `buf`.
-        buf_len: u8,
     }
 
     impl<'a> BitmapDecoder<'a> {
@@ -190,79 +186,35 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
                 x: 0,
                 y: 0,
                 row_start: 0,
-                buf: 0,
-                buf_len: 0,
             }
-        }
-
-        #[inline]
-        fn flush_buf(&mut self) {
-            if self.buf_len == 0 {
-                return;
-            }
-
-            let start_x = self.x - self.buf_len as u32;
-            if start_x < self.bitmap.width {
-                let word_idx = (start_x / WORD_BITS) as usize;
-                let bit_in_word = start_x % WORD_BITS;
-                let shift = WORD_SHIFT - bit_in_word - (self.buf_len as u32 - 1);
-                self.bitmap.data[self.row_start + word_idx] |= (self.buf as Word) << shift;
-            }
-            self.buf = 0;
-            self.buf_len = 0;
         }
     }
 
     impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
         #[inline]
-        fn push_pixel(&mut self, white: bool) {
-            self.buf = (self.buf << 1) | white as u8;
-            self.buf_len += 1;
-            self.x += 1;
-
-            if self.buf_len == 8 {
-                self.flush_buf();
-            }
-        }
-
-        #[inline]
-        fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-            const WORD_BYTES: usize = (WORD_BITS / 8) as usize;
-            const BYTE_MASKS: [Word; WORD_BYTES] = {
-                #[allow(trivial_numeric_casts)]
-                let mut masks = [0 as Word; WORD_BYTES];
-                let mut i = 0;
-                while i < WORD_BYTES {
-                    #[allow(trivial_numeric_casts)]
-                    {
-                        masks[i] = (0xFF as Word) << ((WORD_BYTES - 1 - i) * 8);
-                    }
-                    i += 1;
-                }
-                masks
-            };
-
+        fn push_pixels(&mut self, white: bool, count: u32) {
             let row_start = self.row_start;
-            let end_x = (self.x + chunk_count * 8).min(self.bitmap.width);
-            let white_mask = (white as Word).wrapping_neg();
+            let end_x = (self.x + count).min(self.bitmap.width);
 
-            let start = (self.x / 8) as usize;
-            let end = (end_x / 8) as usize;
-            let first_full = start.div_ceil(WORD_BYTES);
-            let last_full = end / WORD_BYTES;
+            if white && end_x > self.x {
+                let first_word = (self.x / WORD_BITS) as usize;
+                let last_word = ((end_x - 1) / WORD_BITS) as usize;
+                let first_mask = Word::MAX >> (self.x % WORD_BITS);
+                let end_bit = end_x % WORD_BITS;
+                let last_mask = if end_bit == 0 {
+                    Word::MAX
+                } else {
+                    Word::MAX << (WORD_BITS - end_bit)
+                };
 
-            for b in start..(first_full * WORD_BYTES).min(end) {
-                self.bitmap.data[row_start + b / WORD_BYTES] |=
-                    BYTE_MASKS[b % WORD_BYTES] & white_mask;
-            }
-
-            if last_full > first_full {
-                self.bitmap.data[row_start + first_full..row_start + last_full].fill(white_mask);
-            }
-
-            for b in (first_full.max(last_full) * WORD_BYTES)..end {
-                self.bitmap.data[row_start + b / WORD_BYTES] |=
-                    BYTE_MASKS[b % WORD_BYTES] & white_mask;
+                if first_word == last_word {
+                    self.bitmap.data[row_start + first_word] |= first_mask & last_mask;
+                } else {
+                    self.bitmap.data[row_start + first_word] |= first_mask;
+                    self.bitmap.data[row_start + first_word + 1..row_start + last_word]
+                        .fill(Word::MAX);
+                    self.bitmap.data[row_start + last_word] |= last_mask;
+                }
             }
 
             self.x = end_x;
@@ -270,8 +222,6 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
 
         #[inline]
         fn next_line(&mut self) {
-            self.flush_buf();
-
             self.x = 0;
             self.y += 1;
             self.row_start = (self.y * self.bitmap.stride) as usize;
