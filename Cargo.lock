@@ -571,9 +571,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "font-types"
-version = "0.11.3"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b38ad915f6dadd993ced50848a8291a543bd41ca62bc10740d5e64e2ab4cfd7"
+checksum = "ad67eced03f5504d9cbd3a879b5958b5c54d4e5fd794361c6eb21b05fb703411"
 dependencies = [
  "bytemuck",
 ]
@@ -676,7 +676,7 @@ dependencies = [
 [[package]]
 name = "glifo"
 version = "0.1.1"
-source = "git+https://github.com/linebender/vello?rev=8442ef4#8442ef44019568a05aeb6a04451e5cf503a6c406"
+source = "git+https://github.com/linebender/vello?rev=dc23e93841d20060743e490ef49c1e0d0d22cf40#dc23e93841d20060743e490ef49c1e0d0d22cf40"
 dependencies = [
  "bytemuck",
  "foldhash",
@@ -1503,12 +1503,13 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.39.2"
+version = "0.40.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81"
+checksum = "487889119a5f19ff7c0a20637196bdc76b9f54ebec17e3588b5d75e4999f8773"
 dependencies = [
  "bytemuck",
  "font-types",
+ "once_cell",
 ]
 
 [[package]]
@@ -1732,9 +1733,9 @@ dependencies = [
 
 [[package]]
 name = "skrifa"
-version = "0.42.1"
+version = "0.43.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564"
+checksum = "4cbe997d0f2480442d727488fbe2150779114cbe480ecdbadef58b33e0318ffb"
 dependencies = [
  "bytemuck",
  "read-fonts",
@@ -2038,7 +2039,7 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.9"
-source = "git+https://github.com/linebender/vello?rev=8442ef4#8442ef44019568a05aeb6a04451e5cf503a6c406"
+source = "git+https://github.com/linebender/vello?rev=dc23e93841d20060743e490ef49c1e0d0d22cf40#dc23e93841d20060743e490ef49c1e0d0d22cf40"
 dependencies = [
  "bytemuck",
  "fearless_simd 0.4.0",
@@ -2054,7 +2055,7 @@ dependencies = [
 [[package]]
 name = "vello_cpu"
 version = "0.0.9"
-source = "git+https://github.com/linebender/vello?rev=8442ef4#8442ef44019568a05aeb6a04451e5cf503a6c406"
+source = "git+https://github.com/linebender/vello?rev=dc23e93841d20060743e490ef49c1e0d0d22cf40#dc23e93841d20060743e490ef49c1e0d0d22cf40"
 dependencies = [
  "bytemuck",
  "glifo",
