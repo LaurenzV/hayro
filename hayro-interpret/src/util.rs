@@ -181,3 +181,20 @@ impl RectExt for hayro_syntax::object::Rect {
         Rect::new(self.x0, self.y0, self.x1, self.y1)
     }
 }
+
+/// Return the vectors by which a point in the transformed space moves when
+/// advancing by one unit in the x or y direction, ignoring translation.
+pub fn x_y_advances(transform: &kurbo::Affine) -> (kurbo::Vec2, kurbo::Vec2) {
+    let scale_skew_transform = {
+        let c = transform.as_coeffs();
+        kurbo::Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
+    };
+
+    let x_advance = scale_skew_transform * kurbo::Point::new(1.0, 0.0);
+    let y_advance = scale_skew_transform * kurbo::Point::new(0.0, 1.0);
+
+    (
+        kurbo::Vec2::new(x_advance.x, x_advance.y),
+        kurbo::Vec2::new(y_advance.x, y_advance.y),
+    )
+}

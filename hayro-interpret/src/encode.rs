@@ -4,7 +4,8 @@ use crate::color::{AlphaColor, ColorComponents, ColorSpace};
 use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
-use kurbo::{Affine, Point};
+use crate::util::x_y_advances;
+use kurbo::{Affine, Point, Rect};
 use rustc_hash::FxHashMap;
 use smallvec::{ToSmallVec, smallvec};
 use std::sync::Arc;
@@ -38,7 +39,7 @@ pub enum EncodedShadingType {
 /// Encoded function-based shading.
 #[derive(Clone, Debug)]
 pub struct EncodedFunctionBasedShading {
-    pub(crate) domain: kurbo::Rect,
+    pub(crate) domain: Rect,
     pub(crate) function: ShadingFunction,
 }
 
@@ -62,6 +63,36 @@ pub struct EncodedSampledShading {
 #[derive(Clone, Debug)]
 pub struct EncodedDummyShading;
 
+/// A shading that was rasterized into a texture.
+pub struct ShadingTexture {
+    /// The straight (non-premultiplied) RGBA8 pixel data, row-major.
+    pub data: Vec<u8>,
+    /// The width of the texture in pixels.
+    pub width: u32,
+    /// The height of the texture in pixels.
+    pub height: u32,
+    /// The transform from texture space to the space of the rasterized
+    /// bounding box.
+    pub transform: Affine,
+    /// Whether any pixel of the texture is not fully opaque.
+    pub has_transparency: bool,
+}
+
+/// Return the texture dimensions [`EncodedShadingPattern::sample_texture`]
+/// uses for the given bounding box and scale factor.
+///
+/// Exposed so that callers can bound the size of the resulting texture
+/// before sampling.
+pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
+    let base_width = (bbox.width() as f32).max(1.0);
+    let base_height = (bbox.height() as f32).max(1.0);
+
+    (
+        (base_width * scale).ceil() as u32,
+        (base_height * scale).ceil() as u32,
+    )
+}
+
 impl EncodedShadingPattern {
     /// Sample the shading at the given position.
     #[inline]
@@ -79,6 +110,80 @@ impl EncodedShadingPattern {
                 components
             })
             .unwrap_or([0.0, 0.0, 0.0, 0.0])
+    }
+
+    /// Sample the shading on a pixel grid covering `bbox`, with `scale`
+    /// pixels per unit of `bbox`.
+    ///
+    /// The callback is invoked once per pixel in row-major order with the
+    /// straight (non-premultiplied) RGBA sample, letting callers apply their
+    /// own conversion. Returns the dimensions of the grid (see
+    /// [`texture_dimensions`]) and the transform from grid space to the space
+    /// of `bbox`. No size cap is applied — callers that need to bound the
+    /// texture size should check [`texture_dimensions`] first.
+    pub fn sample_texture(
+        &self,
+        bbox: Rect,
+        scale: f32,
+        mut f: impl FnMut([f32; 4]),
+    ) -> (u32, u32, Affine) {
+        let (width, height) = texture_dimensions(bbox, scale);
+        let inv_scale = 1.0 / scale as f64;
+
+        let (x_advance, y_advance) =
+            x_y_advances(&(Affine::scale(inv_scale) * self.base_transform));
+
+        let mut start_point = self.base_transform
+            * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
+            * Point::new(bbox.x0, bbox.y0);
+
+        for _ in 0..height {
+            let mut point = start_point;
+
+            for _ in 0..width {
+                f(self.sample(point));
+
+                point += x_advance;
+            }
+
+            start_point += y_advance;
+        }
+
+        (
+            width,
+            height,
+            Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(inv_scale),
+        )
+    }
+
+    /// Rasterize the shading into a straight (non-premultiplied) RGBA8
+    /// texture covering `bbox`, with `scale` pixels per unit of `bbox`.
+    ///
+    /// See [`sample_texture`](Self::sample_texture) for the grid semantics.
+    pub fn render_texture(&self, bbox: Rect, scale: f32) -> ShadingTexture {
+        let (width, height) = texture_dimensions(bbox, scale);
+        let mut data = Vec::with_capacity(width as usize * height as usize * 4);
+        let mut has_transparency = false;
+
+        let (_, _, transform) = self.sample_texture(bbox, scale, |sample| {
+            let converted = [
+                (sample[0] * 255.0 + 0.5) as u8,
+                (sample[1] * 255.0 + 0.5) as u8,
+                (sample[2] * 255.0 + 0.5) as u8,
+                (sample[3] * 255.0 + 0.5) as u8,
+            ];
+
+            has_transparency |= converted[3] != 255;
+            data.extend_from_slice(&converted);
+        });
+
+        ShadingTexture {
+            data,
+            width,
+            height,
+            transform,
+            has_transparency,
+        }
     }
 }
 
@@ -265,7 +370,7 @@ fn sample_triangles(
 }
 
 fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> EncodedShadingType {
-    let domain = kurbo::Rect::new(
+    let domain = Rect::new(
         domain[0] as f64,
         domain[2] as f64,
         domain[1] as f64,

@@ -44,7 +44,7 @@ use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context, DrawMode, DrawProps, ImageDrawProps, SoftMask};
 use hayro_interpret::{ClipPath, interpret_page};
-use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
+use kurbo::{Affine, BezPath, Rect, Shape};
 use pic_scale::Scaler;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -334,21 +334,6 @@ pub(crate) fn derive_settings(settings: &vello_cpu::RenderSettings) -> vello_cpu
         num_threads: 0,
         ..*settings
     }
-}
-
-pub(crate) fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
-    let scale_skew_transform = {
-        let c = transform.as_coeffs();
-        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
-    };
-
-    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
-    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
-
-    (
-        Vec2::new(x_advance.x, x_advance.y),
-        Vec2::new(y_advance.x, y_advance.y),
-    )
 }
 
 fn convert_fill_rule(fill_rule: FillRule) -> Fill {
