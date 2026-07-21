@@ -332,6 +332,10 @@
     "file": "pdfs/custom/image_mask_missing_bpc.pdf"
   },
   {
+    "id": "image_named_colorspace",
+    "file": "pdfs/custom/image_named_colorspace.pdf"
+  },
+  {
     "id": "image_rgb16",
     "file": "pdfs/custom/image_rgb16.pdf"
   },

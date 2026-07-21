@@ -8,6 +8,7 @@ pub(crate) use image::ImageXObject;
 
 use crate::WarningSinkFn;
 use crate::cache::Cache;
+use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::Function;
@@ -69,6 +70,7 @@ pub(crate) enum XObject<'a> {
 impl<'a> XObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
+        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,
@@ -77,7 +79,7 @@ impl<'a> XObject<'a> {
         match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(
                 stream,
-                |_| None,
+                resolve_cs,
                 warning_sink,
                 cache,
                 transfer_function,

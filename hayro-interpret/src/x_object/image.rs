@@ -126,7 +126,8 @@ impl<'a> ImageXObject<'a> {
             cs_obj
                 .clone()
                 .and_then(|c| ColorSpace::new(c, cache))
-                // Inline images can also refer to color spaces by name.
+                // Images can also refer to color spaces in the resource
+                // dictionary by name.
                 .or_else(|| {
                     cs_obj
                         .and_then(|c| c.into_name())
