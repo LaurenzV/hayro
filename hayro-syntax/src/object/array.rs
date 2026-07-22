@@ -6,7 +6,7 @@ use crate::object::{FromBytes, Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 use core::marker::PhantomData;
 use smallvec::SmallVec;
 
@@ -63,6 +63,19 @@ impl Debug for Array<'_> {
         });
 
         debug_list.finish()
+    }
+}
+
+impl Display for Array<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("[")?;
+        for (index, item) in self.raw_iter().enumerate() {
+            if index > 0 {
+                f.write_str(" ")?;
+            }
+            Display::fmt(&item, f)?;
+        }
+        f.write_str("]")
     }
 }
 
@@ -420,5 +433,12 @@ mod tests {
         let array = Array::from_bytes(b"[34]").unwrap();
 
         assert_eq!(format!("{array:?}"), "[Number(Number(Integer(34)))]");
+    }
+
+    #[test]
+    fn display() {
+        let array = Array::from_bytes(b"[  34 % comment\n /Test  [1   2] ]").unwrap();
+
+        assert_eq!(format!("{array}"), "[34 /Test [1 2]]");
     }
 }

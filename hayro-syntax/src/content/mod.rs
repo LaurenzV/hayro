@@ -43,7 +43,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use crate::util::find_needle;
 use core::array;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
@@ -53,6 +53,12 @@ use smallvec::SmallVec;
 const OPERANDS_THRESHOLD: usize = 10;
 
 impl Debug for Operator<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
+impl Display for Operator<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0.as_str())
     }
@@ -554,6 +560,49 @@ pub(crate) trait OperatorTrait<'b, 'a>: Sized {
 }
 
 mod macros {
+    macro_rules! display_op {
+        ($t:ident $(<$($l:lifetime),+>)?;) => {
+            impl$(<$($l),+>)? core::fmt::Display for $t$(<$($l),+>)? {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str(stringify!($t))
+                }
+            }
+        };
+        ($t:ident $(<$($l:lifetime),+>)?; $first:tt $(, $field:tt)*) => {
+            impl$(<$($l),+>)? core::fmt::Display for $t$(<$($l),+>)? {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str(concat!(stringify!($t), "("))?;
+                    core::fmt::Display::fmt(&self.$first, f)?;
+                    $(
+                        f.write_str(" ")?;
+                        core::fmt::Display::fmt(&self.$field, f)?;
+                    )*
+                    f.write_str(")")
+                }
+            }
+        };
+    }
+
+    macro_rules! display_variadic_op {
+        ($t:ident $(<$($l:lifetime),+>)?) => {
+            impl$(<$($l),+>)? core::fmt::Display for $t$(<$($l),+>)? {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str(stringify!($t))?;
+                    if let Some((first, rest)) = self.0.split_first() {
+                        f.write_str("(")?;
+                        core::fmt::Display::fmt(first, f)?;
+                        for value in rest {
+                            f.write_str(" ")?;
+                            core::fmt::Display::fmt(value, f)?;
+                        }
+                        f.write_str(")")?;
+                    }
+                    Ok(())
+                }
+            }
+        };
+    }
+
     macro_rules! op_impl {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr, $n:expr, |$stack:ident : $stack_ty:ty| $body:block) => {
             impl<'b, 'a> OperatorTrait<'b, 'a> for $t$(<$($l),+>)? {
@@ -595,6 +644,7 @@ mod macros {
 
     macro_rules! op0 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?;);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 0, |_stack: &'b Stack<'a>| {
                 Some(Self)
             });
@@ -603,6 +653,7 @@ mod macros {
 
     macro_rules! op1 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?; 0);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 1, |stack: &'b Stack<'a>| {
                 let shift = stack.len().saturating_sub(1);
                 Some(Self(stack.get(0 + shift)?))
@@ -612,6 +663,7 @@ mod macros {
 
     macro_rules! op_all {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_variadic_op!($t$(<$($l),+>)?);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, u8::MAX as usize, |stack: &'b Stack<'a>| {
                 Some(Self(stack.get_all()?))
             });
@@ -620,6 +672,7 @@ mod macros {
 
     macro_rules! op2 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?; 0, 1);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 2, |stack: &'b Stack<'a>| {
                 let shift = stack.len().saturating_sub(2);
                 Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?))
@@ -629,6 +682,7 @@ mod macros {
 
     macro_rules! op3 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?; 0, 1, 2);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 3, |stack: &'b Stack<'a>| {
                 let shift = stack.len().saturating_sub(3);
                 Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
@@ -639,6 +693,7 @@ mod macros {
 
     macro_rules! op4 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?; 0, 1, 2, 3);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 4, |stack: &'b Stack<'a>| {
                let shift = stack.len().saturating_sub(4);
             Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
@@ -649,6 +704,7 @@ mod macros {
 
     macro_rules! op6 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
+            crate::content::macros::display_op!($t$(<$($l),+>)?; 0, 1, 2, 3, 4, 5);
             crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 6, |stack: &'b Stack<'a>| {
                 let shift = stack.len().saturating_sub(6);
             Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
@@ -658,6 +714,8 @@ mod macros {
         }
     }
 
+    pub(crate) use display_op;
+    pub(crate) use display_variadic_op;
     pub(crate) use op_all;
     pub(crate) use op_impl;
     pub(crate) use op0;
