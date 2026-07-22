@@ -80,6 +80,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn image_mask_4() { run_render_test("image_mask_4", "pdfs/custom/image_mask_4.pdf", None); }
 #[test] fn image_mask_hairline() { run_render_test("image_mask_hairline", "pdfs/custom/image_mask_hairline.pdf", None); }
 #[test] fn image_mask_missing_bpc() { run_render_test("image_mask_missing_bpc", "pdfs/custom/image_mask_missing_bpc.pdf", None); }
+#[test] fn image_named_colorspace() { run_render_test("image_named_colorspace", "pdfs/custom/image_named_colorspace.pdf", None); }
 #[test] fn image_rgb16() { run_render_test("image_rgb16", "pdfs/custom/image_rgb16.pdf", None); }
 #[test] fn image_rgb8() { run_render_test("image_rgb8", "pdfs/custom/image_rgb8.pdf", None); }
 #[test] fn image_rgb8_decode() { run_render_test("image_rgb8_decode", "pdfs/custom/image_rgb8_decode.pdf", None); }

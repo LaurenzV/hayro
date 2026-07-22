@@ -127,6 +127,8 @@ impl<'a> ImageXObject<'a> {
                 .clone()
                 .and_then(|c| ColorSpace::new(c, cache))
                 // Inline images can also refer to color spaces by name.
+                // Apparently, some PDF producers also do this for normal images,
+                // though the PDF spec forbids it. See https://github.com/LaurenzV/hayro/pull/1311.
                 .or_else(|| {
                     cs_obj
                         .and_then(|c| c.into_name())
