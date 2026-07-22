@@ -126,8 +126,9 @@ impl<'a> ImageXObject<'a> {
             cs_obj
                 .clone()
                 .and_then(|c| ColorSpace::new(c, cache))
-                // Images can also refer to color spaces in the resource
-                // dictionary by name.
+                // Inline images can also refer to color spaces by name.
+                // Apparently, some PDF producers also do this for normal images,
+                // though the PDF spec forbids it. See https://github.com/LaurenzV/hayro/pull/1311.
                 .or_else(|| {
                     cs_obj
                         .and_then(|c| c.into_name())
