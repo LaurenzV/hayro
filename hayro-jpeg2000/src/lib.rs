@@ -643,7 +643,7 @@ fn cielab_to_rgb<S: Simd>(
 
     let rl = lab.rl.unwrap_or(100);
     let ra = lab.ra.unwrap_or(170);
-    let rb = lab.ra.unwrap_or(200);
+    let rb = lab.rb.unwrap_or(200);
     let ol = lab.ol.unwrap_or(0);
     let oa = lab.oa.unwrap_or(1 << (bit_depth - 1));
     let ob = lab
