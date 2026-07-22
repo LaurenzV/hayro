@@ -7,7 +7,7 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
 use core::borrow::Borrow;
-use core::fmt::{self, Debug, Formatter};
+use core::fmt::{self, Debug, Display, Formatter};
 use core::hash::{Hash, Hasher};
 use core::ops::Deref;
 use smallvec::SmallVec;
@@ -123,6 +123,12 @@ impl Debug for Name<'_> {
     }
 }
 
+impl Display for Name<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "/{}", self.as_str())
+    }
+}
+
 object!(Name<'a>, Name);
 
 impl Skippable for Name<'_> {
@@ -166,6 +172,15 @@ mod tests {
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
     use std::ops::Deref;
+
+    #[test]
+    fn display() {
+        let name = Reader::new(b"/Test")
+            .read_without_context::<Name<'_>>()
+            .unwrap();
+
+        assert_eq!(format!("{name}"), "/Test");
+    }
 
     #[test]
     fn name_1() {

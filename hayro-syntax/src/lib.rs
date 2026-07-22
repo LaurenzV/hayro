@@ -41,7 +41,7 @@ for page in pages.iter() {
     let mut ops = page.typed_operations();
 
     while let Some(op) = ops.next() {
-        println!("{op:?}");
+        println!("{op}");
     }
 }
 ```

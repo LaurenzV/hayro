@@ -13,7 +13,7 @@ pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use core::fmt::Debug;
+use core::fmt::{Debug, Display, Formatter};
 
 mod bool;
 mod date;
@@ -60,6 +60,21 @@ pub enum Object<'a> {
     // Can only be an indirect object in theory and thus comes with some caveats,
     // but we just treat it the same.
     Stream(Stream<'a>),
+}
+
+impl Display for Object<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Null(value) => Display::fmt(value, f),
+            Self::Boolean(value) => Display::fmt(value, f),
+            Self::Number(value) => Display::fmt(value, f),
+            Self::String(value) => Display::fmt(value, f),
+            Self::Name(value) => Display::fmt(value, f),
+            Self::Dict(value) => Display::fmt(value, f),
+            Self::Array(value) => Display::fmt(value, f),
+            Self::Stream(value) => Display::fmt(value, f),
+        }
+    }
 }
 
 impl<'a> Object<'a> {
@@ -378,6 +393,24 @@ mod tests {
             object_impl(b"<< /Length 3 >> stream\nabc\nendstream").unwrap(),
             Object::Stream(_)
         ));
+    }
+
+    #[test]
+    fn display() {
+        let cases: &[(&[u8], &str)] = &[
+            (b"null", "null"),
+            (b"true", "true"),
+            (b"34.5", "34.5"),
+            (b"(Hi)", "\"Hi\""),
+            (b"/Name", "/Name"),
+            (b"[45]", "[45]"),
+            (b"<</Entry 45>>", "<< /Entry 45 >>"),
+            (b"<< /Length 3 >> stream\nabc\nendstream", "Stream (len: 3)"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(format!("{}", object_impl(input).unwrap()), *expected);
+        }
     }
 
     #[test]

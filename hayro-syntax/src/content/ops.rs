@@ -7,6 +7,7 @@ use crate::object::Name;
 use crate::object::Number;
 use crate::object::Object;
 use crate::object::Stream;
+use core::fmt::{Display, Formatter};
 use smallvec::{SmallVec, smallvec};
 
 use crate::content::macros::{op_all, op_impl, op0, op1, op2, op3, op4, op6};
@@ -36,11 +37,43 @@ fn parse_named_color<'b, 'a>(
     Some((nums, name))
 }
 
+fn fmt_named_color(
+    f: &mut Formatter<'_>,
+    operator: &str,
+    numbers: &[Number],
+    name: Option<&Name<'_>>,
+) -> core::fmt::Result {
+    f.write_str(operator)?;
+    if !numbers.is_empty() || name.is_some() {
+        f.write_str("(")?;
+        for (index, number) in numbers.iter().enumerate() {
+            if index > 0 {
+                f.write_str(" ")?;
+            }
+            Display::fmt(number, f)?;
+        }
+        if let Some(name) = name {
+            if !numbers.is_empty() {
+                f.write_str(" ")?;
+            }
+            Display::fmt(name, f)?;
+        }
+        f.write_str(")")?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrokeColorNamed<'b, 'a>(
     pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
     pub Option<&'b Name<'a>>,
 );
+
+impl Display for StrokeColorNamed<'_, '_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        fmt_named_color(f, "StrokeColorNamed", &self.0, self.1)
+    }
+}
 
 op_impl!(
     StrokeColorNamed<'b, 'a>,
@@ -57,6 +90,12 @@ pub struct NonStrokeColorNamed<'b, 'a>(
     pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
     pub Option<&'b Name<'a>>,
 );
+
+impl Display for NonStrokeColorNamed<'_, '_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        fmt_named_color(f, "NonStrokeColorNamed", &self.0, self.1)
+    }
+}
 
 op_impl!(
     NonStrokeColorNamed<'b, 'a>,
@@ -149,6 +188,40 @@ f
             iter.next(),
             Some(TypedInstruction::FillPathNonZero(FillPathNonZero))
         ));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn display_ops() {
+        let mut iter = TypedIter::new(
+            b"h 2 w 1 0 0 RG 0 0 10 20 re 10 20 m 30 20 60 40 90 80 c \
+              0.1 0.2 SC 0.0 scn 1.0 /Spot SCN (Hello) Tj <00FF> Tj foo",
+        );
+
+        assert_eq!(format!("{}", iter.next().unwrap()), "ClosePath");
+        assert_eq!(format!("{}", iter.next().unwrap()), "LineWidth(2)");
+        assert_eq!(
+            format!("{}", iter.next().unwrap()),
+            "StrokeColorDeviceRgb(1 0 0)"
+        );
+        assert_eq!(format!("{}", iter.next().unwrap()), "RectPath(0 0 10 20)");
+        assert_eq!(format!("{}", iter.next().unwrap()), "MoveTo(10 20)");
+        assert_eq!(
+            format!("{}", iter.next().unwrap()),
+            "CubicTo(30 20 60 40 90 80)"
+        );
+        assert_eq!(format!("{}", iter.next().unwrap()), "StrokeColor(0.1 0.2)");
+        assert_eq!(
+            format!("{}", iter.next().unwrap()),
+            "NonStrokeColorNamed(0.0)"
+        );
+        assert_eq!(
+            format!("{}", iter.next().unwrap()),
+            "StrokeColorNamed(1.0 /Spot)"
+        );
+        assert_eq!(format!("{}", iter.next().unwrap()), "ShowText(\"Hello\")");
+        assert_eq!(format!("{}", iter.next().unwrap()), "ShowText([0, 255])");
+        assert_eq!(format!("{}", iter.next().unwrap()), "Fallback(foo)");
         assert!(iter.next().is_none());
     }
 

@@ -4,7 +4,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 
 /// A reference to an object.
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
@@ -22,6 +22,12 @@ impl ObjRef {
             obj_number,
             gen_number,
         }
+    }
+}
+
+impl Display for ObjRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{} {} R", self.obj_number, self.gen_number)
     }
 }
 
@@ -117,6 +123,15 @@ where
     }
 }
 
+impl<T: Display> Display for MaybeRef<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Ref(value) => Display::fmt(value, f),
+            Self::NotRef(value) => Display::fmt(value, f),
+        }
+    }
+}
+
 impl<T> Skippable for MaybeRef<T>
 where
     T: Skippable,
@@ -143,9 +158,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::object::ObjRef;
+    use crate::object::{MaybeRef, Number, ObjRef};
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn display() {
+        assert_eq!(format!("{}", ObjRef::new(34, 1)), "34 1 R");
+        assert_eq!(format!("{}", MaybeRef::NotRef(Number::from_i32(12))), "12");
+    }
 
     #[test]
     fn ref_1() {

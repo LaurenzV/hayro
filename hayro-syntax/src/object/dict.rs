@@ -10,7 +10,7 @@ use crate::sync::Arc;
 use crate::sync::FxHashMap;
 use alloc::format;
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
@@ -154,6 +154,22 @@ impl Debug for Dict<'_> {
         }
 
         debug_struct.finish()
+    }
+}
+
+impl Display for Dict<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("<<")?;
+        for (key, value) in self.entries() {
+            f.write_str(" ")?;
+            Display::fmt(&key, f)?;
+            f.write_str(" ")?;
+            Display::fmt(&value, f)?;
+        }
+        if !self.is_empty() {
+            f.write_str(" ")?;
+        }
+        f.write_str(">>")
     }
 }
 
@@ -1160,5 +1176,13 @@ mod tests {
             format!("{dict:?}"),
             "Dict { \"Hi\": Number(Number(Integer(34))) }"
         );
+    }
+
+    #[test]
+    fn display() {
+        let dict = Dict::from_bytes(b"<< /B [1   2] % comment\n /A << /X   true >> >>").unwrap();
+
+        assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
+        assert_eq!(format!("{}", Dict::empty()), "<<>>");
     }
 }

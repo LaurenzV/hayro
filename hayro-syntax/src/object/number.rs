@@ -6,7 +6,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
-use core::fmt::Debug;
+use core::fmt::{Debug, Display, Formatter};
 
 #[rustfmt::skip]
 static POWERS_OF_10: [f64; 20] = [
@@ -64,6 +64,15 @@ impl Number {
     /// Create a new `Number` from an i32 number.
     pub const fn from_i32(num: i32) -> Self {
         Self(InternalNumber::Integer(num as i64))
+    }
+}
+
+impl Display for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            InternalNumber::Real(value) => write!(f, "{value:?}"),
+            InternalNumber::Integer(value) => write!(f, "{value}"),
+        }
     }
 }
 
@@ -324,6 +333,13 @@ mod tests {
     use crate::object::Number;
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn display() {
+        assert_eq!(format!("{}", Number::from_i32(10)), "10");
+        assert_eq!(format!("{}", Number::from_f32(10.0)), "10.0");
+        assert_eq!(format!("{}", Number::from_f32(10.5)), "10.5");
+    }
 
     #[test]
     fn int_1() {

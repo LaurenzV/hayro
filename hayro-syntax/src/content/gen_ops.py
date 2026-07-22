@@ -177,10 +177,15 @@ def gen_dispatch_match(code, name, types):
     return f'b"{escaped_code}" => {name}::from_stack(instruction.operands)?.into(),'
 
 
+def gen_display_match(name, types):
+    return f"Self::{name}(value) => Display::fmt(value, f),"
+
+
 # Generate all code pieces
 structs = []
 enum_variants = []
 dispatch_arms = []
+display_arms = []
 
 for category in ops.values():
     for code, name, types in category:
@@ -188,6 +193,7 @@ for category in ops.values():
             structs.append(gen_struct(name, code, types))
         enum_variants.append(gen_enum_variant(name, types))
         dispatch_arms.append(gen_dispatch_match(code, name, types))
+        display_arms.append(gen_display_match(name, types))
 
 # Build the final Rust code blocks
 struct_block = "\n\n".join(structs)
@@ -196,6 +202,19 @@ enum_block = (
     "#[derive(Debug, PartialEq, Clone)]\n"
     "pub enum TypedInstruction<'b, 'a> {\n" + "    " + ",\n    ".join(enum_variants) + ",\n"
     "    Fallback(&'b Operator<'a>),\n}"
+)
+
+display_block = (
+    "impl Display for TypedInstruction<'_, '_> {\n"
+    "    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {\n"
+    "        match self {\n"
+    + "            "
+    + "\n            ".join(display_arms)
+    + "\n"
+    "            Self::Fallback(operator) => write!(f, \"Fallback({operator})\"),\n"
+    "        }\n"
+    "    }\n"
+    "}"
 )
 
 dispatch_block = (
@@ -216,7 +235,9 @@ dispatch_block = (
 gen_notice = "// THIS FILE IS AUTO-GENERATED, DO NOT EDIT MANUALLY"
 imports = "use crate::content::Operator;"
 
-joined = "\n\n".join([gen_notice, imports, struct_block, enum_block, dispatch_block])
+joined = "\n\n".join(
+    [gen_notice, imports, struct_block, enum_block, display_block, dispatch_block]
+)
 
 with open("ops_generated.rs", "w") as f:
     f.write(joined)

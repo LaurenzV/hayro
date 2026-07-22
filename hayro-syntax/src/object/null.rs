@@ -4,10 +4,17 @@ use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, Skippable};
+use core::fmt::{Display, Formatter};
 
 /// The null object.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Null;
+
+impl Display for Null {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("null")
+    }
+}
 
 object!(Null, Null);
 
@@ -30,6 +37,11 @@ mod tests {
     use crate::object::Null;
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn display() {
+        assert_eq!(format!("{}", Null), "null");
+    }
 
     #[test]
     fn null() {

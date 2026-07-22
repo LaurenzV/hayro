@@ -82,6 +82,15 @@ impl core::fmt::Debug for String<'_> {
     }
 }
 
+impl core::fmt::Display for String<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match core::str::from_utf8(self.as_bytes()) {
+            Ok(value) => write!(f, "{value:?}"),
+            Err(_) => write!(f, "{:?}", self.as_bytes()),
+        }
+    }
+}
+
 object!(String<'a>, String);
 
 impl Skippable for String<'_> {
@@ -276,6 +285,19 @@ mod tests {
     use crate::object::String;
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn display() {
+        let normal = Reader::new(b"(Hello)")
+            .read_without_context::<String<'_>>()
+            .unwrap();
+        let binary = Reader::new(b"<00FF>")
+            .read_without_context::<String<'_>>()
+            .unwrap();
+
+        assert_eq!(format!("{normal}"), "\"Hello\"");
+        assert_eq!(format!("{binary}"), "[0, 255]");
+    }
 
     #[test]
     fn hex_string_empty() {

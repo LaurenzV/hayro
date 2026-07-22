@@ -14,7 +14,7 @@ use crate::trivia::is_white_space_character;
 use crate::util::{OptionLog, find_needle};
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 use smallvec::SmallVec;
 
 struct FiltersAndParams<'a> {
@@ -198,6 +198,12 @@ impl Debug for Stream<'_> {
     }
 }
 
+impl Display for Stream<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Stream (len: {})", self.data.len())
+    }
+}
+
 impl Skippable for Stream<'_> {
     fn skip(_: &mut Reader<'_>, _: bool) -> Option<()> {
         // A stream can never appear in a dict/array, so it should never be skipped.
@@ -363,6 +369,16 @@ mod tests {
     use crate::object::Stream;
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
+
+    #[test]
+    fn display() {
+        let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
+        let stream = reader
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(format!("{stream}"), "Stream (len: 3)");
+    }
 
     #[test]
     fn stream() {
