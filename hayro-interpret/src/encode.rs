@@ -84,12 +84,9 @@ pub struct ShadingTexture {
 /// Exposed so that callers can bound the size of the resulting texture
 /// before sampling.
 pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
-    let base_width = (bbox.width() as f32).max(1.0);
-    let base_height = (bbox.height() as f32).max(1.0);
-
     (
-        (base_width * scale).ceil() as u32,
-        (base_height * scale).ceil() as u32,
+        (bbox.width() as f32 * scale).max(1.0).ceil() as u32,
+        (bbox.height() as f32 * scale).max(1.0).ceil() as u32,
     )
 }
 
