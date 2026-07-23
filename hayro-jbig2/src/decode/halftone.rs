@@ -11,12 +11,14 @@ use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
+use enough::Stop;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -28,7 +30,7 @@ pub(crate) fn decode(
         header.flags.initial_pixel_color,
     )?;
 
-    decode_into(header, pattern_dict, &mut htreg, ctx)?;
+    decode_into(header, pattern_dict, &mut htreg, ctx, stop)?;
 
     Ok(RegionBitmap {
         bitmap: htreg,
@@ -41,6 +43,7 @@ pub(crate) fn decode_into(
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
         Some(compute_skip_bitmap(header, pattern_dict, htreg)?)
@@ -64,7 +67,7 @@ pub(crate) fn decode_into(
         template: header.flags.template,
         skip_mask: skip_bitmap.as_deref(),
     };
-    let gi = decode_gray_scale_image(header.data, &gs_params, ctx)?;
+    let gi = decode_gray_scale_image(header.data, &gs_params, ctx, stop)?;
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)

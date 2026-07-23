@@ -232,6 +232,24 @@ impl Default for RenderSettings {
     }
 }
 
+/// Render the page like [`render`], but report whether the cooperative stop
+/// (`interpreter_settings.stop`) fired.
+///
+/// The stop is polled throughout interpretation (per operator, glyph, and
+/// image) and stream/image decoding, so a fired stop ends the work early and
+/// the returned pixmap is incomplete. `Ok` is a completed render; `Err` carries
+/// the [`StopReason`](enough::StopReason).
+pub fn render_with_stop<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+) -> Result<Pixmap, enough::StopReason> {
+    let pixmap = render(page, cache, interpreter_settings, render_settings);
+    interpreter_settings.stop.check()?;
+    Ok(pixmap)
+}
+
 /// Render the page with the given settings to a pixmap.
 pub fn render<'a>(
     page: &'a Page<'a>,

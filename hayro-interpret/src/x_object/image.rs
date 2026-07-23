@@ -11,6 +11,7 @@ use crate::{BlendMode, CacheKey, Image, ImageDrawProps, RasterImage, StencilImag
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Name, Object, Stream};
 use kurbo::Affine;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) enum ImageTransferFunction {
@@ -55,6 +56,7 @@ pub(crate) struct ImageXObject<'a> {
     pub(crate) stream: Stream<'a>,
     pub(crate) transfer_function: Option<ImageTransferFunction>,
     pub(crate) warning_sink: WarningSinkFn,
+    pub(crate) stop: Arc<dyn enough::Stop>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -77,6 +79,7 @@ impl<'a> ImageXObject<'a> {
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
         Self::new_inner(
             stream,
@@ -85,6 +88,7 @@ impl<'a> ImageXObject<'a> {
             cache,
             ImageKind::Image,
             transfer_function,
+            stop,
         )
     }
 
@@ -92,8 +96,17 @@ impl<'a> ImageXObject<'a> {
         stream: &Stream<'a>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
-        Self::new_inner(stream, |_| None, warning_sink, cache, ImageKind::Mask, None)
+        Self::new_inner(
+            stream,
+            |_| None,
+            warning_sink,
+            cache,
+            ImageKind::Mask,
+            None,
+            stop,
+        )
     }
 
     fn new_inner(
@@ -103,6 +116,7 @@ impl<'a> ImageXObject<'a> {
         cache: &Cache,
         mut kind: ImageKind,
         transfer_function: Option<ActiveTransferFunction>,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
         let dict = stream.dict();
 
@@ -158,6 +172,7 @@ impl<'a> ImageXObject<'a> {
             interpolate,
             stream: stream.clone(),
             kind,
+            stop: stop.clone(),
         })
     }
 

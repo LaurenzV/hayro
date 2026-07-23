@@ -13,6 +13,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use crate::util::{OptionLog, find_needle};
 use alloc::borrow::Cow;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use smallvec::SmallVec;
@@ -157,7 +158,17 @@ impl<'a> Stream<'a> {
     /// Note that the result of this method will not be cached, so calling it multiple
     /// times is expensive.
     pub fn decoded(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
-        self.decoded_image(&ImageDecodeParams::default())
+        self.decoded_with_stop(enough::Unstoppable)
+    }
+
+    /// Like [`Stream::decoded`], but polls `stop` at coarse intervals during
+    /// filter decoding and fails with [`DecodeFailure::Stopped`] if it fires.
+    pub fn decoded_with_stop(
+        &self,
+        stop: impl enough::Stop + 'static,
+    ) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        let stop: Arc<dyn enough::Stop> = Arc::new(stop);
+        self.decoded_image(&ImageDecodeParams::default(), &stop)
             .map(|r| r.data)
     }
 
@@ -166,6 +177,7 @@ impl<'a> Stream<'a> {
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
@@ -181,6 +193,7 @@ impl<'a> Stream<'a> {
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
                 image_params,
+                stop,
             )?;
             current = Some(new);
         }
@@ -246,6 +259,14 @@ pub enum DecodeFailure {
     Decryption,
     /// An unknown failure occurred.
     Unknown,
+    /// Decoding was stopped early by the stop check.
+    Stopped,
+}
+
+impl From<enough::StopReason> for DecodeFailure {
+    fn from(_: enough::StopReason) -> Self {
+        Self::Stopped
+    }
 }
 
 /// An image color space.

@@ -37,6 +37,8 @@ hayro-write = { path = "hayro-write", version = "0.7.0", default-features = fals
 hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
 hayro-cmap = { path = "hayro-cmap", version = "0.1.0", default-features = false }
 
+enough = { version = "0.4.4", default-features = false, features = ["alloc"] }
+
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
@@ -122,3 +124,10 @@ strip = "none"
 inherits = "release"
 debug = 1
 overflow-checks = true
+
+[patch.crates-io]
+# zune-jpeg cooperative cancellation (CancelCheck / set_cancel), from our open
+# upstream PR, so DctDecode can be cancelled mid-decode. Drop once a published
+# zune-jpeg exposes the same hook.
+zune-jpeg = { git = "https://github.com/lilith/zune-image", branch = "jpeg-stop-vendored" }
+zune-core = { git = "https://github.com/lilith/zune-image", branch = "jpeg-stop-vendored" }
