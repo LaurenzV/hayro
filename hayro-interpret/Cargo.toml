@@ -22,6 +22,7 @@ yoke = { workspace = true, features = ["derive"]}
 siphasher = { workspace = true }
 bitflags = { workspace = true }
 rustc-hash = { workspace = true }
+enough.workspace = true
 
 [dev-dependencies]
 image = { workspace = true, features = ["png"] }

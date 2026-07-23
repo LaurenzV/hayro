@@ -11,3 +11,6 @@ readme = "README.md"
 
 [lints]
 workspace = true
+
+[dependencies]
+enough.workspace = true

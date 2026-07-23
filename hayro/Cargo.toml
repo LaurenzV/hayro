@@ -18,8 +18,10 @@ vello_cpu = { workspace = true }
 pic-scale = { workspace = true }
 rustc-hash = { workspace = true }
 fearless_simd = { workspace = true }
+enough.workspace = true
 
 [dev-dependencies]
+almost-enough = "0.4.4"
 log = { workspace = true }
 
 [features]
