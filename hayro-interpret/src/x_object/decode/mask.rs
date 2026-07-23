@@ -42,6 +42,23 @@ fn decode_mask_data(mut ctx: DecodeContext<'_>, invert: bool) -> Option<(Vec<u8>
     let inverted_default = ctx
         .color_space
         .inverted_default_decode_arr(ctx.bits_per_component as f32);
+
+    // 1-bit masks (the common case for stencil masks) only ever produce 0 or 255,
+    // so expand them with a byte-wide lookup table instead of going through the
+    // general per-sample `BitReader` + f32 interpolation path below, which is
+    // several times slower for large masks (see #1319).
+    if ctx.bits_per_component == 1
+        && ctx.color_space.num_components() == 1
+        && (ctx.decode_arr.as_slice() == default_decode.as_slice()
+            || ctx.decode_arr.as_slice() == inverted_default.as_slice())
+        && let Some(decoded) = decode_bilevel_mask_data(
+            &ctx,
+            invert ^ (ctx.decode_arr.as_slice() == inverted_default.as_slice()),
+        )
+    {
+        return Some((decoded, ctx.height));
+    }
+
     let fast_path = ctx.bits_per_component == 8
         && (ctx.decode_arr.as_slice() == default_decode.as_slice()
             || ctx.decode_arr.as_slice() == inverted_default.as_slice());
@@ -90,4 +107,44 @@ fn decode_mask_data(mut ctx: DecodeContext<'_>, invert: bool) -> Option<(Vec<u8>
     )?;
 
     Some((data, ctx.height))
+}
+
+/// Expand a 1-bit mask (single component, default or inverted-default decode
+/// array) into 0/255 luma bytes using a byte-wide lookup table that emits
+/// 8 pixels per input byte.
+///
+/// Rows are byte-aligned, matching the `BitReader::align` call in the general
+/// path. `should_invert` is the stencil inversion combined with an inverted
+/// decode array. Returns `None` when the decoded data is too short for
+/// `width x height`, leaving truncated files to the general path (which adapts
+/// the height instead of padding whole rows).
+fn decode_bilevel_mask_data(ctx: &DecodeContext<'_>, should_invert: bool) -> Option<Vec<u8>> {
+    let width = ctx.width as usize;
+    let height = ctx.height as usize;
+    let row_bytes = width.div_ceil(8);
+    let data = ctx.decoded.data.as_ref();
+    if data.len() < row_bytes.checked_mul(height)? {
+        return None;
+    }
+
+    let (zero, one) = if should_invert { (255, 0) } else { (0, 255) };
+    let mut lut = [[0_u8; 8]; 256];
+    for (byte, expanded) in lut.iter_mut().enumerate() {
+        for (bit, out) in expanded.iter_mut().enumerate() {
+            *out = if byte & (0x80 >> bit) != 0 { one } else { zero };
+        }
+    }
+
+    let full_bytes = width / 8;
+    let tail_bits = width % 8;
+    let mut out = Vec::with_capacity(width * height);
+    for row in data.chunks_exact(row_bytes).take(height) {
+        for &byte in &row[..full_bytes] {
+            out.extend_from_slice(&lut[byte as usize]);
+        }
+        if tail_bits != 0 {
+            out.extend_from_slice(&lut[row[full_bytes] as usize][..tail_bits]);
+        }
+    }
+    Some(out)
 }
