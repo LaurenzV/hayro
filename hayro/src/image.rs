@@ -80,36 +80,130 @@ impl RenderImageData {
 }
 
 impl Renderer<'_> {
+    /// Draw an image whose alpha mask has different dimensions or a different
+    /// interpolation setting than the image itself (`/SMask` and stencil `/Mask`
+    /// streams have their own dimensions).
+    ///
+    /// The alpha channel is resampled onto a common pixel grid and attached
+    /// directly to the image, so that the combined image can be drawn in a
+    /// single pass. Compared to routing the mask through a nested render
+    /// context, this avoids materializing several intermediate buffers at mask
+    /// resolution and drawing the image content twice (see issue #1315).
     fn draw_image_with_alpha_mask(&mut self, image_data: RenderImageData, alpha_data: LumaData) {
-        let mask = {
-            let transform = *self.ctx.transform()
-                * Affine::scale_non_uniform(
-                    image_data.width() as f64 / alpha_data.width as f64,
-                    image_data.height() as f64 / alpha_data.height as f64,
-                );
-            let mut renderer = self.child(self.ctx.width(), self.ctx.height());
-            let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
-            let rgb_data = ImageData::Rgb(RgbData {
-                data: vec![0; alpha_data.width as usize * alpha_data.height as usize * 3],
-                width: alpha_data.width,
-                height: alpha_data.height,
-                interpolate: alpha_data.interpolate,
-                scale_factors: alpha_data.scale_factors,
-            });
-            renderer.ctx.set_transform(transform);
-            // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
-            // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
-            // values between alpha_data and rgb_data don't match, which they do here.
-            renderer.draw_image(rgb_data, Some(alpha_data));
-            renderer.ctx.flush();
-            let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render(&mut mask_pix, &mut resources);
-            Mask::new_alpha(&mask_pix)
+        let img_width = image_data.width();
+        let img_height = image_data.height();
+        let interpolate = image_data.interpolate();
+
+        // In most cases, the image's own dimensions serve as the common grid.
+        // However, if the mask stores more detail than the image on some axis
+        // (common for stencil masks of scanned pages), keep as much of that
+        // detail as remains visible at the current scale by extending the grid
+        // up to the image's on-screen footprint.
+        let (grid_width, grid_height) = {
+            let (x_scale, y_scale) = {
+                let (x, y) = x_y_advances(self.ctx.transform());
+                (x.length() as f32, y.length() as f32)
+            };
+            let max_dim = (u16::MAX / 2) as u32;
+            let screen_width = ((img_width as f32 * x_scale) as u32).clamp(1, max_dim);
+            let screen_height = ((img_height as f32 * y_scale) as u32).clamp(1, max_dim);
+
+            (
+                img_width.max(screen_width.min(alpha_data.width)),
+                img_height.max(screen_height.min(alpha_data.height)),
+            )
         };
 
-        self.ctx.push_mask_layer(mask);
-        self.draw_image(image_data, None);
-        self.ctx.pop_layer();
+        // Match the image's interpolation setting so that the call to
+        // `draw_image` below doesn't dispatch back to this method.
+        let alpha_data = if (alpha_data.width, alpha_data.height) == (grid_width, grid_height) {
+            LumaData {
+                interpolate,
+                ..alpha_data
+            }
+        } else {
+            let scale_factors = alpha_data.scale_factors;
+            let data = self.resize_image_data(
+                alpha_data.data,
+                alpha_data.width,
+                alpha_data.height,
+                grid_width,
+                grid_height,
+                ImagePixelFormat::Luma,
+            );
+
+            LumaData {
+                data,
+                width: grid_width,
+                height: grid_height,
+                interpolate,
+                scale_factors,
+            }
+        };
+
+        let image_data = if (img_width, img_height) == (grid_width, grid_height) {
+            image_data
+        } else {
+            // The mask is more detailed than the image, so the image is drawn
+            // at the mask-derived grid resolution instead. `draw_image`
+            // positions the image based on its pixel dimensions, so compensate
+            // for the dimension change in the transform.
+            self.ctx.set_transform(
+                *self.ctx.transform()
+                    * Affine::scale_non_uniform(
+                        img_width as f64 / grid_width as f64,
+                        img_height as f64 / grid_height as f64,
+                    ),
+            );
+
+            match image_data {
+                RenderImageData::Rgb(rgb) => {
+                    let scale_factors = rgb.scale_factors;
+                    let data = self.resize_image_data(
+                        rgb.data,
+                        img_width,
+                        img_height,
+                        grid_width,
+                        grid_height,
+                        ImagePixelFormat::Rgb,
+                    );
+
+                    RenderImageData::Rgb(RgbData {
+                        data,
+                        width: grid_width,
+                        height: grid_height,
+                        interpolate,
+                        scale_factors,
+                    })
+                }
+                RenderImageData::Luma(luma) => {
+                    let scale_factors = luma.scale_factors;
+                    let data = self.resize_image_data(
+                        luma.data,
+                        img_width,
+                        img_height,
+                        grid_width,
+                        grid_height,
+                        ImagePixelFormat::Luma,
+                    );
+
+                    RenderImageData::Luma(LumaData {
+                        data,
+                        width: grid_width,
+                        height: grid_height,
+                        interpolate,
+                        scale_factors,
+                    })
+                }
+                RenderImageData::Solid(solid) => RenderImageData::Solid(SolidColorImage {
+                    width: grid_width,
+                    height: grid_height,
+                    ..solid
+                }),
+            }
+        };
+
+        self.draw_image(image_data, Some(alpha_data));
     }
 
     fn resize_image_data(
