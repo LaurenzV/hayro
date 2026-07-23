@@ -148,8 +148,7 @@ impl Renderer<'_> {
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
                         renderer.ctx.flush();
-                        let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render(&mut pix, &mut resources);
+                        renderer.rasterize(&mut pix);
 
                         // TODO: Fix these
                         if x_step < 0.0 {

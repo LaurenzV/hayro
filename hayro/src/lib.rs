@@ -50,6 +50,7 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub use hayro_interpret;
 pub use hayro_interpret::hayro_syntax;
@@ -73,14 +74,17 @@ pub(crate) struct GlobalState {
     level: Level,
     outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     scaler: Scaler,
+    /// Cooperative stop, shared with every nested renderer via [`Renderer::child`].
+    stop: Arc<dyn enough::Stop>,
 }
 
 impl GlobalState {
-    pub(crate) fn new(cache: &RenderCache<'_>) -> Self {
+    pub(crate) fn new(cache: &RenderCache<'_>, stop: Arc<dyn enough::Stop>) -> Self {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
+            stop,
         }
     }
 }
@@ -116,6 +120,21 @@ impl<'r> Renderer<'r> {
             derive_settings(self.ctx.render_settings()),
             self.global,
         )
+    }
+
+    /// Rasterize the recorded scene into `pixmap`.
+    ///
+    /// Once the cooperative stop has fired the whole render is abandoned and the
+    /// pixmap discarded, so skip the (potentially expensive) rasterization
+    /// rather than compute a result nobody reads. This bounds cancellation
+    /// latency to the coarser interpret-level polling; a fired stop is reported
+    /// by [`render_with_stop`].
+    pub(crate) fn rasterize(&mut self, pixmap: &mut Pixmap) {
+        if self.global.stop.should_stop() {
+            return;
+        }
+        let mut resources = vello_cpu::Resources::default();
+        self.ctx.render(pixmap, &mut resources);
     }
 
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
@@ -232,6 +251,24 @@ impl Default for RenderSettings {
     }
 }
 
+/// Render the page like [`render`], but report whether the cooperative stop
+/// (`interpreter_settings.stop`) fired.
+///
+/// The stop is polled throughout interpretation (per operator, glyph, and
+/// image) and stream/image decoding, so a fired stop ends the work early and
+/// the returned pixmap is incomplete. `Ok` is a completed render; `Err` carries
+/// the [`StopReason`](enough::StopReason).
+pub fn render_with_stop<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+) -> Result<Pixmap, enough::StopReason> {
+    let pixmap = render(page, cache, interpreter_settings, render_settings);
+    interpreter_settings.stop.check()?;
+    Ok(pixmap)
+}
+
 /// Render the page with the given settings to a pixmap.
 pub fn render<'a>(
     page: &'a Page<'a>,
@@ -264,7 +301,7 @@ pub fn render<'a>(
         num_threads: 0,
     };
 
-    let global = GlobalState::new(cache);
+    let global = GlobalState::new(cache, interpreter_settings.stop.clone());
     let mut device = Renderer::new(pix_width, pix_height, vc_settings, &global);
 
     device.ctx.set_paint(render_settings.bg_color);
@@ -286,8 +323,7 @@ pub fn render<'a>(
     device.pop_clip();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
-    let mut resources = vello_cpu::Resources::default();
-    device.ctx.render(&mut pixmap, &mut resources);
+    device.rasterize(&mut pixmap);
 
     pixmap
 }

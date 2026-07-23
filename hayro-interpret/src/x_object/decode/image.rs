@@ -218,7 +218,12 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             .get::<Stream<'_>>(SMASK)
             .or_else(|| dict.get::<Stream<'_>>(MASK))
         {
-            let obj = ImageXObject::new_mask(&s_mask, &self.obj.warning_sink, &self.obj.cache)?;
+            let obj = ImageXObject::new_mask(
+                &s_mask,
+                &self.obj.warning_sink,
+                &self.obj.cache,
+                &self.obj.stop,
+            )?;
 
             decode_mask(&obj, self.target_dimension).map(|decoded| decoded.luma)
         } else if self.color_key_mask.is_some() {
@@ -243,7 +248,12 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         let mut matte_rgb = [0_u8; 3];
         self.ctx.color_space.convert_values(&matte, &mut matte_rgb);
 
-        let mask_obj = ImageXObject::new_mask(&s_mask, &self.obj.warning_sink, &self.obj.cache)?;
+        let mask_obj = ImageXObject::new_mask(
+            &s_mask,
+            &self.obj.warning_sink,
+            &self.obj.cache,
+            &self.obj.stop,
+        )?;
         let alpha = decode_mask(&mask_obj, self.target_dimension)?.luma;
 
         Some((alpha, matte_rgb))

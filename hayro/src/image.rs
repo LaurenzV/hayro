@@ -102,8 +102,7 @@ impl Renderer<'_> {
             // values between alpha_data and rgb_data don't match, which they do here.
             renderer.draw_image(rgb_data, Some(alpha_data));
             renderer.ctx.flush();
-            let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render(&mut mask_pix, &mut resources);
+            renderer.rasterize(&mut mask_pix);
             Mask::new_alpha(&mask_pix)
         };
 
@@ -562,8 +561,7 @@ impl Renderer<'_> {
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
                                     sub_renderer.ctx.flush();
-                                    let mut resources = vello_cpu::Resources::default();
-                                    sub_renderer.ctx.render(&mut sub_pix, &mut resources);
+                                    sub_renderer.rasterize(&mut sub_pix);
                                     sub_pix
                                 };
 

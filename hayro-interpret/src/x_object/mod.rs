@@ -74,6 +74,7 @@ impl<'a> XObject<'a> {
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
@@ -83,6 +84,7 @@ impl<'a> XObject<'a> {
                 warning_sink,
                 cache,
                 transfer_function,
+                stop,
             )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
             _ => None,

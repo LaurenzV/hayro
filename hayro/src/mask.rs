@@ -87,8 +87,7 @@ fn draw_soft_mask(
 
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.flush();
-    let mut resources = vello_cpu::Resources::default();
-    renderer.ctx.render(&mut pix, &mut resources);
+    renderer.rasterize(&mut pix);
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
