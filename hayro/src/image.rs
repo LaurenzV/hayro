@@ -108,6 +108,10 @@ impl Renderer<'_> {
             None,
         );
         self.ctx.set_transform(mask_transform);
+        // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
+        // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
+        // values between alpha_data and rgb_data don't match. Here we use a
+        // `SolidColorImage` so it doesn't affect it.
         self.draw_image(RenderImageData::Solid(mask_image), Some(alpha_data));
         self.ctx.pop_layer();
         self.ctx.pop_layer();
