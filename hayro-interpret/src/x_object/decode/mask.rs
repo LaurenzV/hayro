@@ -2,6 +2,19 @@ use super::{DecodeContext, decode_context, fix_image_length, unpack_samples};
 use crate::LumaData;
 use crate::function::interpolate;
 use crate::x_object::image::{ImageKind, ImageXObject};
+use std::sync::LazyLock;
+
+static BILEVEL_MASK_LUT: LazyLock<Box<[u64; 256]>> = LazyLock::new(|| {
+    let mut lut = Box::new([0; 256]);
+    for (byte, expanded) in lut.iter_mut().enumerate() {
+        let mut pixels = [0; 8];
+        for (bit, pixel) in pixels.iter_mut().enumerate() {
+            *pixel = if byte & (0x80 >> bit) != 0 { 255 } else { 0 };
+        }
+        *expanded = u64::from_ne_bytes(pixels);
+    }
+    lut
+});
 
 pub(crate) struct DecodedMask {
     pub(crate) luma: LumaData,
@@ -43,27 +56,20 @@ fn decode_mask_data(mut ctx: DecodeContext<'_>, invert: bool) -> Option<(Vec<u8>
         .color_space
         .inverted_default_decode_arr(ctx.bits_per_component as f32);
 
-    // 1-bit masks (the common case for stencil masks) only ever produce 0 or 255,
-    // so expand them with a byte-wide lookup table instead of going through the
-    // general per-sample `BitReader` + f32 interpolation path below, which is
-    // several times slower for large masks (see #1319).
-    if ctx.bits_per_component == 1
+    let bilevel_fast_path = ctx.bits_per_component == 1
         && ctx.color_space.num_components() == 1
         && (ctx.decode_arr.as_slice() == default_decode.as_slice()
-            || ctx.decode_arr.as_slice() == inverted_default.as_slice())
-        && let Some(decoded) = decode_bilevel_mask_data(
-            &ctx,
-            invert ^ (ctx.decode_arr.as_slice() == inverted_default.as_slice()),
-        )
-    {
-        return Some((decoded, ctx.height));
-    }
-
+            || ctx.decode_arr.as_slice() == inverted_default.as_slice());
     let fast_path = ctx.bits_per_component == 8
         && (ctx.decode_arr.as_slice() == default_decode.as_slice()
             || ctx.decode_arr.as_slice() == inverted_default.as_slice());
 
-    let mut data = if fast_path {
+    let mut data = if bilevel_fast_path {
+        decode_bilevel_mask_data(
+            &ctx,
+            invert ^ (ctx.decode_arr.as_slice() == inverted_default.as_slice()),
+        )
+    } else if fast_path {
         let mut decoded = ctx.decoded.data;
         let should_invert = invert ^ (ctx.decode_arr.as_slice() == inverted_default.as_slice());
         if should_invert {
@@ -109,42 +115,33 @@ fn decode_mask_data(mut ctx: DecodeContext<'_>, invert: bool) -> Option<(Vec<u8>
     Some((data, ctx.height))
 }
 
-/// Expand a 1-bit mask (single component, default or inverted-default decode
-/// array) into 0/255 luma bytes using a byte-wide lookup table that emits
-/// 8 pixels per input byte.
-///
-/// Rows are byte-aligned, matching the `BitReader::align` call in the general
-/// path. `should_invert` is the stencil inversion combined with an inverted
-/// decode array. Returns `None` when the decoded data is too short for
-/// `width x height`, leaving truncated files to the general path (which adapts
-/// the height instead of padding whole rows).
-fn decode_bilevel_mask_data(ctx: &DecodeContext<'_>, should_invert: bool) -> Option<Vec<u8>> {
+fn decode_bilevel_mask_data(ctx: &DecodeContext<'_>, should_invert: bool) -> Vec<u8> {
     let width = ctx.width as usize;
     let height = ctx.height as usize;
     let row_bytes = width.div_ceil(8);
     let data = ctx.decoded.data.as_ref();
-    if data.len() < row_bytes.checked_mul(height)? {
-        return None;
-    }
 
-    let (zero, one) = if should_invert { (255, 0) } else { (0, 255) };
-    let mut lut = [[0_u8; 8]; 256];
-    for (byte, expanded) in lut.iter_mut().enumerate() {
-        for (bit, out) in expanded.iter_mut().enumerate() {
-            *out = if byte & (0x80 >> bit) != 0 { one } else { zero };
-        }
-    }
-
+    let xor_mask = if should_invert { u64::MAX } else { 0 };
     let full_bytes = width / 8;
     let tail_bits = width % 8;
+    let lut = &**BILEVEL_MASK_LUT;
     let mut out = Vec::with_capacity(width * height);
-    for row in data.chunks_exact(row_bytes).take(height) {
-        for &byte in &row[..full_bytes] {
-            out.extend_from_slice(&lut[byte as usize]);
+    // To avoid repeatedly calling `extend`, which turns out to be very
+    // expensive.
+    let mut buffer = [[0; 8]; 32];
+
+    for row in data.chunks(row_bytes).take(height) {
+        for chunk in row[..row.len().min(full_bytes)].chunks(buffer.len()) {
+            for (expanded, &byte) in buffer.iter_mut().zip(chunk) {
+                *expanded = (lut[byte as usize] ^ xor_mask).to_ne_bytes();
+            }
+            out.extend_from_slice(buffer[..chunk.len()].as_flattened());
         }
-        if tail_bits != 0 {
-            out.extend_from_slice(&lut[row[full_bytes] as usize][..tail_bits]);
+
+        if tail_bits != 0 && row.len() > full_bytes {
+            let expanded = (lut[row[full_bytes] as usize] ^ xor_mask).to_ne_bytes();
+            out.extend_from_slice(&expanded[..tail_bits]);
         }
     }
-    Some(out)
+    out
 }
