@@ -1,6 +1,7 @@
 //! Error types for JBIG2 decoding.
 
 use core::fmt;
+use enough::StopReason;
 
 /// The main error type for JBIG2 decoding operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +24,8 @@ pub enum DecodeError {
     Overflow(OverflowError),
     /// Feature not yet implemented.
     Unsupported,
+    /// Decoding was stopped early by the stop check.
+    Stopped(StopReason),
 }
 
 /// Errors related to reading/parsing data.
@@ -149,6 +152,7 @@ impl fmt::Display for DecodeError {
             Self::Symbol(e) => write!(f, "{e}"),
             Self::Overflow(e) => write!(f, "{e}"),
             Self::Unsupported => write!(f, "unsupported feature"),
+            Self::Stopped(_) => write!(f, "decoding stopped by the stop check"),
         }
     }
 }
@@ -300,6 +304,12 @@ impl From<SymbolError> for DecodeError {
 impl From<OverflowError> for DecodeError {
     fn from(e: OverflowError) -> Self {
         Self::Overflow(e)
+    }
+}
+
+impl From<StopReason> for DecodeError {
+    fn from(reason: StopReason) -> Self {
+        Self::Stopped(reason)
     }
 }
 

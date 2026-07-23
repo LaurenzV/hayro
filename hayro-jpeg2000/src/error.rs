@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use enough::StopReason;
+
 /// The main error type for JPEG 2000 decoding operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecodeError {
@@ -17,6 +19,8 @@ pub enum DecodeError {
     Decoding(DecodingError),
     /// Errors related to color space and component handling.
     Color(ColorError),
+    /// Decoding was stopped early by the stop check.
+    Stopped(StopReason),
 }
 
 /// Errors related to JP2 file format and box parsing.
@@ -130,7 +134,14 @@ impl fmt::Display for DecodeError {
             Self::Validation(e) => write!(f, "{e}"),
             Self::Decoding(e) => write!(f, "{e}"),
             Self::Color(e) => write!(f, "{e}"),
+            Self::Stopped(_) => write!(f, "decoding stopped by the stop check"),
         }
+    }
+}
+
+impl From<StopReason> for DecodeError {
+    fn from(reason: StopReason) -> Self {
+        Self::Stopped(reason)
     }
 }
 

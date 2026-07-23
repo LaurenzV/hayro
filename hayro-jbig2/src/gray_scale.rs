@@ -10,6 +10,7 @@ use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, Result, bail};
 use crate::simd::{self, Level, Simd, u32x8};
+use enough::Stop;
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
 #[derive(Debug, Clone)]
@@ -37,19 +38,20 @@ pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<Vec<u32>> {
     // Table C.1: "GSMMR specifies whether MMR is used."
     if params.use_mmr {
-        decode_mmr(data, params)
+        decode_mmr(data, params, stop)
     } else {
-        decode_arithmetic(data, params, ctx)
+        decode_arithmetic(data, params, ctx, stop)
     }
 }
 
 /// The gray-scale image decoding procedure using MMR (Annex C, C.5).
 ///
 /// Table C.4: "MMR = GSMMR"
-fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
+fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>, stop: &dyn Stop) -> Result<Vec<u32>> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
     // `GSH` - The height of the gray-scale image.
@@ -61,7 +63,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let mut offset = 0;
     decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
         // Table C.4: "GBW = GSW, GBH = GSH"
-        offset += decode_bitmap_mmr(bitplane, &data[offset..])?;
+        offset += decode_bitmap_mmr(bitplane, &data[offset..], stop)?;
 
         Ok(())
     })
@@ -74,6 +76,7 @@ fn decode_arithmetic(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<Vec<u32>> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
@@ -124,6 +127,9 @@ fn decode_arithmetic(
         ArithmeticDecoderContext::default(),
     );
 
+    // Skip the per-row poll entirely when the stop can never fire.
+    let stop = stop.may_stop().then_some(stop);
+
     macro_rules! gs_decode_loop {
         ($gather:expr) => {
             decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
@@ -131,6 +137,8 @@ fn decode_arithmetic(
                 let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
                 for y in 0..height {
+                    // Poll the stop check once per bitplane row.
+                    stop.check()?;
                     gatherer.start_row(bitplane, y);
                     for x in 0..width {
                         gatherer.maybe_reload_buffers(bitplane, x);
