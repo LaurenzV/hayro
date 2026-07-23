@@ -1,5 +1,6 @@
-use crate::{Renderer, x_y_advances};
+use crate::Renderer;
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x32};
+use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Point, Rect};
 use pic_scale::{

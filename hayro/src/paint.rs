@@ -1,11 +1,12 @@
-use crate::{Renderer, x_y_advances};
+use crate::Renderer;
 use hayro_interpret::Paint;
-use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
+use hayro_interpret::encode::{EncodedShadingType, texture_dimensions};
 use hayro_interpret::gradient::SvgGradientKind;
 use hayro_interpret::pattern::Pattern;
-use kurbo::{Affine, BezPath, Point, Rect, Shape};
+use hayro_interpret::util::x_y_advances;
+use kurbo::{Affine, BezPath, Rect, Shape};
 use std::sync::Arc;
-use vello_cpu::color::{AlphaColor, DynamicColor, PremulRgba8, Srgb};
+use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
 use vello_cpu::peniko::{ColorStop, Gradient, ImageQuality, ImageSampler};
 use vello_cpu::{Image, ImageSource, PaintType, Pixmap, peniko};
 
@@ -90,8 +91,16 @@ impl Renderer<'_> {
 
                             PaintType::Gradient(gradient)
                         } else {
-                            let (image, width, height, transform, may_have_transparency) =
-                                render_shading_texture(bbox, &encoded);
+                            let (width, height) = texture_dimensions(bbox, 1.0);
+                            let mut image = Vec::with_capacity(width as usize * height as usize);
+                            let mut may_have_transparency = false;
+                            let (width, height, transform) =
+                                encoded.sample_texture(bbox, 1.0, |sample| {
+                                    let pixel =
+                                        AlphaColor::<Srgb>::new(sample).premultiply().to_rgba8();
+                                    may_have_transparency |= pixel.a != 255;
+                                    image.push(pixel);
+                                });
                             paint_transform = path_transform.inverse() * transform;
 
                             let pixmap = Pixmap::from_parts_with_opacity(
@@ -186,46 +195,4 @@ impl Renderer<'_> {
 
         clip_path
     }
-}
-
-// TODO: Deduplicate with hayro-svg?
-fn render_shading_texture(
-    path_bbox: Rect,
-    shading_pattern: &EncodedShadingPattern,
-) -> (Vec<PremulRgba8>, u32, u32, Affine, bool) {
-    let base_width = (path_bbox.width() as f32).max(1.0);
-    let base_height = (path_bbox.height() as f32).max(1.0);
-
-    let width = (base_width).ceil() as u32;
-    let height = (base_height).ceil() as u32;
-
-    let (x_advance, y_advance) = x_y_advances(&shading_pattern.base_transform);
-
-    let mut buf = vec![PremulRgba8::from_u32(0); width as usize * height as usize];
-    let mut start_point = shading_pattern.base_transform
-        * Affine::translate((0.5, 0.5))
-        * Point::new(path_bbox.x0, path_bbox.y0);
-    let mut may_have_transparency = false;
-
-    for row in buf.chunks_exact_mut(width as usize) {
-        let mut point = start_point;
-
-        for pixel in row {
-            let sample = shading_pattern.sample(point);
-            *pixel = AlphaColor::<Srgb>::new(sample).premultiply().to_rgba8();
-            may_have_transparency |= pixel.a != 255;
-
-            point += x_advance;
-        }
-
-        start_point += y_advance;
-    }
-
-    (
-        buf,
-        width,
-        height,
-        Affine::translate((path_bbox.x0, path_bbox.y0)),
-        may_have_transparency,
-    )
 }

@@ -1,12 +1,12 @@
 use crate::clip::CachedClipPath;
 use crate::{Id, hash128};
 use crate::{SvgRenderer, convert_transform};
-use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
+use hayro_interpret::encode::EncodedShadingType;
 use hayro_interpret::gradient::{SvgGradient, SvgGradientKind};
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{CacheKey, FillRule, Paint, StrokeProps};
 use image::{DynamicImage, ImageBuffer};
-use kurbo::{Affine, Point, Rect, Shape, Vec2};
+use kurbo::{Affine, Rect, Shape};
 
 #[derive(Clone)]
 pub(crate) struct CachedTilingPattern<'a> {
@@ -331,8 +331,11 @@ impl<'a> SvgRenderer<'a> {
 
         for (id, shading) in shadings.iter() {
             let encoded = shading.pattern.encode();
-            let (image, transform) = render_shading_texture(shading.bbox, &encoded);
-            self.write_image(&image, true, Some(id), transform);
+            let texture = encoded.render_texture(shading.bbox, 1.0);
+            let image = DynamicImage::ImageRgba8(
+                ImageBuffer::from_raw(texture.width, texture.height, texture.data).unwrap(),
+            );
+            self.write_image(&image, true, Some(id), texture.transform);
         }
 
         self.xml.end_element();
@@ -447,68 +450,4 @@ fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradie
     }
 
     xml.end_element();
-}
-
-fn render_shading_texture(
-    bbox: Rect,
-    shading_pattern: &EncodedShadingPattern,
-) -> (DynamicImage, Affine) {
-    const SCALE: f32 = 1.0;
-    const INV_SCALE: f32 = 1.0 / SCALE;
-
-    let base_width = (bbox.width() as f32).max(1.0);
-    let base_height = (bbox.height() as f32).max(1.0);
-
-    let width = (base_width * SCALE).ceil() as u32;
-    let height = (base_height * SCALE).ceil() as u32;
-
-    let (x_advance, y_advance) =
-        x_y_advances(&(Affine::scale(INV_SCALE as f64) * shading_pattern.base_transform));
-
-    let mut buf = vec![0_u8; width as usize * height as usize * 4];
-    let mut start_point = shading_pattern.base_transform
-        * Affine::translate((0.5, 0.5))
-        * Point::new(bbox.x0, bbox.y0);
-
-    for row in buf.chunks_exact_mut(width as usize * 4) {
-        let mut point = start_point;
-
-        for pixel in row.chunks_exact_mut(4) {
-            let sample = shading_pattern.sample(point);
-            let converted = [
-                (sample[0] * 255.0 + 0.5) as u8,
-                (sample[1] * 255.0 + 0.5) as u8,
-                (sample[2] * 255.0 + 0.5) as u8,
-                (sample[3] * 255.0 + 0.5) as u8,
-            ];
-
-            pixel.copy_from_slice(&converted);
-
-            point += x_advance;
-        }
-
-        start_point += y_advance;
-    }
-
-    let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
-
-    (
-        image,
-        Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(INV_SCALE as f64),
-    )
-}
-
-fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
-    let scale_skew_transform = {
-        let c = transform.as_coeffs();
-        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
-    };
-
-    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
-    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
-
-    (
-        Vec2::new(x_advance.x, x_advance.y),
-        Vec2::new(y_advance.x, y_advance.y),
-    )
 }
