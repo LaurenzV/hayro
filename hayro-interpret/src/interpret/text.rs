@@ -3,6 +3,7 @@ use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
+use enough::Stop;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
@@ -30,6 +31,11 @@ pub(crate) fn show_text_string<'a>(
     let mut cur_idx = 0;
 
     while cur_idx < bytes.len() {
+        // Poll the stop check once per glyph; a single show-text operator can
+        // cover an arbitrary number of glyphs.
+        if ctx.settings.stop.should_stop() {
+            return;
+        }
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
 

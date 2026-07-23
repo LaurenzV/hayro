@@ -47,7 +47,7 @@ fn decode_context<'a>(
 
     let decoded = obj
         .stream
-        .decoded_image(&decode_params)
+        .decoded_image(&decode_params, &obj.stop)
         .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
         .ok()?;
 
