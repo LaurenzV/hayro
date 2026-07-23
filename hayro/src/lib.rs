@@ -26,8 +26,10 @@ For usage examples, see the [example](https://github.com/LaurenzV/hayro/tree/mas
 the GitHub repository.
 
 ## Cargo features
-This crate has one optional feature:
+This crate has the following optional features:
 - `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
+- `multithreading`: Enable support for multi-threaded rendering. See
+  [`RenderSettings::num_threads`] for more information.
 */
 
 #![forbid(unsafe_code)]
@@ -218,6 +220,12 @@ pub struct RenderSettings {
     /// The background color. Determines the color of the base
     /// rectangle during rendering to a pixmap.
     pub bg_color: AlphaColor<Srgb>,
+    /// The number of worker threads to use for rendering. If set to 0 (the default),
+    /// rendering happens synchronously on the current thread.
+    ///
+    /// Only has an effect if the `multithreading` feature is enabled. Note that nested
+    /// content (like soft masks and tiling patterns) is always rendered single-threaded.
+    pub num_threads: u16,
 }
 
 impl Default for RenderSettings {
@@ -228,6 +236,7 @@ impl Default for RenderSettings {
             width: None,
             height: None,
             bg_color: TRANSPARENT,
+            num_threads: 0,
         }
     }
 }
@@ -261,7 +270,7 @@ pub fn render<'a>(
 
     let vc_settings = vello_cpu::RenderSettings {
         level: vello_cpu::Level::new(),
-        num_threads: 0,
+        num_threads: render_settings.num_threads,
     };
 
     let global = GlobalState::new(cache);
@@ -287,6 +296,8 @@ pub fn render<'a>(
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
     let mut resources = vello_cpu::Resources::default();
+    // Required when rendering multi-threaded, and a no-op otherwise.
+    device.ctx.flush();
     device.ctx.render(&mut pixmap, &mut resources);
 
     pixmap
@@ -329,6 +340,10 @@ pub fn render_pdf(
     Some(rendered)
 }
 
+/// Derive the settings for nested render contexts (used for soft masks, stencil masks
+/// and tiling patterns). Those always render single-threaded: they are created on the
+/// fly while interpreting the page, so spawning a worker pool for each of them would
+/// cost more than it gains.
 pub(crate) fn derive_settings(settings: &vello_cpu::RenderSettings) -> vello_cpu::RenderSettings {
     vello_cpu::RenderSettings {
         num_threads: 0,

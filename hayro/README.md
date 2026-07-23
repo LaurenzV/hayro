@@ -32,8 +32,10 @@ For usage examples, see the [example](https://github.com/LaurenzV/hayro/tree/mas
 the GitHub repository.
 
 ### Cargo features
-This crate has one optional feature:
+This crate has the following optional features:
 - `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
+- `multithreading`: Enable support for multi-threaded rendering. See
+  [`RenderSettings::num_threads`](https://docs.rs/hayro/latest/hayro/struct.RenderSettings.html#structfield.num_threads) for more information.
 
 <!-- cargo-rdme end -->
 
