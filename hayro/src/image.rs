@@ -6,7 +6,7 @@ use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
 };
 use std::sync::Arc;
-use vello_cpu::peniko::{Fill, ImageQuality, ImageSampler};
+use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{Image, ImageSource, Mask, Pixmap, peniko};
 
 // Previously, we used `CatmullRom`. The problem with that one is that it
@@ -81,35 +81,41 @@ impl RenderImageData {
 
 impl Renderer<'_> {
     fn draw_image_with_alpha_mask(&mut self, image_data: RenderImageData, alpha_data: LumaData) {
-        let mask = {
-            let transform = *self.ctx.transform()
-                * Affine::scale_non_uniform(
-                    image_data.width() as f64 / alpha_data.width as f64,
-                    image_data.height() as f64 / alpha_data.height as f64,
-                );
-            let mut renderer = self.child(self.ctx.width(), self.ctx.height());
-            let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
-            let rgb_data = ImageData::Rgb(RgbData {
-                data: vec![0; alpha_data.width as usize * alpha_data.height as usize * 3],
-                width: alpha_data.width,
-                height: alpha_data.height,
-                interpolate: alpha_data.interpolate,
-                scale_factors: alpha_data.scale_factors,
-            });
-            renderer.ctx.set_transform(transform);
-            // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
-            // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
-            // values between alpha_data and rgb_data don't match, which they do here.
-            renderer.draw_image(rgb_data, Some(alpha_data));
-            renderer.ctx.flush();
-            let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render(&mut mask_pix, &mut resources);
-            Mask::new_alpha(&mask_pix)
+        let img_width = image_data.width();
+        let img_height = image_data.height();
+        let image_transform = *self.ctx.transform();
+        let mask_transform = image_transform
+            * Affine::scale_non_uniform(
+                img_width as f64 / alpha_data.width as f64,
+                img_height as f64 / alpha_data.height as f64,
+            );
+        let mask_image = SolidColorImage {
+            color: [0; 3],
+            width: alpha_data.width,
+            height: alpha_data.height,
+            interpolate: alpha_data.interpolate,
         };
 
-        self.ctx.push_mask_layer(mask);
+        self.ctx.push_layer(None, None, None, None, None);
+        self.ctx.set_transform(image_transform);
         self.draw_image(image_data, None);
+
+        self.ctx.push_layer(
+            None,
+            Some(peniko::BlendMode::new(Mix::Normal, Compose::DestIn)),
+            None,
+            None,
+            None,
+        );
+        self.ctx.set_transform(mask_transform);
+        // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
+        // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
+        // values between alpha_data and rgb_data don't match. Here we use a
+        // `SolidColorImage` so it doesn't affect it.
+        self.draw_image(RenderImageData::Solid(mask_image), Some(alpha_data));
         self.ctx.pop_layer();
+        self.ctx.pop_layer();
+        self.ctx.set_transform(image_transform);
     }
 
     fn resize_image_data(
