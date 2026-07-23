@@ -56,6 +56,10 @@
     "file": "pdfs/custom/color_space_separation_2.pdf"
   },
   {
+    "id": "filter_flate_1bit",
+    "file": "pdfs/custom/filter_flate_1bit.pdf"
+  },
+  {
     "id": "filter_tiff_predictor_gray",
     "file": "pdfs/custom/filter_tiff_predictor_gray.pdf"
   },
