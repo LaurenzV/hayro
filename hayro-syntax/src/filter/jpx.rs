@@ -1,10 +1,11 @@
 use crate::bit_reader::BitWriter;
 use crate::filter::FilterResult;
 use crate::math::round_f32;
-use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
+use crate::object::stream::{DecodeFailure, ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
+use enough::Stop;
 use hayro_jpeg2000::{ColorSpace, DecodeSettings};
 
 impl ImageColorSpace {
@@ -18,7 +19,20 @@ impl ImageColorSpace {
     }
 }
 
-pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult<'static>> {
+/// Preserve a stop across the JPEG 2000 decoder boundary; any other error is
+/// a generic image-decode failure.
+fn map_err(e: hayro_jpeg2000::DecodeError) -> DecodeFailure {
+    match e {
+        hayro_jpeg2000::DecodeError::Stopped(_) => DecodeFailure::Stopped,
+        _ => DecodeFailure::ImageDecode,
+    }
+}
+
+pub(crate) fn decode(
+    data: &[u8],
+    params: &ImageDecodeParams,
+    stop: &dyn Stop,
+) -> Result<FilterResult<'static>, DecodeFailure> {
     use crate::object::stream::ImageColorSpace;
 
     let settings = DecodeSettings {
@@ -27,7 +41,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         target_resolution: params.target_dimension,
     };
 
-    let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
+    let image = hayro_jpeg2000::Image::new(data, &settings).map_err(map_err)?;
 
     let width = image.width();
     let height = image.height();
@@ -44,12 +58,15 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
             1 => ImageColorSpace::Gray,
             3 => ImageColorSpace::Rgb,
             4 => ImageColorSpace::Cmyk,
-            _ => return None,
+            _ => return Err(DecodeFailure::ImageDecode),
         },
     };
     let has_alpha = image.has_alpha();
     let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
-    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8();
+    let bitmap = image
+        .decode_with_stop(&mut decoder_context, stop)
+        .map_err(map_err)?
+        .data_u8();
 
     let (mut data, mut alpha) = if !has_alpha {
         (bitmap, None)
@@ -62,7 +79,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         let mut alpha_channel = Vec::with_capacity(bitmap.len() / total_channels as usize);
 
         for sample in bitmap.chunks_exact(total_channels as usize) {
-            let (alpha, color) = sample.split_last()?;
+            let (alpha, color) = sample.split_last().ok_or(DecodeFailure::ImageDecode)?;
             alpha_channel.push(*alpha);
             color_channels.extend_from_slice(color);
         }
@@ -73,11 +90,12 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     // The decoded image is always 8-bit, so if necessary we have to rescale
     // ourselves.
     if bpc != 8 {
-        data = scale(&data, bpc, cs.num_components(), width, height)?;
+        data = scale(&data, bpc, cs.num_components(), width, height)
+            .ok_or(DecodeFailure::ImageDecode)?;
         alpha = alpha.and_then(|alpha| scale(&alpha, bpc, cs.num_components(), width, height));
     }
 
-    Some(FilterResult {
+    Ok(FilterResult {
         data: Cow::Owned(data),
         image_data: Some(ImageData {
             alpha,

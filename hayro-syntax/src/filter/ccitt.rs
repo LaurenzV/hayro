@@ -2,23 +2,29 @@ use crate::object::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
-use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use crate::object::stream::{
+    DecodeFailure, FilterResult, ImageColorSpace, ImageData, ImageDecodeParams,
+};
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
+use enough::Stop;
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult<'static>> {
+    stop: &dyn Stop,
+) -> Result<FilterResult<'static>, DecodeFailure> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
     let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
-    let output_len = (columns as usize).checked_mul(rows as usize)?;
+    let output_len = (columns as usize)
+        .checked_mul(rows as usize)
+        .ok_or(DecodeFailure::ImageDecode)?;
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
     let settings = DecodeSettings {
@@ -109,12 +115,18 @@ pub(crate) fn decode(
             bit_count: 0,
         };
         let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode_with_stop(data, &mut decoder, &mut context, stop);
+
+        // A stop is propagated even when some rows decoded, so a cancelled
+        // decode is never mistaken for a lenient partial success.
+        if let Err(hayro_ccitt::DecodeError::Stopped) = result {
+            return Err(DecodeFailure::Stopped);
+        }
 
         // If we decoded at least one row, let's be lenient and return what we got.
         // See also 0001763.pdf.
         if result.is_err() && decoder.decoded_rows == 0 {
-            return None;
+            return Err(DecodeFailure::ImageDecode);
         }
 
         (decoder.output, 1)
@@ -147,10 +159,14 @@ pub(crate) fn decode(
             decoded_rows: 0,
         };
         let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode_with_stop(data, &mut decoder, &mut context, stop);
+
+        if let Err(hayro_ccitt::DecodeError::Stopped) = result {
+            return Err(DecodeFailure::Stopped);
+        }
 
         if result.is_err() && decoder.decoded_rows == 0 {
-            return None;
+            return Err(DecodeFailure::ImageDecode);
         }
 
         if result.is_err() {
@@ -160,7 +176,7 @@ pub(crate) fn decode(
         (decoder.output, 8)
     };
 
-    Some(FilterResult {
+    Ok(FilterResult {
         data: Cow::Owned(decoded),
         image_data: Some(ImageData {
             alpha: None,
@@ -183,7 +199,13 @@ mod tests {
     fn issue1258() {
         let params = Dict::from_bytes(b"<< /K 0 /Columns 8 /Rows 1 >>").unwrap();
 
-        let decoded = decode(&[0x35, 0x14], &params, &ImageDecodeParams::default()).unwrap();
+        let decoded = decode(
+            &[0x35, 0x14],
+            &params,
+            &ImageDecodeParams::default(),
+            &enough::Unstoppable,
+        )
+        .unwrap();
 
         assert_eq!(decoded.data.as_ref(), &[0; 8]);
         assert_eq!(decoded.image_data.unwrap().height, 1);

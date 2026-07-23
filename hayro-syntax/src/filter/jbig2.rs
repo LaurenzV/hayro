@@ -2,10 +2,22 @@ use crate::bit_reader::BitWriter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use crate::object::stream::{
+    DecodeFailure, FilterResult, ImageColorSpace, ImageData, ImageDecodeParams,
+};
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
+use enough::Stop;
+
+/// Preserve a stop across the JBIG2 decoder boundary; any other error is a
+/// generic image-decode failure.
+fn map_err(e: hayro_jbig2::DecodeError) -> DecodeFailure {
+    match e {
+        hayro_jbig2::DecodeError::Stopped(_) => DecodeFailure::Stopped,
+        _ => DecodeFailure::ImageDecode,
+    }
+}
 
 /// Decode JBIG2 data from a PDF stream.
 ///
@@ -15,12 +27,14 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult<'static>> {
+    stop: &dyn Stop,
+) -> Result<FilterResult<'static>, DecodeFailure> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .and_then(|g| g.decoded().ok());
 
-    let image = hayro_jbig2::Image::new_embedded(data, globals.as_deref()).ok()?;
+    let image = hayro_jbig2::Image::new_embedded(data, globals.as_deref())
+        .map_err(|_| DecodeFailure::ImageDecode)?;
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
@@ -52,9 +66,15 @@ pub(crate) fn decode(
             }
         }
 
-        let writer = BitWriter::new(&mut packed, 1)?;
+        let writer = BitWriter::new(&mut packed, 1).ok_or(DecodeFailure::ImageDecode)?;
         let mut decoder = BitWriterDecoder { writer };
-        image.decode(&mut decoder).ok()?;
+        image
+            .decode_with_stop(
+                &mut decoder,
+                &mut hayro_jbig2::DecoderContext::default(),
+                stop,
+            )
+            .map_err(map_err)?;
 
         (packed, 1)
     } else {
@@ -89,12 +109,18 @@ pub(crate) fn decode(
             output: vec![0xFF; image.width() as usize * image.height() as usize],
             pos: 0,
         };
-        image.decode(&mut decoder).ok()?;
+        image
+            .decode_with_stop(
+                &mut decoder,
+                &mut hayro_jbig2::DecoderContext::default(),
+                stop,
+            )
+            .map_err(map_err)?;
 
         (decoder.output, 8)
     };
 
-    Some(FilterResult {
+    Ok(FilterResult {
         data: Cow::Owned(decoded),
         image_data: Some(ImageData {
             alpha: None,

@@ -1,8 +1,12 @@
 use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
-use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use crate::object::stream::{
+    DecodeFailure, FilterResult, ImageColorSpace, ImageData, ImageDecodeParams,
+};
 use alloc::borrow::Cow;
+use alloc::sync::Arc;
 use core::num::NonZeroU32;
+use enough::Stop;
 use zune_jpeg::zune_core::bytestream::ZCursor;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::colorspace::ColorSpace::CMYK;
@@ -12,9 +16,10 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult<'static>> {
+    stop: &Arc<dyn Stop>,
+) -> Result<FilterResult<'static>, DecodeFailure> {
     if image_params.width > u16::MAX as u32 || image_params.height > u16::MAX as u32 {
-        return None;
+        return Err(DecodeFailure::ImageDecode);
     }
 
     // Some PDFs have weird JPEGs where the JPEG metadata is completely wrong
@@ -22,13 +27,15 @@ pub(crate) fn decode(
     // metadata in the PDF image dictionary is correct. Therefore, we first
     // validate the JPEG metadata and patch the data if any of the dimensions
     // are too large (if they are too small, they will just be padded later on).
-    let data = maybe_patch_jpeg_dimensions(data, image_params)?;
+    let data = maybe_patch_jpeg_dimensions(data, image_params).ok_or(DecodeFailure::ImageDecode)?;
 
     let options = DecoderOptions::default()
         .set_max_width(u16::MAX as usize)
         .set_max_height(u16::MAX as usize);
     let mut decoder = zune_jpeg::JpegDecoder::new_with_options(ZCursor::new(&*data), options);
-    decoder.decode_headers().ok()?;
+    decoder
+        .decode_headers()
+        .map_err(|_| DecodeFailure::ImageDecode)?;
 
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
     let input_color_space = decoder.input_colorspace().unwrap();
@@ -36,7 +43,9 @@ pub(crate) fn decode(
     let mut out_colorspace = if let Some(num_components) = image_params.num_components
         && !matches!(num_components, 1 | 3 | 4)
     {
-        ColorSpace::MultiBand(NonZeroU32::new(num_components as u32)?)
+        ColorSpace::MultiBand(
+            NonZeroU32::new(num_components as u32).ok_or(DecodeFailure::ImageDecode)?,
+        )
     } else {
         match input_color_space {
             ColorSpace::YCbCr => {
@@ -61,7 +70,21 @@ pub(crate) fn decode(
     }
 
     decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
-    let mut decoded = decoder.decode().ok()?;
+    // Bridge the PDF-level stop into zune-jpeg's CancelCheck so a large JPEG is
+    // cancellable mid-decode (polled per MCU rows), not just up front.
+    decoder.set_cancel({
+        let stop = stop.clone();
+        move || stop.should_stop()
+    });
+    // zune's error does not name cancellation, so recover a stop from the
+    // (monotonic) stop before reporting a generic image-decode failure.
+    let mut decoded = match decoder.decode() {
+        Ok(d) => d,
+        Err(_) => {
+            stop.may_stop().then_some(stop.as_ref()).check()?;
+            return Err(DecodeFailure::ImageDecode);
+        }
+    };
 
     if out_colorspace == ColorSpace::YCCK {
         // See <https://github.com/mozilla/pdf.js/blob/69595a29192b7704733404a42a2ebb537601117b/src/core/jpg.js#L1331>
@@ -92,7 +115,7 @@ pub(crate) fn decode(
         height,
     };
 
-    Some(FilterResult {
+    Ok(FilterResult {
         data: Cow::Owned(decoded),
         image_data: Some(image_data),
     })

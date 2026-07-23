@@ -18,7 +18,42 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::*;
 use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
+use alloc::sync::Arc;
 use core::ops::Deref;
+use enough::Stop;
+
+/// Throttles cooperative-cancellation polling: checks the stop at most once per
+/// `interval` bytes of produced output. `enough` leaves poll throttling to the
+/// caller, and the byte-oriented decoders all share this pattern.
+pub(crate) struct Pace {
+    interval: usize,
+    next: usize,
+}
+
+impl Pace {
+    pub(crate) fn new(interval: usize) -> Self {
+        Self {
+            interval,
+            next: interval,
+        }
+    }
+
+    /// If at least `interval` bytes were produced since the last checkpoint,
+    /// poll `stop`, propagating [`DecodeFailure::Stopped`] if it fires. Pass a
+    /// `stop` already gated by `may_stop().then_some(..)` so an unstoppable
+    /// decode skips the check entirely.
+    pub(crate) fn poll(
+        &mut self,
+        produced: usize,
+        stop: Option<&dyn Stop>,
+    ) -> Result<(), DecodeFailure> {
+        if produced >= self.next {
+            self.next = produced.saturating_add(self.interval);
+            stop.check()?;
+        }
+        Ok(())
+    }
+}
 
 /// A data filter.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -86,7 +121,11 @@ impl Filter {
         data: &[u8],
         params: &Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
+        #[cfg_attr(not(feature = "images"), allow(unused))] stop: &Arc<dyn Stop>,
     ) -> Result<FilterResult<'static>, DecodeFailure> {
+        // Each decoder reports a `DecodeFailure` directly, so a stop
+        // (`DecodeFailure::Stopped`) is distinguished from a genuine decode
+        // failure without re-polling the stop after the fact.
         let res = match self {
             Self::AsciiHexDecode => ascii_hex::decode(data)
                 .map(FilterResult::from_data)
@@ -94,29 +133,23 @@ impl Filter {
             Self::Ascii85Decode => ascii_85::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::RunLengthDecode => run_length::decode(data)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
-            Self::LzwDecode => lzw_flate::lzw::decode(data, params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
-            Self::FlateDecode => lzw_flate::flate::decode(data, params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
-            #[cfg(feature = "images")]
-            Self::DctDecode => {
-                dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+            Self::RunLengthDecode => {
+                run_length::decode(data, stop.as_ref()).map(FilterResult::from_data)
+            }
+            Self::LzwDecode => {
+                lzw_flate::lzw::decode(data, params, stop.as_ref()).map(FilterResult::from_data)
+            }
+            Self::FlateDecode => {
+                lzw_flate::flate::decode(data, params, stop.as_ref()).map(FilterResult::from_data)
             }
             #[cfg(feature = "images")]
-            Self::CcittFaxDecode => {
-                ccitt::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
-            }
+            Self::DctDecode => dct::decode(data, params, image_params, stop),
             #[cfg(feature = "images")]
-            Self::Jbig2Decode => {
-                jbig2::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
-            }
+            Self::CcittFaxDecode => ccitt::decode(data, params, image_params, stop.as_ref()),
             #[cfg(feature = "images")]
-            Self::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
+            Self::Jbig2Decode => jbig2::decode(data, params, image_params, stop.as_ref()),
+            #[cfg(feature = "images")]
+            Self::JpxDecode => jpx::decode(data, image_params, stop.as_ref()),
             #[cfg(not(feature = "images"))]
             Self::DctDecode | Self::CcittFaxDecode | Self::Jbig2Decode | Self::JpxDecode => {
                 warn!("image decoding is not supported (enable the `images` feature)");
@@ -125,7 +158,8 @@ impl Filter {
             _ => Err(DecodeFailure::StreamDecode),
         };
 
-        if res.is_err() {
+        // A stop is an expected outcome; only a genuine failure warrants a warning.
+        if matches!(&res, Err(e) if !matches!(e, DecodeFailure::Stopped)) {
             warn!("failed to apply filter {}", self.debug_name());
         }
 
