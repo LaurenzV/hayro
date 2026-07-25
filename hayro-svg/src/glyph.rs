@@ -1,7 +1,7 @@
 use crate::SvgRenderer;
 use crate::hash128;
 use crate::path::BezPathExt;
-use hayro_interpret::font::{Glyph, Type3Glyph};
+use hayro_interpret::font::{Glyph, GlyphRun, Type3Glyph};
 use hayro_interpret::{CacheKey, DrawMode, DrawProps, Paint};
 use kurbo::{Affine, BezPath, Shape};
 
@@ -19,7 +19,18 @@ pub(crate) struct CachedType3Glyph<'a> {
 }
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn draw_glyph(
+    pub(crate) fn draw_glyph_run(
+        &mut self,
+        glyph_run: &GlyphRun<'_, 'a>,
+        props: DrawProps<'a>,
+        mode: &DrawMode,
+    ) {
+        for glyph in glyph_run.glyphs() {
+            self.draw_glyph(glyph, glyph.transform(), props.clone(), mode);
+        }
+    }
+
+    fn draw_glyph(
         &mut self,
         glyph: &Glyph<'a>,
         glyph_transform: Affine,
@@ -31,9 +42,9 @@ impl<'a> SvgRenderer<'a> {
         }
 
         match glyph {
-            Glyph::Outline(o) => {
-                let outline = o.outline();
-                let glyph_id = o.identifier().cache_key();
+            Glyph::Outline(glyph) => {
+                let outline = glyph.outline();
+                let glyph_id = glyph.identifier().cache_key();
                 let (cache_key, glyph_path, use_transform, paint_transform) = match mode {
                     DrawMode::Fill(_) => {
                         let transform = props.transform * glyph_transform;
@@ -95,9 +106,9 @@ impl<'a> SvgRenderer<'a> {
                 }
                 self.xml.end_element();
             }
-            Glyph::Type3(t) => {
+            Glyph::Type3(glyph) => {
                 let cache_key = hash128(&(
-                    t.cache_key(),
+                    glyph.cache_key(),
                     props.transform.cache_key(),
                     glyph_transform.cache_key(),
                     props.paint.cache_key(),
@@ -105,7 +116,7 @@ impl<'a> SvgRenderer<'a> {
 
                 if !self.type3_glyphs.contains(cache_key) {
                     self.with_dummy(|r| {
-                        t.interpret(r, props.transform, glyph_transform, &props.paint);
+                        glyph.interpret(r, props.transform, glyph_transform, &props.paint);
                     });
                 }
 
@@ -113,7 +124,7 @@ impl<'a> SvgRenderer<'a> {
                 let id = self
                     .type3_glyphs
                     .insert_with(cache_key, || CachedType3Glyph {
-                        glyph: t.clone(),
+                        glyph: glyph.clone(),
                         transform: props.transform,
                         glyph_transform,
                         paint: props.paint.clone(),

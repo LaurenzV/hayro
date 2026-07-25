@@ -22,7 +22,7 @@ use crate::mask::MaskKind;
 use crate::paint::{
     CachedNativeGradient, CachedShading, CachedShadingPattern, CachedTilingPattern,
 };
-use hayro_interpret::font::Glyph;
+use hayro_interpret::font::GlyphRun;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{Float32Ext, TransformExt};
 use hayro_interpret::{
@@ -312,15 +312,14 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask), blend_mode);
     }
 
-    fn draw_glyph(
+    fn draw_glyph_run(
         &mut self,
-        glyph: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
         self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
-            Self::draw_glyph(r, glyph, glyph_transform, props, draw_mode);
+            Self::draw_glyph_run(r, glyph_run, props, draw_mode);
         });
     }
 

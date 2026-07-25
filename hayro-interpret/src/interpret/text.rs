@@ -1,15 +1,29 @@
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::Glyph;
+use crate::font::{Glyph, GlyphRun, PositionedGlyph, UNITS_PER_EM};
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
-use kurbo::Affine;
+use kurbo::{Affine, BezPath};
 
 pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device<'a>,
+    resources: &Resources<'a>,
+    text: &object::String<'_>,
+) {
+    begin_glyph_run(ctx);
+    append_text_string(ctx, resources, text);
+    show_glyph_run(ctx, device);
+}
+
+pub(crate) fn begin_glyph_run(ctx: &mut Context<'_>) {
+    ctx.glyph_scratch.clear();
+}
+
+pub(crate) fn append_text_string<'a>(
+    ctx: &mut Context<'a>,
     resources: &Resources<'a>,
     text: &object::String<'_>,
 ) {
@@ -28,24 +42,26 @@ pub(crate) fn show_text_string<'a>(
         || (matches!(font, TextStateFont::Fallback(_)) && bytes.is_ascii());
 
     let mut cur_idx = 0;
-
     while cur_idx < bytes.len() {
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
 
-        if show_glyphs {
-            let (glyph, glyph_transform) = font.get_glyph(
-                font.map_code(code),
-                code,
-                ctx,
-                resources,
-                font.origin_displacement(code),
-            );
-            show_glyph(ctx, device, &glyph, glyph_transform);
+        if show_glyphs && ctx.ocg_state.is_visible() {
+            let origin_displacement = font.origin_displacement(code);
+            let transform = ctx.get().text_state.full_transform()
+                * Affine::scale(1.0 / UNITS_PER_EM as f64)
+                * Affine::translate(origin_displacement);
+            let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
+
+            ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
         }
 
         ctx.get_mut().text_state.apply_code_advance(code, adv);
     }
+}
+
+pub(crate) fn apply_glyph_run_adjustment(ctx: &mut Context<'_>, adjustment: f32) {
+    ctx.get_mut().text_state.apply_adjustment(adjustment);
 }
 
 pub(crate) fn next_line(ctx: &mut Context<'_>, tx: f64, ty: f64) {
@@ -54,110 +70,84 @@ pub(crate) fn next_line(ctx: &mut Context<'_>, tx: f64, ty: f64) {
     ctx.get_mut().text_state.text_matrix = new_matrix;
 }
 
-pub(crate) fn show_glyph<'a>(
-    ctx: &mut Context<'a>,
-    device: &mut impl Device<'a>,
-    glyph: &Glyph<'a>,
-    glyph_transform: Affine,
-) {
-    if !ctx.ocg_state.is_visible() {
+pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device<'a>) {
+    if ctx.glyph_scratch.is_empty() {
         return;
     }
 
+    let render_mode = ctx.get().text_state.render_mode;
     let stroke_props = ctx.stroke_props();
+    let fill_props = ctx.draw_props(false);
+    let stroke_draw_props = ctx.draw_props(true);
 
-    match ctx.get().text_state.render_mode {
-        TextRenderingMode::Fill => {
-            let props = ctx.draw_props(false);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Fill(FillRule::NonZero),
-            );
+    let clip_path = {
+        let run = GlyphRun {
+            glyphs: &ctx.glyph_scratch,
+        };
+
+        let clip_path = if matches!(
+            render_mode,
+            TextRenderingMode::Clip
+                | TextRenderingMode::FillAndClip
+                | TextRenderingMode::StrokeAndClip
+                | TextRenderingMode::FillAndStrokeAndClip
+        ) {
+            let mut clip_path = BezPath::new();
+            for glyph in run.glyphs() {
+                clip_glyph(&mut clip_path, glyph);
+            }
+            Some(clip_path)
+        } else {
+            None
+        };
+
+        match render_mode {
+            TextRenderingMode::Fill => {
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
+            }
+            TextRenderingMode::Stroke => {
+                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
+            }
+            TextRenderingMode::FillStroke => {
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
+                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
+            }
+            TextRenderingMode::Invisible => {
+                // Still call draw_glyph_run for invisible text, so that it can
+                // for example be used for text extraction.
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
+            }
+            TextRenderingMode::FillAndClip => {
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
+            }
+            TextRenderingMode::StrokeAndClip => {
+                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
+            }
+            TextRenderingMode::FillAndStrokeAndClip => {
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
+                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
+            }
+            TextRenderingMode::Clip => {}
         }
-        TextRenderingMode::Stroke => {
-            let props = ctx.draw_props(true);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Stroke(stroke_props),
-            );
-        }
-        TextRenderingMode::FillStroke => {
-            let props = ctx.draw_props(false);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Fill(FillRule::NonZero),
-            );
-            let props = ctx.draw_props(true);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Stroke(stroke_props),
-            );
-        }
-        TextRenderingMode::Invisible => {
-            // Still call draw_glyph for invisible text, so that it can
-            // for example be used for text extraction.
-            let props = ctx.draw_props(false);
-            device.draw_glyph(glyph, glyph_transform, props, &DrawMode::Invisible);
-        }
-        TextRenderingMode::Clip => {
-            clip_glyph(ctx, glyph, glyph_transform);
-        }
-        TextRenderingMode::FillAndClip => {
-            clip_glyph(ctx, glyph, glyph_transform);
-            let props = ctx.draw_props(false);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Fill(FillRule::NonZero),
-            );
-        }
-        TextRenderingMode::StrokeAndClip => {
-            clip_glyph(ctx, glyph, glyph_transform);
-            let props = ctx.draw_props(true);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Stroke(stroke_props),
-            );
-        }
-        TextRenderingMode::FillAndStrokeAndClip => {
-            clip_glyph(ctx, glyph, glyph_transform);
-            let props = ctx.draw_props(false);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Fill(FillRule::NonZero),
-            );
-            let props = ctx.draw_props(true);
-            device.draw_glyph(
-                glyph,
-                glyph_transform,
-                props,
-                &DrawMode::Stroke(stroke_props),
-            );
-        }
+
+        clip_path
+    };
+
+    if let Some(clip_path) = clip_path {
+        ctx.get_mut().text_state.clip_paths.extend(clip_path);
     }
+
+    ctx.glyph_scratch.clear();
 }
 
-pub(crate) fn clip_glyph(context: &mut Context<'_>, glyph: &Glyph<'_>, transform: Affine) {
-    match glyph {
-        Glyph::Outline(o) => {
-            let outline = transform * o.outline();
+fn clip_glyph(clip_path: &mut BezPath, glyph: &PositionedGlyph<'_>) {
+    match &**glyph {
+        Glyph::Outline(outline_glyph) => {
+            let outline = glyph.transform() * outline_glyph.outline();
             let has_outline = outline.segments().next().is_some();
 
             if has_outline {
-                context.get_mut().text_state.clip_paths.extend(outline);
+                clip_path.extend(outline);
             }
         }
         Glyph::Type3(_) => {

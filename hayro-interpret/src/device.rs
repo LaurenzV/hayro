@@ -1,8 +1,8 @@
-use crate::font::Glyph;
+use crate::font::GlyphRun;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{BezPath, Rect, Shape};
 
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device<'a> {
@@ -24,11 +24,10 @@ pub trait Device<'a> {
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
     );
-    /// Draw a glyph.
-    fn draw_glyph(
+    /// Draw a run of positioned glyphs.
+    fn draw_glyph_run(
         &mut self,
-        glyph: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     );
@@ -58,7 +57,7 @@ impl Device<'_> for DummyDevice {
     fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_>, _: &DrawMode) {}
     fn push_clip_path(&mut self, _: &ClipPath) {}
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
-    fn draw_glyph(&mut self, _: &Glyph<'_>, _: Affine, _: DrawProps<'_>, _: &DrawMode) {}
+    fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
     fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}

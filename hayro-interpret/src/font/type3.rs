@@ -3,7 +3,7 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{Width, read_encoding, read_widths};
-use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM, read_to_unicode};
+use crate::font::{Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, read_to_unicode};
 use crate::interpret::state::TextState;
 use crate::util::RectExt;
 use crate::x_object::soft_mask::SoftMask;
@@ -211,14 +211,13 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
-    fn draw_glyph(
+    fn draw_glyph_run(
         &mut self,
-        g: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        self.inner.draw_glyph(g, glyph_transform, props, draw_mode);
+        self.inner.draw_glyph_run(glyph_run, props, draw_mode);
     }
 
     fn pop_clip(&mut self) {

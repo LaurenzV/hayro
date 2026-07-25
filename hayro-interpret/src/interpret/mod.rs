@@ -601,17 +601,19 @@ pub fn interpret<'a>(
                     .map(TextStateFont::Fallback);
                 }
 
+                text::begin_glyph_run(context);
                 for obj in s.0.iter::<Object<'_>>() {
                     match obj {
                         Object::Number(num) => {
-                            context.get_mut().text_state.apply_adjustment(num.as_f32());
+                            text::apply_glyph_run_adjustment(context, num.as_f32());
                         }
                         Object::String(text) => {
-                            text::show_text_string(context, device, resources, &text);
+                            text::append_text_string(context, resources, &text);
                         }
                         _ => {}
                     }
                 }
+                text::show_glyph_run(context, device);
             }
             TypedInstruction::HorizontalScaling(h) => {
                 context.get_mut().text_state.horizontal_scaling = h.0.as_f32();

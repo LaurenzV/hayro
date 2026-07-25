@@ -4,7 +4,7 @@ use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
 use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
-use crate::font::Glyph;
+use crate::font::GlyphRun;
 use crate::interpret::state::{ActiveTransferFunction, State};
 use crate::shading::Shading;
 use crate::util::{Float32Ext, RectExt, hash128};
@@ -309,14 +309,13 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
-    fn draw_glyph(
+    fn draw_glyph_run(
         &mut self,
-        g: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        self.inner.draw_glyph(g, glyph_transform, props, draw_mode);
+        self.inner.draw_glyph_run(glyph_run, props, draw_mode);
     }
 
     fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
