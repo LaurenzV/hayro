@@ -213,7 +213,7 @@ impl Renderer<'_> {
 
         if !outlines_only {
             self.draw_glyphs_individually(glyph_run, props, draw_mode);
-            
+
             return;
         }
 
