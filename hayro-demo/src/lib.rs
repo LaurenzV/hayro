@@ -1,8 +1,6 @@
-use console_error_panic_hook;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderCache, RenderSettings};
-use js_sys;
 use vello_cpu::color::palette::css::WHITE;
 use wasm_bindgen::prelude::*;
 
@@ -36,13 +34,12 @@ impl log::Log for ConsoleLogger {
                 _ => web_sys::console::log_1(&message.clone().into()),
             }
 
-            if let Some(window) = web_sys::window() {
-                if let Ok(add_log_entry) = js_sys::Reflect::get(&window, &"addLogEntry".into()) {
-                    if add_log_entry.is_function() {
-                        let function = js_sys::Function::from(add_log_entry);
-                        let _ = function.call2(&window, &level_str.into(), &message.into());
-                    }
-                }
+            if let Some(window) = web_sys::window()
+                && let Ok(add_log_entry) = js_sys::Reflect::get(&window, &"addLogEntry".into())
+                && add_log_entry.is_function()
+            {
+                let function = js_sys::Function::from(add_log_entry);
+                let _ = function.call2(&window, &level_str.into(), &message.into());
             }
         }
     }
@@ -56,6 +53,12 @@ static LOGGER: ConsoleLogger = ConsoleLogger;
 pub struct PdfViewer {
     pdf: Option<Pdf>,
     total_pages: usize,
+}
+
+impl Default for PdfViewer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
