@@ -3,46 +3,101 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hayro PDF Demo</title>
+    <meta name="theme-color" content="#f4f4f4">
+    <title>Hayro demo</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="app">
-        <div id="file-selector">
-            <div id="drop-zone">
-                <div class="drop-content">
-                    <div class="drop-icon">📄</div>
-                    <p>Drop PDF here or click to select</p>
-                </div>
-                <input type="file" id="file-input" accept=".pdf" style="display: none;">
-            </div>
-        </div>
-        
-        <div id="viewer" style="display: none;">
-            <canvas id="pdf-canvas"></canvas>
-            
-            <div id="controls">
-                <button id="prev-page" title="Previous page">← Previous</button>
-                <span id="page-info">1 / 1</span>
-                <input type="number" id="page-input" min="1" title="Go to page">
-                <button id="next-page" title="Next page">Next →</button>
-            </div>
-            
-            <div id="drop-overlay" style="display: none;">
-                <div class="drop-overlay-content">
-                    <div class="drop-icon">📄</div>
-                    <p>Drop new PDF here</p>
+        <header class="topbar">
+            <button class="brand" id="home-button" type="button" aria-label="Return to file picker">
+                hayro
+            </button>
+
+            <div class="viewer-controls" id="viewer-controls" hidden>
+                <div class="control-group zoom-controls" aria-label="Zoom controls">
+                    <button id="zoom-out" class="icon-button" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+                    <button id="zoom-value" class="zoom-value" type="button" title="Reset zoom">100%</button>
+                    <button id="zoom-in" class="icon-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
                 </div>
             </div>
-        </div>
-        
-        <div id="log-window">
-            <div id="log-header">
-                <span>Logs</span>
-                <button id="clear-logs" title="Clear logs">Clear</button>
+
+            <div class="header-actions">
+                <button id="settings-button" class="settings-button" type="button" aria-expanded="false" aria-controls="settings-popover">
+                    Settings
+                </button>
+                <div id="settings-popover" class="settings-popover" role="dialog" aria-label="Settings" hidden>
+                    <div class="settings-group">
+                        <span class="settings-title">View</span>
+                        <div class="segmented-control" role="group" aria-label="View mode">
+                            <button id="paged-mode" class="segment" type="button" aria-pressed="false">Paged</button>
+                            <button id="continuous-mode" class="segment active" type="button" aria-pressed="true">Scroll</button>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <span class="settings-title">Appearance</span>
+                        <div class="theme-control" role="group" aria-label="Color theme">
+                            <button class="theme-option" data-theme-choice="light" type="button" aria-pressed="false">Light</button>
+                            <button class="theme-option" data-theme-choice="dark" type="button" aria-pressed="false">Dark</button>
+                            <button class="theme-option active" data-theme-choice="system" type="button" aria-pressed="true">System</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div id="log-content"></div>
+        </header>
+
+        <main id="file-selector" class="file-selector">
+            <section class="file-picker">
+                <button id="drop-zone" class="drop-zone" type="button">
+                    <span class="file-glyph" aria-hidden="true">PDF</span>
+                    <span class="drop-copy">
+                        <strong>Drop a PDF here</strong>
+                        <small>or click to select one</small>
+                    </span>
+                </button>
+                <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
+            </section>
+        </main>
+
+        <main id="viewer" class="viewer" hidden>
+            <div id="document-viewport" class="document-viewport">
+                <div id="document-stage" class="document-stage paged">
+                    <div id="paged-document" class="paged-document">
+                        <div class="page-shell paged-shell" data-page="1">
+                            <canvas id="pdf-canvas" aria-label="Rendered PDF page"></canvas>
+                            <div class="page-placeholder" role="status" aria-label="Rendering page">
+                                <span class="spinner page-spinner" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="continuous-document" class="continuous-document" hidden></div>
+                </div>
+            </div>
+
+            <div class="page-navigation" aria-label="Page navigation">
+                <button id="prev-page" class="icon-button" type="button" title="Previous page" aria-label="Previous page">←</button>
+                <label class="page-field">
+                    <span class="sr-only">Current page</span>
+                    <input id="page-input" type="number" min="1" inputmode="numeric" value="1">
+                    <span id="page-total">/ 1</span>
+                </label>
+                <button id="next-page" class="icon-button" type="button" title="Next page" aria-label="Next page">→</button>
+            </div>
+
+            <div id="drop-overlay" class="drop-overlay" hidden>
+                <div class="drop-overlay-card">
+                    <span class="file-glyph small" aria-hidden="true">PDF</span>
+                    <strong>Drop to open PDF</strong>
+                </div>
+            </div>
+        </main>
+
+        <div id="loading-overlay" class="loading-overlay" hidden>
+            <span class="spinner large"></span>
+            <strong>Loading PDF</strong>
         </div>
+
+        <div id="toast" class="toast" role="alert" hidden></div>
     </div>
     <script type="module" src="index.js"></script>
 </body>
