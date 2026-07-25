@@ -8,6 +8,9 @@ www/hayro_demo.d.ts
 www/package.json
 
 dist/
+dist-profile/
+profile-pkg/
+.wasm-build-*/
 target/
 
 .DS_Store

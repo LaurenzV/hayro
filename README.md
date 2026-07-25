@@ -24,7 +24,7 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro-cmap`](hayro-cmap): A parser for CMap files in PDFs.
 
 ## Demo
-A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
+A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is just a quick, vibe-coded PDF viewer not intended to be used as an actual viewer. Features such as text selection, search, annotations, and forms are not implemented there and out of scope. It's meant as a quick way to test the rendering capabilities and performance of `hayro`.
 
 ## Minimum Supported Rust Version (MSRV)
 The minimum supported Rust version is **1.92**.
