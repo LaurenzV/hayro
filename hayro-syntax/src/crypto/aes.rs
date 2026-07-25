@@ -410,11 +410,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
 
         let mut padded_data = data.to_vec();
         let pad_len = 16 - (data.len() % 16);
-        if pad_len == 0 {
-            padded_data.extend(vec![16_u8; 16]);
-        } else {
-            padded_data.extend(vec![pad_len as u8; pad_len]);
-        }
+        padded_data.extend(vec![pad_len as u8; pad_len]);
 
         for chunk in padded_data.chunks(16) {
             let mut block = [0_u8; 16];
