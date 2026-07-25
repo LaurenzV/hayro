@@ -107,11 +107,7 @@ fn load_jpx_images(pdf_path: &Path) -> Result<Vec<ExtractedJpx>, String> {
             continue;
         };
 
-        if !stream
-            .filters()
-            .iter()
-            .any(|filter| *filter == Filter::JpxDecode)
-        {
+        if !stream.filters().contains(&Filter::JpxDecode) {
             continue;
         }
 
