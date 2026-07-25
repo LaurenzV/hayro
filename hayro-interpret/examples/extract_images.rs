@@ -3,7 +3,7 @@
 //!
 //! Note that you must have downloaded the corresponding PDF file for the example to work.
 
-use hayro_interpret::font::Glyph;
+use hayro_interpret::font::GlyphRun;
 use hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageData, ImageDrawProps,
     InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
@@ -60,7 +60,7 @@ impl Device<'_> for ImageExtractor {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
-    fn draw_glyph(&mut self, _: &Glyph<'_>, _: Affine, _: DrawProps<'_>, _: &DrawMode) {}
+    fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
 
     fn pop_clip(&mut self) {}
 

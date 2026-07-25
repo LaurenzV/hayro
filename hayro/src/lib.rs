@@ -38,7 +38,7 @@ use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
-use hayro_interpret::font::Glyph;
+use hayro_interpret::font::GlyphRun;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
@@ -171,14 +171,13 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         Self::draw_rect(self, rect, props, draw_mode);
     }
 
-    fn draw_glyph(
+    fn draw_glyph_run(
         &mut self,
-        glyph: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        Self::draw_glyph(self, glyph, glyph_transform, props, draw_mode);
+        Self::draw_glyph_run(self, glyph_run, props, draw_mode);
     }
 }
 

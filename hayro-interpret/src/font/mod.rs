@@ -107,6 +107,39 @@ impl Glyph<'_> {
     }
 }
 
+/// A glyph and its position within a [`GlyphRun`].
+pub struct PositionedGlyph<'a> {
+    pub(crate) glyph: Glyph<'a>,
+    pub(crate) transform: Affine,
+}
+
+impl PositionedGlyph<'_> {
+    /// Return the transform that places this glyph in text space.
+    pub fn transform(&self) -> Affine {
+        self.transform
+    }
+}
+
+impl<'a> Deref for PositionedGlyph<'a> {
+    type Target = Glyph<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.glyph
+    }
+}
+
+/// A fully materialized run of positioned glyphs.
+pub struct GlyphRun<'run, 'a> {
+    pub(crate) glyphs: &'run [PositionedGlyph<'a>],
+}
+
+impl<'run, 'a> GlyphRun<'run, 'a> {
+    /// Return the glyphs in the run.
+    pub fn glyphs(&self) -> &'run [PositionedGlyph<'a>] {
+        self.glyphs
+    }
+}
+
 /// An identifier that uniquely identifies a glyph, for caching purposes.
 #[derive(Clone, Debug)]
 pub struct GlyphIdentifier {
@@ -296,13 +329,8 @@ impl<'a> Font<'a> {
         char_code: u32,
         ctx: &mut Context<'a>,
         resources: &Resources<'a>,
-        origin_displacement: Vec2,
-    ) -> (Glyph<'a>, Affine) {
-        let glyph_transform = ctx.get().text_state.full_transform()
-            * Affine::scale(1.0 / UNITS_PER_EM as f64)
-            * Affine::translate(origin_displacement);
-
-        let glyph = match &self.1 {
+    ) -> Glyph<'a> {
+        match &self.1 {
             FontType::Type1(t) => {
                 let font = OutlineFont::Type1(t.clone());
                 Glyph::Outline(OutlineGlyph {
@@ -343,9 +371,7 @@ impl<'a> Font<'a> {
 
                 Glyph::Type3(Box::new(shape_glyph))
             }
-        };
-
-        (glyph, glyph_transform)
+        }
     }
 
     pub(crate) fn code_advance(&self, code: u32) -> Vec2 {

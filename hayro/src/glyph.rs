@@ -1,24 +1,24 @@
 use crate::Renderer;
-use hayro_interpret::font::Glyph;
+use hayro_interpret::font::{Glyph, GlyphRun, OutlineGlyph};
 use hayro_interpret::{CacheKey, DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath};
 use std::rc::Rc;
 
 impl Renderer<'_> {
-    fn fill_glyph<'a>(&mut self, glyph: &Glyph<'a>, props: DrawProps<'a>, glyph_transform: Affine) {
+    fn fill_glyph<'a>(&mut self, glyph: &Glyph<'a>, props: DrawProps<'a>, transform: Affine) {
         match glyph {
-            Glyph::Outline(o) => {
-                let base_outline = self.cached_outline(o);
+            Glyph::Outline(glyph) => {
+                let outline = self.cached_outline(glyph);
                 let props = DrawProps {
-                    transform: props.transform * glyph_transform,
+                    transform: props.transform * transform,
                     ..props
                 };
 
-                self.fill_path(base_outline.as_ref(), props, FillRule::NonZero);
+                self.fill_path(outline.as_ref(), props, FillRule::NonZero);
             }
-            Glyph::Type3(s) => {
+            Glyph::Type3(glyph) => {
                 self.in_type3_glyph = true;
-                s.interpret(self, props.transform, glyph_transform, &props.paint);
+                glyph.interpret(self, props.transform, transform, &props.paint);
                 self.in_type3_glyph = false;
             }
         }
@@ -28,27 +28,26 @@ impl Renderer<'_> {
         &mut self,
         glyph: &Glyph<'a>,
         props: DrawProps<'a>,
-        glyph_transform: Affine,
+        transform: Affine,
         stroke_props: &StrokeProps,
     ) {
         match glyph {
-            Glyph::Outline(o) => {
-                let base_outline = self.cached_outline(o);
-
+            Glyph::Outline(glyph) => {
+                let outline = self.cached_outline(glyph);
                 self.stroke_path(
-                    &(glyph_transform * base_outline.as_ref().clone()),
+                    &(transform * outline.as_ref().clone()),
                     props,
                     stroke_props,
                     true,
                 );
             }
-            Glyph::Type3(s) => {
-                s.interpret(self, props.transform, glyph_transform, &props.paint);
+            Glyph::Type3(glyph) => {
+                glyph.interpret(self, props.transform, transform, &props.paint);
             }
         }
     }
 
-    fn cached_outline(&self, glyph: &hayro_interpret::font::OutlineGlyph) -> Rc<BezPath> {
+    fn cached_outline(&self, glyph: &OutlineGlyph) -> Rc<BezPath> {
         let id = glyph.identifier().cache_key();
 
         if let Some(path) = self.global.outline_cache.borrow().get(&id) {
@@ -63,25 +62,27 @@ impl Renderer<'_> {
         path
     }
 
-    pub(super) fn draw_glyph<'a>(
+    pub(super) fn draw_glyph_run<'a>(
         &mut self,
-        glyph: &Glyph<'a>,
-        glyph_transform: Affine,
+        glyph_run: &GlyphRun<'_, 'a>,
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        match draw_mode {
-            DrawMode::Fill(_) => {
-                Self::fill_glyph(self, glyph, props, glyph_transform);
+        for glyph in glyph_run.glyphs() {
+            let transform = glyph.transform();
+            match draw_mode {
+                DrawMode::Fill(_) => {
+                    Self::fill_glyph(self, glyph, props.clone(), transform);
+                }
+                DrawMode::Stroke(stroke) => {
+                    Self::stroke_glyph(self, glyph, props.clone(), transform, stroke);
+                }
+                DrawMode::FillAndStroke(_, stroke) => {
+                    Self::fill_glyph(self, glyph, props.clone(), transform);
+                    Self::stroke_glyph(self, glyph, props.clone(), transform, stroke);
+                }
+                DrawMode::Invisible => {}
             }
-            DrawMode::Stroke(s) => {
-                Self::stroke_glyph(self, glyph, props, glyph_transform, s);
-            }
-            DrawMode::FillAndStroke(_, s) => {
-                Self::fill_glyph(self, glyph, props.clone(), glyph_transform);
-                Self::stroke_glyph(self, glyph, props, glyph_transform, s);
-            }
-            DrawMode::Invisible => {}
         }
     }
 }

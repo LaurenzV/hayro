@@ -1,7 +1,7 @@
 use crate::cache::{Cache, CacheKey};
 use crate::color::{Color, ColorSpace};
 use crate::convert::convert_transform;
-use crate::font::{Font, StandardFont};
+use crate::font::{Font, PositionedGlyph, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
@@ -60,6 +60,7 @@ pub struct Context<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
+    pub(crate) glyph_scratch: Vec<PositionedGlyph<'a>>,
 }
 
 impl<'a> Context<'a> {
@@ -105,6 +106,7 @@ impl<'a> Context<'a> {
             interpreter_cache: cache.clone(),
             ocg_state,
             nesting_depth,
+            glyph_scratch: Vec::new(),
         }
     }
 
