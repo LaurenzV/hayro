@@ -1,6 +1,7 @@
 //! The starting point for reading PDF files.
 
 use crate::PdfData;
+use crate::limits::Limits;
 use crate::object::Object;
 use crate::page::Pages;
 use crate::page::cached::CachedPages;
@@ -28,13 +29,23 @@ pub enum LoadPdfError {
     Invalid,
 }
 
+/// Options for loading a PDF file.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct PdfOptions<'a> {
+    /// The password to decrypt the document with, if any.
+    pub password: &'a str,
+    /// Resource limits applied while parsing and decoding the document.
+    pub limits: Limits,
+}
+
 #[allow(clippy::len_without_is_empty)]
 impl Pdf {
     /// Try to read the given PDF file.
     ///
     /// Returns `Err` if it was unable to read it.
     pub fn new(data: impl Into<PdfData>) -> Result<Self, LoadPdfError> {
-        Self::new_with_password(data, "")
+        Self::new_with_options(data, PdfOptions::default())
     }
 
     /// Try to read the given PDF file with a password.
@@ -44,14 +55,31 @@ impl Pdf {
         data: impl Into<PdfData>,
         password: &str,
     ) -> Result<Self, LoadPdfError> {
+        Self::new_with_options(
+            data,
+            PdfOptions {
+                password,
+                ..PdfOptions::default()
+            },
+        )
+    }
+
+    /// Try to read the given PDF file with the given options.
+    ///
+    /// Returns `Err` if it was unable to read it or if the password is incorrect.
+    pub fn new_with_options(
+        data: impl Into<PdfData>,
+        options: PdfOptions<'_>,
+    ) -> Result<Self, LoadPdfError> {
         let data = data.into();
-        let password = password.as_bytes();
+        let limits = options.limits;
+        let password = options.password.as_bytes();
         let version = find_version(data.as_ref()).unwrap_or(PdfVersion::Pdf10);
-        let xref = match root_xref(data.clone(), password) {
+        let xref = match root_xref(data.clone(), password, limits) {
             Ok(x) => x,
             Err(e) => match e {
                 XRefError::Unknown => {
-                    fallback(data.clone(), password).ok_or(LoadPdfError::Invalid)?
+                    fallback(data.clone(), password, limits).ok_or(LoadPdfError::Invalid)?
                 }
                 XRefError::Encryption(e) => return Err(LoadPdfError::Decryption(e)),
             },

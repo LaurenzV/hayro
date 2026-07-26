@@ -2,6 +2,7 @@
 
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
+use crate::limits::Limits;
 use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
@@ -152,6 +153,15 @@ impl<'a> Stream<'a> {
         self.filters_and_params().filters
     }
 
+    /// Return the resource limits governing this stream.
+    ///
+    /// These are the limits configured when the containing document was
+    /// loaded (see [`Limits`]), or [`Limits::DEFAULT`] for streams parsed
+    /// outside of a loaded document.
+    pub fn limits(&self) -> Limits {
+        self.dict.ctx().xref().limits()
+    }
+
     /// Return the decoded data of the stream.
     ///
     /// Note that the result of this method will not be cached, so calling it multiple
@@ -169,6 +179,7 @@ impl<'a> Stream<'a> {
     ) -> Result<FilterResult<'a>, DecodeFailure> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
+        let limits = self.limits();
 
         let mut current: Option<FilterResult<'a>> = None;
 
@@ -181,6 +192,7 @@ impl<'a> Stream<'a> {
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
                 image_params,
+                limits,
             )?;
             current = Some(new);
         }

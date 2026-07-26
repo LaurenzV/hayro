@@ -2,6 +2,7 @@
 
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
+use crate::limits::Limits;
 use crate::metadata::Metadata;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
@@ -38,7 +39,7 @@ pub(crate) enum XRefError {
 }
 
 /// Parse the "root" xref from the PDF.
-pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
+pub(crate) fn root_xref(data: PdfData, password: &[u8], limits: Limits) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
     let xref_pos = find_last_xref_pos(data.as_ref()).ok_or(XRefError::Unknown)?;
     let trailer =
@@ -50,18 +51,19 @@ pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefErro
         XRefInput::TrailerDictData(trailer),
         false,
         password,
+        limits,
     )
 }
 
 /// Try to manually parse the PDF to build an xref table and trailer dictionary.
-pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
+pub(crate) fn fallback(data: PdfData, password: &[u8], limits: Limits) -> Option<XRef> {
     warn!("xref table was invalid, trying to manually build xref table");
-    let (xref_map, xref_input) = fallback_xref_map(&data, password);
+    let (xref_map, xref_input) = fallback_xref_map(&data, password, limits);
 
     if let Some(xref_input) = xref_input {
         warn!("rebuild xref table with {} entries", xref_map.len());
 
-        XRef::new(data.clone(), xref_map, xref_input, true, password).ok()
+        XRef::new(data.clone(), xref_map, xref_input, true, password, limits).ok()
     } else {
         warn!("couldn't find trailer dictionary, failed to rebuild xref table");
 
@@ -69,8 +71,12 @@ pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
     }
 }
 
-fn fallback_xref_map<'a>(data: &'a PdfData, password: &[u8]) -> (XrefMap, Option<XRefInput<'a>>) {
-    fallback_xref_map_inner(data, ReaderContext::dummy(), true, password)
+fn fallback_xref_map<'a>(
+    data: &'a PdfData,
+    password: &[u8],
+    limits: Limits,
+) -> (XrefMap, Option<XRefInput<'a>>) {
+    fallback_xref_map_inner(data, ReaderContext::dummy(), true, password, limits)
 }
 
 fn fallback_xref_map_inner<'a>(
@@ -78,6 +84,7 @@ fn fallback_xref_map_inner<'a>(
     mut dummy_ctx: ReaderContext<'a>,
     recurse: bool,
     password: &[u8],
+    limits: Limits,
 ) -> (XrefMap, Option<XRefInput<'a>>) {
     let mut xref_map = FxHashMap::default();
     let mut trailer_dicts = vec![];
@@ -248,9 +255,10 @@ fn fallback_xref_map_inner<'a>(
             XRefInput::TrailerDictData(trailer_dict.as_ref().map(|d| d.data()).unwrap()),
             true,
             password,
+            limits,
         ) {
             let ctx = ReaderContext::new(&xref, false);
-            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false, password);
+            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false, password, limits);
             xref_map = patched_map;
         }
     }
@@ -274,12 +282,25 @@ const DUMMY_XREF: XRef = XRef(Inner::Dummy);
 pub struct XRef(Inner);
 
 impl XRef {
+    /// Return the resource limits configured for the document this xref
+    /// table belongs to.
+    ///
+    /// Dummy xref tables (used for objects parsed outside of a loaded
+    /// document) report [`Limits::DEFAULT`].
+    pub fn limits(&self) -> Limits {
+        match &self.0 {
+            Inner::Some(repr) => repr.limits,
+            Inner::Dummy => Limits::DEFAULT,
+        }
+    }
+
     fn new(
         data: PdfData,
         xref_map: XrefMap,
         input: XRefInput<'_>,
         repaired: bool,
         password: &[u8],
+        limits: Limits,
     ) -> Result<Self, XRefError> {
         // This is a bit hacky, but the problem is we can't read the resolved trailer dictionary
         // before we actually created the xref struct. So we first create it using dummy data
@@ -294,6 +315,7 @@ impl XRef {
             metadata: Arc::new(Metadata::default()),
             trailer_data,
             password: password.to_vec(),
+            limits,
         })));
 
         // We read the trailer twice, once to determine the encryption used and then a second
@@ -485,7 +507,7 @@ impl XRef {
         let mut locked = r.map.try_put().unwrap();
         assert!(!locked.repaired);
 
-        let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
+        let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password, r.limits);
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
@@ -681,6 +703,7 @@ struct SomeRepr {
     has_ocgs: bool,
     password: Vec<u8>,
     trailer_data: TrailerData,
+    limits: Limits,
 }
 
 #[derive(Debug, Clone)]

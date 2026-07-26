@@ -1,3 +1,4 @@
+use crate::limits::Limits;
 use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
@@ -12,8 +13,19 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    limits: Limits,
 ) -> Option<FilterResult<'static>> {
     if image_params.width > u16::MAX as u32 || image_params.height > u16::MAX as u32 {
+        return None;
+    }
+
+    // The JPEG's own SOF dimensions are clamped down to these below, so the
+    // dictionary dimensions bound the decode; enforce the limit against them.
+    if !limits.permits_image(image_params.width, image_params.height) {
+        debug!(
+            "JPEG image {}x{} exceeds the configured limits",
+            image_params.width, image_params.height
+        );
         return None;
     }
 

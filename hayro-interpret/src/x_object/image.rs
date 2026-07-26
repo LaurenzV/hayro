@@ -115,6 +115,15 @@ impl<'a> ImageXObject<'a> {
             return None;
         }
 
+        // Reject dimension claims beyond the configured limits before any
+        // decode work: decode-time allocations are proportional to the
+        // claimed pixel count, so a tiny crafted dictionary can otherwise
+        // request a multi-gigabyte allocation.
+        if !stream.limits().permits_image(width, height) {
+            debug!("image dimensions {width}x{height} exceed the configured limits");
+            return None;
+        }
+
         Some(Self {
             width,
             cache: cache.clone(),

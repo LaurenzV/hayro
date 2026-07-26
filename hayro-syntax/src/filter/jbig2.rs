@@ -1,4 +1,5 @@
 use crate::bit_reader::BitWriter;
+use crate::limits::Limits;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -15,12 +16,24 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    limits: Limits,
 ) -> Option<FilterResult<'static>> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .and_then(|g| g.decoded().ok());
 
     let image = hayro_jbig2::Image::new_embedded(data, globals.as_deref()).ok()?;
+
+    // The image dimensions come from the JBIG2 codestream, not the image
+    // dictionary, and size the output buffers below.
+    if !limits.permits_image(image.width(), image.height()) {
+        debug!(
+            "JBIG2 image {}x{} exceeds the configured limits",
+            image.width(),
+            image.height()
+        );
+        return None;
+    }
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
