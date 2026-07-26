@@ -8,7 +8,7 @@ use smallvec::{SmallVec, smallvec};
 #[derive(Debug)]
 pub(crate) struct Type2 {
     c0: Values,
-    c1: Values,
+    delta: Values,
     clamper: Clamper,
     n: f32,
 }
@@ -18,10 +18,16 @@ impl Type2 {
     pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let c0 = dict.get::<Values>(C0).unwrap_or(smallvec![0.0]);
         let c1 = dict.get::<Values>(C1).unwrap_or(smallvec![1.0]);
+        let delta = c0.iter().zip(&c1).map(|(c0, c1)| c1 - c0).collect();
         let clamper = Clamper::new(dict)?;
         let n = dict.get::<Number>(N)?.as_f64() as f32;
 
-        Some(Self { c0, c1, clamper, n })
+        Some(Self {
+            c0,
+            delta,
+            clamper,
+            n,
+        })
     }
 
     /// Evaluate the function with the given input.
@@ -37,8 +43,8 @@ impl Type2 {
         let mut out = self
             .c0
             .iter()
-            .zip(self.c1.iter())
-            .map(|(c0, c1)| *c0 + factor * (*c1 - *c0))
+            .zip(&self.delta)
+            .map(|(c0, delta)| *c0 + factor * *delta)
             .collect::<SmallVec<_>>();
 
         self.clamper.clamp_output(&mut out);
