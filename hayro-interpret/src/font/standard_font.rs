@@ -355,6 +355,7 @@ pub(crate) struct StandardKind {
     widths: Vec<Width>,
     missing_width: f32,
     fallback: bool,
+    code_to_glyph: RefCell<FxHashMap<u8, GlyphId>>,
     glyph_to_code: RefCell<FxHashMap<GlyphId, u8>>,
     encodings: FxHashMap<u8, String>,
 }
@@ -391,6 +392,7 @@ impl StandardKind {
             widths,
             missing_width,
             encodings: encoding_map,
+            code_to_glyph: RefCell::new(FxHashMap::default()),
             glyph_to_code: RefCell::new(FxHashMap::default()),
             fallback,
             encoding,
@@ -410,6 +412,12 @@ impl StandardKind {
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+        let mut code_to_glyph = self.code_to_glyph.borrow_mut();
+
+        if let Some(glyph) = code_to_glyph.get(&code).copied() {
+            return glyph;
+        }
+
         let result = self
             .code_to_ps_name(code)
             .and_then(|c| {
@@ -422,6 +430,7 @@ impl StandardKind {
                 })
             })
             .unwrap_or(GlyphId::NOTDEF);
+        code_to_glyph.insert(code, result);
         self.glyph_to_code.borrow_mut().insert(result, code);
 
         result
