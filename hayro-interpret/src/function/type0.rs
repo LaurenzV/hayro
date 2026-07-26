@@ -3,14 +3,14 @@ use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
-use rustc_hash::FxHashMap;
-use smallvec::{SmallVec, ToSmallVec, smallvec};
+use smallvec::{SmallVec, smallvec};
 
 /// A type 0 function (sampled function).
 #[derive(Debug)]
 pub(crate) struct Type0 {
     sizes: IntVec,
-    table: FxHashMap<Key, IntVec>,
+    strides: Vec<usize>,
+    table: Vec<u32>,
     clamper: Clamper,
     range: TupleVec,
     bits_per_sample: u8,
@@ -62,21 +62,26 @@ impl Type0 {
             buf
         };
 
-        let num_expected_entries = sizes.iter().fold(1, |i1, i2| i1 * *i2 as usize) * range.len();
+        let mut stride = range.len();
+        let mut strides = Vec::with_capacity(sizes.len());
+        for size in &sizes {
+            strides.push(stride);
+            stride = stride.checked_mul(*size as usize)?;
+        }
+        let num_expected_entries = stride;
 
         if data.len() != num_expected_entries {
             warn!("Type0 function didn't have the expected number of sample entries.");
             data.truncate(num_expected_entries);
         }
 
-        let table = build_table(&data, &sizes, range.len())?;
-
         Some(Self {
             sizes,
+            strides,
             clamper,
             range,
             bits_per_sample,
-            table,
+            table: data,
             encode,
             decode,
         })
@@ -107,13 +112,8 @@ impl Type0 {
         let in_prev = key.iter().map(|v| v.floor() as u32).collect::<IntVec>();
         let in_next = key.iter().map(|v| v.ceil() as u32).collect::<IntVec>();
 
-        let interpolator = Interpolator::new(
-            key.clone().to_smallvec(),
-            in_prev,
-            in_next,
-            self.sizes.clone(),
-            self.range.len(),
-        );
+        let interpolator =
+            Interpolator::new(&key, in_prev, in_next, &self.strides, self.range.len());
 
         let interpolated = interpolator.interpolate(&self.table)?;
 
@@ -141,162 +141,81 @@ type FloatVec = SmallVec<[f32; 4]>;
 type IntVec = SmallVec<[u32; 4]>;
 
 // See <https://github.com/apache/pdfbox/blob/bb778d4784f354c36ce032e91a0cee2169a4c598/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/common/function/PDFunctionType0.java#L252>
-struct Interpolator {
-    input: FloatVec,
-    sizes: IntVec,
+struct Interpolator<'a> {
+    input: &'a [f32],
+    strides: &'a [usize],
     in_prev: IntVec,
     in_next: IntVec,
     out_len: usize,
 }
 
-impl Interpolator {
+impl<'a> Interpolator<'a> {
     fn new(
-        input: FloatVec,
+        input: &'a [f32],
         in_prev: IntVec,
         in_next: IntVec,
-        sizes: IntVec,
+        strides: &'a [usize],
         out_len: usize,
     ) -> Self {
         Self {
             input,
             in_prev,
             in_next,
-            sizes,
+            strides,
             out_len,
         }
     }
 
-    fn interpolate(&self, table: &FxHashMap<Key, IntVec>) -> Option<FloatVec> {
-        self.interpolate_inner(smallvec![0; self.input.len()], 0, table)
+    fn interpolate(&self, table: &[u32]) -> Option<FloatVec> {
+        let mut out = smallvec![0.0; self.out_len];
+        self.interpolate_inner(0, 0, 1.0, table, &mut out)?;
+        Some(out)
     }
 
     fn interpolate_inner(
         &self,
-        mut coord: IntVec,
         step: usize,
-        table: &FxHashMap<Key, IntVec>,
-    ) -> Option<FloatVec> {
-        if step == self.input.len() - 1 {
-            if self.in_prev[step] == self.in_next[step] {
-                coord[step] = self.in_prev[step];
-
-                Some(
-                    table
-                        .get(&Key::from_raw(&self.sizes, &coord))?
-                        .clone()
-                        .iter()
-                        .map(|n| *n as f32)
-                        .collect(),
-                )
-            } else {
-                coord[step] = self.in_prev[step];
-                let val1 = table.get(&Key::from_raw(&self.sizes, &coord))?;
-                coord[step] = self.in_next[step];
-                let val2 = table.get(&Key::from_raw(&self.sizes, &coord))?;
-                let mut out = smallvec![0.0; self.out_len];
-
-                for i in 0..self.out_len {
-                    out[i] = interpolate(
-                        self.input[step],
-                        self.in_prev[step] as f32,
-                        self.in_next[step] as f32,
-                        val1[i] as f32,
-                        val2[i] as f32,
-                    );
-                }
-
-                Some(out)
+        offset: usize,
+        weight: f32,
+        table: &[u32],
+        out: &mut [f32],
+    ) -> Option<()> {
+        if step == self.input.len() {
+            let sample = table.get(offset..offset + self.out_len)?;
+            for (out, sample) in out.iter_mut().zip(sample) {
+                *out += weight * *sample as f32;
             }
-        } else if self.in_prev[step] == self.in_next[step] {
-            coord[step] = self.in_prev[step];
-            self.interpolate_inner(coord, step + 1, table)
+            return Some(());
+        }
+
+        let prev = self.in_prev[step];
+        let next = self.in_next[step];
+        let stride = self.strides[step];
+
+        if prev == next {
+            self.interpolate_inner(
+                step + 1,
+                offset + prev as usize * stride,
+                weight,
+                table,
+                out,
+            )
         } else {
-            coord[step] = self.in_prev[step];
-            let val1 = self.interpolate_inner(coord.clone(), step + 1, table)?;
-            coord[step] = self.in_next[step];
-            let val2 = self.interpolate_inner(coord, step + 1, table)?;
-
-            let mut out = smallvec![0.0; self.out_len];
-
-            for i in 0..self.out_len {
-                out[i] = interpolate(
-                    self.input[step],
-                    self.in_prev[step] as f32,
-                    self.in_next[step] as f32,
-                    val1[i],
-                    val2[i],
-                );
-            }
-
-            Some(out)
+            let next_weight = self.input[step] - prev as f32;
+            self.interpolate_inner(
+                step + 1,
+                offset + prev as usize * stride,
+                weight * (1.0 - next_weight),
+                table,
+                out,
+            )?;
+            self.interpolate_inner(
+                step + 1,
+                offset + next as usize * stride,
+                weight * next_weight,
+                table,
+                out,
+            )
         }
-    }
-}
-
-fn build_table(data: &[u32], sizes: &[u32], n: usize) -> Option<FxHashMap<Key, IntVec>> {
-    let mut key = Key::new(sizes);
-    let mut table = FxHashMap::default();
-
-    let mut first = true;
-
-    for b in data.chunks_exact(n) {
-        if !first {
-            key.increment();
-        }
-
-        table.insert(key.clone(), b.to_smallvec());
-
-        first = false;
-    }
-
-    Some(table)
-}
-
-/// A sampled function consists of a (possibly) multi-dimensional table that we can index
-/// into. We do this by representing the entries as a flat list of vectors, where each
-/// element in the vector represents the value of the key in that specific dimension.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Key {
-    sizes: SmallVec<[u32; 4]>,
-    parts: SmallVec<[u32; 4]>,
-}
-
-impl Key {
-    fn new(sizes: &[u32]) -> Self {
-        let parts = smallvec![0; sizes.len()];
-
-        Self {
-            sizes: sizes.to_smallvec(),
-            parts,
-        }
-    }
-
-    fn from_raw(sizes: &[u32], parts: &[u32]) -> Self {
-        Self {
-            sizes: sizes.to_smallvec(),
-            parts: parts.to_smallvec(),
-        }
-    }
-
-    fn increment(&mut self) -> Option<()> {
-        self.increment_index(0)
-    }
-
-    fn increment_index(&mut self, index: usize) -> Option<()> {
-        let size = *self.sizes.get(index).or_else(|| {
-            error!("overflowed key in sampled function");
-
-            None
-        })?;
-        let val = self.parts.get_mut(index)?;
-
-        if *val >= (size - 1) {
-            *val = 0;
-            self.increment_index(index + 1)?;
-        } else {
-            *val += 1;
-        }
-
-        Some(())
     }
 }
