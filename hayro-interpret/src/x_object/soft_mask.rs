@@ -1,9 +1,8 @@
-pub use super::TransferFunction;
 use super::form::FormXObject;
 use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
-use crate::function::Function;
+use crate::function::{Function, TransferFunction};
 use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::{CacheKey, InterpreterSettings};

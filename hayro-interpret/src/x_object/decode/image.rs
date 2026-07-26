@@ -1,7 +1,8 @@
 use super::mask::decode_mask;
 use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, unpack_samples};
 use crate::color::{ColorComponents, ToLuma, ToRgb};
-use crate::x_object::image::{ImageTransferFunction, ImageXObject};
+use crate::interpret::state::ActiveTransferFunction;
+use crate::x_object::image::ImageXObject;
 use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
@@ -133,7 +134,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             .obj
             .transfer_function
             .as_ref()
-            .is_none_or(|t| matches!(t, ImageTransferFunction::Single(_)))
+            .is_none_or(|t| matches!(t, ActiveTransferFunction::Single(_)))
             && self.ctx.color_space.to_luma(&mut components).is_some()
         {
             if let Some(transfer_function) = &self.obj.transfer_function {

@@ -1,4 +1,3 @@
-use super::TransferFunction;
 use super::decode::{DecodedImage, DecodedMask, decode_image, decode_mask};
 use super::xobject_oc;
 use crate::WarningSinkFn;
@@ -13,38 +12,6 @@ use hayro_syntax::object::{Name, Object, Stream};
 use kurbo::Affine;
 
 #[derive(Clone)]
-pub(crate) enum ImageTransferFunction {
-    Single(TransferFunction),
-    Rgb([TransferFunction; 3]),
-}
-
-impl ImageTransferFunction {
-    fn new(transfer_function: ActiveTransferFunction) -> Self {
-        match transfer_function {
-            ActiveTransferFunction::Single(function) => {
-                Self::Single(TransferFunction::new(function))
-            }
-            ActiveTransferFunction::Four([red, green, blue, _]) => Self::Rgb([
-                TransferFunction::new(red),
-                TransferFunction::new(green),
-                TransferFunction::new(blue),
-            ]),
-        }
-    }
-
-    pub(crate) fn apply_to(&self, values: &mut [u8]) {
-        match self {
-            Self::Single(function) => function.apply_to(values),
-            Self::Rgb(functions) => {
-                for (channel, function) in functions.iter().enumerate() {
-                    function.apply_to_stride(&mut values[channel..], 3);
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
 pub(crate) struct ImageXObject<'a> {
     pub(crate) width: u32,
     pub(crate) height: u32,
@@ -53,7 +20,7 @@ pub(crate) struct ImageXObject<'a> {
     pub(crate) interpolate: bool,
     pub(crate) kind: ImageKind,
     pub(crate) stream: Stream<'a>,
-    pub(crate) transfer_function: Option<ImageTransferFunction>,
+    pub(crate) transfer_function: Option<ActiveTransferFunction>,
     pub(crate) warning_sink: WarningSinkFn,
 }
 
@@ -154,7 +121,7 @@ impl<'a> ImageXObject<'a> {
             height,
             color_space: image_cs,
             warning_sink: warning_sink.clone(),
-            transfer_function: transfer_function.map(ImageTransferFunction::new),
+            transfer_function,
             interpolate,
             stream: stream.clone(),
             kind,
