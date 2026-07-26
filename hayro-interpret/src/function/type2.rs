@@ -28,12 +28,17 @@ impl Type2 {
     pub(crate) fn eval(&self, input: f32) -> Values {
         let mut input = [input];
         self.clamper.clamp_input(&mut input);
+        let factor = if self.n == 1.0 {
+            input[0]
+        } else {
+            input[0].powf(self.n)
+        };
 
         let mut out = self
             .c0
             .iter()
             .zip(self.c1.iter())
-            .map(|(c0, c1)| *c0 + input[0].powf(self.n) * (*c1 - *c0))
+            .map(|(c0, c1)| *c0 + factor * (*c1 - *c0))
             .collect::<SmallVec<_>>();
 
         self.clamper.clamp_output(&mut out);
