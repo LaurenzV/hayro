@@ -4,6 +4,32 @@ use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
 use kurbo::{BezPath, Rect, Shape};
 
+/// Properties attached to a marked-content sequence.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MarkedContentProperties<'a> {
+    mcid: Option<i32>,
+    actual_text: Option<&'a [u8]>,
+}
+
+impl<'a> MarkedContentProperties<'a> {
+    pub(crate) fn new(mcid: Option<i32>, actual_text: Option<&'a [u8]>) -> Self {
+        Self { mcid, actual_text }
+    }
+
+    /// The marked-content identifier, if present.
+    pub fn mcid(self) -> Option<i32> {
+        self.mcid
+    }
+
+    /// The raw PDF text-string bytes from `/ActualText`, if present.
+    ///
+    /// Consumers must decode these according to the PDF text-string encoding
+    /// rules.
+    pub fn actual_text(self) -> Option<&'a [u8]> {
+        self.actual_text
+    }
+}
+
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device<'a> {
     /// Draw a path.
@@ -46,6 +72,19 @@ pub trait Device<'a> {
     /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
     /// the marked content identifier from the properties dict, if present.
     fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
+    /// Called at the beginning of a marked content sequence with a property
+    /// list (BDC).
+    ///
+    /// The default implementation forwards to [`Device::begin_marked_content`]
+    /// so devices that only need the marked-content identifier remain
+    /// compatible.
+    fn begin_marked_content_with_properties(
+        &mut self,
+        tag: &[u8],
+        properties: MarkedContentProperties<'_>,
+    ) {
+        self.begin_marked_content(tag, properties.mcid());
+    }
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }
