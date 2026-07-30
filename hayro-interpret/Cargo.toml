@@ -25,6 +25,7 @@ rustc-hash = { workspace = true }
 
 [dev-dependencies]
 image = { workspace = true, features = ["png"] }
+pdf-writer = { workspace = true }
 
 [features]
 default = ["embed-fonts", "embed-cmaps"]

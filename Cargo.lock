@@ -793,6 +793,7 @@ dependencies = [
  "kurbo",
  "log",
  "moxcms",
+ "pdf-writer",
  "phf",
  "rustc-hash",
  "siphasher",
