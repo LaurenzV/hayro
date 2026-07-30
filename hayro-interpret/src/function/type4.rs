@@ -2,7 +2,7 @@ use crate::function::{Clamper, Values};
 use hayro_syntax::content;
 use hayro_syntax::object::Number;
 use hayro_syntax::object::Stream;
-use hayro_syntax::reader::Reader;
+use hayro_syntax::reader::{Reader, ByteReader};
 use hayro_syntax::reader::{ReaderContext, ReaderExt};
 use smallvec::SmallVec;
 use std::array;
@@ -415,7 +415,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 }
 
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
-    let mut r = Reader::new(data);
+    let mut r = Reader::from_slice(data);
     parse_procedure_inner(&mut r)
 }
 

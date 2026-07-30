@@ -1,5 +1,7 @@
+use crate::byte_reader::SliceReader;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
+use crate::reader::Reader;
 use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
 use crate::sync::{Arc, Mutex, MutexExt};
@@ -10,11 +12,12 @@ use core::fmt::{Debug, Formatter};
 
 /// A container for the bytes of a PDF file.
 #[derive(Clone)]
-pub struct PdfData {
+pub enum PdfData {
+    /// Buffer in memory
     #[cfg(feature = "std")]
-    inner: Arc<dyn AsRef<[u8]> + Send + Sync>,
+    Buffer(Arc<dyn AsRef<[u8]> + Send + Sync>),
     #[cfg(not(feature = "std"))]
-    inner: Arc<dyn AsRef<[u8]>>,
+    Buffer(Arc<dyn AsRef<[u8]>>),
 }
 
 impl Debug for PdfData {
@@ -23,30 +26,31 @@ impl Debug for PdfData {
     }
 }
 
-impl AsRef<[u8]> for PdfData {
-    fn as_ref(&self) -> &[u8] {
-        (*self.inner).as_ref()
-    }
-}
-
 #[cfg(feature = "std")]
 impl<T: AsRef<[u8]> + Send + Sync + 'static> From<Arc<T>> for PdfData {
     fn from(data: Arc<T>) -> Self {
-        Self { inner: data }
+        Self::Buffer(data)
     }
 }
 
 #[cfg(not(feature = "std"))]
 impl<T: AsRef<[u8]> + 'static> From<Arc<T>> for PdfData {
     fn from(data: Arc<T>) -> Self {
-        Self { inner: data }
+        Self::Buffer(data)
     }
 }
 
 impl From<Vec<u8>> for PdfData {
     fn from(data: Vec<u8>) -> Self {
-        Self {
-            inner: Arc::new(data),
+        Self::Buffer(Arc::new(data))
+    }
+}
+
+impl PdfData {
+    /// create reader from pdf-data
+    pub fn reader(&self) -> Reader<'_> {
+        match self {
+            PdfData::Buffer(inner) => Reader::Slice(SliceReader::new((**inner).as_ref())),
         }
     }
 }

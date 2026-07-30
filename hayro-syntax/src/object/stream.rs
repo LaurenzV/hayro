@@ -1,5 +1,6 @@
 //! Streams.
 
+use crate::byte_reader::ByteReader;
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
 use crate::object;
@@ -326,7 +327,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    Some(Stream::new(data, dict.clone()))
+        Some(Stream::new(data, dict.clone()))
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
@@ -372,7 +373,7 @@ mod tests {
 
     #[test]
     fn display() {
-        let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
+        let mut reader = Reader::from_slice(b"<< /Length 3 >> stream\nabc\nendstream");
         let stream = reader
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
@@ -383,22 +384,22 @@ mod tests {
     #[test]
     fn stream() {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::new(data);
+        let mut r = Reader::from_slice(data);
         let stream = r
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
-        assert_eq!(stream.data, b"abcdefghij");
+        assert_eq!(stream.data.as_ref(), b"abcdefghij");
     }
 
     #[test]
     fn stream_fallback() {
         let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::new(data);
+        let mut r = Reader::from_slice(data);
         let stream = r
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
-        assert_eq!(stream.data, b"abcdefghij");
+        assert_eq!(stream.data.as_ref(), b"abcdefghij");
     }
 }

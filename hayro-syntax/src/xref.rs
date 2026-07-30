@@ -1,5 +1,6 @@
 //! Reading and querying the xref table of a PDF file.
 
+use crate::byte_reader::{ByteReader, SliceReader};
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
 use crate::metadata::Metadata;
@@ -20,7 +21,6 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
-use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -40,9 +40,9 @@ pub(crate) enum XRefError {
 /// Parse the "root" xref from the PDF.
 pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
-    let xref_pos = find_last_xref_pos(data.as_ref()).ok_or(XRefError::Unknown)?;
+    let xref_pos = find_last_xref_pos(&data).ok_or(XRefError::Unknown)?;
     let trailer =
-        populate_xref_impl(data.as_ref(), xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
+        populate_xref_impl(&data, xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
 
     XRef::new(
         data.clone(),
@@ -83,7 +83,7 @@ fn fallback_xref_map_inner<'a>(
     let mut trailer_dicts = vec![];
     let mut root_ref = None;
 
-    let mut r = Reader::new(data.as_ref());
+    let mut r = data.reader();
 
     let mut last_obj_num = None;
 
@@ -111,13 +111,13 @@ fn fallback_xref_map_inner<'a>(
             // Then, try to check whether we have a dictionary, in particular a trailer
             // dictionary.
             let mut probe_reader = r.clone();
-            if r.peek_bytes(2).is_some_and(|b| b == b"<<")
+            if r.peek_bytes(2).is_some_and(|b| b.as_ref() == b"<<")
                 && let Some(probe) =
                     { probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>") }
             {
                 r = probe_reader;
                 if probe.has_root || probe.has_type {
-                    let mut dict_reader = Reader::new(probe.data);
+                    let mut dict_reader = Reader::from_slice(probe.data);
                     if let Some(dict) = dict_reader.read_with_context::<Dict<'_>>(&dummy_ctx) {
                         if probe.has_root && dict.contains_key(ROOT) {
                             trailer_dicts.push(dict.clone());
@@ -162,9 +162,9 @@ fn fallback_xref_map_inner<'a>(
                 // We can skip everything until the next white space character,
                 // as there cannot possibly be any new dictionary/object identifier
                 // until then.
-                let old_pos = r.offset;
+                let old_pos = r.offset();
                 r.forward_while(|b| !is_white_space_character(b));
-                if r.offset == old_pos {
+                if r.offset() == old_pos {
                     r.read_byte();
                 }
             }
@@ -185,7 +185,8 @@ fn fallback_xref_map_inner<'a>(
             match root_id {
                 MaybeRef::Ref(r) => match xref_map.get(&r.into()) {
                     Some(EntryType::Normal(offset)) => {
-                        let mut reader = Reader::new(&data.as_ref()[*offset..]);
+                        let mut reader = data.reader();
+                        reader.jump(*offset);
 
                         if let Some(obj) =
                             reader.read_with_context::<IndirectObject<Dict<'_>>>(&dummy_ctx)
@@ -201,7 +202,8 @@ fn fallback_xref_map_inner<'a>(
                         if let Some(EntryType::Normal(offset)) =
                             xref_map.get(&ObjectIdentifier::new(*obj_num as i32, 0))
                         {
-                            let mut reader = Reader::new(&data.as_ref()[*offset..]);
+                            let mut reader = data.reader();
+                            reader.jump(*offset);
 
                             if let Some(stream) =
                                 reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
@@ -303,7 +305,7 @@ impl XRef {
         let decryptor = {
             match input {
                 XRefInput::TrailerDictData(trailer_dict_data) => {
-                    let mut r = Reader::new(trailer_dict_data);
+                    let mut r = Reader::from_slice(trailer_dict_data);
 
                     let trailer_dict = r
                         .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -325,7 +327,7 @@ impl XRef {
 
         let (trailer_data, has_ocgs, metadata) = match input {
             XRefInput::TrailerDictData(trailer_dict_data) => {
-                let mut r = Reader::new(trailer_dict_data);
+                let mut r = Reader::from_slice(trailer_dict_data);
 
                 let trailer_dict = r
                     .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -543,7 +545,7 @@ impl XRef {
 
         let locked = repr.map.try_get().unwrap();
 
-        let mut r = Reader::new(repr.data.get().as_ref());
+        let mut r = repr.data.get().reader();
 
         let entry = *locked.xref_map.get(&id).or({
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
@@ -625,10 +627,10 @@ pub(crate) enum XRefInput<'a> {
     RootRef(ObjectIdentifier),
 }
 
-pub(crate) fn find_last_xref_pos(data: &[u8]) -> Option<usize> {
+pub(crate) fn find_last_xref_pos(data: &PdfData) -> Option<usize> {
     let needle = b"startxref";
-    let pos = findr_needle(data, needle)?;
-    let mut finder = Reader::new(data);
+    let mut finder = data.reader();
+    let pos = finder.findr_needle(needle)?;
     finder.jump(pos);
     finder.forward_tag(needle)?;
     finder.skip_white_spaces_and_comments();
@@ -729,7 +731,7 @@ impl XRefEntry {
     }
 }
 
-fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
+fn populate_xref_impl<'a>(data: &'a PdfData, pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
     let mut visited = BTreeSet::new();
     populate_xref_impl_inner(data, pos, xref_map, &mut visited)
 }
@@ -738,7 +740,7 @@ fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) ->
 const MAX_XREF_CHAIN_DEPTH: usize = 256;
 
 fn populate_xref_impl_inner<'a>(
-    data: &'a [u8],
+    data: &'a PdfData,
     pos: usize,
     xref_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
@@ -758,7 +760,7 @@ fn populate_xref_impl_inner<'a>(
         return None;
     }
 
-    let mut reader = Reader::new(data);
+    let mut reader = data.reader();
     reader.jump(pos);
     // In case the position points to before the object number of a xref stream.
     reader.skip_white_spaces_and_comments();
@@ -794,7 +796,7 @@ impl Readable<'_> for SubsectionHeader {
 
 /// Populate the xref table, and return the trailer dict.
 fn populate_from_xref_table<'a>(
-    data: &'a [u8],
+    data: &PdfData,
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
@@ -830,7 +832,7 @@ fn populate_from_xref_table<'a>(
         for obj_number in start..end {
             max_obj = max(max_obj, obj_number);
             let bytes = reader.read_bytes(XREF_ENTRY_LEN)?;
-            let entry = XRefEntry::read(bytes)?;
+            let entry = XRefEntry::read(bytes.as_ref())?;
 
             // Specification says we should ignore any object number > SIZE, but probably
             // not important?
@@ -847,7 +849,7 @@ fn populate_from_xref_table<'a>(
 }
 
 fn populate_from_xref_stream<'a>(
-    data: &'a [u8],
+    data: &PdfData,
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
@@ -877,7 +879,7 @@ fn populate_from_xref_stream<'a>(
     }
 
     let xref_data = stream.decoded().ok()?;
-    let mut xref_reader = Reader::new(xref_data.as_ref());
+    let mut xref_reader = Reader::Slice(SliceReader::new(xref_data.as_ref()));
 
     if let Some(arr) = stream.dict().get::<Array<'_>>(INDEX) {
         let iter = arr.iter::<(u32, u32)>();
@@ -959,14 +961,14 @@ fn xref_stream_subsection<'a>(
             1 => {
                 let offset = if f2_len > 0 {
                     let data = xref_reader.read_bytes(f2_len as usize)?;
-                    xref_stream_num(data)?
+                    xref_stream_num(data.as_ref())?
                 } else {
                     0
                 };
 
                 let gen_number = if f3_len > 0 {
                     let data = xref_reader.read_bytes(f3_len as usize)?;
-                    xref_stream_num(data)?
+                    xref_stream_num(data.as_ref())?
                 } else {
                     0
                 };
@@ -979,12 +981,12 @@ fn xref_stream_subsection<'a>(
             2 => {
                 let obj_stream_number = {
                     let data = xref_reader.read_bytes(f2_len as usize)?;
-                    xref_stream_num(data)?
+                    xref_stream_num(data.as_ref())?
                 };
                 let gen_number = 0;
                 let index = if f3_len > 0 {
                     let data = xref_reader.read_bytes(f3_len as usize)?;
-                    xref_stream_num(data)?
+                    xref_stream_num(data.as_ref())?
                 } else {
                     0
                 };
@@ -1054,7 +1056,7 @@ impl<'a> ObjectStream<'a> {
         let num_objects = inner.dict().get::<usize>(N)?;
         let first_offset = inner.dict().get::<usize>(FIRST)?;
 
-        let mut r = Reader::new(data);
+        let mut r = Reader::from_slice(data);
 
         let mut offsets = vec![];
 
@@ -1078,7 +1080,7 @@ impl<'a> ObjectStream<'a> {
         T: ObjectLike<'a>,
     {
         let offset = self.offsets.get(index as usize)?.1;
-        let mut r = Reader::new(self.data);
+        let mut r = Reader::from_slice(self.data);
         r.jump(offset);
         r.skip_white_spaces_and_comments();
 
@@ -1135,20 +1137,22 @@ mod tests {
         );
 
         let mut xref_map = FxHashMap::default();
-        let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
-        let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+        let pdf_data = PdfData::Buffer(Arc::new(pdf));
+        let xref_pos = find_last_xref_pos(&pdf_data).unwrap();
+        let _result = populate_xref_impl(&pdf_data, xref_pos, &mut xref_map);
     }
 
     #[test]
     fn find_last_xref_uses_last_startxref() {
         let pdf = b"%PDF-1.0\nstartxref\n5\n%%EOF\nstartxref\n42\n%%EOF";
-        assert_eq!(find_last_xref_pos(pdf), Some(42));
+        let pdf_data = PdfData::Buffer(Arc::new(pdf));
+        assert_eq!(find_last_xref_pos(&pdf_data), Some(42));
     }
 
     #[test]
     fn xref_table_trailer_rejects_overflowing_entry_skip() {
         let data = b"xref\n0 999999999999999999999\ntrailer\n<<>>";
-        let mut reader = Reader::new(data);
+        let mut reader = Reader::from_slice(data);
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
     }
 }

@@ -1,5 +1,6 @@
 //! Dictionaries.
 
+use crate::byte_reader::ByteReader;
 use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
@@ -85,7 +86,7 @@ impl<'a> Dict<'a> {
     pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
-        Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
+        Reader::from_slice(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
     }
 
     /// Returns an iterator over all keys in the dictionary.
@@ -118,7 +119,7 @@ impl<'a> Dict<'a> {
     {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
-        Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
+        Reader::from_slice(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -141,7 +142,7 @@ impl Debug for Dict<'_> {
         let mut debug_struct = f.debug_struct("Dict");
 
         if let Some(offsets) = self.offsets() {
-            let mut r = Reader::new(self.data());
+            let mut r = Reader::from_slice(self.data());
 
             for (key, val) in offsets {
                 r.jump(*val);
@@ -1029,7 +1030,7 @@ mod tests {
     use crate::reader::{ReaderContext, ReaderExt};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
-        Reader::new(data).read_with_context::<Dict<'_>>(&ReaderContext::dummy())
+        Reader::from_slice(data).read_with_context::<Dict<'_>>(&ReaderContext::dummy())
     }
 
     #[test]
@@ -1081,7 +1082,7 @@ mod tests {
                 >>
 >>";
 
-        let dict = Reader::new(data.as_bytes())
+        let dict = Reader::from_slice(data.as_bytes())
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
@@ -1128,7 +1129,7 @@ mod tests {
     fn inline_dict() {
         let dict_data = b"/W 17 /H 17 /CS /RGB /BPC 8 /F [ /A85 /LZW ] ID ";
 
-        let dict = Reader::new(&dict_data[..])
+        let dict = Reader::from_slice(&dict_data[..])
             .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
             .unwrap();
 

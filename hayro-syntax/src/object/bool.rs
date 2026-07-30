@@ -1,5 +1,6 @@
 //! Booleans.
 
+use crate::byte_reader::ByteReader;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
@@ -35,7 +36,7 @@ mod tests {
     #[test]
     fn bool_true() {
         assert!(
-            Reader::new("true".as_bytes())
+            Reader::from_slice("true".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );
@@ -44,7 +45,7 @@ mod tests {
     #[test]
     fn bool_false() {
         assert!(
-            !Reader::new("false".as_bytes())
+            !Reader::from_slice("false".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );
@@ -53,7 +54,7 @@ mod tests {
     #[test]
     fn bool_trailing() {
         assert!(
-            Reader::new("trueabdf".as_bytes())
+            Reader::from_slice("trueabdf".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );

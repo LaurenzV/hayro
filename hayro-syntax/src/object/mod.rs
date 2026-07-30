@@ -1,5 +1,6 @@
 //! Parsing and reading from PDF objects.
 
+use crate::byte_reader::ByteReader;
 pub use crate::object::array::Array;
 pub use crate::object::date::DateTime;
 pub use crate::object::dict::Dict;
@@ -180,7 +181,7 @@ impl Skippable for Object<'_> {
             b'n' => Null::skip(r, is_content_stream),
             b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
-            b'<' => match r.peek_bytes(2)? {
+            b'<' => match r.peek_bytes(2)?.as_ref() {
                 // A stream can never appear in a dict/array, so it should never be skipped.
                 b"<<" => Dict::skip(r, is_content_stream),
                 _ => String::skip(r, is_content_stream),
@@ -201,7 +202,7 @@ impl<'a> Readable<'a> for Object<'a> {
             b'n' => Self::Null(Null::read(r, ctx)?),
             b't' | b'f' => Self::Boolean(bool::read(r, ctx)?),
             b'/' => Self::Name(Name::read(r, ctx)?),
-            b'<' => match r.peek_bytes(2)? {
+            b'<' => match r.peek_bytes(2)?.as_ref() {
                 b"<<" => {
                     let mut cloned = r.clone();
                     let dict = Dict::read(&mut cloned, ctx)?;
@@ -340,7 +341,7 @@ mod tests {
     use crate::reader::{ReaderContext, ReaderExt};
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
-        let mut r = Reader::new(data);
+        let mut r = Reader::from_slice(data);
         r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
     }
 

@@ -1,5 +1,6 @@
 //! Comments and white spaces.
 
+use crate::byte_reader::ByteReader;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 

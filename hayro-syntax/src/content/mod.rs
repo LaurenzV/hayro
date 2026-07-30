@@ -33,6 +33,7 @@ assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
 #[allow(missing_docs)]
 pub mod ops;
 
+use crate::byte_reader::ByteReader;
 use crate::content::ops::TypedInstruction;
 use crate::object;
 use crate::object::dict::InlineImageDict;
@@ -109,7 +110,7 @@ impl<'a> UntypedIter<'a> {
     /// Create a new untyped iterator.
     pub fn new(data: &'a [u8]) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::from_slice(data),
             stack: Stack::new(),
             operator: None,
         }
@@ -118,7 +119,7 @@ impl<'a> UntypedIter<'a> {
     /// Create a new empty untyped iterator.
     pub fn empty() -> Self {
         Self {
-            reader: Reader::new(&[]),
+            reader: Reader::from_slice(&[]),
             stack: Stack::new(),
             operator: None,
         }
@@ -202,7 +203,7 @@ impl<'a> UntypedIter<'a> {
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
                             let tail = &self.reader.tail()?[2..];
-                            let mut find_reader = Reader::new(tail);
+                            let mut find_reader = Reader::from_slice(tail);
 
                             while !find_reader.at_end() {
                                 let remaining = find_reader.tail()?;

@@ -1,3 +1,4 @@
+use crate::byte_reader::ByteReader;
 use crate::object::{ObjectIdentifier, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};

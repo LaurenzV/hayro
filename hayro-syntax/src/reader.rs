@@ -1,12 +1,13 @@
 //! Reading bytes and PDF objects from data.
 
+use crate::byte_reader::SliceReader;
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
 use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
-pub use crate::byte_reader::Reader;
+pub use crate::byte_reader::{Reader, ByteReader};
 
 /// Extension trait for the `Reader` struct.
 pub trait ReaderExt<'a> {
@@ -31,11 +32,10 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     // that it's not an object reference.
     #[inline]
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
-        let old_offset = self.offset;
+        let old_offset = self.offset();
 
         T::read(self, ctx).or_else(|| {
-            self.offset = old_offset;
-
+            self.jump(old_offset);
             None
         })
     }
@@ -52,14 +52,14 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]> {
-        let old_offset = self.offset;
+        let old_offset = self.offset();
 
         T::skip(self, is_content_stream).or_else(|| {
-            self.offset = old_offset;
+            self.jump(old_offset);
             None
         })?;
 
-        self.data.get(old_offset..self.offset)
+        self.range(old_offset..self.offset())
     }
 
     #[inline]
@@ -231,7 +231,7 @@ impl<'a> ReaderContext<'a> {
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
-        let mut r = Reader::new(b);
+        let mut r = Reader::Slice(SliceReader::new(b));
         Self::read(&mut r, &ReaderContext::dummy())
     }
 }

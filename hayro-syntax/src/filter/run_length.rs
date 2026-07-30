@@ -1,9 +1,10 @@
+use crate::byte_reader::ByteReader;
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
-    let mut reader = Reader::new(data);
+    let mut reader = Reader::from_slice(data);
     let mut decoded = vec![];
 
     loop {

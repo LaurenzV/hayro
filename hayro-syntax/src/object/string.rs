@@ -1,5 +1,6 @@
 //! Strings.
 
+use crate::byte_reader::ByteReader;
 use crate::crypto::DecryptionTarget;
 use crate::filter::ascii_hex;
 use crate::object::Object;
@@ -196,7 +197,7 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
         return Some(StringInner::Borrowed(data));
     }
 
-    let mut r = Reader::new(data);
+    let mut r = Reader::from_slice(data);
     let mut result = SmallVec::new();
 
     while let Some(byte) = r.read_byte() {
@@ -288,10 +289,10 @@ mod tests {
 
     #[test]
     fn display() {
-        let normal = Reader::new(b"(Hello)")
+        let normal = Reader::from_slice(b"(Hello)")
             .read_without_context::<String<'_>>()
             .unwrap();
-        let binary = Reader::new(b"<00FF>")
+        let binary = Reader::from_slice(b"<00FF>")
             .read_without_context::<String<'_>>()
             .unwrap();
 
@@ -302,7 +303,7 @@ mod tests {
     #[test]
     fn hex_string_empty() {
         assert_eq!(
-            Reader::new(b"<>")
+            Reader::from_slice(b"<>")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -313,7 +314,7 @@ mod tests {
     #[test]
     fn hex_string_1() {
         assert_eq!(
-            Reader::new(b"<00010203>")
+            Reader::from_slice(b"<00010203>")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -324,7 +325,7 @@ mod tests {
     #[test]
     fn hex_string_2() {
         assert_eq!(
-            Reader::new(b"<000102034>")
+            Reader::from_slice(b"<000102034>")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -335,7 +336,7 @@ mod tests {
     #[test]
     fn hex_string_trailing_1() {
         assert_eq!(
-            Reader::new(b"<000102034>dfgfg4")
+            Reader::from_slice(b"<000102034>dfgfg4")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -346,7 +347,7 @@ mod tests {
     #[test]
     fn hex_string_trailing_2() {
         assert_eq!(
-            Reader::new(b"<1  3 4>dfgfg4")
+            Reader::from_slice(b"<1  3 4>dfgfg4")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -357,7 +358,7 @@ mod tests {
     #[test]
     fn hex_string_trailing_3() {
         assert_eq!(
-            Reader::new(b"<1>dfgfg4")
+            Reader::from_slice(b"<1>dfgfg4")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -368,7 +369,7 @@ mod tests {
     #[test]
     fn hex_string_invalid_1() {
         assert!(
-            Reader::new(b"<")
+            Reader::from_slice(b"<")
                 .read_without_context::<String<'_>>()
                 .is_none()
         );
@@ -377,7 +378,7 @@ mod tests {
     #[test]
     fn hex_string_invalid_2() {
         assert!(
-            Reader::new(b"34AD")
+            Reader::from_slice(b"34AD")
                 .read_without_context::<String<'_>>()
                 .is_none()
         );
@@ -386,7 +387,7 @@ mod tests {
     #[test]
     fn literal_string_empty() {
         assert_eq!(
-            Reader::new(b"()")
+            Reader::from_slice(b"()")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -397,7 +398,7 @@ mod tests {
     #[test]
     fn literal_string_1() {
         assert_eq!(
-            Reader::new(b"(Hi there.)")
+            Reader::from_slice(b"(Hi there.)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -408,7 +409,7 @@ mod tests {
     #[test]
     fn literal_string_2() {
         assert!(
-            Reader::new(b"(Hi \\777)")
+            Reader::from_slice(b"(Hi \\777)")
                 .read_without_context::<String<'_>>()
                 .is_some()
         );
@@ -417,7 +418,7 @@ mod tests {
     #[test]
     fn literal_string_3() {
         assert_eq!(
-            Reader::new(b"(Hi ) there.)")
+            Reader::from_slice(b"(Hi ) there.)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -428,7 +429,7 @@ mod tests {
     #[test]
     fn literal_string_4() {
         assert_eq!(
-            Reader::new(b"(Hi (()) there)")
+            Reader::from_slice(b"(Hi (()) there)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -439,7 +440,7 @@ mod tests {
     #[test]
     fn literal_string_5() {
         assert_eq!(
-            Reader::new(b"(Hi \\()")
+            Reader::from_slice(b"(Hi \\()")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -450,7 +451,7 @@ mod tests {
     #[test]
     fn literal_string_6() {
         assert_eq!(
-            Reader::new(b"(Hi \\\nthere)")
+            Reader::from_slice(b"(Hi \\\nthere)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -461,7 +462,7 @@ mod tests {
     #[test]
     fn literal_string_7() {
         assert_eq!(
-            Reader::new(b"(Hi \\05354)")
+            Reader::from_slice(b"(Hi \\05354)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -472,7 +473,7 @@ mod tests {
     #[test]
     fn literal_string_8() {
         assert_eq!(
-            Reader::new(b"(\\3)")
+            Reader::from_slice(b"(\\3)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -483,7 +484,7 @@ mod tests {
     #[test]
     fn literal_string_9() {
         assert_eq!(
-            Reader::new(b"(\\36)")
+            Reader::from_slice(b"(\\36)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -494,7 +495,7 @@ mod tests {
     #[test]
     fn literal_string_10() {
         assert_eq!(
-            Reader::new(b"(\\36ab)")
+            Reader::from_slice(b"(\\36ab)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -505,7 +506,7 @@ mod tests {
     #[test]
     fn literal_string_11() {
         assert_eq!(
-            Reader::new(b"(\\00Y)")
+            Reader::from_slice(b"(\\00Y)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -516,7 +517,7 @@ mod tests {
     #[test]
     fn literal_string_12() {
         assert_eq!(
-            Reader::new(b"(\\0Y)")
+            Reader::from_slice(b"(\\0Y)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -527,7 +528,7 @@ mod tests {
     #[test]
     fn literal_string_trailing() {
         assert_eq!(
-            Reader::new(b"(Hi there.)abcde")
+            Reader::from_slice(b"(Hi there.)abcde")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -538,7 +539,7 @@ mod tests {
     #[test]
     fn literal_string_invalid() {
         assert_eq!(
-            Reader::new(b"(Hi \\778)")
+            Reader::from_slice(b"(Hi \\778)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -549,7 +550,7 @@ mod tests {
     #[test]
     fn string_1() {
         assert_eq!(
-            Reader::new(b"(Hi there.)")
+            Reader::from_slice(b"(Hi there.)")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
@@ -560,7 +561,7 @@ mod tests {
     #[test]
     fn string_2() {
         assert_eq!(
-            Reader::new(b"<00010203>")
+            Reader::from_slice(b"<00010203>")
                 .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),

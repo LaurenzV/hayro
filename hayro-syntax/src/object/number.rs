@@ -1,5 +1,6 @@
 //! Numbers.
 
+use crate::byte_reader::ByteReader;
 use crate::math::{powi_f64, trunc_f64};
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
@@ -344,7 +345,7 @@ mod tests {
     #[test]
     fn int_1() {
         assert_eq!(
-            Reader::new("0".as_bytes())
+            Reader::from_slice("0".as_bytes())
                 .read_without_context::<i32>()
                 .unwrap(),
             0
@@ -354,7 +355,7 @@ mod tests {
     #[test]
     fn int_3() {
         assert_eq!(
-            Reader::new("+32".as_bytes())
+            Reader::from_slice("+32".as_bytes())
                 .read_without_context::<i32>()
                 .unwrap(),
             32
@@ -364,7 +365,7 @@ mod tests {
     #[test]
     fn int_4() {
         assert_eq!(
-            Reader::new("-32".as_bytes())
+            Reader::from_slice("-32".as_bytes())
                 .read_without_context::<i32>()
                 .unwrap(),
             -32
@@ -374,7 +375,7 @@ mod tests {
     #[test]
     fn int_6() {
         assert_eq!(
-            Reader::new("98349".as_bytes())
+            Reader::from_slice("98349".as_bytes())
                 .read_without_context::<i32>()
                 .unwrap(),
             98349
@@ -384,7 +385,7 @@ mod tests {
     #[test]
     fn int_7() {
         assert_eq!(
-            Reader::new("003245".as_bytes())
+            Reader::from_slice("003245".as_bytes())
                 .read_without_context::<i32>()
                 .unwrap(),
             3245
@@ -394,7 +395,7 @@ mod tests {
     #[test]
     fn int_min_does_not_panic() {
         assert_eq!(
-            Reader::new("-9223372036854775808".as_bytes())
+            Reader::from_slice("-9223372036854775808".as_bytes())
                 .read_without_context::<i64>()
                 .unwrap(),
             i64::MIN
@@ -404,7 +405,7 @@ mod tests {
     #[test]
     fn real_1() {
         assert_eq!(
-            Reader::new("3".as_bytes())
+            Reader::from_slice("3".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             3.0
@@ -414,7 +415,7 @@ mod tests {
     #[test]
     fn real_3() {
         assert_eq!(
-            Reader::new("+32".as_bytes())
+            Reader::from_slice("+32".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             32.0
@@ -424,7 +425,7 @@ mod tests {
     #[test]
     fn real_4() {
         assert_eq!(
-            Reader::new("-32".as_bytes())
+            Reader::from_slice("-32".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -32.0
@@ -434,7 +435,7 @@ mod tests {
     #[test]
     fn real_5() {
         assert_eq!(
-            Reader::new("-32.01".as_bytes())
+            Reader::from_slice("-32.01".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -32.01
@@ -444,7 +445,7 @@ mod tests {
     #[test]
     fn real_6() {
         assert_eq!(
-            Reader::new("-.345".as_bytes())
+            Reader::from_slice("-.345".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -0.345
@@ -454,7 +455,7 @@ mod tests {
     #[test]
     fn real_7() {
         assert_eq!(
-            Reader::new("-.00143".as_bytes())
+            Reader::from_slice("-.00143".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -0.00143
@@ -464,7 +465,7 @@ mod tests {
     #[test]
     fn real_8() {
         assert_eq!(
-            Reader::new("-12.0013".as_bytes())
+            Reader::from_slice("-12.0013".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -12.0013
@@ -474,7 +475,7 @@ mod tests {
     #[test]
     fn real_9() {
         assert_eq!(
-            Reader::new("98349.432534".as_bytes())
+            Reader::from_slice("98349.432534".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             98_349.43
@@ -484,7 +485,7 @@ mod tests {
     #[test]
     fn real_10() {
         assert_eq!(
-            Reader::new("-34534656.34".as_bytes())
+            Reader::from_slice("-34534656.34".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
             -34534656.34
@@ -494,7 +495,7 @@ mod tests {
     #[test]
     fn real_failing() {
         assert!(
-            Reader::new("+abc".as_bytes())
+            Reader::from_slice("+abc".as_bytes())
                 .read_without_context::<f32>()
                 .is_none()
         );
@@ -503,7 +504,7 @@ mod tests {
     #[test]
     fn number_1() {
         assert_eq!(
-            Reader::new("+32".as_bytes())
+            Reader::from_slice("+32".as_bytes())
                 .read_without_context::<Number>()
                 .unwrap()
                 .as_f64() as f32,
@@ -514,7 +515,7 @@ mod tests {
     #[test]
     fn number_2() {
         assert_eq!(
-            Reader::new("-32.01".as_bytes())
+            Reader::from_slice("-32.01".as_bytes())
                 .read_without_context::<Number>()
                 .unwrap()
                 .as_f64() as f32,
@@ -525,7 +526,7 @@ mod tests {
     #[test]
     fn number_3() {
         assert_eq!(
-            Reader::new("-.345".as_bytes())
+            Reader::from_slice("-.345".as_bytes())
                 .read_without_context::<Number>()
                 .unwrap()
                 .as_f64() as f32,
@@ -536,7 +537,7 @@ mod tests {
     #[test]
     fn large_number() {
         assert_eq!(
-            Reader::new("38359922".as_bytes())
+            Reader::from_slice("38359922".as_bytes())
                 .read_without_context::<Number>()
                 .unwrap()
                 .as_i64(),
@@ -547,7 +548,7 @@ mod tests {
     #[test]
     fn large_number_2() {
         assert_eq!(
-            Reader::new("4294966260".as_bytes())
+            Reader::from_slice("4294966260".as_bytes())
                 .read_without_context::<u32>()
                 .unwrap(),
             4294966260

@@ -1,5 +1,6 @@
 //! Arrays.
 
+use crate::byte_reader::ByteReader;
 use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
@@ -125,7 +126,7 @@ pub struct ArrayIter<'a> {
 impl<'a> ArrayIter<'a> {
     fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::from_slice(data),
             ctx: ctx.clone(),
         }
     }
@@ -185,7 +186,7 @@ pub struct FlexArrayIter<'a> {
 impl<'a> FlexArrayIter<'a> {
     fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::from_slice(data),
             ctx: ctx.clone(),
         }
     }
@@ -333,13 +334,13 @@ mod tests {
     use crate::xref::XRef;
 
     fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {
-        Reader::new(data)
+        Reader::from_slice(data)
             .read_with_context::<Array<'_>>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.iter::<Object<'_>>().collect::<Vec<_>>())
     }
 
     fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object<'_>>>> {
-        Reader::new(data)
+        Reader::from_slice(data)
             .read_with_context::<Array<'_>>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.raw_iter().collect::<Vec<_>>())
     }

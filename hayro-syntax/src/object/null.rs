@@ -1,5 +1,6 @@
 //! The null object.
 
+use crate::byte_reader::ByteReader;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
@@ -46,7 +47,7 @@ mod tests {
     #[test]
     fn null() {
         assert_eq!(
-            Reader::new("null".as_bytes())
+            Reader::from_slice("null".as_bytes())
                 .read_without_context::<Null>()
                 .unwrap(),
             Null
@@ -56,7 +57,7 @@ mod tests {
     #[test]
     fn null_trailing() {
         assert_eq!(
-            Reader::new("nullabs".as_bytes())
+            Reader::from_slice("nullabs".as_bytes())
                 .read_without_context::<Null>()
                 .unwrap(),
             Null
