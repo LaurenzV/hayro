@@ -63,7 +63,7 @@ pub(crate) fn is_eol_character(char: u8) -> bool {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
-pub(crate) struct Comment<'a>(pub(crate) &'a [u8]);
+pub(crate) struct Comment<'a>(pub(crate) alloc::borrow::Cow<'a, [u8]>);
 
 impl Skippable for Comment<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
@@ -77,8 +77,8 @@ impl Skippable for Comment<'_> {
 impl<'a> Readable<'a> for Comment<'a> {
     fn read(r: &mut Reader<'a>, _: &ReaderContext<'_>) -> Option<Self> {
         let bytes = r.skip::<Comment<'_>>(false)?;
-        let bytes = bytes.get(1..bytes.len()).unwrap();
+        let bytes = bytes.clone_range(1..bytes.len());
 
-        Some(Comment(bytes))
+        Some(Comment(bytes.into()))
     }
 }

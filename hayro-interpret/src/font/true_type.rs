@@ -474,12 +474,12 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, FxHashMap<u8, String>
         }
 
         (
-            get_encoding_base(&encoding_dict, Name::new_unescaped(BASE_ENCODING)),
+            get_encoding_base(&encoding_dict, Name::new_unescaped_slice(BASE_ENCODING)),
             map,
         )
     } else {
         (
-            get_encoding_base(dict, Name::new_unescaped(ENCODING)),
+            get_encoding_base(dict, Name::new_unescaped_slice(ENCODING)),
             FxHashMap::default(),
         )
     }

@@ -380,5 +380,5 @@ fn write_null_objects() {
         .unwrap();
     let data = dict.data();
 
-    assert_eq!(data, b"<<\n      /F1 5 0 R\n      /F2 null\n    >>");
+    assert_eq!(data.as_ref(), b"<<\n      /F1 5 0 R\n      /F2 null\n    >>");
 }

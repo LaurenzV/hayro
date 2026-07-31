@@ -160,7 +160,7 @@ fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
 
     // Exclude outer brackets.
     let raw = r.range(start + 1..end - 1)?;
-    let decoded = ascii_hex::decode_into(raw)?;
+    let decoded = ascii_hex::decode_into(raw.as_ref())?;
 
     Some(decoded)
 }
@@ -194,10 +194,13 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
     let data = r.range(start + 1..end - 1)?;
 
     if !data.iter().any(|b| matches!(b, b'\\' | b'\n' | b'\r')) {
-        return Some(StringInner::Borrowed(data));
+        return Some(match data.into() {
+            alloc::borrow::Cow::Borrowed(data) => StringInner::Borrowed(data),
+            alloc::borrow::Cow::Owned(data) => StringInner::Owned(data.into()),
+        })
     }
 
-    let mut r = Reader::from_slice(data);
+    let mut r = Reader::from_read(data);
     let mut result = SmallVec::new();
 
     while let Some(byte) = r.read_byte() {

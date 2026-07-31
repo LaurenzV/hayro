@@ -1,4 +1,3 @@
-use crate::byte_reader::SliceReader;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::reader::Reader;
@@ -50,7 +49,7 @@ impl PdfData {
     /// create reader from pdf-data
     pub fn reader(&self) -> Reader<'_> {
         match self {
-            PdfData::Buffer(inner) => Reader::Slice(SliceReader::new((**inner).as_ref())),
+            PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
         }
     }
 }

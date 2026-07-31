@@ -1,6 +1,6 @@
 //! Reading and querying the xref table of a PDF file.
 
-use crate::byte_reader::{ByteReader, SliceReader};
+use crate::byte_reader::ByteReader;
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
 use crate::metadata::Metadata;
@@ -17,7 +17,7 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
-use crate::reader::Reader;
+use crate::reader::{ReadBytes, Reader};
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
@@ -117,7 +117,7 @@ fn fallback_xref_map_inner<'a>(
             {
                 r = probe_reader;
                 if probe.has_root || probe.has_type {
-                    let mut dict_reader = Reader::from_slice(probe.data);
+                    let mut dict_reader = Reader::from_read(probe.data);
                     if let Some(dict) = dict_reader.read_with_context::<Dict<'_>>(&dummy_ctx) {
                         if probe.has_root && dict.contains_key(ROOT) {
                             trailer_dicts.push(dict.clone());
@@ -247,7 +247,7 @@ fn fallback_xref_map_inner<'a>(
         if let Ok(xref) = XRef::new(
             data.clone(),
             xref_map.clone(),
-            XRefInput::TrailerDictData(trailer_dict.as_ref().map(|d| d.data()).unwrap()),
+            XRefInput::TrailerDictData(trailer_dict.as_ref().map(|d| d.data().clone()).unwrap()),
             true,
             password,
         ) {
@@ -257,7 +257,7 @@ fn fallback_xref_map_inner<'a>(
         }
     }
 
-    if let Some(trailer_dict_data) = trailer_dict.map(|d| d.data()) {
+    if let Some(trailer_dict_data) = trailer_dict.map(|d| d.data().clone()) {
         (
             xref_map,
             Some(XRefInput::TrailerDictData(trailer_dict_data)),
@@ -303,9 +303,9 @@ impl XRef {
         // that are stored in an encrypted object stream.
 
         let decryptor = {
-            match input {
+            match &input {
                 XRefInput::TrailerDictData(trailer_dict_data) => {
-                    let mut r = Reader::from_slice(trailer_dict_data);
+                    let mut r = Reader::from_slice(trailer_dict_data.as_ref());
 
                     let trailer_dict = r
                         .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -327,7 +327,7 @@ impl XRef {
 
         let (trailer_data, has_ocgs, metadata) = match input {
             XRefInput::TrailerDictData(trailer_dict_data) => {
-                let mut r = Reader::from_slice(trailer_dict_data);
+                let mut r = Reader::from_slice(trailer_dict_data.as_ref());
 
                 let trailer_dict = r
                     .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -612,11 +612,11 @@ impl XRef {
 
 /// An input that is passed to the xref constructor so that we can fully resolve
 /// the PDF.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum XRefInput<'a> {
     /// This option is going to be uesd in 99.999% of the case. It contains the
     /// raw data of the trailer dictionary which is then going to be processed.
-    TrailerDictData(&'a [u8]),
+    TrailerDictData(ReadBytes<'a>),
     /// In case the trailer dictionary could not be read (for example because
     /// it is cut-off), we just pass the object ID of the root dictionary
     /// in case we have found one, and try our best to build the PDF just
@@ -731,7 +731,7 @@ impl XRefEntry {
     }
 }
 
-fn populate_xref_impl<'a>(data: &'a PdfData, pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
+fn populate_xref_impl<'a>(data: &'a PdfData, pos: usize, xref_map: &mut XrefMap) -> Option<ReadBytes<'a>> {
     let mut visited = BTreeSet::new();
     populate_xref_impl_inner(data, pos, xref_map, &mut visited)
 }
@@ -744,7 +744,7 @@ fn populate_xref_impl_inner<'a>(
     pos: usize,
     xref_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
-) -> Option<&'a [u8]> {
+) -> Option<ReadBytes<'a>> {
     if !visited.insert(pos) {
         warn!("circular xref PREV chain detected at offset {}", pos);
 
@@ -800,7 +800,7 @@ fn populate_from_xref_table<'a>(
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
-) -> Option<&'a [u8]> {
+) -> Option<ReadBytes<'a>> {
     let trailer = {
         let mut reader = reader.clone();
         read_xref_table_trailer(&mut reader, &ReaderContext::dummy())?
@@ -845,7 +845,7 @@ fn populate_from_xref_table<'a>(
         }
     }
 
-    Some(trailer.data())
+    Some(trailer.data().clone())
 }
 
 fn populate_from_xref_stream<'a>(
@@ -853,7 +853,7 @@ fn populate_from_xref_stream<'a>(
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
-) -> Option<&'a [u8]> {
+) -> Option<ReadBytes<'a>> {
     let stream = reader
         .read_with_context::<IndirectObject<Stream<'_>>>(&ReaderContext::dummy())?
         .get();
@@ -879,7 +879,7 @@ fn populate_from_xref_stream<'a>(
     }
 
     let xref_data = stream.decoded().ok()?;
-    let mut xref_reader = Reader::Slice(SliceReader::new(xref_data.as_ref()));
+    let mut xref_reader = Reader::from_slice(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array<'_>>(INDEX) {
         let iter = arr.iter::<(u32, u32)>();
@@ -907,7 +907,7 @@ fn populate_from_xref_stream<'a>(
         )?;
     }
 
-    Some(stream.dict().data())
+    Some(stream.dict().data().clone())
 }
 
 fn xref_stream_num(data: &[u8]) -> Option<u32> {
@@ -1027,11 +1027,11 @@ fn read_xref_table_trailer<'a>(
     reader.read_with_context::<Dict<'_>>(ctx)
 }
 
-fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, XRefError> {
-    if let Some(encryption_dict) = trailer_dict.get::<Dict<'_>>(ENCRYPT) {
+fn get_decryptor<'a>(trailer_dict: &Dict<'a>, password: &[u8]) -> Result<Decryptor, XRefError> {
+    if let Some(encryption_dict) = trailer_dict.get::<Dict<'a>>(ENCRYPT) {
         let id = if let Some(id) = trailer_dict
-            .get::<Array<'_>>(ID)
-            .and_then(|a| a.flex_iter().next::<object::String<'_>>())
+            .get::<Array<'a>>(ID)
+            .and_then(|a| a.flex_iter().next::<object::String<'a>>())
         {
             id.to_vec()
         } else {

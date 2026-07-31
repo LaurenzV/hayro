@@ -5,7 +5,7 @@ use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
-use crate::reader::Reader;
+use crate::reader::{ReadBytes, Reader};
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
 use crate::sync::FxHashMap;
@@ -46,10 +46,10 @@ impl<'a> Dict<'a> {
     }
 
     /// Get the raw bytes underlying to the dictionary.
-    pub fn data(&self) -> &'a [u8] {
+    pub fn data(&self) -> &ReadBytes<'a> {
         match &self.0 {
-            Inner::Empty => &[],
-            Inner::Some(repr) => repr.data,
+            Inner::Empty => &ReadBytes::EMPTY,
+            Inner::Some(repr) => &repr.data,
         }
     }
 
@@ -118,8 +118,7 @@ impl<'a> Dict<'a> {
         T: Readable<'a>,
     {
         let offset = *self.offsets()?.get(key.as_ref())?;
-
-        Reader::from_slice(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
+        Reader::from_read(self.data().clone_range(offset..)).read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -243,7 +242,7 @@ fn read_inner<'a>(
 }
 
 pub(crate) struct DictProbe<'a> {
-    pub(crate) data: &'a [u8],
+    pub(crate) data: ReadBytes<'a>,
     pub(crate) has_root: bool,
     pub(crate) has_type: bool,
 }
@@ -290,11 +289,10 @@ fn parse_dict_with<'a, F>(
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
     mut on_entry: F,
-) -> Option<&'a [u8]>
+) -> Option<ReadBytes<'a>>
 where
     F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
 {
-    let dict_data = r.tail()?;
     let start_offset = r.offset();
 
     // Inline image dictionaries don't start with '<<'.
@@ -308,9 +306,9 @@ where
         // Normal dictionaries end with '>>', inline image dictionaries end with BD.
         if let Some(()) = r.peek_tag(end_tag) {
             r.forward_tag(end_tag)?;
-            let end_offset = r.offset() - start_offset;
+            let end_offset = r.offset();
 
-            break Some(&dict_data[..end_offset]);
+            break r.range(start_offset..end_offset);
         } else {
             let Some(name) = r.read_without_context::<Name<'_>>() else {
                 if start_tag.is_some() {
@@ -347,7 +345,7 @@ where
 object!(Dict<'a>, Dict);
 
 struct Repr<'a> {
-    data: &'a [u8],
+    data: ReadBytes<'a>,
     offsets: FxHashMap<Name<'a>, usize>,
     ctx: ReaderContext<'a>,
 }
@@ -1055,7 +1053,7 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 1);
-        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
+        assert!(dict.get::<Number>(Name::new_unescaped_slice(b"Hi")).is_some());
     }
 
     #[test]
@@ -1064,8 +1062,8 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 2);
-        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
-        assert!(dict.get::<bool>(Name::new_unescaped(b"Second")).is_some());
+        assert!(dict.get::<Number>(Name::new_unescaped_slice(b"Hi")).is_some());
+        assert!(dict.get::<bool>(Name::new_unescaped_slice(b"Second")).is_some());
     }
 
     #[test]
@@ -1086,25 +1084,25 @@ mod tests {
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
-        assert!(dict.get::<Name<'_>>(Name::new_unescaped(b"Type")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Type")).is_some());
         assert!(
-            dict.get::<Name<'_>>(Name::new_unescaped(b"Subtype"))
+            dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Subtype"))
                 .is_some()
         );
         assert!(
-            dict.get::<Number>(Name::new_unescaped(b"Version"))
+            dict.get::<Number>(Name::new_unescaped_slice(b"Version"))
                 .is_some()
         );
         assert!(
-            dict.get::<i32>(Name::new_unescaped(b"IntegerItem"))
+            dict.get::<i32>(Name::new_unescaped_slice(b"IntegerItem"))
                 .is_some()
         );
         assert!(
-            dict.get::<string::String<'_>>(Name::new_unescaped(b"StringItem"))
+            dict.get::<string::String<'_>>(Name::new_unescaped_slice(b"StringItem"))
                 .is_some()
         );
         assert!(
-            dict.get::<Dict<'_>>(Name::new_unescaped(b"Subdictionary"))
+            dict.get::<Dict<'_>>(Name::new_unescaped_slice(b"Subdictionary"))
                 .is_some()
         );
     }

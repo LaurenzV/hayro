@@ -1,31 +1,85 @@
 //! A byte reader.
 
+use core::ops::Deref;
 use core::ops::Range;
+use core::ops::RangeBounds;
 use std::io::Read;
 use std::io::Seek;
 
+use alloc::borrow::Cow;
+
 use crate::util;
 
-// impl<'a> From<Vec<u8>> for ReadBytes<'a> {
-//     fn from(value: Vec<u8>) -> Self {
-//         ReadBytes::Vec(value)
-//     }
-// }
+#[derive(Clone, Debug)]
+pub struct ReadBytes<'a>(Cow<'a, [u8]>);
 
-// impl<'a> From<&'a [u8]> for ReadBytes<'a> {
-//     fn from(value: &'a [u8]) -> Self {
-//         ReadBytes::Slice(value)
-//     }
-// }
+impl<'a> ReadBytes<'a> {
+    pub const EMPTY: ReadBytes<'static> = ReadBytes(Cow::Borrowed(&[]));
 
-// impl<'a> AsRef<[u8]> for ReadBytes<'a> {
-//     fn as_ref(&self) -> &[u8] {
-//         match self {
-//             ReadBytes::Slice(slice) => *slice,
-//             ReadBytes::Vec(vec) => vec.as_slice(),
-//         }
-//     }
-// }
+    #[inline]
+    pub fn inner(&self) -> &Cow<'a, [u8]> {
+        &self.0
+    }
+
+    #[inline]
+    pub fn clone_range<B: RangeBounds<usize>>(&self, range: B) -> Self {
+        let range = range_from_bounds(range, self.len());
+        match &self.0 {
+            Cow::Borrowed(data) => ReadBytes(Cow::Borrowed(&data[range])),
+            Cow::Owned(data) => ReadBytes(Cow::Owned(data[range].to_vec())),
+        }
+    }
+}
+
+impl<'a> Deref for ReadBytes<'a> {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl<'a> PartialEq for ReadBytes<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<'a> AsRef<[u8]> for ReadBytes<'a> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl<'a> From<&'a [u8]> for ReadBytes<'a> {
+    #[inline]
+    fn from(value: &'a [u8]) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl<'a, const C: usize> From<&'a [u8; C]> for ReadBytes<'a> {
+    #[inline]
+    fn from(value: &'a [u8; C]) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl<'a> From<Vec<u8>> for ReadBytes<'a> {
+    #[inline]
+    fn from(value: Vec<u8>) -> Self {
+        Self(Cow::Owned(value))
+    }
+}
+
+impl<'a> Into<Cow<'a, [u8]>> for ReadBytes<'a> {
+    #[inline]
+    fn into(self) -> Cow<'a, [u8]> {
+        self.0
+    }
+}
 
 pub trait ByteReader<'a> {
     /// Returns `true` if the reader has reached the end of the data.
@@ -38,7 +92,7 @@ pub trait ByteReader<'a> {
     fn jump(&mut self, offset: usize);
 
     /// Returns the remaining data from the current offset to the end.
-    fn tail(&mut self) -> Option<&'a [u8]>;
+    fn tail(&mut self) -> Option<ReadBytes<'a>>;
 
     /// Returns the total length of the underlying data.
     fn len(&self) -> usize;
@@ -47,13 +101,13 @@ pub trait ByteReader<'a> {
     fn is_empty(&self) -> bool;
 
     /// Returns a slice of the data for the specified range.
-    fn range(&self, range: Range<usize>) -> Option<&'a [u8]>;
+    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>>;
 
     /// Returns the current offset of the reader.
     fn offset(&self) -> usize;
 
     /// Reads the specified number of bytes and advances the offset.
-    fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]>;
+    fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'a>>;
 
     /// Reads a single byte and advances the offset.
     fn read_byte(&mut self) -> Option<u8>;
@@ -62,7 +116,7 @@ pub trait ByteReader<'a> {
     fn skip_bytes(&mut self, len: usize) -> Option<()>;
 
     /// Peeks the specified number of bytes.
-    fn peek_bytes(&self, len: usize) -> Option<&'a [u8]>;
+    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>>;
 
     /// Peeks a single byte.
     fn peek_byte(&self) -> Option<u8>;
@@ -108,8 +162,11 @@ pub enum Reader<'a> {
 }
 
 impl <'a> Reader<'a> {
+    pub fn from_read(read: ReadBytes<'a>) -> Self {
+        Reader::Slice(SliceReader::new(read))
+    }
     pub fn from_slice(slice: &'a [u8]) -> Self {
-        Reader::Slice(SliceReader::new(slice))
+        Reader::Slice(SliceReader::new(slice.into()))
     }
 }
 
@@ -136,7 +193,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn tail(&mut self) -> Option<&'a [u8]> {
+    fn tail(&mut self) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.tail(),
         }
@@ -157,7 +214,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn range(&self, range: Range<usize>) -> Option<&'a [u8]> {
+    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.range(range),
         }
@@ -171,7 +228,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
+    fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.read_bytes(len),
         }
@@ -192,7 +249,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn peek_bytes(&self, len: usize) -> Option<&'a [u8]> {
+    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.peek_bytes(len),
         }
@@ -292,7 +349,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
 #[derive(Clone, Debug)]
 pub struct SliceReader<'a> {
     /// The underlying data of the reader.
-    pub data: &'a [u8],
+    pub data: ReadBytes<'a>,
     /// The current byte-offset.
     pub offset: usize,
 }
@@ -300,13 +357,13 @@ pub struct SliceReader<'a> {
 impl<'a> SliceReader<'a> {
     /// Create a new reader.
     #[inline]
-    pub fn new(data: &'a [u8]) -> Self {
+    pub fn new(data: ReadBytes<'a>) -> Self {
         Self { data, offset: 0 }
     }
 
     /// Create a new reader at the given offset.
     #[inline]
-    pub fn new_with(data: &'a [u8], offset: usize) -> Self {
+    pub fn new_with(data: ReadBytes<'a>, offset: usize) -> Self {
         Self { data, offset }
     }
 }
@@ -328,8 +385,11 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn tail(&mut self) -> Option<&'a [u8]> {
-        self.data.get(self.offset..).map(|s| s.into())
+    fn tail(&mut self) -> Option<ReadBytes<'a>> {
+        match &self.data.inner() {
+            Cow::Borrowed(data) => data.get(self.offset..).map(|s| s.into()),
+            Cow::Owned(data) => data.get(self.offset..).map(|s| s.to_owned().into()),
+        }
     }
 
     #[inline]
@@ -343,8 +403,11 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn range(&self, range: Range<usize>) -> Option<&'a [u8]> {
-        self.data.get(range).map(|s| s.into())
+    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>> {
+        match &self.data.inner() {
+            Cow::Borrowed(data) => data.get(range).map(|s| s.into()),
+            Cow::Owned(data) => data.get(range).map(|s| s.to_owned().into()),
+        }
     }
 
     #[inline]
@@ -353,7 +416,7 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
+    fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'a>> {
         let v = self.peek_bytes(len)?;
         self.offset += len;
 
@@ -374,11 +437,9 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn peek_bytes(&self, len: usize) -> Option<&'a [u8]> {
-        self.offset
-            .checked_add(len)
-            .and_then(|end| self.data.get(self.offset..end))
-            .map(|s| s.into())
+    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>> {
+        let end = self.offset.checked_add(len)?;
+        self.range(self.offset..end)
     }
 
     #[inline]
@@ -481,12 +542,26 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
     
     fn find_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        util::find_needle(self.data, needle)
+        util::find_needle(self.data.as_ref(), needle)
     }
     
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        util::findr_needle(self.data, needle)
+        util::findr_needle(self.data.as_ref(), needle)
     }
+}
+
+fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usize> {
+    let start = match bounds.start_bound() {
+        core::ops::Bound::Included(index) => *index,
+        core::ops::Bound::Excluded(index) => *index + 1,
+        core::ops::Bound::Unbounded => 0,
+    };
+    let end = match bounds.end_bound() {
+        core::ops::Bound::Included(index) => *index + 1,
+        core::ops::Bound::Excluded(index) => *index,
+        core::ops::Bound::Unbounded => len,
+    };
+    start..end
 }
 
 pub trait SeekRead: Seek + Read {}
@@ -497,7 +572,8 @@ mod tests {
 
     #[test]
     fn peek_bytes_rejects_overflowing_len() {
-        let reader = SliceReader::new(b"abc");
+        let bytes = b"abc";
+        let reader = SliceReader::new(bytes.into());
         assert!(reader.peek_bytes(usize::MAX).is_none());
     }
 }

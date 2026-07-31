@@ -176,10 +176,10 @@ impl<'a> UntypedIter<'a> {
                     let stream_data = self.reader.tail()?;
                     let start_offset = self.reader.offset();
 
-                    'outer: while let Some(pos) = find_needle(self.reader.tail()?, b"EI") {
+                    'outer: while let Some(pos) = self.reader.find_needle(b"EI") {
                         self.reader.read_bytes(pos)?;
 
-                        if self.reader.peek_bytes(2) == Some(b"EI") {
+                        if self.reader.peek_bytes(2).as_ref().map(|e| e.as_ref()) == Some(b"EI") {
                             // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
                             if self
                                 .reader
@@ -192,7 +192,7 @@ impl<'a> UntypedIter<'a> {
                             }
 
                             let end_offset = self.reader.offset() - start_offset;
-                            let image_data = &stream_data[..end_offset];
+                            let image_data = stream_data.clone_range(..end_offset);
 
                             let stream = Stream::new(image_data, dict.clone());
 
@@ -207,8 +207,8 @@ impl<'a> UntypedIter<'a> {
 
                             while !find_reader.at_end() {
                                 let remaining = find_reader.tail()?;
-                                let next_ei = find_needle(remaining, b"EI");
-                                let next_bi = find_needle(remaining, b"BI");
+                                let next_ei = find_needle(remaining.as_ref(), b"EI");
+                                let next_bi = find_needle(remaining.as_ref(), b"BI");
 
                                 let (next_pos, is_ei) = match (next_ei, next_bi) {
                                     (Some(ei), Some(bi)) if ei <= bi => (ei, true),

@@ -1,20 +1,19 @@
 //! Reading bytes and PDF objects from data.
 
-use crate::byte_reader::SliceReader;
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
 use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
-pub use crate::byte_reader::{Reader, ByteReader};
+pub use crate::byte_reader::{Reader, ByteReader, ReadBytes};
 
 /// Extension trait for the `Reader` struct.
 pub trait ReaderExt<'a> {
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_with_context<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T>;
-    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]>;
+    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>>;
     fn skip_white_spaces(&mut self);
     fn read_white_space(&mut self) -> Option<()>;
     fn skip_eol_characters(&mut self);
@@ -51,7 +50,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]> {
+    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>> {
         let old_offset = self.offset();
 
         T::skip(self, is_content_stream).or_else(|| {
@@ -231,7 +230,7 @@ impl<'a> ReaderContext<'a> {
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
-        let mut r = Reader::Slice(SliceReader::new(b));
+        let mut r = Reader::from_slice(b);
         Self::read(&mut r, &ReaderContext::dummy())
     }
 }

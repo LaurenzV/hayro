@@ -4,7 +4,7 @@ use crate::byte_reader::ByteReader;
 use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
-use crate::reader::Reader;
+use crate::reader::{ReadBytes, Reader};
 use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
 use core::borrow::Borrow;
@@ -75,7 +75,7 @@ impl Ord for Name<'_> {
 impl<'a> Name<'a> {
     /// Create a new name from a sequence of bytes.
     #[inline]
-    pub fn new(data: &'a [u8]) -> Option<Self> {
+    pub fn new(data: ReadBytes<'a>) -> Option<Self> {
         if !data.contains(&b'#') {
             Some(Self::new_unescaped(data))
         } else {
@@ -85,15 +85,24 @@ impl<'a> Name<'a> {
 
     /// Create a new name from an unescaped byte sequence.
     #[inline]
-    pub fn new_unescaped(data: &'a [u8]) -> Self {
+    pub fn new_unescaped(data: ReadBytes<'a>) -> Self {
+        Self(match data.into() {
+            alloc::borrow::Cow::Borrowed(data) => NameInner::Borrowed(data),
+            alloc::borrow::Cow::Owned(data) => NameInner::Owned(data.into()),
+        })
+    }
+
+    /// Create a new name from an unescaped byte sequence.
+    #[inline]
+    pub fn new_unescaped_slice(data: &'a [u8]) -> Self {
         Self(NameInner::Borrowed(data))
     }
 
     /// Create a new name from bytes that may contain escape sequences.
     #[inline]
-    pub fn new_escaped(data: &'a [u8]) -> Option<Self> {
+    pub fn new_escaped(data: ReadBytes<'a>) -> Option<Self> {
         let mut result = SmallVec::new();
-        let mut r = Reader::from_slice(data);
+        let mut r = Reader::from_read(data);
 
         while let Some(b) = r.read_byte() {
             if b == b'#' {
@@ -146,6 +155,7 @@ impl<'a> Readable<'a> for Name<'a> {
 
         // Exclude leading solidus.
         let data = r.range(start + 1..end)?;
+
         Self::new(data)
     }
 }

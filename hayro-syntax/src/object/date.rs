@@ -33,7 +33,7 @@ impl DateTime {
                 return None;
             }
 
-            let num = u16::from_str(core::str::from_utf8(reader.read_bytes(bytes as usize)?).ok()?)
+            let num = u16::from_str(core::str::from_utf8(reader.read_bytes(bytes as usize)?.as_ref()).ok()?)
                 .ok()?;
 
             if num < min || num > max {
