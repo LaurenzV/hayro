@@ -24,6 +24,11 @@ impl<'a> ReadBytes<'a> {
     }
 
     #[inline]
+    pub fn into_owned(self) -> Vec<u8> {
+        self.0.into_owned()
+    }
+
+    #[inline]
     pub fn clone_range<B: RangeBounds<usize>>(&self, range: B) -> Self {
         let range = range_from_bounds(range, self.len());
         match &self.0 {
@@ -115,10 +120,10 @@ pub trait ByteReader<'a> {
     fn skip_bytes(&mut self, len: usize) -> Option<()>;
 
     /// Peeks the specified number of bytes.
-    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>>;
+    fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>>;
 
     /// Peeks a single byte.
-    fn peek_byte(&self) -> Option<u8>;
+    fn peek_byte(&mut self) -> Option<u8>;
 
     /// Eat the next byte if it satisfies the condition.
     fn eat(&mut self, f: impl Fn(u8) -> bool) -> Option<u8>;
@@ -139,7 +144,7 @@ pub trait ByteReader<'a> {
     fn forward_while(&mut self, f: impl Fn(u8) -> bool);
 
     /// Checks if the next bytes match the specified tag.
-    fn peek_tag(&self, tag: &[u8]) -> Option<()>;
+    fn peek_tag(&mut self, tag: &[u8]) -> Option<()>;
 
     /// Read a u16 integer (in big endian order).
     fn read_u16(&mut self) -> Option<u16>;
@@ -257,7 +262,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>> {
+    fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         match self {
             Reader::Slice(reader) => reader.peek_bytes(len),
             Reader::Custom(reader) => reader.peek_bytes(len),
@@ -265,7 +270,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn peek_byte(&self) -> Option<u8> {
+    fn peek_byte(&mut self) -> Option<u8> {
         match self {
             Reader::Slice(reader) => reader.peek_byte(),
             Reader::Custom(reader) => reader.peek_byte(),
@@ -321,7 +326,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn peek_tag(&self, tag: &[u8]) -> Option<()> {
+    fn peek_tag(&mut self, tag: &[u8]) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.peek_tag(tag),
             Reader::Custom(reader) => reader.peek_tag(tag),
@@ -433,7 +438,8 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'a>> {
-        let v = self.peek_bytes(len)?;
+        let end = self.offset.checked_add(len)?;
+        let v = self.range(self.offset..end)?;
         self.offset += len;
 
         Some(v)
@@ -457,13 +463,13 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'a>> {
+    fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         let end = self.offset.checked_add(len)?;
         self.range(self.offset..end)
     }
 
     #[inline]
-    fn peek_byte(&self) -> Option<u8> {
+    fn peek_byte(&mut self) -> Option<u8> {
         self.data.get(self.offset).copied()
     }
 
@@ -521,7 +527,7 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn peek_tag(&self, tag: &[u8]) -> Option<()> {
+    fn peek_tag(&mut self, tag: &[u8]) -> Option<()> {
         let mut cloned = self.clone();
 
         for b in tag.iter().copied() {
@@ -572,11 +578,16 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 }
 
+/// size of buffers
+const BUFFER_SIZE: usize = 50;
+
 #[derive(Clone, Debug)]
 pub struct CustomReader {
     data: Arc<Mutex<dyn CustomSource>>,
     offset: usize,
     len: usize,
+    /// buffer for accelerating peeking and single byte access
+    buffer: (Range<usize>, Vec<u8>),
 }
 
 impl CustomReader {
@@ -586,6 +597,28 @@ impl CustomReader {
             data: data,
             offset: 0,
             len: len,
+            buffer: (0..0, Vec::new()),
+        }
+    }
+}
+
+impl CustomReader {
+    fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
+        if range.end > self.len {
+            return None;
+        }
+
+        let buf_start = self.buffer.0.start;
+        let buf_end = self.buffer.0.end;
+        if range.start >= buf_start && range.end <= buf_end {
+            Some(&self.buffer.1[range.start-buf_start..range.end-buf_start])
+        } else {
+            let new_start = range.start;
+            let new_end = (new_start + BUFFER_SIZE).min(self.len);
+            let new_range = new_start..new_end;
+            let bytes = self.range(new_range.clone())?.into_owned();
+            self.buffer = (new_range, bytes);
+            Some(&self.buffer.1[0..(range.end - range.start)])
         }
     }
 }
@@ -630,10 +663,10 @@ impl ByteReader<'static> for CustomReader {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
-        let v = self.peek_bytes(len)?;
+        let end = self.offset.checked_add(len)?;
+        let read = self.range(self.offset..end)?;
         self.offset += len;
-
-        Some(v)
+        Some(read)
     }
 
     #[inline]
@@ -654,14 +687,20 @@ impl ByteReader<'static> for CustomReader {
     }
 
     #[inline]
-    fn peek_bytes(&self, len: usize) -> Option<ReadBytes<'static>> {
+    fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         let end = self.offset.checked_add(len)?;
-        self.range(self.offset..end)
+        let range = self.offset..end;
+
+        if len <= BUFFER_SIZE {
+            self.read_buf(range.clone()).map(|r| r.into())
+        } else {
+            self.range(range)
+        }
     }
 
     #[inline]
-    fn peek_byte(&self) -> Option<u8> {
-        self.data.lock().unwrap().read_byte(self.offset).unwrap()
+    fn peek_byte(&mut self) -> Option<u8> {
+        self.peek_bytes(1).map(|b| b.as_ref()[0])
     }
 
     #[inline]
@@ -708,8 +747,8 @@ impl ByteReader<'static> for CustomReader {
 
     #[inline]
     fn forward_while(&mut self, f: impl Fn(u8) -> bool) {
-        let mut data = self.data.lock().unwrap();
-        while let Some(b) = data.read_byte(self.offset).unwrap() {
+        // let mut data = self.data.lock().unwrap();
+        while let Some(b) = self.peek_byte() {
             if f(b) {
                 self.offset += 1;
             } else {
@@ -734,7 +773,7 @@ impl ByteReader<'static> for CustomReader {
     // }
 
     #[inline]
-    fn peek_tag(&self, tag: &[u8]) -> Option<()> {
+    fn peek_tag(&mut self, tag: &[u8]) -> Option<()> {
         let bytes = self.peek_bytes(tag.len())?;
         if tag == bytes.as_ref() {
             Some(())
@@ -824,7 +863,6 @@ fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usiz
 pub trait CustomSource: Debug {
     fn len(&mut self) -> std::io::Result<usize>;
     fn read(&mut self, range: Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
-    fn read_byte(&mut self, pos: usize) -> std::io::Result<Option<u8>>;
 }
 
 #[cfg(test)]
@@ -834,7 +872,7 @@ mod tests {
     #[test]
     fn peek_bytes_rejects_overflowing_len() {
         let bytes = b"abc";
-        let reader = SliceReader::new(bytes.into());
+        let mut reader = SliceReader::new(bytes.into());
         assert!(reader.peek_bytes(usize::MAX).is_none());
     }
 }
