@@ -42,7 +42,6 @@ use crate::object::{Array, Null, Number, Object, Stream};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::find_needle;
 use core::array;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
@@ -173,7 +172,6 @@ impl<'a> UntypedIter<'a> {
                     // One whitespace after "ID".
                     self.reader.read_white_space()?;
 
-                    let stream_data = self.reader.tail()?;
                     let start_offset = self.reader.offset();
 
                     'outer: while let Some(pos) = self.reader.find_needle(b"EI") {
@@ -191,8 +189,7 @@ impl<'a> UntypedIter<'a> {
                                 continue;
                             }
 
-                            let end_offset = self.reader.offset() - start_offset;
-                            let image_data = stream_data.clone_range(..end_offset);
+                            let image_data = self.reader.range(start_offset..self.reader.offset()).unwrap();
 
                             let stream = Stream::new(image_data, dict.clone());
 
@@ -202,13 +199,12 @@ impl<'a> UntypedIter<'a> {
                             // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
-                            let tail = &self.reader.tail()?[2..];
-                            let mut find_reader = Reader::from_slice(tail);
+                            let tail = self.reader.range(self.reader.offset()+2..self.reader.len())?; // safe to take tail, since this reader is always in memory 
+                            let mut find_reader = Reader::from_slice(tail.as_ref());
 
                             while !find_reader.at_end() {
-                                let remaining = find_reader.tail()?;
-                                let next_ei = find_needle(remaining.as_ref(), b"EI");
-                                let next_bi = find_needle(remaining.as_ref(), b"BI");
+                                let next_ei = find_reader.find_needle(b"EI");
+                                let next_bi = find_reader.find_needle(b"BI");
 
                                 let (next_pos, is_ei) = match (next_ei, next_bi) {
                                     (Some(ei), Some(bi)) if ei <= bi => (ei, true),
@@ -238,7 +234,7 @@ impl<'a> UntypedIter<'a> {
                                     // stream and there should be at least one text-related
                                     // operator that can be parsed correctly.
 
-                                    let mut iter = TypedIter::new(tail);
+                                    let mut iter = TypedIter::new(tail.as_ref());
                                     let mut found = false;
                                     let mut counter = 0;
 

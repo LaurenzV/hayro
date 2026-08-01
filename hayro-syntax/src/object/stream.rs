@@ -13,7 +13,7 @@ use crate::reader::ReadBytes;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::{OptionLog, find_needle};
+use crate::util::OptionLog;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
@@ -310,8 +310,8 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let stream_offset = find_needle(r.tail()?.as_ref(), b"stream")?;
-    r.read_bytes(stream_offset)?;
+    let stream_offset = r.find_needle(b"stream")?;
+    r.jump(stream_offset);
     r.forward_tag(b"stream")?;
 
     r.forward_tag(b"\n")
@@ -319,18 +319,15 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
-    let tail = r.tail()?;
-    let endstream_offset = find_needle(tail.as_ref(), b"endstream")?;
-    let data_end = trim_trailing_ascii_whitespace(&tail.as_ref()[..endstream_offset]);
-    let data = tail.as_ref().get(..data_end)?;
+    let end_pos = r.find_needle(b"endstream")?; // (xlp) TODO: find_needle_read func?  
+    let data = r.read_bytes(end_pos - r.offset())?;
+    let data_end = trim_trailing_ascii_whitespace(data.as_ref());
+    let data_inner = data.clone_range(..data_end);
 
-    r.read_bytes(endstream_offset)?;
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    // TODO: optimize
-
-    Some(Stream::new(data.to_owned().into(), dict.clone()))
+    Some(Stream::new(data_inner, dict.clone()))
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {

@@ -115,7 +115,7 @@ fn find_version(data: &PdfData) -> Option<PdfVersion> {
         r.read_byte()?;
     }
 
-    PdfVersion::from_bytes(r.tail()?.as_ref())
+    PdfVersion::from_bytes(r.read_bytes(3)?.as_ref())
 }
 
 /// The version of a PDF document.

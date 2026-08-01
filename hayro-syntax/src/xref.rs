@@ -630,6 +630,7 @@ pub(crate) enum XRefInput<'a> {
 pub(crate) fn find_last_xref_pos(data: &PdfData) -> Option<usize> {
     let needle = b"startxref";
     let mut finder = data.reader();
+    finder.jump_to_end();
     let pos = finder.findr_needle(needle)?;
     finder.jump(pos);
     finder.forward_tag(needle)?;

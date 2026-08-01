@@ -66,7 +66,7 @@ impl PdfData {
     pub fn reader(&self) -> Reader<'_> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
-            PdfData::Custom(read_seek) => Reader::from_read_seek(read_seek.clone()),
+            PdfData::Custom(read_seek) => Reader::from_custom_source(read_seek.clone()),
         }
     }
 }

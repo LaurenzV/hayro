@@ -11,6 +11,7 @@ use alloc::sync::Arc;
 
 use crate::util;
 
+/// Struct holding bytes that have been read
 #[derive(Clone, Debug)]
 pub struct ReadBytes<'a>(Cow<'a, [u8]>);
 
@@ -92,9 +93,6 @@ pub trait ByteReader<'a> {
     /// Moves the reader to the specified offset.
     fn jump(&mut self, offset: usize);
 
-    /// Returns the remaining data from the current offset to the end.
-    fn tail(&mut self) -> Option<ReadBytes<'a>>;
-
     /// Returns the total length of the underlying data.
     fn len(&self) -> usize;
 
@@ -172,7 +170,7 @@ impl <'a> Reader<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Self {
         Reader::Slice(SliceReader::new(slice.into()))
     }
-    pub fn from_read_seek(read_seek: Arc<Mutex<dyn CustomSource>>) -> Self {
+    pub fn from_custom_source(read_seek: Arc<Mutex<dyn CustomSource>>) -> Self {
         Reader::Custom(CustomReader::new(read_seek))
     }
 }
@@ -199,14 +197,6 @@ impl<'a> ByteReader<'a> for Reader<'a> {
         match self {
             Reader::Slice(reader) => reader.jump(offset),
             Reader::Custom(reader) => reader.jump(offset),
-        }
-    }
-
-    #[inline]
-    fn tail(&mut self) -> Option<ReadBytes<'a>> {
-        match self {
-            Reader::Slice(reader) => reader.tail(),
-            Reader::Custom(reader) => reader.tail(),
         }
     }
 
@@ -419,11 +409,6 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn tail(&mut self) -> Option<ReadBytes<'a>> {
-        self.range(self.offset..self.data.len())
-    }
-
-    #[inline]
     fn len(&self) -> usize {
         self.data.len()
     }
@@ -464,7 +449,11 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
 
     #[inline]
     fn skip_bytes(&mut self, len: usize) -> Option<()> {
-        self.read_bytes(len).map(|_| {})
+        let dest = self.offset
+            .checked_add(len)
+            .filter(|d| *d < self.len())?;
+        self.jump(dest);
+        Some(())
     }
 
     #[inline]
@@ -574,12 +563,12 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     
     #[inline]
     fn find_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        util::find_needle(self.data.as_ref(), needle)
+        util::find_needle(&self.data[self.offset..], needle)
     }
     
     #[inline]
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        util::findr_needle(self.data.as_ref(), needle)
+        util::findr_needle(&self.data[..self.offset], needle)
     }
 }
 
@@ -615,11 +604,6 @@ impl ByteReader<'static> for CustomReader {
     #[inline]
     fn jump(&mut self, offset: usize) {
         self.offset = offset;
-    }
-
-    #[inline]
-    fn tail(&mut self) -> Option<ReadBytes<'static>> {
-        self.range(self.offset..self.len)
     }
 
     #[inline]
@@ -662,7 +646,11 @@ impl ByteReader<'static> for CustomReader {
 
     #[inline]
     fn skip_bytes(&mut self, len: usize) -> Option<()> {
-        self.read_bytes(len).map(|_| {})
+        let dest = self.offset
+            .checked_add(len)
+            .filter(|d| *d < self.len())?;
+        self.jump(dest);
+        Some(())
     }
 
     #[inline]
@@ -729,7 +717,6 @@ impl ByteReader<'static> for CustomReader {
             }
         }
     }
-
 
     // #[inline]
     // fn forward_while(&mut self, f: impl Fn(u8) -> bool) {
