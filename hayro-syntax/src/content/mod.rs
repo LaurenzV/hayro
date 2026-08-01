@@ -175,7 +175,7 @@ impl<'a> UntypedIter<'a> {
                     let start_offset = self.reader.offset();
 
                     'outer: while let Some(pos) = self.reader.find_needle(b"EI") {
-                        self.reader.read_bytes(pos)?;
+                        self.reader.skip_bytes(pos)?;
 
                         if self.reader.peek_bytes(2).as_ref().map(|e| e.as_ref()) == Some(b"EI") {
                             // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
@@ -184,7 +184,7 @@ impl<'a> UntypedIter<'a> {
                                 .peek_bytes(3)
                                 .is_some_and(|b| !is_white_space_character(b[2]))
                             {
-                                self.reader.read_bytes(3)?;
+                                self.reader.skip_bytes(3)?;
 
                                 continue;
                             }
@@ -214,7 +214,7 @@ impl<'a> UntypedIter<'a> {
                                     (None, None) => break,
                                 };
 
-                                find_reader.read_bytes(next_pos)?;
+                                find_reader.jump(next_pos);
 
                                 if is_ei {
                                     let analyze_data = &tail[..find_reader.offset()];
@@ -222,7 +222,7 @@ impl<'a> UntypedIter<'a> {
                                     // If there is any binary data in-between, we for sure
                                     // have not reached the end.
                                     if analyze_data.iter().any(|c| !c.is_ascii()) {
-                                        self.reader.read_bytes(2)?;
+                                        self.reader.skip_bytes(2)?;
                                         continue 'outer;
                                     }
 
@@ -268,14 +268,14 @@ impl<'a> UntypedIter<'a> {
                                     if !found {
                                         // Seems like the data in-between is not a valid content
                                         // stream, so we are likely still within the image data.
-                                        self.reader.read_bytes(2)?;
+                                        self.reader.skip_bytes(2)?;
                                         continue 'outer;
                                     }
                                 } else {
                                     // Possibly another inline image, if so, the previously found "EI"
                                     // is indeed the end of data.
                                     let mut cloned = find_reader.clone();
-                                    cloned.read_bytes(2)?;
+                                    cloned.skip_bytes(2)?;
                                     if cloned
                                         .read_without_context::<InlineImageDict<'_>>()
                                         .is_some()
@@ -289,7 +289,7 @@ impl<'a> UntypedIter<'a> {
 
                             self.stack.push(Object::Stream(stream))?;
 
-                            self.reader.read_bytes(2)?;
+                            self.reader.skip_bytes(2)?;
                             self.reader.skip_white_spaces();
 
                             break;

@@ -949,7 +949,7 @@ fn xref_stream_subsection<'a>(
             1
         } else {
             // We assume a length of 1.
-            xref_reader.read_bytes(1)?[0]
+            xref_reader.read_byte()?
         };
 
         let obj_number = start + i;
