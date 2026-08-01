@@ -105,7 +105,7 @@ pub trait ByteReader<'a> {
     fn is_empty(&self) -> bool;
 
     /// Returns a slice of the data for the specified range.
-    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>>;
+    fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'a>>;
 
     /// Returns the current offset of the reader.
     fn offset(&self) -> usize;
@@ -222,7 +222,7 @@ impl<'a> ByteReader<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>> {
+    fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.range(range),
             Reader::Custom(reader) => reader.range(range),
@@ -424,7 +424,7 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 
     #[inline]
-    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'a>> {
+    fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'a>> {
         match &self.data.inner() {
             Cow::Borrowed(data) => data.get(range).map(|s| s.into()),
             Cow::Owned(data) => data.get(range).map(|s| s.to_owned().into()),
@@ -579,7 +579,7 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
 }
 
 /// size of buffers
-const BUFFER_SIZE: usize = 50;
+const BUFFER_SIZE: usize = 500;
 
 #[derive(Clone, Debug)]
 pub struct CustomReader {
@@ -603,6 +603,7 @@ impl CustomReader {
 }
 
 impl CustomReader {
+    #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
         if range.end > self.len {
             return None;
@@ -613,10 +614,11 @@ impl CustomReader {
         if range.start >= buf_start && range.end <= buf_end {
             Some(&self.buffer.1[range.start-buf_start..range.end-buf_start])
         } else {
+            let mut data = self.data.lock().unwrap();
             let new_start = range.start;
             let new_end = (new_start + BUFFER_SIZE).min(self.len);
             let new_range = new_start..new_end;
-            let bytes = self.range(new_range.clone())?.into_owned();
+            let bytes = data.read(new_range.clone()).unwrap()?;
             self.buffer = (new_range, bytes);
             Some(&self.buffer.1[0..(range.end - range.start)])
         }
@@ -650,10 +652,14 @@ impl ByteReader<'static> for CustomReader {
     }
 
     #[inline]
-    fn range(&self, range: Range<usize>) -> Option<ReadBytes<'static>> {
-        let mut data = self.data.lock().unwrap();
-        let read = data.read(range).unwrap()?;
-        Some(read.into())
+    fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'static>> {
+        let len = range.end - range.start;
+        if len <= BUFFER_SIZE {
+            self.read_buf(range).map(|r| r.to_vec().into())
+        } else {
+            let mut data = self.data.lock().unwrap();
+            Some(data.read(range).unwrap()?.into())
+        }
     }
 
     #[inline]
@@ -663,8 +669,7 @@ impl ByteReader<'static> for CustomReader {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
-        let end = self.offset.checked_add(len)?;
-        let read = self.range(self.offset..end)?;
+        let read = self.peek_bytes(len)?.into_owned().into();
         self.offset += len;
         Some(read)
     }
@@ -689,13 +694,7 @@ impl ByteReader<'static> for CustomReader {
     #[inline]
     fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         let end = self.offset.checked_add(len)?;
-        let range = self.offset..end;
-
-        if len <= BUFFER_SIZE {
-            self.read_buf(range.clone()).map(|r| r.into())
-        } else {
-            self.range(range)
-        }
+        self.range(self.offset..end)
     }
 
     #[inline]
