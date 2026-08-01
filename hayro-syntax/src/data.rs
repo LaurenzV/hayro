@@ -1,5 +1,7 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
+#[cfg(feature = "std")]
+use crate::reader::CustomSource;
 use crate::reader::Reader;
 use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
@@ -15,13 +17,20 @@ pub enum PdfData {
     /// Buffer in memory
     #[cfg(feature = "std")]
     Buffer(Arc<dyn AsRef<[u8]> + Send + Sync>),
+    /// Buffer in memory
     #[cfg(not(feature = "std"))]
     Buffer(Arc<dyn AsRef<[u8]>>),
+    /// Custom Reader
+    #[cfg(feature = "std")]
+    Custom(Arc<Mutex<dyn CustomSource + Send + Sync>>),
 }
 
 impl Debug for PdfData {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "PdfData {{ ... }}")
+        match self {
+            PdfData::Buffer(as_ref) => write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len()),
+            PdfData::Custom(mutex) => write!(f, "PdfData::Custom({:?})", mutex.lock().unwrap()),
+        }
     }
 }
 
@@ -45,11 +54,19 @@ impl From<Vec<u8>> for PdfData {
     }
 }
 
+#[cfg(feature = "std")]
+impl<T: CustomSource + Send + Sync + 'static> From<T> for PdfData {
+    fn from(data: T) -> Self {
+        Self::Custom(Arc::new(Mutex::new(data)))
+    }
+}
+
 impl PdfData {
     /// create reader from pdf-data
     pub fn reader(&self) -> Reader<'_> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
+            PdfData::Custom(read_seek) => Reader::from_read_seek(read_seek.clone()),
         }
     }
 }
