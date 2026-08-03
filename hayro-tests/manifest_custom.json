@@ -797,6 +797,10 @@
     "file": "pdfs/custom/pattern_tiling_nested.pdf"
   },
   {
+    "id": "pattern_tiling_phase",
+    "file": "pdfs/custom/pattern_tiling_phase.pdf"
+  },
+  {
     "id": "pattern_tiling_rotated",
     "file": "pdfs/custom/pattern_tiling_rotated.pdf"
   },

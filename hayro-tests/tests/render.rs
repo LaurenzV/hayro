@@ -194,6 +194,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pattern_tiling_large_x_step() { run_render_test("pattern_tiling_large_x_step", "pdfs/custom/pattern_tiling_large_x_step.pdf", None); }
 #[test] fn pattern_tiling_lines() { run_render_test("pattern_tiling_lines", "pdfs/custom/pattern_tiling_lines.pdf", None); }
 #[test] fn pattern_tiling_nested() { run_render_test("pattern_tiling_nested", "pdfs/custom/pattern_tiling_nested.pdf", None); }
+#[test] fn pattern_tiling_phase() { run_render_test("pattern_tiling_phase", "pdfs/custom/pattern_tiling_phase.pdf", None); }
 #[test] fn pattern_tiling_rotated() { run_render_test("pattern_tiling_rotated", "pdfs/custom/pattern_tiling_rotated.pdf", None); }
 #[test] fn pattern_tiling_rotated_shape() { run_render_test("pattern_tiling_rotated_shape", "pdfs/custom/pattern_tiling_rotated_shape.pdf", None); }
 #[test] fn pattern_tiling_simple() { run_render_test("pattern_tiling_simple", "pdfs/custom/pattern_tiling_simple.pdf", None); }
