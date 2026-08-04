@@ -155,11 +155,20 @@ pub trait ByteReader<'a> {
     /// Read a u64 integer (in big endian order).
     fn read_u64(&mut self) -> Option<u64>;
 
-    // Returns the index of the first occurrence of the given needle
+    /// Returns the index of the first occurrence of the given needle
     fn find_needle(&mut self, needle: &[u8]) -> Option<usize>;
 
-    // Returns the index of the last occurrence of the given needle
+    /// Returns the index of the last occurrence of the given needle
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize>;
+
+    /// Sets marker to read from, the results can be retrieved with `take_marked`.
+    /// Only one marker may be set at once, will panic if marker has already been set.
+    fn set_marker(&mut self);
+
+    /// Removes marker and returns content from marker to current position.
+    /// None if current offset is before current marker.
+    /// Panics if marker has not been set.
+    fn take_marked(&mut self) -> Option<ReadBytes<'a>>;
 }
 
 #[derive(Clone, Debug)]
@@ -375,6 +384,22 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
             Reader::Custom(reader) => reader.findr_needle(needle),
         }
     }
+    
+    #[inline]
+    fn set_marker(&mut self) {
+        match self {
+            Reader::Slice(reader) => reader.set_marker(),
+            Reader::Custom(reader) => reader.set_marker(),
+        }
+    }
+    
+    #[inline]
+    fn take_marked(&mut self) -> Option<ReadBytes<'a>> {
+        match self {
+            Reader::Slice(reader) => reader.take_marked(),
+            Reader::Custom(reader) => reader.take_marked(),
+        }
+    }
 }
 
 /// A reader for reading bytes and PDF objects.
@@ -384,19 +409,21 @@ pub struct SliceReader<'a> {
     pub data: ReadBytes<'a>,
     /// The current byte-offset.
     pub offset: usize,
+    /// Current marker.
+    pub marker: Option<usize>,
 }
 
 impl<'a> SliceReader<'a> {
     /// Create a new reader.
     #[inline]
     pub fn new(data: ReadBytes<'a>) -> Self {
-        Self { data, offset: 0 }
+        Self { data, offset: 0, marker: None }
     }
 
     /// Create a new reader at the given offset.
     #[inline]
     pub fn new_with(data: ReadBytes<'a>, offset: usize) -> Self {
-        Self { data, offset }
+        Self { data, offset, marker: None }
     }
 }
 
@@ -579,6 +606,24 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
         util::findr_needle(&self.data[..self.offset], needle)
     }
+    
+    #[inline]
+    fn set_marker(&mut self) {
+        if self.marker.is_some() {
+            panic!("marker has already been set")
+        }
+        self.marker = Some(self.offset)
+    }
+    
+    #[inline]
+    fn take_marked(&mut self) -> Option<ReadBytes<'a>> {
+        let marker = self.marker.take().expect("marker has not been set");
+        if marker <= self.offset {
+            self.range(marker..self.offset)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -586,7 +631,17 @@ pub struct CustomReader<'c> {
     data: Arc<Mutex<dyn CustomSource>>,
     offset: usize,
     len: usize,
+    marker: Option<RecordingMarker>,
     cache: CacheInstance<'c>,
+}
+
+/// Marker object to record bytes behind marker into
+#[derive(Clone, Debug)]
+struct RecordingMarker {
+    /// position where marker has been set
+    start: usize,
+    /// data behind marker that has already been read
+    data: Vec<u8>,
 }
 
 impl CustomReader<'static> {
@@ -596,6 +651,7 @@ impl CustomReader<'static> {
             data: data,
             offset: 0,
             len: len,
+            marker: None,
             cache: ReaderCache::default().into(),
         }
     }
@@ -608,18 +664,41 @@ impl<'c> CustomReader<'c> {
             data: data,
             offset: 0,
             len: len,
+            marker: None,
             cache: cache.into(),
         }
     }
-}
 
-impl<'c> CustomReader<'c> {
     #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
         self.cache.as_mut().read_buf(range, self.len, |read_range| {
             let mut data = self.data.lock().unwrap();
             data.read(read_range).unwrap()
         })
+    }
+
+    #[inline]
+    fn catch_up_marker(&mut self, pos: usize) -> Option<()> {
+        let marker = self.marker.as_mut()?;
+        if marker.start > pos {
+            return None;
+        }
+        let marker_end = marker.start + marker.data.len();
+        if marker_end >= pos {
+            return Some(())
+        }
+
+        let range = marker_end..pos;
+        let read_data = self.range(range)?;
+        self.marker.as_mut()?.data.extend_from_slice(read_data.as_ref());
+        Some(())
+    }
+
+    fn record_marker(&mut self, pos: usize, data: &[u8]) -> Option<()> {
+        self.catch_up_marker(pos)?;
+        let marker = self.marker.as_mut()?;
+        marker.data.extend_from_slice(data);
+        Some(())
     }
 }
 
@@ -667,7 +746,10 @@ impl ByteReader<'static> for CustomReader<'_> {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
-        let read = self.peek_bytes(len)?.into_owned().into();
+        let read: ReadBytes<'_> = self.peek_bytes(len)?.into_owned().into();
+        if self.marker.is_some() {
+            self.record_marker(self.offset, read.as_ref());
+        }
         self.offset += len;
         Some(read)
     }
@@ -675,6 +757,9 @@ impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn read_byte(&mut self) -> Option<u8> {
         let v = self.peek_byte()?;
+        if self.marker.is_some() {
+            self.record_marker(self.offset, &[v]);
+        }
         self.offset += 1;
 
         Some(v)
@@ -840,6 +925,26 @@ impl ByteReader<'static> for CustomReader<'_> {
             }
             prev = chunk[..needle.len().min(chunk.len())].to_vec();
         }
+    }
+    
+    fn set_marker(&mut self) {
+        if self.marker.is_some() {
+            panic!("marker has already been set")
+        }
+        self.marker = Some(RecordingMarker {
+            start: self.offset,
+            data: Vec::new(),
+        })
+    }
+    
+    fn take_marked(&mut self) -> Option<ReadBytes<'static>> {
+        if self.marker.is_none() {
+            panic!("marker has not been set")
+        }
+        self.catch_up_marker(self.offset)?;
+        let mut marker = self.marker.take().unwrap();
+        marker.data.truncate(self.offset - marker.start);
+        Some(marker.data.into())
     }
 }
 

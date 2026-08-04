@@ -288,8 +288,28 @@ fn parse_dict_with<'a, F>(
     ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
-    mut on_entry: F,
+    on_entry: F,
 ) -> Option<ReadBytes<'a>>
+where
+    F: FnMut(Name<'a>, usize, &Reader<'a, '_>) -> Option<()>,
+{
+    r.set_marker();
+    match parse_dict_with_inner(r, ctx, start_tag, end_tag, on_entry) {
+        Some(()) => r.take_marked(),
+        None => { 
+            r.take_marked(); 
+            None
+        },
+    }
+}
+
+fn parse_dict_with_inner<'a, F>(
+    r: &mut Reader<'a, '_>,
+    ctx: &ReaderContext<'a>,
+    start_tag: Option<&[u8]>,
+    end_tag: &[u8],
+    mut on_entry: F,
+) -> Option<()>
 where
     F: FnMut(Name<'a>, usize, &Reader<'a, '_>) -> Option<()>,
 {
@@ -306,9 +326,7 @@ where
         // Normal dictionaries end with '>>', inline image dictionaries end with BD.
         if let Some(()) = r.peek_tag(end_tag) {
             r.forward_tag(end_tag)?;
-            let end_offset = r.offset();
-
-            break r.range(start_offset..end_offset);
+            break Some(());
         } else {
             let Some(name) = r.read_without_context::<Name<'_>>() else {
                 if start_tag.is_some() {

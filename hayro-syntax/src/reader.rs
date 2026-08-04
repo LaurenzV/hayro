@@ -13,7 +13,8 @@ pub trait ReaderExt<'a> {
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_with_context<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T>;
-    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>>;
+    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<()>;
+    fn skip_read<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>>;
     fn skip_white_spaces(&mut self);
     fn read_white_space(&mut self) -> Option<()>;
     fn skip_eol_characters(&mut self);
@@ -50,15 +51,23 @@ impl<'a> ReaderExt<'a> for Reader<'a, '_> {
     }
 
     #[inline]
-    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>> {
+    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<()> {
         let old_offset = self.offset();
 
         T::skip(self, is_content_stream).or_else(|| {
             self.jump(old_offset);
             None
-        })?;
+        })
+    }
 
-        self.range(old_offset..self.offset())
+    #[inline]
+    fn skip_read<T: Skippable>(&mut self, is_content_stream: bool) -> Option<ReadBytes<'a>> {
+        self.set_marker();
+        self.skip::<T>(is_content_stream).or_else(|| {
+            self.take_marked();
+            None
+        })?;
+        self.take_marked()
     }
 
     #[inline]

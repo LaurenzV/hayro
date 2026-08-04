@@ -76,7 +76,7 @@ impl Skippable for Comment<'_> {
 
 impl<'a> Readable<'a> for Comment<'a> {
     fn read(r: &mut Reader<'a, '_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let bytes = r.skip::<Comment<'_>>(false)?;
+        let bytes = r.skip_read::<Comment<'_>>(false)?;
         let bytes = bytes.clone_range(1..bytes.len());
 
         Some(Comment(bytes.into()))

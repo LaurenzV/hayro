@@ -108,7 +108,7 @@ impl Default for Array<'_> {
 
 impl<'a> Readable<'a> for Array<'a> {
     fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let bytes = r.skip::<Array<'_>>(ctx.in_content_stream())?;
+        let bytes = r.skip_read::<Array<'_>>(ctx.in_content_stream())?;
 
         Some(Self {
             data: bytes.clone_range(1..bytes.len() - 1),
