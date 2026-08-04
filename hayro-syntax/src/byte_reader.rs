@@ -163,12 +163,12 @@ pub trait ByteReader<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub enum Reader<'a> {
+pub enum Reader<'a, 'c> {
     Slice(SliceReader<'a>),
-    Custom(CustomReader),
+    Custom(CustomReader<'c>),
 }
 
-impl <'a> Reader<'a> {
+impl <'a, 'c> Reader<'a, 'c> {
     pub fn from_read(read: ReadBytes<'a>) -> Self {
         Reader::Slice(SliceReader::new(read))
     }
@@ -178,9 +178,12 @@ impl <'a> Reader<'a> {
     pub fn from_custom_source(read_seek: Arc<Mutex<dyn CustomSource>>) -> Self {
         Reader::Custom(CustomReader::new(read_seek))
     }
+    pub fn from_custom_source_with_cache(read_seek: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
+        Reader::Custom(CustomReader::new_with_cache(read_seek, cache))
+    }
 }
 
-impl<'a> ByteReader<'a> for Reader<'a> {
+impl<'a> ByteReader<'a> for Reader<'a, '_> {
     #[inline]
     fn at_end(&self) -> bool {
         match self {
@@ -578,54 +581,121 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CustomReader<'c> {
+    data: Arc<Mutex<dyn CustomSource>>,
+    offset: usize,
+    len: usize,
+    cache: CacheInstance<'c>,
+}
+
+#[derive(Debug)]
+enum CacheInstance<'c> {
+    Owned(ReaderCache),
+    Borrowed(&'c mut ReaderCache)
+}
+
+impl From<ReaderCache> for CacheInstance<'static> {
+    fn from(value: ReaderCache) -> Self {
+        Self::Owned(value)
+    }
+}
+impl<'c> From<&'c mut ReaderCache> for CacheInstance<'c> {
+    fn from(value: &'c mut ReaderCache) -> Self {
+        Self::Borrowed(value)
+    }
+}
+
+impl AsRef<ReaderCache> for CacheInstance<'_> {
+    fn as_ref(&self) -> &ReaderCache {
+        match self {
+            CacheInstance::Owned(reader_cache) => reader_cache,
+            CacheInstance::Borrowed(reader_cache) => reader_cache,
+        }
+    }
+}
+
+impl AsMut<ReaderCache> for CacheInstance<'_> {
+    fn as_mut(&mut self) -> &mut ReaderCache {
+        match self {
+            CacheInstance::Owned(reader_cache) => reader_cache,
+            CacheInstance::Borrowed(reader_cache) => reader_cache,
+        }
+    }
+}
+
+impl Clone for CacheInstance<'_> {
+    fn clone(&self) -> Self {
+        CacheInstance::Owned(self.as_ref().clone())
+    }
+}
+
 /// size of buffers
 const BUFFER_SIZE: usize = 500;
 
 #[derive(Clone, Debug)]
-pub struct CustomReader {
-    data: Arc<Mutex<dyn CustomSource>>,
-    offset: usize,
-    len: usize,
+pub struct ReaderCache {
     /// buffer for accelerating peeking and single byte access
     buffer: (Range<usize>, Vec<u8>),
 }
 
-impl CustomReader {
+impl ReaderCache {
+    pub fn new() -> Self {
+        Self {
+            buffer: (0..0, Vec::new()),
+        }
+    }
+}
+
+impl CustomReader<'static> {
     fn new(data: Arc<Mutex<dyn CustomSource>>) -> Self {
         let len = data.lock().unwrap().len().unwrap();
         Self {
             data: data,
             offset: 0,
             len: len,
-            buffer: (0..0, Vec::new()),
+            cache: ReaderCache::new().into(),
         }
     }
 }
 
-impl CustomReader {
+impl<'c> CustomReader<'c> {
+    fn new_with_cache(data: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
+        let len = data.lock().unwrap().len().unwrap();
+        Self {
+            data: data,
+            offset: 0,
+            len: len,
+            cache: cache.into(),
+        }
+    }
+}
+
+impl<'c> CustomReader<'c> {
     #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
         if range.end > self.len {
             return None;
         }
+        let buffer = &mut self.cache.as_mut().buffer;
 
-        let buf_start = self.buffer.0.start;
-        let buf_end = self.buffer.0.end;
+        let buf_start = buffer.0.start;
+        let buf_end = buffer.0.end;
         if range.start >= buf_start && range.end <= buf_end {
-            Some(&self.buffer.1[range.start-buf_start..range.end-buf_start])
+            Some(&buffer.1[range.start-buf_start..range.end-buf_start])
         } else {
             let mut data = self.data.lock().unwrap();
             let new_start = range.start;
             let new_end = (new_start + BUFFER_SIZE).min(self.len);
             let new_range = new_start..new_end;
             let bytes = data.read(new_range.clone()).unwrap()?;
-            self.buffer = (new_range, bytes);
-            Some(&self.buffer.1[0..(range.end - range.start)])
+            *buffer = (new_range, bytes);
+            Some(&buffer.1[0..(range.end - range.start)])
         }
     }
 }
 
-impl ByteReader<'static> for CustomReader {
+impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn at_end(&self) -> bool {
         self.offset >= self.len

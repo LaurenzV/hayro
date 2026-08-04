@@ -419,7 +419,7 @@ fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     parse_procedure_inner(&mut r)
 }
 
-fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
+fn parse_procedure_inner(r: &mut Reader<'_, '_>) -> Option<Vec<PostScriptOp>> {
     let mut stack = ParseStack::new();
 
     let mut ops = vec![];
@@ -492,7 +492,7 @@ pub(super) enum PostScriptOp {
 }
 
 impl PostScriptOp {
-    fn from_reader(r: &mut Reader<'_>, stack: &mut ParseStack) -> Option<Self> {
+    fn from_reader(r: &mut Reader<'_, '_>, stack: &mut ParseStack) -> Option<Self> {
         let op = if let Some(n) = r.read::<Number>(&ReaderContext::dummy()) {
             // TODO: Support radix numbers
             Self::Number(n)

@@ -142,13 +142,13 @@ impl Display for Name<'_> {
 object!(Name<'a>, Name);
 
 impl Skippable for Name<'_> {
-    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {
         skip_name_like(r, true).map(|_| ())
     }
 }
 
 impl<'a> Readable<'a> for Name<'a> {
-    fn read(r: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a, '_>, _: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         skip_name_like(r, true)?;
         let end = r.offset();
@@ -162,7 +162,7 @@ impl<'a> Readable<'a> for Name<'a> {
 
 // This method is shared by `Name` and the parser for content stream operators (which behave like
 // names, except that they aren't preceded by a solidus.
-pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
+pub(crate) fn skip_name_like(r: &mut Reader<'_, '_>, solidus: bool) -> Option<()> {
     // Note that we are not validating hex escape sequences here
     // (since this method can lie on the hot path), so it's possible
     // this method will yield invalid names. Validation needs to happen during actual

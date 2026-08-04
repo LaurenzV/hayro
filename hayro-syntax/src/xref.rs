@@ -17,9 +17,9 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
-use crate::reader::{ReadBytes, Reader};
+use crate::reader::{ReadBytes, Reader, ReaderCache};
 use crate::reader::{Readable, ReaderContext, ReaderExt};
-use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
+use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt, Mutex};
 use crate::trivia::is_white_space_character;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
@@ -27,7 +27,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -178,6 +178,7 @@ fn fallback_xref_map_inner<'a>(
     // Try to choose the right trailer dict by doing basic validation.
     let mut trailer_dict = None;
 
+    let mut reader = r; // reuse reader from before
     for dict in trailer_dicts {
         if let Some(root_id) = dict.get_raw::<Dict<'_>>(ROOT) {
             let check = |dict: &Dict<'_>| -> bool { dict.contains_key(PAGES) };
@@ -185,7 +186,6 @@ fn fallback_xref_map_inner<'a>(
             match root_id {
                 MaybeRef::Ref(r) => match xref_map.get(&r.into()) {
                     Some(EntryType::Normal(offset)) => {
-                        let mut reader = data.reader();
                         reader.jump(*offset);
 
                         if let Some(obj) =
@@ -202,7 +202,6 @@ fn fallback_xref_map_inner<'a>(
                         if let Some(EntryType::Normal(offset)) =
                             xref_map.get(&ObjectIdentifier::new(*obj_num as i32, 0))
                         {
-                            let mut reader = data.reader();
                             reader.jump(*offset);
 
                             if let Some(stream) =
@@ -288,8 +287,10 @@ impl XRef {
         // and then populate the data.
         let trailer_data = TrailerData::dummy();
 
+        let cache = data.make_cache();
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
             data: Arc::new(Data::new(data)),
+            read_cache: cache.map(|c| Arc::new(Mutex::new(c))),
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             decryptor: Arc::new(Decryptor::None),
             has_ocgs: false,
@@ -545,8 +546,6 @@ impl XRef {
 
         let locked = repr.map.try_get().unwrap();
 
-        let mut r = repr.data.get().reader();
-
         let entry = *locked.xref_map.get(&id).or({
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
             // shall be treated as a reference to the null object.
@@ -561,6 +560,8 @@ impl XRef {
         match entry {
             EntryType::Normal(offset) => {
                 ctx.set_in_object_stream(false);
+                let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap());
+                let mut r = repr.data.get().reader_with_cache(r_cache.as_mut().map(|g| g.deref_mut()));
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
@@ -574,6 +575,8 @@ impl XRef {
                         return None;
                     }
                 };
+
+                drop(r_cache);
 
                 // The xref table is broken, try to repair if not already repaired.
                 if self.is_repaired() {
@@ -678,6 +681,7 @@ impl TrailerData {
 #[derive(Debug, Clone)]
 struct SomeRepr {
     data: Arc<Data>,
+    read_cache: Option<Arc<Mutex<ReaderCache>>>,
     map: Arc<RwLock<MapRepr>>,
     metadata: Arc<Metadata>,
     decryptor: Arc<Decryptor>,
@@ -784,7 +788,7 @@ pub(super) struct SubsectionHeader {
 }
 
 impl Readable<'_> for SubsectionHeader {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_, '_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.skip_white_spaces();
         let start = r.read_without_context::<u32>()?;
         r.skip_white_spaces();
@@ -798,7 +802,7 @@ impl Readable<'_> for SubsectionHeader {
 /// Populate the xref table, and return the trailer dict.
 fn populate_from_xref_table<'a>(
     data: &PdfData,
-    reader: &mut Reader<'a>,
+    reader: &mut Reader<'a, '_>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
 ) -> Option<ReadBytes<'a>> {
@@ -851,7 +855,7 @@ fn populate_from_xref_table<'a>(
 
 fn populate_from_xref_stream<'a>(
     data: &PdfData,
-    reader: &mut Reader<'a>,
+    reader: &mut Reader<'a, '_>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
 ) -> Option<ReadBytes<'a>> {
@@ -936,7 +940,7 @@ fn xref_stream_num(data: &[u8]) -> Option<u32> {
 }
 
 fn xref_stream_subsection<'a>(
-    xref_reader: &mut Reader<'a>,
+    xref_reader: &mut Reader<'a, '_>,
     start: u32,
     num_elements: u32,
     f1_len: u8,
@@ -1009,7 +1013,7 @@ fn xref_stream_subsection<'a>(
 }
 
 fn read_xref_table_trailer<'a>(
-    reader: &mut Reader<'a>,
+    reader: &mut Reader<'a, '_>,
     ctx: &ReaderContext<'a>,
 ) -> Option<Dict<'a>> {
     reader.skip_white_spaces();

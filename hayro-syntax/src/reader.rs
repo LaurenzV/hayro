@@ -6,7 +6,7 @@ use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
-pub use crate::byte_reader::{Reader, ByteReader, ReadBytes, CustomSource};
+pub use crate::byte_reader::{Reader, ByteReader, ReadBytes, CustomSource, ReaderCache};
 
 /// Extension trait for the `Reader` struct.
 pub trait ReaderExt<'a> {
@@ -20,7 +20,7 @@ pub trait ReaderExt<'a> {
     fn skip_white_spaces_and_comments(&mut self);
 }
 
-impl<'a> ReaderExt<'a> for Reader<'a> {
+impl<'a> ReaderExt<'a> for Reader<'a, '_> {
     // Note: If `PLAIN` is true, it means that the data we are about to read _might_ contain
     // an object reference instead of an actual object. if `PLAIN` is false, then an object
     // reference cannot occur. The main reason we make this distinction is that when parsing
@@ -228,7 +228,7 @@ impl<'a> ReaderContext<'a> {
 }
 
 pub trait Readable<'a>: Sized {
-    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
+    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
         let mut r = Reader::from_slice(b);
         Self::read(&mut r, &ReaderContext::dummy())
@@ -236,5 +236,5 @@ pub trait Readable<'a>: Sized {
 }
 
 pub trait Skippable {
-    fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()>;
+    fn skip(r: &mut Reader<'_, '_>, is_content_stream: bool) -> Option<()>;
 }

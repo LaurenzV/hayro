@@ -95,7 +95,7 @@ impl core::fmt::Display for String<'_> {
 object!(String<'a>, String);
 
 impl Skippable for String<'_> {
-    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {
         match r.peek_byte()? {
             b'<' => skip_hex(r),
             b'(' => skip_literal(r),
@@ -105,7 +105,7 @@ impl Skippable for String<'_> {
 }
 
 impl<'a> Readable<'a> for String<'a> {
-    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let decoded = match r.peek_byte()? {
             b'<' => StringInner::Owned(read_hex(r)?),
             b'(' => read_literal(r)?,
@@ -136,7 +136,7 @@ impl From<Vec<u8>> for StringInner<'_> {
     }
 }
 
-fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
+fn skip_hex(r: &mut Reader<'_, '_>) -> Option<()> {
     r.forward_tag(b"<")?;
     while let Some(b) = r.peek_byte() {
         let is_hex = b.is_ascii_hexdigit();
@@ -153,7 +153,7 @@ fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
+fn read_hex(r: &mut Reader<'_, '_>) -> Option<SmallVec<[u8; 23]>> {
     let start = r.offset();
     skip_hex(r)?;
     let end = r.offset();
@@ -165,7 +165,7 @@ fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
     Some(decoded)
 }
 
-fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
+fn skip_literal(r: &mut Reader<'_, '_>) -> Option<()> {
     r.forward_tag(b"(")?;
     let mut bracket_counter = 1;
 
@@ -185,7 +185,7 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
+fn read_literal<'a>(r: &mut Reader<'a, '_>) -> Option<StringInner<'a>> {
     let start = r.offset();
     skip_literal(r)?;
     let end = r.offset();

@@ -28,7 +28,7 @@ impl DateTime {
 
         reader.forward_tag(b"D:")?;
 
-        let read_num = |reader: &mut Reader<'_>, bytes: u8, min: u16, max: u16| -> Option<u16> {
+        let read_num = |reader: &mut Reader<'_, '_>, bytes: u8, min: u16, max: u16| -> Option<u16> {
             if matches!(reader.peek_byte()?, b'-' | b'+' | b'Z') {
                 return None;
             }
