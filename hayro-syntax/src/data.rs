@@ -83,7 +83,7 @@ impl PdfData {
     pub fn make_cache(&self) -> Option<ReaderCache> {
         match self {
             PdfData::Buffer(_) => None,
-            PdfData::Custom(_) => Some(ReaderCache::new()),
+            PdfData::Custom(_) => Some(ReaderCache::default()),
         }
     }
 }

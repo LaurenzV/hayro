@@ -589,64 +589,6 @@ pub struct CustomReader<'c> {
     cache: CacheInstance<'c>,
 }
 
-#[derive(Debug)]
-enum CacheInstance<'c> {
-    Owned(ReaderCache),
-    Borrowed(&'c mut ReaderCache)
-}
-
-impl From<ReaderCache> for CacheInstance<'static> {
-    fn from(value: ReaderCache) -> Self {
-        Self::Owned(value)
-    }
-}
-impl<'c> From<&'c mut ReaderCache> for CacheInstance<'c> {
-    fn from(value: &'c mut ReaderCache) -> Self {
-        Self::Borrowed(value)
-    }
-}
-
-impl AsRef<ReaderCache> for CacheInstance<'_> {
-    fn as_ref(&self) -> &ReaderCache {
-        match self {
-            CacheInstance::Owned(reader_cache) => reader_cache,
-            CacheInstance::Borrowed(reader_cache) => reader_cache,
-        }
-    }
-}
-
-impl AsMut<ReaderCache> for CacheInstance<'_> {
-    fn as_mut(&mut self) -> &mut ReaderCache {
-        match self {
-            CacheInstance::Owned(reader_cache) => reader_cache,
-            CacheInstance::Borrowed(reader_cache) => reader_cache,
-        }
-    }
-}
-
-impl Clone for CacheInstance<'_> {
-    fn clone(&self) -> Self {
-        CacheInstance::Owned(self.as_ref().clone())
-    }
-}
-
-/// size of buffers
-const BUFFER_SIZE: usize = 500;
-
-#[derive(Clone, Debug)]
-pub struct ReaderCache {
-    /// buffer for accelerating peeking and single byte access
-    buffer: (Range<usize>, Vec<u8>),
-}
-
-impl ReaderCache {
-    pub fn new() -> Self {
-        Self {
-            buffer: (0..0, Vec::new()),
-        }
-    }
-}
-
 impl CustomReader<'static> {
     fn new(data: Arc<Mutex<dyn CustomSource>>) -> Self {
         let len = data.lock().unwrap().len().unwrap();
@@ -654,7 +596,7 @@ impl CustomReader<'static> {
             data: data,
             offset: 0,
             len: len,
-            cache: ReaderCache::new().into(),
+            cache: ReaderCache::default().into(),
         }
     }
 }
@@ -674,24 +616,10 @@ impl<'c> CustomReader<'c> {
 impl<'c> CustomReader<'c> {
     #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
-        if range.end > self.len {
-            return None;
-        }
-        let buffer = &mut self.cache.as_mut().buffer;
-
-        let buf_start = buffer.0.start;
-        let buf_end = buffer.0.end;
-        if range.start >= buf_start && range.end <= buf_end {
-            Some(&buffer.1[range.start-buf_start..range.end-buf_start])
-        } else {
+        self.cache.as_mut().read_buf(range, self.len, |read_range| {
             let mut data = self.data.lock().unwrap();
-            let new_start = range.start;
-            let new_end = (new_start + BUFFER_SIZE).min(self.len);
-            let new_range = new_start..new_end;
-            let bytes = data.read(new_range.clone()).unwrap()?;
-            *buffer = (new_range, bytes);
-            Some(&buffer.1[0..(range.end - range.start)])
-        }
+            data.read(read_range).unwrap()
+        })
     }
 }
 
@@ -912,6 +840,167 @@ impl ByteReader<'static> for CustomReader<'_> {
             }
             prev = chunk[..needle.len().min(chunk.len())].to_vec();
         }
+    }
+}
+
+
+#[derive(Debug)]
+enum CacheInstance<'c> {
+    Owned(ReaderCache),
+    Borrowed(&'c mut ReaderCache)
+}
+
+impl From<ReaderCache> for CacheInstance<'static> {
+    fn from(value: ReaderCache) -> Self {
+        Self::Owned(value)
+    }
+}
+impl<'c> From<&'c mut ReaderCache> for CacheInstance<'c> {
+    fn from(value: &'c mut ReaderCache) -> Self {
+        Self::Borrowed(value)
+    }
+}
+
+impl AsRef<ReaderCache> for CacheInstance<'_> {
+    fn as_ref(&self) -> &ReaderCache {
+        match self {
+            CacheInstance::Owned(reader_cache) => reader_cache,
+            CacheInstance::Borrowed(reader_cache) => reader_cache,
+        }
+    }
+}
+
+impl AsMut<ReaderCache> for CacheInstance<'_> {
+    fn as_mut<'s>(&'s mut self) -> &'s mut ReaderCache {
+        match self {
+            CacheInstance::Owned(reader_cache) => reader_cache,
+            CacheInstance::Borrowed(reader_cache) => reader_cache,
+        }
+    }
+}
+
+impl Clone for CacheInstance<'_> {
+    fn clone(&self) -> Self {
+        CacheInstance::Owned(self.as_ref().clone())
+    }
+}
+
+/// count of buffers
+const BUFFER_COUNT: usize = 3;
+/// size of buffers
+const BUFFER_SIZE: usize = 500;
+
+#[derive(Clone, Debug, Default)]
+pub struct ReaderCache {
+    /// buffers for accelerating access
+    buffers: [CacheBuffer; BUFFER_COUNT],
+    /// LRU counter to fill `CacheBuffer::used` with upon use
+    lru_counter: u64,
+}
+
+#[derive(Clone, Debug)]
+struct CacheBuffer {
+    /// range of this buffer is valid for
+    range: Range<usize>,
+    /// actual buffered data
+    data: Vec<u8>,
+    /// LRU index, the higher the more recently used
+    used: u64,
+}
+
+impl Default for CacheBuffer {
+    fn default() -> Self {
+        Self {
+            range: 0..0,
+            data: Vec::new(),
+            used: 0,
+        }
+    }
+}
+
+impl ReaderCache {
+    /// Reads buffer using cache
+    /// * `range` - The range to read
+    /// * `data_len` - The length of the data-source to read from
+    /// * `read_data` - Callback to actually read data from source
+    #[inline]
+    fn read_buf(&mut self, range: Range<usize>, data_len: usize, read_data: impl FnOnce(Range<usize>) -> Option<Vec<u8>>) -> Option<&[u8]> {
+        if range.end > data_len {
+            return None;
+        }
+
+        let found_hit = self.buffers.iter().enumerate().find_map(|(index, buffer)| {
+            let buf_start = buffer.range.start;
+            let buf_end = buffer.range.end;
+            if range.start >= buf_start && range.end <= buf_end {
+                Some((index, range.start-buf_start..range.end-buf_start))
+            } else {
+                None
+            }
+        });
+
+        if let Some((index,  range)) = found_hit {
+            let buffer = &mut self.buffers[index];
+            buffer.used = self.lru_counter;
+            self.lru_counter += 1;
+            Some(&buffer.data[range])
+        } else {
+            self.handle_cache_miss(range, data_len, read_data)
+        }
+    }
+
+    fn handle_cache_miss(&mut self, range: Range<usize>, data_len: usize, read_data: impl FnOnce(Range<usize>) -> Option<Vec<u8>>) -> Option<&[u8]> {
+        // println!("cache miss {range:?} (len {})", range.end - range.start);
+        let new_start = range.start;
+        let new_end = (new_start + BUFFER_SIZE).min(data_len);
+        let new_range = new_start..new_end;
+        let (cached_start, inner_range, cached_end) = self.get_overlap(new_range.clone());
+        let bytes = if inner_range.is_empty() {
+            let mut bytes = Vec::with_capacity(range.len());
+            bytes.extend_from_slice(cached_start);
+            bytes.extend_from_slice(cached_end);
+            bytes
+        } else {
+            let read_bytes = read_data(inner_range)?;
+            if !cached_start.is_empty() || !cached_end.is_empty() {
+                let mut bytes = Vec::with_capacity(range.len());
+                bytes.extend_from_slice(cached_start);
+                bytes.extend(read_bytes);
+                bytes.extend_from_slice(cached_end);
+                bytes
+            } else {
+                read_bytes
+            }
+        };
+        let buffer = self.buffers.iter_mut().min_by(|a, b| a.used.cmp(&b.used)).unwrap();
+        *buffer = CacheBuffer { range: new_range, data: bytes, used: self.lru_counter };
+        self.lru_counter += 1;
+        Some(&buffer.data[0..(range.end - range.start)])
+    }
+
+    #[inline]
+    fn get_overlap(&self, range: Range<usize>) -> (&[u8], Range<usize>, &[u8]) {
+        // (&[], range, &[])
+        let start = self.buffers.iter()
+            .filter(|b| !range.contains(&b.range.start) && range.contains(&b.range.end))
+            .max_by(|a, b| a.range.end.cmp(&b.range.end))
+            .map(|b| &b.data[(range.start - b.range.start)..])
+            .unwrap_or_default();
+        // let mut end: &[u8] = &[];
+        let mut end = self.buffers.iter()
+            .filter(|b| range.contains(&b.range.start) && !range.contains(&b.range.end))
+            .min_by(|a, b| a.range.start.cmp(&b.range.start))
+            .map(|b| &b.data[..(b.data.len() - (b.range.end - range.end))])
+            .unwrap_or_default();
+
+        if start.len() + end.len() > range.len() {
+            // start and end are overlapping, truncate end
+            let overlap = start.len() + end.len() - range.len();
+            end = &end[overlap..];
+        }
+
+        let inner_range = (range.start + start.len())..(range.end - end.len());
+        (start, inner_range, end)
     }
 }
 
