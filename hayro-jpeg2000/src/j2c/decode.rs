@@ -336,9 +336,10 @@ fn decode_sub_band_bitplanes(
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
 
+    let quantised =
+        component_info.quantization_info.quantization_style != QuantizationStyle::NoQuantization;
     let dequantization_step = {
-        if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization
-        {
+        if !quantised {
             1.0
         } else {
             let (exponent, mantissa) =
@@ -411,7 +412,7 @@ fn decode_sub_band_bitplanes(
                 for ((output, coefficient), coefficient_state) in
                     out_row.iter_mut().zip(coefficients).zip(coefficient_states)
                 {
-                    *output = coefficient.reconstructed(coefficient_state) as f32;
+                    *output = coefficient.reconstructed(coefficient_state, quantised);
                     *output *= dequantization_step;
                 }
 

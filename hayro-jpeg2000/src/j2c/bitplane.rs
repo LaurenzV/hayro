@@ -275,21 +275,33 @@ impl CoefficientState {
 pub(crate) struct Coefficient(u32);
 
 impl Coefficient {
-    pub(crate) fn reconstructed(&self, state: &CoefficientState) -> i32 {
+    pub(crate) fn reconstructed(&self, state: &CoefficientState, quantised: bool) -> f32 {
         let mut magnitude = (self.0 & !0x80000000) as i32;
         // Map sign (0 for positive, 1 for negative) to 1, -1.
         magnitude *= 1 - 2 * (self.sign() as i32);
-
-        // See Formula E-6: In case the coefficient doesn't have full precision,
-        // we need to apply a reconstruction bias. The recommended value is
-        // 1/2.
-        let bit_position = state.decoded_bit_position();
-        if magnitude != 0 && bit_position != 0 {
-            let offset = 1 << (bit_position - 1);
-            magnitude += if magnitude > 0 { offset } else { -offset };
+        if magnitude == 0 {
+            return 0.0;
         }
 
-        magnitude
+        // Formula E-6 reconstructs a nonzero coefficient at `r * 2 ^ (Mb - Nb)` above its
+        // decoded magnitude, with r = 1/2 the usual midpoint. `Mb - Nb` is the number of
+        // magnitude bits that were never coded, so it is zero once a coefficient is fully
+        // decoded -- and the term is then r itself rather than nothing, because a
+        // quantisation interval of width Delta still surrounds the value.
+        //
+        // Without quantisation there is no such interval: a fully decoded coefficient is
+        // exact, and offsetting it by half would move a lossless image.
+        let bit_position = state.decoded_bit_position();
+        let offset = if bit_position == 0 {
+            if quantised {
+                0.5
+            } else {
+                return magnitude as f32;
+            }
+        } else {
+            0.5 * (1_u32 << bit_position) as f32
+        };
+        magnitude as f32 + if magnitude > 0 { offset } else { -offset }
     }
 
     fn set_sign(&mut self, sign: u8) {
