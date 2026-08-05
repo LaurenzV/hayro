@@ -17,9 +17,13 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
-use crate::reader::{ReadBytes, Reader, ReaderCache};
+use crate::reader::{ReadBytes, Reader};
+#[cfg(reader_opt_ext_cache)]
+use crate::reader::ReaderCache;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
-use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt, Mutex};
+use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
+#[cfg(reader_opt_ext_cache)]
+use crate::sync::Mutex;
 use crate::trivia::is_white_space_character;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
@@ -27,7 +31,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
+#[cfg(reader_opt_ext_cache)]
+use core::ops::DerefMut;
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -287,9 +293,11 @@ impl XRef {
         // and then populate the data.
         let trailer_data = TrailerData::dummy();
 
+        #[cfg(reader_opt_ext_cache)]
         let cache = data.make_cache();
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
             data: Arc::new(Data::new(data)),
+            #[cfg(reader_opt_ext_cache)]
             read_cache: cache.map(|c| Arc::new(Mutex::new(c))),
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             decryptor: Arc::new(Decryptor::None),
@@ -560,8 +568,12 @@ impl XRef {
         match entry {
             EntryType::Normal(offset) => {
                 ctx.set_in_object_stream(false);
+                #[cfg(reader_opt_ext_cache)]
                 let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap());
+                #[cfg(reader_opt_ext_cache)]
                 let mut r = repr.data.get().reader_with_cache(r_cache.as_mut().map(|g| g.deref_mut()));
+                #[cfg(not(reader_opt_ext_cache))]
+                let mut r = repr.data.get().reader();
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
@@ -576,6 +588,7 @@ impl XRef {
                     }
                 };
 
+                #[cfg(reader_opt_ext_cache)]
                 drop(r_cache);
 
                 // The xref table is broken, try to repair if not already repaired.
@@ -681,6 +694,7 @@ impl TrailerData {
 #[derive(Debug, Clone)]
 struct SomeRepr {
     data: Arc<Data>,
+    #[cfg(reader_opt_ext_cache)]
     read_cache: Option<Arc<Mutex<ReaderCache>>>,
     map: Arc<RwLock<MapRepr>>,
     metadata: Arc<Metadata>,

@@ -3,6 +3,7 @@ use crate::object::Stream;
 #[cfg(feature = "std")]
 use crate::reader::CustomSource;
 use crate::reader::Reader;
+#[cfg(reader_opt_ext_cache)]
 use crate::reader::ReaderCache;
 use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
@@ -65,10 +66,14 @@ impl<T: CustomSource + Send + Sync + 'static> From<T> for PdfData {
 impl PdfData {
     /// create reader from pdf-data
     pub fn reader(&self) -> Reader<'_, '_> {
-        Self::reader_with_cache(self, None)
+        match self {
+            PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
+            PdfData::Custom(read_seek) => Reader::from_custom_source(read_seek.clone()),
+        }
     }
 
     /// create reader from pdf-data with cache
+    #[cfg(reader_opt_ext_cache)]
     pub fn reader_with_cache<'c>(&self, cache: Option<&'c mut ReaderCache>) -> Reader<'_, 'c> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
@@ -80,6 +85,7 @@ impl PdfData {
     }
 
     /// instantiates cache if necessary
+    #[cfg(reader_opt_ext_cache)]
     pub fn make_cache(&self) -> Option<ReaderCache> {
         match self {
             PdfData::Buffer(_) => None,

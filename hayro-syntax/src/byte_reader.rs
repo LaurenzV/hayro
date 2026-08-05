@@ -187,6 +187,7 @@ impl <'a, 'c> Reader<'a, 'c> {
     pub fn from_custom_source(read_seek: Arc<Mutex<dyn CustomSource>>) -> Self {
         Reader::Custom(CustomReader::new(read_seek))
     }
+    #[cfg(reader_opt_ext_cache)]
     pub fn from_custom_source_with_cache(read_seek: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
         Reader::Custom(CustomReader::new_with_cache(read_seek, cache))
     }
@@ -626,6 +627,14 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 }
 
+// Configuration for CustomReader  
+
+/// size of cache buffers
+const BUFFER_SIZE: usize = 500;
+/// count of cache buffers
+#[cfg(reader_opt_multi_buffer)]
+const BUFFER_COUNT: usize = 3;
+
 #[derive(Clone, Debug)]
 pub struct CustomReader<'c> {
     data: Arc<Mutex<dyn CustomSource>>,
@@ -641,10 +650,11 @@ struct RecordingMarker {
     /// position where marker has been set
     start: usize,
     /// data behind marker that has already been read
+    #[cfg(reader_opt_recording_marker)]
     data: Vec<u8>,
 }
 
-impl CustomReader<'static> {
+impl<'c> CustomReader<'c> {
     fn new(data: Arc<Mutex<dyn CustomSource>>) -> Self {
         let len = data.lock().unwrap().len().unwrap();
         Self {
@@ -655,9 +665,8 @@ impl CustomReader<'static> {
             cache: ReaderCache::default().into(),
         }
     }
-}
 
-impl<'c> CustomReader<'c> {
+    #[cfg(reader_opt_ext_cache)]
     fn new_with_cache(data: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
         let len = data.lock().unwrap().len().unwrap();
         Self {
@@ -677,6 +686,7 @@ impl<'c> CustomReader<'c> {
         })
     }
 
+    #[cfg(reader_opt_recording_marker)]
     #[inline]
     fn catch_up_marker(&mut self, pos: usize) -> Option<()> {
         let marker = self.marker.as_mut()?;
@@ -694,6 +704,7 @@ impl<'c> CustomReader<'c> {
         Some(())
     }
 
+    #[cfg(reader_opt_recording_marker)]
     fn record_marker(&mut self, pos: usize, data: &[u8]) -> Option<()> {
         self.catch_up_marker(pos)?;
         let marker = self.marker.as_mut()?;
@@ -747,9 +758,12 @@ impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
         let read: ReadBytes<'_> = self.peek_bytes(len)?.into_owned().into();
+        
+        #[cfg(reader_opt_recording_marker)]
         if self.marker.is_some() {
             self.record_marker(self.offset, read.as_ref());
         }
+
         self.offset += len;
         Some(read)
     }
@@ -757,6 +771,8 @@ impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn read_byte(&mut self) -> Option<u8> {
         let v = self.peek_byte()?;
+
+        #[cfg(reader_opt_recording_marker)]
         if self.marker.is_some() {
             self.record_marker(self.offset, &[v]);
         }
@@ -777,7 +793,13 @@ impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         let end = self.offset.checked_add(len)?;
-        self.range(self.offset..end)
+
+        let range = self.offset..end;
+        if len <= BUFFER_SIZE {
+            self.read_buf(range).map(|slice| slice.into())
+        } else {
+            self.range(range)
+        }
     }
 
     #[inline]
@@ -838,21 +860,6 @@ impl ByteReader<'static> for CustomReader<'_> {
             }
         }
     }
-
-    // #[inline]
-    // fn forward_while(&mut self, f: impl Fn(u8) -> bool) {
-    //     let mut data = self.data.lock().unwrap();
-    //     while self.offset < self.len {
-    //         let chunk = data.read_next(self.offset).unwrap().unwrap();
-    //         for b in chunk {
-    //             if f(b) {
-    //                 self.offset += 1;
-    //             } else {
-    //                 return;
-    //             }
-    //         }
-    //     }
-    // }
 
     #[inline]
     fn peek_tag(&mut self, tag: &[u8]) -> Option<()> {
@@ -933,6 +940,7 @@ impl ByteReader<'static> for CustomReader<'_> {
         }
         self.marker = Some(RecordingMarker {
             start: self.offset,
+            #[cfg(reader_opt_recording_marker)]
             data: Vec::new(),
         })
     }
@@ -941,10 +949,19 @@ impl ByteReader<'static> for CustomReader<'_> {
         if self.marker.is_none() {
             panic!("marker has not been set")
         }
-        self.catch_up_marker(self.offset)?;
-        let mut marker = self.marker.take().unwrap();
-        marker.data.truncate(self.offset - marker.start);
-        Some(marker.data.into())
+
+        #[cfg(reader_opt_recording_marker)]
+        {
+            self.catch_up_marker(self.offset)?;
+            let mut marker = self.marker.take().unwrap();
+            marker.data.truncate(self.offset - marker.start);
+            Some(marker.data.into())
+        }
+        #[cfg(not(reader_opt_recording_marker))]
+        {
+            let marker = self.marker.take().unwrap();
+            self.range(marker.start..self.offset)
+        }
     }
 }
 
@@ -990,17 +1007,17 @@ impl Clone for CacheInstance<'_> {
     }
 }
 
-/// count of buffers
-const BUFFER_COUNT: usize = 3;
-/// size of buffers
-const BUFFER_SIZE: usize = 500;
-
 #[derive(Clone, Debug, Default)]
 pub struct ReaderCache {
     /// buffers for accelerating access
+    #[cfg(reader_opt_multi_buffer)]
     buffers: [CacheBuffer; BUFFER_COUNT],
     /// LRU counter to fill `CacheBuffer::used` with upon use
+    #[cfg(reader_opt_multi_buffer)]
     lru_counter: u64,
+    /// buffers for accelerating access
+    #[cfg(not(reader_opt_multi_buffer))]
+    buffer: CacheBuffer,
 }
 
 #[derive(Clone, Debug)]
@@ -1010,6 +1027,7 @@ struct CacheBuffer {
     /// actual buffered data
     data: Vec<u8>,
     /// LRU index, the higher the more recently used
+    #[cfg(reader_opt_multi_buffer)]
     used: u64,
 }
 
@@ -1018,6 +1036,7 @@ impl Default for CacheBuffer {
         Self {
             range: 0..0,
             data: Vec::new(),
+            #[cfg(reader_opt_multi_buffer)]
             used: 0,
         }
     }
@@ -1033,27 +1052,47 @@ impl ReaderCache {
         if range.end > data_len {
             return None;
         }
+        
+        #[cfg(reader_opt_multi_buffer)]
+        {
+            let found_hit = self.buffers.iter().enumerate().find_map(|(index, buffer)| {
+                let buf_start = buffer.range.start;
+                let buf_end = buffer.range.end;
+                if range.start >= buf_start && range.end <= buf_end {
+                    Some((index, range.start-buf_start..range.end-buf_start))
+                } else {
+                    None
+                }
+            });
 
-        let found_hit = self.buffers.iter().enumerate().find_map(|(index, buffer)| {
+            if let Some((index,  range)) = found_hit {
+                let buffer = &mut self.buffers[index];
+                buffer.used = self.lru_counter;
+                self.lru_counter += 1;
+                Some(&buffer.data[range])
+            } else {
+                self.handle_cache_miss(range, data_len, read_data)
+            }
+        }
+        #[cfg(not(reader_opt_multi_buffer))]
+        {
+            let buffer = &mut self.buffer;
             let buf_start = buffer.range.start;
             let buf_end = buffer.range.end;
             if range.start >= buf_start && range.end <= buf_end {
-                Some((index, range.start-buf_start..range.end-buf_start))
+                Some(&buffer.data[range.start-buf_start..range.end-buf_start])
             } else {
-                None
+                let new_start = range.start;
+                let new_end = (new_start + BUFFER_SIZE).min(data_len);
+                let new_range = new_start..new_end;
+                let bytes = read_data(new_range.clone())?;
+                *buffer = CacheBuffer { range: new_range, data: bytes };
+                Some(&buffer.data[0..(range.end - range.start)])
             }
-        });
-
-        if let Some((index,  range)) = found_hit {
-            let buffer = &mut self.buffers[index];
-            buffer.used = self.lru_counter;
-            self.lru_counter += 1;
-            Some(&buffer.data[range])
-        } else {
-            self.handle_cache_miss(range, data_len, read_data)
         }
     }
 
+    #[cfg(reader_opt_multi_buffer)]
     fn handle_cache_miss(&mut self, range: Range<usize>, data_len: usize, read_data: impl FnOnce(Range<usize>) -> Option<Vec<u8>>) -> Option<&[u8]> {
         // println!("cache miss {range:?} (len {})", range.end - range.start);
         let new_start = range.start;
@@ -1083,6 +1122,8 @@ impl ReaderCache {
         Some(&buffer.data[0..(range.end - range.start)])
     }
 
+
+    #[cfg(reader_opt_multi_buffer)]
     #[inline]
     fn get_overlap(&self, range: Range<usize>) -> (&[u8], Range<usize>, &[u8]) {
         // (&[], range, &[])
