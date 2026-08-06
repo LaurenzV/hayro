@@ -138,22 +138,37 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     let mut has_dot = false;
     let mut decimal_shift: u32 = 0;
     let mut has_digits = false;
+    // The number of integer digits that were dropped by the overflow guard
+    // below. Each one scales the final value by 10 after the loop.
+    let mut dropped_int_digits: u32 = 0;
 
     loop {
         match r.peek_byte() {
             Some(b'0'..=b'9') => {
                 let d = r.read_byte().unwrap();
-                mantissa = mantissa
-                    // Using `saturating` would arguably be better here, but
-                    // profiling showed that it seems to be more expensive, at least
-                    // on ARM. Since such large numbers shouldn't appear anyway,
-                    // it doesn't really matter a lot what mode we use.
-                    .wrapping_mul(10)
-                    .wrapping_add((d - b'0') as u64);
-                has_digits = true;
-                if has_dot {
-                    decimal_shift += 1;
+                // Stop accumulating once another digit could overflow the
+                // mantissa. At that point the mantissa already carries at
+                // least 19 significant digits, so a dropped digit perturbs
+                // the value by a relative error of less than 1/mantissa
+                // <= 5.5e-19, below the precision of an f64. Wrapping
+                // instead would turn the whole mantissa into garbage, e.g.
+                // `190.50000762939453225` (a full-precision f64 emitted
+                // with 20 significant digits) used to parse as ~6.03.
+                //
+                // A dropped fractional digit must not bump `decimal_shift`
+                // (the retained digits keep their scale), while a dropped
+                // integer digit scales the result by 10, applied after the
+                // loop. Note that the digit is consumed either way, so the
+                // extent of the number stays in sync with `Skippable`.
+                if mantissa <= (u64::MAX - 9) / 10 {
+                    mantissa = mantissa * 10 + (d - b'0') as u64;
+                    if has_dot {
+                        decimal_shift += 1;
+                    }
+                } else if !has_dot {
+                    dropped_int_digits += 1;
                 }
+                has_digits = true;
             }
             Some(b'.') if !has_dot => {
                 r.forward();
@@ -183,8 +198,51 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
         return None;
     }
 
+    // If integer digits were dropped by the overflow guard, the exact value
+    // is not representable as an i64, so return a scaled `Real` instead.
+    // Dropping only starts once the mantissa is saturated and it never
+    // un-saturates, so when any integer digit was dropped every later
+    // fractional digit was dropped as well and `decimal_shift` is still 0.
+    // `as_i64` on such a huge `Real` is still well-behaved: float-to-int
+    // `as` casts saturate, so typed integer readers see `i64::MAX`/
+    // `i64::MIN` and reject the value cleanly via `try_into` instead of
+    // receiving a wrapped bit pattern.
+    if dropped_int_digits > 0 {
+        let mut value = (mantissa as f64) * powi_f64(10.0, dropped_int_digits);
+
+        if negative {
+            value = -value;
+        }
+
+        return Some(Number(InternalNumber::Real(value)));
+    }
+
     if !has_dot {
+        // A mantissa in `(i64::MAX, u64::MAX]` fits the u64 accumulator
+        // without tripping the digit guard above, but does not fit an i64:
+        // the plain `as i64` cast below used to sign-wrap it (e.g.
+        // `9999999999999999999` read back as -8446744073709551617). Route
+        // this band to a `Real` as well; the f64 is within 1 ULP of the
+        // exact value and `as_i64` saturates as described above. The
+        // single value in the band that is exactly representable stays an
+        // `Integer`: -(2^63) == `i64::MIN`.
+        if mantissa > i64::MAX as u64 {
+            if negative && mantissa == (i64::MAX as u64) + 1 {
+                return Some(Number(InternalNumber::Integer(i64::MIN)));
+            }
+
+            let mut value = mantissa as f64;
+
+            if negative {
+                value = -value;
+            }
+
+            return Some(Number(InternalNumber::Real(value)));
+        }
+
         let value = if negative {
+            // Cannot wrap: the band above filtered out mantissa >
+            // i64::MAX, so -(mantissa as i64) >= i64::MIN + 1.
             (mantissa as i64).wrapping_neg()
         } else {
             mantissa as i64
@@ -552,5 +610,131 @@ mod tests {
                 .unwrap(),
             4294966260
         );
+    }
+
+    // Mantissas past 19 significant digits must degrade by dropping
+    // trailing digits (a relative error below f64 precision), never by
+    // wrapping the accumulator.
+
+    #[test]
+    fn twenty_digit_real_does_not_wrap() {
+        // 19050000762939453225 mod 2^64 = 603256689229901609, so this
+        // used to parse as ~6.0325668922.
+        let got = Reader::new("190.50000762939453225".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert!((got - 190.50000762939453).abs() < 1e-9, "got {got}");
+    }
+
+    #[test]
+    fn twenty_digit_real_negative() {
+        let got = Reader::new("-190.50000762939453225".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert!((got + 190.50000762939453).abs() < 1e-9, "got {got}");
+    }
+
+    // A 19-digit mantissa still accumulates exactly: the guard only fires
+    // on the digit that could overflow.
+    #[test]
+    fn nineteen_digit_real_stays_exact() {
+        let got = Reader::new("190.5000076293945313".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        // == 190.50000762939453125 exactly, the halfway point between two
+        // adjacent f32 values.
+        assert_eq!(got, 190.500_007_629_394_53);
+    }
+
+    #[test]
+    fn very_long_fraction_is_correct_to_f64_precision() {
+        // 39 fractional digits of pi; the digits past the 19-significant-
+        // digit mantissa are dropped.
+        let got = Reader::new("3.141592653589793238462643383279502884197".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert!((got - core::f64::consts::PI).abs() < 1e-15, "got {got}");
+    }
+
+    #[test]
+    fn twenty_five_digit_integer_scales_instead_of_wrapping() {
+        let n = Reader::new("1234567890123456789012345".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        let got = n.as_f64();
+        let want = 1.234_567_890_123_456_8e24;
+        assert!(((got - want) / want).abs() < 1e-9, "got {got}");
+        // Float-to-int casts saturate, so the typed integer readers see
+        // i64::MAX instead of a wrapped bit pattern.
+        assert_eq!(n.as_i64(), i64::MAX);
+    }
+
+    #[test]
+    fn twenty_five_digit_integer_negative() {
+        let n = Reader::new("-1234567890123456789012345".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        let got = n.as_f64();
+        let want = -1.234_567_890_123_456_8e24;
+        assert!(((got - want) / want).abs() < 1e-9, "got {got}");
+        assert_eq!(n.as_i64(), i64::MIN);
+    }
+
+    // Overflowing digits before the dot and more digits after it: the
+    // fractional digits arrive with the mantissa already saturated, so
+    // they are all dropped and no decimal shift applies.
+    #[test]
+    fn integer_overflow_then_fraction() {
+        let got = Reader::new("12345678901234567890123.456".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        let want = 1.234_567_890_123_456_8e22;
+        assert!(((got - want) / want).abs() < 1e-9, "got {got}");
+    }
+
+    // The integer band (i64::MAX, u64::MAX] fits the u64 accumulator
+    // without tripping the digit guard, but not an i64: it must surface
+    // as a positive `Real` (typed readers then saturate at i64::MAX),
+    // never as a sign-wrapped `Integer`.
+    #[test]
+    fn nineteen_digit_integer_above_i64_max_does_not_sign_wrap() {
+        let n = Reader::new("9999999999999999999".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(n.as_f64(), 9_999_999_999_999_999_999_u64 as f64);
+        assert_eq!(n.as_i64(), i64::MAX);
+    }
+
+    #[test]
+    fn two_pow_63_saturates_positive_and_stays_exact_negative() {
+        let n = Reader::new("9223372036854775808".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(n.as_f64(), 9223372036854775808.0);
+        assert_eq!(n.as_i64(), i64::MAX);
+        // The one exactly representable exception: -(2^63) is i64::MIN
+        // (`int_min_does_not_panic` pins the typed read of the same
+        // bytes).
+        let m = Reader::new("-9223372036854775808".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(m.as_i64(), i64::MIN);
+    }
+
+    #[test]
+    fn max_reachable_mantissa_stays_positive() {
+        // 18446744073709551609 is the accumulator's maximum reachable
+        // value: the guard admits a digit while mantissa <=
+        // 1844674407370955160, and the largest admitted digit is 9.
+        let n = Reader::new("18446744073709551609".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(n.as_f64(), 18_446_744_073_709_551_609_u64 as f64);
+        assert_eq!(n.as_i64(), i64::MAX);
     }
 }
