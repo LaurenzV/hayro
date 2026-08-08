@@ -8,7 +8,7 @@ use core::ops::RangeBounds;
 use alloc::borrow::Cow;
 
 #[cfg(feature = "streaming")]
-use crate::sync::{Mutex, Arc};
+use crate::sync::Arc;
 use crate::util;
 
 /// Struct holding bytes that have been read
@@ -250,11 +250,11 @@ impl <'a, 'c> Reader<'a, 'c> {
     pub fn from_slice(slice: &'a [u8]) -> Self {
         Reader::Slice(SliceReader::new(slice.into()))
     }
-    pub fn from_custom_source(read_seek: Arc<Mutex<dyn CustomSource>>) -> Self {
+    pub fn from_custom_source(read_seek: Arc<dyn CustomSource>) -> Self {
         Reader::Custom(CustomReader::new(read_seek))
     }
     #[cfg(reader_opt_ext_cache)]
-    pub fn from_custom_source_with_cache(read_seek: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
+    pub fn from_custom_source_with_cache(read_seek: Arc<dyn CustomSource>, cache: &'c mut ReaderCache) -> Self {
         Reader::Custom(CustomReader::new_with_cache(read_seek, cache))
     }
 }
@@ -721,7 +721,7 @@ const BUFFER_COUNT: usize = 3;
 #[derive(Clone, Debug)]
 #[cfg(feature = "streaming")]
 pub struct CustomReader<'c> {
-    data: Arc<Mutex<dyn CustomSource>>,
+    data: Arc<dyn CustomSource>,
     offset: usize,
     len: usize,
     marker: Option<RecordingMarker>,
@@ -741,8 +741,8 @@ struct RecordingMarker {
 
 #[cfg(feature = "streaming")]
 impl<'c> CustomReader<'c> {
-    fn new(data: Arc<Mutex<dyn CustomSource>>) -> Self {
-        let len = data.lock().unwrap().len().unwrap();
+    fn new(data: Arc<dyn CustomSource>) -> Self {
+        let len = data.len().unwrap();
         Self {
             data: data,
             offset: 0,
@@ -753,8 +753,8 @@ impl<'c> CustomReader<'c> {
     }
 
     #[cfg(reader_opt_ext_cache)]
-    fn new_with_cache(data: Arc<Mutex<dyn CustomSource>>, cache: &'c mut ReaderCache) -> Self {
-        let len = data.lock().unwrap().len().unwrap();
+    fn new_with_cache(data: Arc<dyn CustomSource>, cache: &'c mut ReaderCache) -> Self {
+        let len = data.len().unwrap();
         Self {
             data: data,
             offset: 0,
@@ -767,8 +767,7 @@ impl<'c> CustomReader<'c> {
     #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
         self.cache.as_mut().read_buf(range, self.len, |read_range| {
-            let mut data = self.data.lock().unwrap();
-            data.read(read_range).unwrap()
+            self.data.read(read_range).unwrap()
         })
     }
 
@@ -832,8 +831,7 @@ impl ByteReader<'static> for CustomReader<'_> {
         if len <= BUFFER_SIZE {
             self.read_buf(range).map(|r| r.to_vec().into())
         } else {
-            let mut data = self.data.lock().unwrap();
-            Some(data.read(range).unwrap()?.into())
+            Some(self.data.read(range).unwrap()?.into())
         }
     }
 
@@ -985,13 +983,12 @@ impl ByteReader<'static> for CustomReader<'_> {
     }
 
     fn find_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        let mut data = self.data.lock().unwrap();
         let mut pos = self.offset;
         let mut chunk = Vec::<u8>::new();
         loop {
             let prev_size = chunk.len();
             let chunk_end = pos.saturating_add(1000).min(self.len);
-            chunk.extend(data.read(pos..chunk_end).unwrap()?);
+            chunk.extend(self.data.read(pos..chunk_end).unwrap()?);
             pos = chunk_end;
             match util::find_needle(chunk.as_slice(), needle) {
                 Some(chunk_pos) => return Some(chunk_pos + pos - prev_size),
@@ -1002,13 +999,12 @@ impl ByteReader<'static> for CustomReader<'_> {
     }
     
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
-        let mut data = self.data.lock().unwrap();
         let mut pos = self.offset;
         let mut prev = Vec::<u8>::new();
         loop {
             let end_pos = pos;
             pos = pos.saturating_sub(1000);
-            let mut chunk = data.read(pos..end_pos).unwrap().unwrap();
+            let mut chunk = self.data.read(pos..end_pos).unwrap().unwrap();
             chunk.extend(prev);
             match util::findr_needle(chunk.as_slice(), needle) {
                 Some(chunk_pos) => return Some(chunk_pos + pos),
@@ -1263,9 +1259,9 @@ fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usiz
 }
 
 #[cfg(feature = "streaming")]
-pub trait CustomSource: Debug {
-    fn len(&mut self) -> std::io::Result<usize>;
-    fn read(&mut self, range: Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
+pub trait CustomSource: Debug + Send + Sync + 'static {
+    fn len(&self) -> std::io::Result<usize>;
+    fn read(&self, range: Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
 }
 
 #[cfg(test)]

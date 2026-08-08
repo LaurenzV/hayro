@@ -24,7 +24,7 @@ pub enum PdfData {
     Buffer(Arc<dyn AsRef<[u8]>>),
     /// Custom Reader
     #[cfg(feature = "streaming")]
-    Custom(Arc<Mutex<dyn CustomSource + Send + Sync>>),
+    Custom(Arc<dyn CustomSource>),
 }
 
 impl Debug for PdfData {
@@ -32,7 +32,7 @@ impl Debug for PdfData {
         match self {
             PdfData::Buffer(as_ref) => write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len()),
             #[cfg(feature = "streaming")]
-            PdfData::Custom(mutex) => write!(f, "PdfData::Custom({:?})", mutex.lock().unwrap()),
+            PdfData::Custom(mutex) => write!(f, "PdfData::Custom({:?})", mutex),
         }
     }
 }
@@ -58,9 +58,16 @@ impl From<Vec<u8>> for PdfData {
 }
 
 #[cfg(feature = "streaming")]
-impl<T: CustomSource + Send + Sync + 'static> From<T> for PdfData {
+impl<T: CustomSource> From<T> for PdfData {
     fn from(data: T) -> Self {
-        Self::Custom(Arc::new(Mutex::new(data)))
+        Self::Custom(Arc::new(data))
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl From<Arc<dyn CustomSource>> for PdfData {
+    fn from(data: Arc<dyn CustomSource>) -> Self {
+        Self::Custom(data)
     }
 }
 
