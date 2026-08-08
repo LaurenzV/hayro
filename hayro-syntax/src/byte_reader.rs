@@ -4,25 +4,42 @@ use core::fmt::Debug;
 use core::ops::Deref;
 use core::ops::Range;
 use core::ops::RangeBounds;
-use std::sync::Mutex;
 
 use alloc::borrow::Cow;
-use alloc::sync::Arc;
 
+#[cfg(feature = "streaming")]
+use crate::sync::{Mutex, Arc};
 use crate::util;
 
 /// Struct holding bytes that have been read
+#[cfg(not(feature = "streaming"))]
+#[derive(Clone, Debug)]
+pub struct ReadBytes<'a>(&'a [u8]);
+
+/// Struct holding bytes that have been read
+#[cfg(feature = "streaming")]
 #[derive(Clone, Debug)]
 pub struct ReadBytes<'a>(Cow<'a, [u8]>);
 
 impl<'a> ReadBytes<'a> {
+    #[cfg(not(feature = "streaming"))]
+    pub const EMPTY: ReadBytes<'static> = ReadBytes(&[]);
+    #[cfg(feature = "streaming")]
     pub const EMPTY: ReadBytes<'static> = ReadBytes(Cow::Borrowed(&[]));
 
+    #[cfg(not(feature = "streaming"))]
+    #[inline]
+    pub fn inner(&self) -> &'a [u8] {
+        &self.0
+    }
+
+    #[cfg(feature = "streaming")]
     #[inline]
     pub fn inner(&self) -> &Cow<'a, [u8]> {
         &self.0
     }
 
+    #[cfg(feature = "streaming")]
     #[inline]
     pub fn into_owned(self) -> Vec<u8> {
         self.0.into_owned()
@@ -31,9 +48,16 @@ impl<'a> ReadBytes<'a> {
     #[inline]
     pub fn clone_range<B: RangeBounds<usize>>(&self, range: B) -> Self {
         let range = range_from_bounds(range, self.len());
-        match &self.0 {
-            Cow::Borrowed(data) => ReadBytes(Cow::Borrowed(&data[range])),
-            Cow::Owned(data) => ReadBytes(Cow::Owned(data[range].to_vec())),
+        #[cfg(not(feature = "streaming"))]
+        {
+            ReadBytes(&self.0[range])
+        }
+        #[cfg(feature = "streaming")]
+        {
+            match &self.0 {
+                Cow::Borrowed(data) => ReadBytes(Cow::Borrowed(&data[range])),
+                Cow::Owned(data) => ReadBytes(Cow::Owned(data[range].to_vec())),
+            }
         }
     }
 }
@@ -43,7 +67,14 @@ impl<'a> Deref for ReadBytes<'a> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.0.deref()
+        #[cfg(not(feature = "streaming"))]
+        {
+            self.0
+        }
+        #[cfg(feature = "streaming")]
+        {
+            self.0.deref()
+        }
     }
 }
 
@@ -56,24 +87,47 @@ impl<'a> PartialEq for ReadBytes<'a> {
 impl<'a> AsRef<[u8]> for ReadBytes<'a> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        #[cfg(not(feature = "streaming"))]
+        {
+            self.0
+        }
+        #[cfg(feature = "streaming")]
+        {
+            self.0.as_ref()
+        }
     }
 }
+
 
 impl<'a> From<&'a [u8]> for ReadBytes<'a> {
     #[inline]
     fn from(value: &'a [u8]) -> Self {
-        Self(Cow::Borrowed(value))
+        #[cfg(not(feature = "streaming"))]
+        {
+            Self(value)
+        }
+        #[cfg(feature = "streaming")]
+        {
+            Self(Cow::Borrowed(value))
+        }
     }
 }
 
 impl<'a, const C: usize> From<&'a [u8; C]> for ReadBytes<'a> {
     #[inline]
     fn from(value: &'a [u8; C]) -> Self {
-        Self(Cow::Borrowed(value))
+        #[cfg(not(feature = "streaming"))]
+        {
+            Self(value)
+        }
+        #[cfg(feature = "streaming")]
+        {
+            Self(Cow::Borrowed(value))
+        }
     }
 }
 
+#[cfg(feature = "streaming")]
 impl<'a> From<Vec<u8>> for ReadBytes<'a> {
     #[inline]
     fn from(value: Vec<u8>) -> Self {
@@ -84,7 +138,14 @@ impl<'a> From<Vec<u8>> for ReadBytes<'a> {
 impl<'a> Into<Cow<'a, [u8]>> for ReadBytes<'a> {
     #[inline]
     fn into(self) -> Cow<'a, [u8]> {
-        self.0
+        #[cfg(not(feature = "streaming"))]
+        {
+            Cow::Borrowed(self.0)
+        }
+        #[cfg(feature = "streaming")]
+        {
+            self.0
+        }
     }
 }
 
@@ -171,12 +232,17 @@ pub trait ByteReader<'a> {
     fn take_marked(&mut self) -> Option<ReadBytes<'a>>;
 }
 
+#[cfg(not(feature = "streaming"))]
+pub type Reader<'a, 'c> = SliceReader<'a>;
+
+#[cfg(feature = "streaming")]
 #[derive(Clone, Debug)]
 pub enum Reader<'a, 'c> {
     Slice(SliceReader<'a>),
     Custom(CustomReader<'c>),
 }
 
+#[cfg(feature = "streaming")]
 impl <'a, 'c> Reader<'a, 'c> {
     pub fn from_read(read: ReadBytes<'a>) -> Self {
         Reader::Slice(SliceReader::new(read))
@@ -193,6 +259,7 @@ impl <'a, 'c> Reader<'a, 'c> {
     }
 }
 
+#[cfg(feature = "streaming")]
 impl<'a> ByteReader<'a> for Reader<'a, '_> {
     #[inline]
     fn at_end(&self) -> bool {
@@ -426,6 +493,16 @@ impl<'a> SliceReader<'a> {
     pub fn new_with(data: ReadBytes<'a>, offset: usize) -> Self {
         Self { data, offset, marker: None }
     }
+
+    #[cfg(not(feature = "streaming"))]
+    pub fn from_read(read: ReadBytes<'a>) -> Self {
+        Self::new(read)
+    }
+    
+    #[cfg(not(feature = "streaming"))]
+    pub fn from_slice(slice: &'a [u8]) -> Self {
+        SliceReader::new(slice.into())
+    }
 }
 
 impl<'a> ByteReader<'a> for SliceReader<'a> {
@@ -456,6 +533,11 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
 
     #[inline]
     fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'a>> {
+        #[cfg(not(feature = "streaming"))]
+        {
+            self.data.inner().get(range).map(move |s| s.into())
+        }
+        #[cfg(feature = "streaming")]
         match &self.data.inner() {
             Cow::Borrowed(data) => data.get(range).map(|s| s.into()),
             Cow::Owned(data) => data.get(range).map(|s| s.to_owned().into()),
@@ -630,12 +712,14 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
 // Configuration for CustomReader  
 
 /// size of cache buffers
+#[cfg(feature = "streaming")]
 const BUFFER_SIZE: usize = 500;
 /// count of cache buffers
-#[cfg(reader_opt_multi_buffer)]
+#[cfg(all(feature = "streaming", reader_opt_multi_buffer))]
 const BUFFER_COUNT: usize = 3;
 
 #[derive(Clone, Debug)]
+#[cfg(feature = "streaming")]
 pub struct CustomReader<'c> {
     data: Arc<Mutex<dyn CustomSource>>,
     offset: usize,
@@ -645,6 +729,7 @@ pub struct CustomReader<'c> {
 }
 
 /// Marker object to record bytes behind marker into
+#[cfg(feature = "streaming")]
 #[derive(Clone, Debug)]
 struct RecordingMarker {
     /// position where marker has been set
@@ -654,6 +739,7 @@ struct RecordingMarker {
     data: Vec<u8>,
 }
 
+#[cfg(feature = "streaming")]
 impl<'c> CustomReader<'c> {
     fn new(data: Arc<Mutex<dyn CustomSource>>) -> Self {
         let len = data.lock().unwrap().len().unwrap();
@@ -713,6 +799,7 @@ impl<'c> CustomReader<'c> {
     }
 }
 
+#[cfg(feature = "streaming")]
 impl ByteReader<'static> for CustomReader<'_> {
     #[inline]
     fn at_end(&self) -> bool {
@@ -966,23 +1053,28 @@ impl ByteReader<'static> for CustomReader<'_> {
 }
 
 
+#[cfg(feature = "streaming")]
 #[derive(Debug)]
 enum CacheInstance<'c> {
     Owned(ReaderCache),
     Borrowed(&'c mut ReaderCache)
 }
 
+#[cfg(feature = "streaming")]
 impl From<ReaderCache> for CacheInstance<'static> {
     fn from(value: ReaderCache) -> Self {
         Self::Owned(value)
     }
 }
+
+#[cfg(feature = "streaming")]
 impl<'c> From<&'c mut ReaderCache> for CacheInstance<'c> {
     fn from(value: &'c mut ReaderCache) -> Self {
         Self::Borrowed(value)
     }
 }
 
+#[cfg(feature = "streaming")]
 impl AsRef<ReaderCache> for CacheInstance<'_> {
     fn as_ref(&self) -> &ReaderCache {
         match self {
@@ -992,6 +1084,7 @@ impl AsRef<ReaderCache> for CacheInstance<'_> {
     }
 }
 
+#[cfg(feature = "streaming")]
 impl AsMut<ReaderCache> for CacheInstance<'_> {
     fn as_mut<'s>(&'s mut self) -> &'s mut ReaderCache {
         match self {
@@ -1001,12 +1094,14 @@ impl AsMut<ReaderCache> for CacheInstance<'_> {
     }
 }
 
+#[cfg(feature = "streaming")]
 impl Clone for CacheInstance<'_> {
     fn clone(&self) -> Self {
         CacheInstance::Owned(self.as_ref().clone())
     }
 }
 
+#[cfg(feature = "streaming")]
 #[derive(Clone, Debug, Default)]
 pub struct ReaderCache {
     /// buffers for accelerating access
@@ -1020,6 +1115,7 @@ pub struct ReaderCache {
     buffer: CacheBuffer,
 }
 
+#[cfg(feature = "streaming")]
 #[derive(Clone, Debug)]
 struct CacheBuffer {
     /// range of this buffer is valid for
@@ -1031,6 +1127,7 @@ struct CacheBuffer {
     used: u64,
 }
 
+#[cfg(feature = "streaming")]
 impl Default for CacheBuffer {
     fn default() -> Self {
         Self {
@@ -1042,6 +1139,7 @@ impl Default for CacheBuffer {
     }
 }
 
+#[cfg(feature = "streaming")]
 impl ReaderCache {
     /// Reads buffer using cache
     /// * `range` - The range to read
@@ -1164,6 +1262,7 @@ fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usiz
     start..end
 }
 
+#[cfg(feature = "streaming")]
 pub trait CustomSource: Debug {
     fn len(&mut self) -> std::io::Result<usize>;
     fn read(&mut self, range: Range<usize>) -> std::io::Result<Option<Vec<u8>>>;

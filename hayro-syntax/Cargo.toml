@@ -23,6 +23,7 @@ unsafe = [
     "zune-jpeg?/neon",
 ]
 logging = ["dep:log", "hayro-jpeg2000?/logging"]
+streaming = ["std"]
 
 [dependencies]
 log = { workspace = true, optional = true }

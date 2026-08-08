@@ -1,9 +1,9 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
-#[cfg(feature = "std")]
+#[cfg(feature = "streaming")]
 use crate::reader::CustomSource;
 use crate::reader::Reader;
-#[cfg(reader_opt_ext_cache)]
+#[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::reader::ReaderCache;
 use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
@@ -23,7 +23,7 @@ pub enum PdfData {
     #[cfg(not(feature = "std"))]
     Buffer(Arc<dyn AsRef<[u8]>>),
     /// Custom Reader
-    #[cfg(feature = "std")]
+    #[cfg(feature = "streaming")]
     Custom(Arc<Mutex<dyn CustomSource + Send + Sync>>),
 }
 
@@ -31,6 +31,7 @@ impl Debug for PdfData {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             PdfData::Buffer(as_ref) => write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len()),
+            #[cfg(feature = "streaming")]
             PdfData::Custom(mutex) => write!(f, "PdfData::Custom({:?})", mutex.lock().unwrap()),
         }
     }
@@ -56,7 +57,7 @@ impl From<Vec<u8>> for PdfData {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "streaming")]
 impl<T: CustomSource + Send + Sync + 'static> From<T> for PdfData {
     fn from(data: T) -> Self {
         Self::Custom(Arc::new(Mutex::new(data)))
@@ -68,12 +69,13 @@ impl PdfData {
     pub fn reader(&self) -> Reader<'_, '_> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
+            #[cfg(feature = "streaming")]
             PdfData::Custom(read_seek) => Reader::from_custom_source(read_seek.clone()),
         }
     }
 
     /// create reader from pdf-data with cache
-    #[cfg(reader_opt_ext_cache)]
+    #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
     pub fn reader_with_cache<'c>(&self, cache: Option<&'c mut ReaderCache>) -> Reader<'_, 'c> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
@@ -85,7 +87,7 @@ impl PdfData {
     }
 
     /// instantiates cache if necessary
-    #[cfg(reader_opt_ext_cache)]
+    #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
     pub fn make_cache(&self) -> Option<ReaderCache> {
         match self {
             PdfData::Buffer(_) => None,
