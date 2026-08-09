@@ -973,7 +973,6 @@ impl ByteReader<'static> for StreamingReader<'_> {
 
     #[inline]
     fn forward_while(&mut self, f: impl Fn(u8) -> bool) {
-        // let mut data = self.data.lock().unwrap();
         while let Some(b) = self.peek_byte() {
             if f(b) {
                 self.offset += 1;
@@ -1237,7 +1236,6 @@ impl ReaderCache {
         data_len: usize,
         read_data: impl FnOnce(Range<usize>) -> Option<Vec<u8>>,
     ) -> Option<&[u8]> {
-        // println!("cache miss {range:?} (len {})", range.end - range.start);
         let new_start = range.start;
         let new_end = (new_start + BUFFER_SIZE).min(data_len);
         let new_range = new_start..new_end;
@@ -1276,7 +1274,6 @@ impl ReaderCache {
     #[cfg(reader_opt_multi_buffer)]
     #[inline]
     fn get_overlap(&self, range: Range<usize>) -> (&[u8], Range<usize>, &[u8]) {
-        // (&[], range, &[])
         let start = self
             .buffers
             .iter()
@@ -1284,7 +1281,6 @@ impl ReaderCache {
             .max_by(|a, b| a.range.end.cmp(&b.range.end))
             .map(|b| &b.data[(range.start - b.range.start)..])
             .unwrap_or_default();
-        // let mut end: &[u8] = &[];
         let mut end = self
             .buffers
             .iter()

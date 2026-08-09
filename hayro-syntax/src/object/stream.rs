@@ -318,7 +318,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a, '_>, dict: &Dict<'a>) -> Option<Stream<
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
-    let end_pos = r.find_needle(b"endstream")?; // (xlp) TODO: find_needle_read func?  
+    let end_pos = r.find_needle(b"endstream")?;
     let data = r.read_bytes(end_pos - r.offset())?;
     let data_end = trim_trailing_ascii_whitespace(data.as_ref());
     let data_inner = data.clone_range(..data_end);
