@@ -771,29 +771,37 @@ impl<'c> CustomReader<'c> {
         })
     }
 
+    /// catches up the marker if needed
+    /// 
+    /// * returns `Some` with the offset how far the marker is ahead of the requested position
+    /// * returns `None` if requested position is before marker
     #[cfg(reader_opt_recording_marker)]
-    #[inline]
-    fn catch_up_marker(&mut self, pos: usize) -> Option<()> {
+    fn catch_up_marker(&mut self, pos: usize) -> Option<usize> {
         let marker = self.marker.as_mut()?;
         if marker.start > pos {
             return None;
         }
         let marker_end = marker.start + marker.data.len();
         if marker_end >= pos {
-            return Some(())
+            return Some(marker_end - pos)
         }
 
         let range = marker_end..pos;
         let read_data = self.range(range)?;
         self.marker.as_mut()?.data.extend_from_slice(read_data.as_ref());
-        Some(())
+        Some(0)
     }
 
+    /// adds content to marker
+    ///  
+    /// when calling, make sure to have called `catch_up_marker` beforehand and pass the provided offset
     #[cfg(reader_opt_recording_marker)]
-    fn record_marker(&mut self, pos: usize, data: &[u8]) -> Option<()> {
-        self.catch_up_marker(pos)?;
+    fn record_marker(&mut self, data: &[u8], offset: usize) -> Option<()> {
+        if offset >= data.len() {
+            return Some(())
+        }
         let marker = self.marker.as_mut()?;
-        marker.data.extend_from_slice(data);
+        marker.data.extend_from_slice(&data[offset..]);
         Some(())
     }
 }
@@ -842,11 +850,18 @@ impl ByteReader<'static> for CustomReader<'_> {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
+        #[cfg(reader_opt_recording_marker)]
+        let record = if self.marker.is_some() {
+            self.catch_up_marker(self.offset)
+        } else {
+            None
+        };
+
         let read: ReadBytes<'_> = self.peek_bytes(len)?.into_owned().into();
         
         #[cfg(reader_opt_recording_marker)]
-        if self.marker.is_some() {
-            self.record_marker(self.offset, read.as_ref());
+        if let Some(offset) = record {
+            self.record_marker(read.as_ref(), offset);
         }
 
         self.offset += len;
@@ -855,11 +870,18 @@ impl ByteReader<'static> for CustomReader<'_> {
 
     #[inline]
     fn read_byte(&mut self) -> Option<u8> {
+        #[cfg(reader_opt_recording_marker)]
+        let record = if self.marker.is_some() {
+            self.catch_up_marker(self.offset)
+        } else {
+            None
+        };
+
         let v = self.peek_byte()?;
 
         #[cfg(reader_opt_recording_marker)]
-        if self.marker.is_some() {
-            self.record_marker(self.offset, &[v]);
+        if let Some(offset) = record {
+            self.record_marker(&[v], offset);
         }
         self.offset += 1;
 
