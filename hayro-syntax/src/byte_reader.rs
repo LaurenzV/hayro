@@ -1,6 +1,7 @@
 //! A byte reader.
 
 use core::fmt::Debug;
+use core::hash::Hash;
 use core::ops::Deref;
 use core::ops::Range;
 use core::ops::RangeBounds;
@@ -83,6 +84,14 @@ impl<'a> Deref for ReadBytes<'a> {
 impl<'a> PartialEq for ReadBytes<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+impl<'a> Eq for ReadBytes<'a> {}
+
+impl<'a> Hash for ReadBytes<'a> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
