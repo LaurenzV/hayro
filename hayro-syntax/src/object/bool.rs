@@ -1,10 +1,9 @@
 //! Booleans.
 
-use crate::byte_reader::ByteReader;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 
 impl Skippable for bool {
     fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {

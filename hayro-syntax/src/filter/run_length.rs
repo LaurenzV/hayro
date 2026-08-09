@@ -1,4 +1,4 @@
-use crate::byte_reader::ByteReader;
+use crate::reader::ByteReader;
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;

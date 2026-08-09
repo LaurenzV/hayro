@@ -1,12 +1,11 @@
 //! Dictionaries.
 
-use crate::byte_reader::ByteReader;
 use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use crate::reader::{ReadBytes, Reader};
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
 use crate::sync::FxHashMap;
 use alloc::format;

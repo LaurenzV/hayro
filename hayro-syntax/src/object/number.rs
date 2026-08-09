@@ -1,11 +1,10 @@
 //! Numbers.
 
-use crate::byte_reader::ByteReader;
 use crate::math::{powi_f64, trunc_f64};
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::{Debug, Display, Formatter};
 

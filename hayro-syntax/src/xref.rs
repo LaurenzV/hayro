@@ -1,6 +1,5 @@
 //! Reading and querying the xref table of a PDF file.
 
-use crate::byte_reader::ByteReader;
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
 use crate::metadata::Metadata;
@@ -19,8 +18,8 @@ use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::reader::ReaderCache;
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt};
 use crate::reader::{ReadBytes, Reader};
-use crate::reader::{Readable, ReaderContext, ReaderExt};
 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::sync::Mutex;
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};

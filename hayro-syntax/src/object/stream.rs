@@ -1,6 +1,5 @@
 //! Streams.
 
-use crate::byte_reader::ByteReader;
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
 use crate::object;
@@ -11,7 +10,7 @@ use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::ReadBytes;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use crate::util::OptionLog;
 use alloc::borrow::Cow;

@@ -1,6 +1,5 @@
 //! Parsing and reading from PDF objects.
 
-use crate::byte_reader::ByteReader;
 pub use crate::object::array::Array;
 pub use crate::object::date::DateTime;
 pub use crate::object::dict::Dict;
@@ -13,7 +12,7 @@ pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use core::fmt::{Debug, Display, Formatter};
 
 mod bool;

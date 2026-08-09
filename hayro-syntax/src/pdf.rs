@@ -1,10 +1,10 @@
 //! The starting point for reading PDF files.
 
 use crate::PdfData;
-use crate::byte_reader::ByteReader;
 use crate::object::Object;
 use crate::page::Pages;
 use crate::page::cached::CachedPages;
+use crate::reader::ByteReader;
 use crate::sync::Arc;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 

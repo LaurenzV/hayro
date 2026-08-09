@@ -1,8 +1,7 @@
 //! Comments and white spaces.
 
-use crate::byte_reader::ByteReader;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 
 const fn build_regular_character_table() -> [bool; 256] {
     let mut table = [true; 256];

@@ -1,11 +1,10 @@
 //! Arrays.
 
-use crate::byte_reader::ByteReader;
 use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use crate::reader::{ReadBytes, Reader};
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::marker::PhantomData;

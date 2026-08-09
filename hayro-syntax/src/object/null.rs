@@ -1,10 +1,9 @@
 //! The null object.
 
-use crate::byte_reader::ByteReader;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, Skippable};
 use core::fmt::{Display, Formatter};
 
 /// The null object.

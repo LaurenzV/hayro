@@ -33,14 +33,13 @@ assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
 #[allow(missing_docs)]
 pub mod ops;
 
-use crate::byte_reader::ByteReader;
 use crate::content::ops::TypedInstruction;
 use crate::object;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
 use crate::object::{Array, Null, Number, Object, Stream};
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use core::array;
 use core::fmt::{Debug, Display, Formatter};
