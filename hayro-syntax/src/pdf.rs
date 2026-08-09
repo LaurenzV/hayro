@@ -11,7 +11,7 @@ use crate::xref::{XRef, XRefError, fallback, root_xref};
 pub use crate::crypto::DecryptionError;
 use crate::metadata::Metadata;
 #[cfg(feature = "streaming")]
-pub use crate::data::StreamingSource;
+pub use crate::data::{StreamingSource, FileSource};
 
 /// A PDF file.
 pub struct Pdf {

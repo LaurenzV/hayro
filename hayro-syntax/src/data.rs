@@ -10,6 +10,8 @@ use crate::util::SegmentList;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
+#[cfg(feature = "streaming")]
+use std::collections::{HashMap, hash_map};
 
 /// A container for the bytes of a PDF file.
 #[derive(Clone)]
@@ -113,6 +115,134 @@ pub trait StreamingSource: Debug + Send + Sync + 'static {
     /// `Ok(None)` when provided range is outside of data, 
     /// `Err(..)` when data can't be loaded
     fn read(&self, range: core::ops::Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
+}
+
+/// Basic streaming file source with optional cache
+#[cfg(feature = "streaming")]
+pub struct FileSource {
+    #[cfg(unix)]
+    file: std::fs::File,
+    #[cfg(not(unix))]
+    file: Mutex<std::fs::File>,
+    len: usize,
+    cache: Option<(usize, Mutex<HashMap<usize, Vec<u8>>>)>,
+}
+
+#[cfg(feature = "streaming")]
+impl FileSource {
+    /// Streaming file source with optional cache
+    /// 
+    /// * `file` - the file to be read
+    /// * `chunk_size` - size of cache chunks (typically 1K, 4K, ...), 0 for no cache
+    pub fn new(file: std::fs::File, chunk_size: usize) -> Self {
+        let len = file.metadata().unwrap().len().try_into().unwrap();
+        Self {
+            #[cfg(unix)]
+            file: file,
+            #[cfg(not(unix))]
+            file: Mutex::new(file),
+            len: len,
+            cache: if chunk_size > 0 {
+                Some((chunk_size, Mutex::new(HashMap::new())))
+            } else {
+                None
+            }
+        }
+    }
+
+    fn read_direct(&self, range: core::ops::Range<usize>) -> std::io::Result<Option<Vec<u8>>> {
+        if range.end > self.len {
+            return Ok(None);
+        }
+        let len = range.end - range.start;
+        if len == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let offset = range.start.try_into().unwrap();
+        let mut buf = vec![0; len];
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::FileExt::read_exact_at(&self.file, &mut buf, offset)?;
+        }
+        #[cfg(not(unix))]
+        {
+            use std::io::{Seek, Read};
+            let mut file = self.file.lock().unwrap();
+            file.seek(std::io::SeekFrom::Start(offset))?;
+            file.read_exact(&mut buf)?;
+        }
+        Ok(Some(buf))
+    }
+
+    fn read_cached(&self, range: core::ops::Range<usize>, chunk_size: usize, cache: &Mutex<HashMap<usize, Vec<u8>>>) -> std::io::Result<Option<Vec<u8>>> {
+        if range.end > self.len {
+            return Ok(None);
+        }
+        let len = range.end - range.start;
+        if len == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let mut cache_map = cache.lock().unwrap();
+        let mut out = Vec::with_capacity(len);
+        let start_chunk = range.start / chunk_size;
+        let start_offset = range.start % chunk_size;
+        let end_chunk = (range.end - 1) / chunk_size;
+        let end_offset = ((range.end - 1) % chunk_size) + 1;
+        for chunk in start_chunk..=end_chunk {
+            let buffer = cache_map.entry(chunk);
+            let cached = match buffer {
+                hash_map::Entry::Occupied(occupied_entry) => occupied_entry.into_mut(),
+                hash_map::Entry::Vacant(vacant_entry) => {
+                    let read_start = chunk*chunk_size;
+                    let read_end = (read_start + chunk_size).min(self.len);
+                    let data = self.read_direct(read_start..read_end)?
+                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "reading chunk returned out-of-bounds"))?;
+                    vacant_entry.insert(data)
+                },
+            };
+
+            let slice = match (chunk == start_chunk, chunk == end_chunk) {
+                (true, true) => &cached[start_offset..end_offset],
+                (true, false) => &cached[start_offset..],
+                (false, true) => &cached[..end_offset],
+                (false, false) => cached,
+            };
+            out.extend_from_slice(slice);
+        }
+        Ok(Some(out))
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl StreamingSource for FileSource {
+    fn len(&self) -> std::io::Result<usize> {
+        Ok(self.len)
+    }
+
+    fn read(&self, range: core::ops::Range<usize>) -> std::io::Result<Option<Vec<u8>>> {
+        if let Some((chunk_size, cache)) = &self.cache {
+            self.read_cached(range, *chunk_size, cache)
+        } else {
+            self.read_direct(range)
+        }
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl Debug for FileSource {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        #[cfg(unix)]
+        let file = &self.file;
+        #[cfg(not(unix))]
+        let file = self.file.lock().unwrap();
+        f.debug_struct("FileSource")
+            .field("file", &file)
+            .field("len", &self.len)
+            .field("cache", &self.cache.as_ref().map(|(chunk_size, cache_map)| 
+                (chunk_size, cache_map.lock().unwrap().len())
+            ))
+            .finish()
+    }
 }
 
 /// A structure for storing the data of the PDF.
