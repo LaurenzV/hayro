@@ -6,10 +6,11 @@ use std::path::PathBuf;
 
 fn main() {
     // Open file
-    let file = std::fs::File::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../in.pdf")).unwrap();
-	
-	// Create the file-source (implements StreamingSource)
-	let file_source = FileSource::new(file, 1024);
+    let file =
+        std::fs::File::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../in.pdf")).unwrap();
+
+    // Create the file-source (implements StreamingSource)
+    let file_source = FileSource::new(file, 1024);
 
     // Then create a new PDF file from it.
     //
@@ -20,10 +21,10 @@ fn main() {
     // First access all pages, and then iterate over the operators of each page's
     // content stream and print them.
     let pages = pdf.pages();
-	let page = pages.first().unwrap();
-	let mut ops = page.typed_operations();
+    let page = pages.first().unwrap();
+    let mut ops = page.typed_operations();
 
-	while let Some(op) = ops.next() {
-		println!("{op}");
-	}
+    while let Some(op) = ops.next() {
+        println!("{op}");
+    }
 }

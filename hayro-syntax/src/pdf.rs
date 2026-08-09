@@ -9,9 +9,9 @@ use crate::sync::Arc;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 
 pub use crate::crypto::DecryptionError;
-use crate::metadata::Metadata;
 #[cfg(feature = "streaming")]
-pub use crate::data::{StreamingSource, FileSource};
+pub use crate::data::{FileSource, StreamingSource};
+use crate::metadata::Metadata;
 
 /// A PDF file.
 pub struct Pdf {

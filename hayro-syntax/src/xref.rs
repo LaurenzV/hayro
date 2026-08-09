@@ -17,13 +17,13 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
-use crate::reader::{ReadBytes, Reader};
 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::reader::ReaderCache;
+use crate::reader::{ReadBytes, Reader};
 use crate::reader::{Readable, ReaderContext, ReaderExt};
-use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::sync::Mutex;
+use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
@@ -47,8 +47,7 @@ pub(crate) enum XRefError {
 pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
     let xref_pos = find_last_xref_pos(&data).ok_or(XRefError::Unknown)?;
-    let trailer =
-        populate_xref_impl(&data, xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
+    let trailer = populate_xref_impl(&data, xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
 
     XRef::new(
         data.clone(),
@@ -568,7 +567,7 @@ impl XRef {
         match entry {
             EntryType::Normal(offset) => {
                 ctx.set_in_object_stream(false);
-                
+
                 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
                 let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap().clone());
                 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
@@ -582,7 +581,13 @@ impl XRef {
                         #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
                         if let Some(r_cache) = r_cache {
                             // store cache for reuse later
-                            *repr.read_cache.as_ref().unwrap().lock().unwrap().deref_mut() = r_cache;
+                            *repr
+                                .read_cache
+                                .as_ref()
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                                .deref_mut() = r_cache;
                         }
                         return Some(object.get());
                     }
@@ -753,7 +758,11 @@ impl XRefEntry {
     }
 }
 
-fn populate_xref_impl<'a>(data: &'a PdfData, pos: usize, xref_map: &mut XrefMap) -> Option<ReadBytes<'a>> {
+fn populate_xref_impl<'a>(
+    data: &'a PdfData,
+    pos: usize,
+    xref_map: &mut XrefMap,
+) -> Option<ReadBytes<'a>> {
     let mut visited = BTreeSet::new();
     populate_xref_impl_inner(data, pos, xref_map, &mut visited)
 }

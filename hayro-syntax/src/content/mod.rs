@@ -189,7 +189,10 @@ impl<'a> UntypedIter<'a> {
                                 continue;
                             }
 
-                            let image_data = self.reader.range(start_offset..self.reader.offset()).unwrap();
+                            let image_data = self
+                                .reader
+                                .range(start_offset..self.reader.offset())
+                                .unwrap();
 
                             let stream = Stream::new(image_data, dict.clone());
 
@@ -199,7 +202,9 @@ impl<'a> UntypedIter<'a> {
                             // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
-                            let tail = self.reader.range(self.reader.offset()+2..self.reader.len())?; // safe to take tail, since this reader is always in memory 
+                            let tail = self
+                                .reader
+                                .range(self.reader.offset() + 2..self.reader.len())?; // safe to take tail, since this reader is always in memory 
                             let mut find_reader = Reader::from_slice(tail.as_ref());
 
                             while !find_reader.at_end() {

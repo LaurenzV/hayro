@@ -30,7 +30,9 @@ pub enum PdfData {
 impl Debug for PdfData {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            PdfData::Buffer(as_ref) => write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len()),
+            PdfData::Buffer(as_ref) => {
+                write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len())
+            }
             #[cfg(feature = "streaming")]
             PdfData::Streaming(mutex) => write!(f, "PdfData::Streaming({:?})", mutex),
         }
@@ -83,7 +85,10 @@ impl PdfData {
 
     /// create reader from pdf-data with cache
     #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-    pub(crate) fn reader_with_cache<'c>(&self, cache: Option<&'c mut ReaderCache>) -> Reader<'_, 'c> {
+    pub(crate) fn reader_with_cache<'c>(
+        &self,
+        cache: Option<&'c mut ReaderCache>,
+    ) -> Reader<'_, 'c> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
             PdfData::Streaming(read_seek) => match cache {
@@ -110,9 +115,9 @@ pub trait StreamingSource: Debug + Send + Sync + 'static {
     fn len(&self) -> std::io::Result<usize>;
 
     /// Read range of bytes
-    /// 
-    /// Returning `Ok(Some(..))` with read data, 
-    /// `Ok(None)` when provided range is outside of data, 
+    ///
+    /// Returning `Ok(Some(..))` with read data,
+    /// `Ok(None)` when provided range is outside of data,
     /// `Err(..)` when data can't be loaded
     fn read(&self, range: core::ops::Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
 }
@@ -131,7 +136,7 @@ pub struct FileSource {
 #[cfg(feature = "streaming")]
 impl FileSource {
     /// Streaming file source with optional cache
-    /// 
+    ///
     /// * `file` - the file to be read
     /// * `chunk_size` - size of cache chunks (typically 1K, 4K, ...), 0 for no cache
     pub fn new(file: std::fs::File, chunk_size: usize) -> Self {
@@ -146,7 +151,7 @@ impl FileSource {
                 Some((chunk_size, Mutex::new(HashMap::new())))
             } else {
                 None
-            }
+            },
         }
     }
 
@@ -166,7 +171,7 @@ impl FileSource {
         }
         #[cfg(not(unix))]
         {
-            use std::io::{Seek, Read};
+            use std::io::{Read, Seek};
             let mut file = self.file.lock().unwrap();
             file.seek(std::io::SeekFrom::Start(offset))?;
             file.read_exact(&mut buf)?;
@@ -174,7 +179,12 @@ impl FileSource {
         Ok(Some(buf))
     }
 
-    fn read_cached(&self, range: core::ops::Range<usize>, chunk_size: usize, cache: &Mutex<HashMap<usize, Vec<u8>>>) -> std::io::Result<Option<Vec<u8>>> {
+    fn read_cached(
+        &self,
+        range: core::ops::Range<usize>,
+        chunk_size: usize,
+        cache: &Mutex<HashMap<usize, Vec<u8>>>,
+    ) -> std::io::Result<Option<Vec<u8>>> {
         if range.end > self.len {
             return Ok(None);
         }
@@ -193,12 +203,16 @@ impl FileSource {
             let cached = match buffer {
                 hash_map::Entry::Occupied(occupied_entry) => occupied_entry.into_mut(),
                 hash_map::Entry::Vacant(vacant_entry) => {
-                    let read_start = chunk*chunk_size;
+                    let read_start = chunk * chunk_size;
                     let read_end = (read_start + chunk_size).min(self.len);
-                    let data = self.read_direct(read_start..read_end)?
-                        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "reading chunk returned out-of-bounds"))?;
+                    let data = self.read_direct(read_start..read_end)?.ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "reading chunk returned out-of-bounds",
+                        )
+                    })?;
                     vacant_entry.insert(data)
-                },
+                }
             };
 
             let slice = match (chunk == start_chunk, chunk == end_chunk) {
@@ -238,9 +252,13 @@ impl Debug for FileSource {
         f.debug_struct("FileSource")
             .field("file", &file)
             .field("len", &self.len)
-            .field("cache", &self.cache.as_ref().map(|(chunk_size, cache_map)| 
-                (chunk_size, cache_map.lock().unwrap().len())
-            ))
+            .field(
+                "cache",
+                &self
+                    .cache
+                    .as_ref()
+                    .map(|(chunk_size, cache_map)| (chunk_size, cache_map.lock().unwrap().len())),
+            )
             .finish()
     }
 }

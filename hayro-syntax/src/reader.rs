@@ -6,9 +6,9 @@ use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
-pub use crate::byte_reader::{Reader, ByteReader, ReadBytes};
 #[cfg(feature = "streaming")]
 pub use crate::byte_reader::ReaderCache;
+pub use crate::byte_reader::{ByteReader, ReadBytes, Reader};
 
 /// Extension trait for the `Reader` struct.
 pub trait ReaderExt<'a> {

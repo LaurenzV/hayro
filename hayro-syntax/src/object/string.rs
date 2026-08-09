@@ -197,7 +197,7 @@ fn read_literal<'a>(r: &mut Reader<'a, '_>) -> Option<StringInner<'a>> {
         return Some(match data.into() {
             alloc::borrow::Cow::Borrowed(data) => StringInner::Borrowed(data),
             alloc::borrow::Cow::Owned(data) => StringInner::Owned(data.into()),
-        })
+        });
     }
 
     let mut r = Reader::from_read(data);

@@ -28,20 +28,23 @@ impl DateTime {
 
         reader.forward_tag(b"D:")?;
 
-        let read_num = |reader: &mut Reader<'_, '_>, bytes: u8, min: u16, max: u16| -> Option<u16> {
-            if matches!(reader.peek_byte()?, b'-' | b'+' | b'Z') {
-                return None;
-            }
+        let read_num =
+            |reader: &mut Reader<'_, '_>, bytes: u8, min: u16, max: u16| -> Option<u16> {
+                if matches!(reader.peek_byte()?, b'-' | b'+' | b'Z') {
+                    return None;
+                }
 
-            let num = u16::from_str(core::str::from_utf8(reader.read_bytes(bytes as usize)?.as_ref()).ok()?)
+                let num = u16::from_str(
+                    core::str::from_utf8(reader.read_bytes(bytes as usize)?.as_ref()).ok()?,
+                )
                 .ok()?;
 
-            if num < min || num > max {
-                return None;
-            }
+                if num < min || num > max {
+                    return None;
+                }
 
-            Some(num)
-        };
+                Some(num)
+            };
 
         let year = read_num(&mut reader, 4, 0, 9999)?;
         let month = read_num(&mut reader, 2, 1, 12)

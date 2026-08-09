@@ -118,7 +118,8 @@ impl<'a> Dict<'a> {
         T: Readable<'a>,
     {
         let offset = *self.offsets()?.get(key.as_ref())?;
-        Reader::from_read(self.data().clone_range(offset..)).read_with_context::<MaybeRef<T>>(self.ctx())
+        Reader::from_read(self.data().clone_range(offset..))
+            .read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -296,10 +297,10 @@ where
     r.set_marker();
     match parse_dict_with_inner(r, ctx, start_tag, end_tag, on_entry) {
         Some(()) => r.take_marked(),
-        None => { 
-            r.take_marked(); 
+        None => {
+            r.take_marked();
             None
-        },
+        }
     }
 }
 
@@ -1071,7 +1072,10 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 1);
-        assert!(dict.get::<Number>(Name::new_unescaped_slice(b"Hi")).is_some());
+        assert!(
+            dict.get::<Number>(Name::new_unescaped_slice(b"Hi"))
+                .is_some()
+        );
     }
 
     #[test]
@@ -1080,8 +1084,14 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 2);
-        assert!(dict.get::<Number>(Name::new_unescaped_slice(b"Hi")).is_some());
-        assert!(dict.get::<bool>(Name::new_unescaped_slice(b"Second")).is_some());
+        assert!(
+            dict.get::<Number>(Name::new_unescaped_slice(b"Hi"))
+                .is_some()
+        );
+        assert!(
+            dict.get::<bool>(Name::new_unescaped_slice(b"Second"))
+                .is_some()
+        );
     }
 
     #[test]
@@ -1102,7 +1112,10 @@ mod tests {
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
-        assert!(dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Type")).is_some());
+        assert!(
+            dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Type"))
+                .is_some()
+        );
         assert!(
             dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Subtype"))
                 .is_some()
