@@ -570,15 +570,20 @@ impl XRef {
                 ctx.set_in_object_stream(false);
                 
                 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap());
+                let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap().clone());
                 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                let mut r = repr.data.get().reader_with_cache(r_cache.as_mut().map(|g| g.deref_mut()));
+                let mut r = repr.data.get().reader_with_cache(r_cache.as_mut());
                 #[cfg(not(all(feature = "streaming", reader_opt_ext_cache)))]
                 let mut r = repr.data.get().reader();
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
                     if object.id() == &id {
+                        #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
+                        if let Some(r_cache) = r_cache {
+                            // store cache for reuse later
+                            *repr.read_cache.as_ref().unwrap().lock().unwrap().deref_mut() = r_cache;
+                        }
                         return Some(object.get());
                     }
                 } else {
@@ -588,9 +593,6 @@ impl XRef {
                         return None;
                     }
                 };
-
-                #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                drop(r_cache);
 
                 // The xref table is broken, try to repair if not already repaired.
                 if self.is_repaired() {
