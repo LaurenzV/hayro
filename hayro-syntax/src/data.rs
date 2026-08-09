@@ -1,7 +1,5 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
-#[cfg(feature = "streaming")]
-use crate::reader::CustomSource;
 use crate::reader::Reader;
 #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
 use crate::reader::ReaderCache;
@@ -16,15 +14,15 @@ use core::fmt::{Debug, Formatter};
 /// A container for the bytes of a PDF file.
 #[derive(Clone)]
 pub enum PdfData {
-    /// Buffer in memory
+    /// Buffer in memory containing the PDF file
     #[cfg(feature = "std")]
     Buffer(Arc<dyn AsRef<[u8]> + Send + Sync>),
-    /// Buffer in memory
+    /// Buffer in memory containing the PDF file
     #[cfg(not(feature = "std"))]
     Buffer(Arc<dyn AsRef<[u8]>>),
-    /// Custom Reader
+    /// Trait providing data when needed
     #[cfg(feature = "streaming")]
-    Custom(Arc<dyn CustomSource>),
+    Streaming(Arc<dyn StreamingSource>),
 }
 
 impl Debug for PdfData {
@@ -32,7 +30,7 @@ impl Debug for PdfData {
         match self {
             PdfData::Buffer(as_ref) => write!(f, "PdfData::Buffer({})", as_ref.as_ref().as_ref().len()),
             #[cfg(feature = "streaming")]
-            PdfData::Custom(mutex) => write!(f, "PdfData::Custom({:?})", mutex),
+            PdfData::Streaming(mutex) => write!(f, "PdfData::Streaming({:?})", mutex),
         }
     }
 }
@@ -58,49 +56,63 @@ impl From<Vec<u8>> for PdfData {
 }
 
 #[cfg(feature = "streaming")]
-impl<T: CustomSource> From<T> for PdfData {
+impl<T: StreamingSource> From<T> for PdfData {
     fn from(data: T) -> Self {
-        Self::Custom(Arc::new(data))
+        Self::Streaming(Arc::new(data))
     }
 }
 
 #[cfg(feature = "streaming")]
-impl From<Arc<dyn CustomSource>> for PdfData {
-    fn from(data: Arc<dyn CustomSource>) -> Self {
-        Self::Custom(data)
+impl From<Arc<dyn StreamingSource>> for PdfData {
+    fn from(data: Arc<dyn StreamingSource>) -> Self {
+        Self::Streaming(data)
     }
 }
 
 impl PdfData {
     /// create reader from pdf-data
-    pub fn reader(&self) -> Reader<'_, '_> {
+    pub(crate) fn reader(&self) -> Reader<'_, '_> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
             #[cfg(feature = "streaming")]
-            PdfData::Custom(read_seek) => Reader::from_custom_source(read_seek.clone()),
+            PdfData::Streaming(read_seek) => Reader::from_streaming_source(read_seek.clone()),
         }
     }
 
     /// create reader from pdf-data with cache
     #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-    pub fn reader_with_cache<'c>(&self, cache: Option<&'c mut ReaderCache>) -> Reader<'_, 'c> {
+    pub(crate) fn reader_with_cache<'c>(&self, cache: Option<&'c mut ReaderCache>) -> Reader<'_, 'c> {
         match self {
             PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
-            PdfData::Custom(read_seek) => match cache {
-                Some(cache) => Reader::from_custom_source_with_cache(read_seek.clone(), cache),
-                None => Reader::from_custom_source(read_seek.clone()),
+            PdfData::Streaming(read_seek) => match cache {
+                Some(cache) => Reader::from_streaming_source_with_cache(read_seek.clone(), cache),
+                None => Reader::from_streaming_source(read_seek.clone()),
             },
         }
     }
 
     /// instantiates cache if necessary
     #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-    pub fn make_cache(&self) -> Option<ReaderCache> {
+    pub(crate) fn make_cache(&self) -> Option<ReaderCache> {
         match self {
             PdfData::Buffer(_) => None,
-            PdfData::Custom(_) => Some(ReaderCache::default()),
+            PdfData::Streaming(_) => Some(ReaderCache::default()),
         }
     }
+}
+
+/// Source providing data as needed
+#[cfg(feature = "streaming")]
+pub trait StreamingSource: Debug + Send + Sync + 'static {
+    /// Total length of data in bytes
+    fn len(&self) -> std::io::Result<usize>;
+
+    /// Read range of bytes
+    /// 
+    /// Returning `Ok(Some(..))` with read data, 
+    /// `Ok(None)` when provided range is outside of data, 
+    /// `Err(..)` when data can't be loaded
+    fn read(&self, range: core::ops::Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
 }
 
 /// A structure for storing the data of the PDF.

@@ -8,6 +8,8 @@ use core::ops::RangeBounds;
 use alloc::borrow::Cow;
 
 #[cfg(feature = "streaming")]
+use crate::data::StreamingSource;
+#[cfg(feature = "streaming")]
 use crate::sync::Arc;
 use crate::util;
 
@@ -239,23 +241,27 @@ pub type Reader<'a, 'c> = SliceReader<'a>;
 #[derive(Clone, Debug)]
 pub enum Reader<'a, 'c> {
     Slice(SliceReader<'a>),
-    Custom(CustomReader<'c>),
+    Streaming(StreamingReader<'c>),
 }
 
 #[cfg(feature = "streaming")]
 impl <'a, 'c> Reader<'a, 'c> {
+    /// creates reader from `ReadBytes`
     pub fn from_read(read: ReadBytes<'a>) -> Self {
         Reader::Slice(SliceReader::new(read))
     }
+    /// creates reader from byte-slice
     pub fn from_slice(slice: &'a [u8]) -> Self {
         Reader::Slice(SliceReader::new(slice.into()))
     }
-    pub fn from_custom_source(read_seek: Arc<dyn CustomSource>) -> Self {
-        Reader::Custom(CustomReader::new(read_seek))
+    /// creates reader from `StreamingSource` implementation
+    pub fn from_streaming_source(read_seek: Arc<dyn StreamingSource>) -> Self {
+        Reader::Streaming(StreamingReader::new(read_seek))
     }
+    /// creates reader from `StreamingSource` implementation with cache
     #[cfg(reader_opt_ext_cache)]
-    pub fn from_custom_source_with_cache(read_seek: Arc<dyn CustomSource>, cache: &'c mut ReaderCache) -> Self {
-        Reader::Custom(CustomReader::new_with_cache(read_seek, cache))
+    pub fn from_streaming_source_with_cache(read_seek: Arc<dyn StreamingSource>, cache: &'c mut ReaderCache) -> Self {
+        Reader::Streaming(StreamingReader::new_with_cache(read_seek, cache))
     }
 }
 
@@ -265,7 +271,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn at_end(&self) -> bool {
         match self {
             Reader::Slice(reader) => reader.at_end(),
-            Reader::Custom(reader) => reader.at_end(),
+            Reader::Streaming(reader) => reader.at_end(),
         }
     }
 
@@ -273,7 +279,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn jump_to_end(&mut self) {
         match self {
             Reader::Slice(reader) => reader.jump_to_end(),
-            Reader::Custom(reader) => reader.jump_to_end(),
+            Reader::Streaming(reader) => reader.jump_to_end(),
         }
     }
 
@@ -281,7 +287,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn jump(&mut self, offset: usize) {
         match self {
             Reader::Slice(reader) => reader.jump(offset),
-            Reader::Custom(reader) => reader.jump(offset),
+            Reader::Streaming(reader) => reader.jump(offset),
         }
     }
 
@@ -289,7 +295,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn len(&self) -> usize {
         match self {
             Reader::Slice(reader) => reader.len(),
-            Reader::Custom(reader) => reader.len(),
+            Reader::Streaming(reader) => reader.len(),
         }
     }
 
@@ -297,7 +303,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn is_empty(&self) -> bool {
         match self {
             Reader::Slice(reader) => reader.is_empty(),
-            Reader::Custom(reader) => reader.is_empty(),
+            Reader::Streaming(reader) => reader.is_empty(),
         }
     }
 
@@ -305,7 +311,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn range(&mut self, range: Range<usize>) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.range(range),
-            Reader::Custom(reader) => reader.range(range),
+            Reader::Streaming(reader) => reader.range(range),
         }
     }
 
@@ -313,7 +319,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn offset(&self) -> usize {
         match self {
             Reader::Slice(reader) => reader.offset(),
-            Reader::Custom(reader) => reader.offset(),
+            Reader::Streaming(reader) => reader.offset(),
         }
     }
 
@@ -321,7 +327,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.read_bytes(len),
-            Reader::Custom(reader) => reader.read_bytes(len),
+            Reader::Streaming(reader) => reader.read_bytes(len),
         }
     }
 
@@ -329,7 +335,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn read_byte(&mut self) -> Option<u8> {
         match self {
             Reader::Slice(reader) => reader.read_byte(),
-            Reader::Custom(reader) => reader.read_byte(),
+            Reader::Streaming(reader) => reader.read_byte(),
         }
     }
 
@@ -337,7 +343,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn skip_bytes(&mut self, len: usize) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.skip_bytes(len),
-            Reader::Custom(reader) => reader.skip_bytes(len),
+            Reader::Streaming(reader) => reader.skip_bytes(len),
         }
     }
 
@@ -345,7 +351,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn peek_bytes(&mut self, len: usize) -> Option<ReadBytes<'_>> {
         match self {
             Reader::Slice(reader) => reader.peek_bytes(len),
-            Reader::Custom(reader) => reader.peek_bytes(len),
+            Reader::Streaming(reader) => reader.peek_bytes(len),
         }
     }
 
@@ -353,7 +359,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn peek_byte(&mut self) -> Option<u8> {
         match self {
             Reader::Slice(reader) => reader.peek_byte(),
-            Reader::Custom(reader) => reader.peek_byte(),
+            Reader::Streaming(reader) => reader.peek_byte(),
         }
     }
 
@@ -361,7 +367,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn eat(&mut self, f: impl Fn(u8) -> bool) -> Option<u8> {
         match self {
             Reader::Slice(reader) => reader.eat(f),
-            Reader::Custom(reader) => reader.eat(f),
+            Reader::Streaming(reader) => reader.eat(f),
         }
     }
 
@@ -369,7 +375,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn forward(&mut self) {
         match self {
             Reader::Slice(reader) => reader.forward(),
-            Reader::Custom(reader) => reader.forward(),
+            Reader::Streaming(reader) => reader.forward(),
         }
     }
 
@@ -377,7 +383,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn forward_if(&mut self, f: impl Fn(u8) -> bool) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.forward_if(f),
-            Reader::Custom(reader) => reader.forward_if(f),
+            Reader::Streaming(reader) => reader.forward_if(f),
         }
     }
 
@@ -385,7 +391,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn forward_while_1(&mut self, f: impl Fn(u8) -> bool) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.forward_while_1(f),
-            Reader::Custom(reader) => reader.forward_while_1(f),
+            Reader::Streaming(reader) => reader.forward_while_1(f),
         }
     }
 
@@ -393,7 +399,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn forward_tag(&mut self, tag: &[u8]) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.forward_tag(tag),
-            Reader::Custom(reader) => reader.forward_tag(tag),
+            Reader::Streaming(reader) => reader.forward_tag(tag),
         }
     }
 
@@ -401,7 +407,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn forward_while(&mut self, f: impl Fn(u8) -> bool) {
         match self {
             Reader::Slice(reader) => reader.forward_while(f),
-            Reader::Custom(reader) => reader.forward_while(f),
+            Reader::Streaming(reader) => reader.forward_while(f),
         }
     }
 
@@ -409,7 +415,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn peek_tag(&mut self, tag: &[u8]) -> Option<()> {
         match self {
             Reader::Slice(reader) => reader.peek_tag(tag),
-            Reader::Custom(reader) => reader.peek_tag(tag),
+            Reader::Streaming(reader) => reader.peek_tag(tag),
         }
     }
 
@@ -417,7 +423,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn read_u16(&mut self) -> Option<u16> {
         match self {
             Reader::Slice(reader) => reader.read_u16(),
-            Reader::Custom(reader) => reader.read_u16(),
+            Reader::Streaming(reader) => reader.read_u16(),
         }
     }
 
@@ -425,7 +431,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn read_u32(&mut self) -> Option<u32> {
         match self {
             Reader::Slice(reader) => reader.read_u32(),
-            Reader::Custom(reader) => reader.read_u32(),
+            Reader::Streaming(reader) => reader.read_u32(),
         }
     }
 
@@ -433,7 +439,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn read_u64(&mut self) -> Option<u64> {
         match self {
             Reader::Slice(reader) => reader.read_u64(),
-            Reader::Custom(reader) => reader.read_u64(),
+            Reader::Streaming(reader) => reader.read_u64(),
         }
     }
     
@@ -441,7 +447,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn find_needle(&mut self, needle: &[u8]) -> Option<usize> {
         match self {
             Reader::Slice(reader) => reader.find_needle(needle),
-            Reader::Custom(reader) => reader.find_needle(needle),
+            Reader::Streaming(reader) => reader.find_needle(needle),
         }
     }
     
@@ -449,7 +455,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
         match self {
             Reader::Slice(reader) => reader.findr_needle(needle),
-            Reader::Custom(reader) => reader.findr_needle(needle),
+            Reader::Streaming(reader) => reader.findr_needle(needle),
         }
     }
     
@@ -457,7 +463,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn set_marker(&mut self) {
         match self {
             Reader::Slice(reader) => reader.set_marker(),
-            Reader::Custom(reader) => reader.set_marker(),
+            Reader::Streaming(reader) => reader.set_marker(),
         }
     }
     
@@ -465,7 +471,7 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
     fn take_marked(&mut self) -> Option<ReadBytes<'a>> {
         match self {
             Reader::Slice(reader) => reader.take_marked(),
-            Reader::Custom(reader) => reader.take_marked(),
+            Reader::Streaming(reader) => reader.take_marked(),
         }
     }
 }
@@ -709,7 +715,7 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     }
 }
 
-// Configuration for CustomReader  
+// Configuration for StreamingReader  
 
 /// size of cache buffers
 #[cfg(feature = "streaming")]
@@ -720,8 +726,8 @@ const BUFFER_COUNT: usize = 3;
 
 #[derive(Clone, Debug)]
 #[cfg(feature = "streaming")]
-pub struct CustomReader<'c> {
-    data: Arc<dyn CustomSource>,
+pub struct StreamingReader<'c> {
+    data: Arc<dyn StreamingSource>,
     offset: usize,
     len: usize,
     marker: Option<RecordingMarker>,
@@ -740,8 +746,8 @@ struct RecordingMarker {
 }
 
 #[cfg(feature = "streaming")]
-impl<'c> CustomReader<'c> {
-    fn new(data: Arc<dyn CustomSource>) -> Self {
+impl<'c> StreamingReader<'c> {
+    fn new(data: Arc<dyn StreamingSource>) -> Self {
         let len = data.len().unwrap();
         Self {
             data: data,
@@ -753,7 +759,7 @@ impl<'c> CustomReader<'c> {
     }
 
     #[cfg(reader_opt_ext_cache)]
-    fn new_with_cache(data: Arc<dyn CustomSource>, cache: &'c mut ReaderCache) -> Self {
+    fn new_with_cache(data: Arc<dyn StreamingSource>, cache: &'c mut ReaderCache) -> Self {
         let len = data.len().unwrap();
         Self {
             data: data,
@@ -807,7 +813,7 @@ impl<'c> CustomReader<'c> {
 }
 
 #[cfg(feature = "streaming")]
-impl ByteReader<'static> for CustomReader<'_> {
+impl ByteReader<'static> for StreamingReader<'_> {
     #[inline]
     fn at_end(&self) -> bool {
         self.offset >= self.len
@@ -1278,12 +1284,6 @@ fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usiz
         core::ops::Bound::Unbounded => len,
     };
     start..end
-}
-
-#[cfg(feature = "streaming")]
-pub trait CustomSource: Debug + Send + Sync + 'static {
-    fn len(&self) -> std::io::Result<usize>;
-    fn read(&self, range: Range<usize>) -> std::io::Result<Option<Vec<u8>>>;
 }
 
 #[cfg(test)]
