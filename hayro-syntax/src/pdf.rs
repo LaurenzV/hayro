@@ -110,13 +110,16 @@ impl Pdf {
 }
 
 fn find_version(data: &PdfData) -> Option<PdfVersion> {
-    let mut r = data.reader(); // TODO: limit at 2000
+    let mut r = data.reader();
 
-    while r.forward_tag(b"%PDF-").is_none() {
-        r.read_byte()?;
+    for _ in 0..2000 {
+        if r.forward_tag(b"%PDF-").is_some() {
+            return PdfVersion::from_bytes(r.read_bytes(3)?.as_ref());
+        }
+        r.skip_bytes(1)?;
     }
 
-    PdfVersion::from_bytes(r.read_bytes(3)?.as_ref())
+    None
 }
 
 /// The version of a PDF document.
