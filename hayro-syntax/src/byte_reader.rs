@@ -1025,6 +1025,9 @@ impl ByteReader<'static> for StreamingReader<'_> {
                 Some(chunk_pos) => return Some(chunk_pos + pos - prev_size),
                 None => (),
             }
+            if chunk_end == self.len {
+                return None;
+            }
             chunk = chunk[chunk.len() - needle.len()..].to_vec();
         }
     }
