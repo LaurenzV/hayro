@@ -6,7 +6,7 @@ use crate::reader::Reader;
 use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
 
 impl Skippable for bool {
-    fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         match r.peek_byte()? {
             b't' => r.forward_tag(b"true"),
             b'f' => r.forward_tag(b"false"),
@@ -16,7 +16,7 @@ impl Skippable for bool {
 }
 
 impl Readable<'_> for bool {
-    fn read(r: &mut Reader<'_, '_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         match r.skip_read::<Self>(true)?.as_ref() {
             b"true" => Some(true),
             b"false" => Some(false),

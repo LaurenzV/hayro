@@ -76,13 +76,13 @@ impl Deref for Operator<'_> {
 }
 
 impl Skippable for Operator<'_> {
-    fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         skip_name_like(r, false).map(|_| ())
     }
 }
 
 impl<'a> Readable<'a> for Operator<'a> {
-    fn read(r: &mut Reader<'a, '_>, _: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         skip_name_like(r, false)?;
         let end = r.offset();
@@ -99,7 +99,7 @@ impl<'a> Readable<'a> for Operator<'a> {
 /// An iterator over operators in the PDF content streams, providing raw access to the instructions.
 #[derive(Clone)]
 pub struct UntypedIter<'a> {
-    reader: Reader<'a, 'static>,
+    reader: Reader<'a>,
     stack: Stack<'a>,
     operator: Option<Operator<'a>>,
 }

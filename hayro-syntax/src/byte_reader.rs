@@ -231,29 +231,20 @@ pub trait ByteReader<'a> {
 
     /// Returns the index of the last occurrence of the given needle
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize>;
-
-    /// Sets marker to read from, the results can be retrieved with `take_marked`.
-    /// Only one marker may be set at once, will panic if marker has already been set.
-    fn set_marker(&mut self);
-
-    /// Removes marker and returns content from marker to current position.
-    /// None if current offset is before current marker.
-    /// Panics if marker has not been set.
-    fn take_marked(&mut self) -> Option<ReadBytes<'a>>;
 }
 
 #[cfg(not(feature = "streaming"))]
-pub type Reader<'a, 'c> = SliceReader<'a>;
+pub type Reader<'a> = SliceReader<'a>;
 
 #[cfg(feature = "streaming")]
 #[derive(Clone, Debug)]
-pub enum Reader<'a, 'c> {
+pub enum Reader<'a> {
     Slice(SliceReader<'a>),
-    Streaming(StreamingReader<'c>),
+    Streaming(StreamingReader),
 }
 
 #[cfg(feature = "streaming")]
-impl<'a, 'c> Reader<'a, 'c> {
+impl<'a> Reader<'a> {
     /// creates reader from byte-slice
     pub fn new(slice: &'a [u8]) -> Self {
         Reader::Slice(SliceReader::new(slice))
@@ -266,18 +257,10 @@ impl<'a, 'c> Reader<'a, 'c> {
     pub fn from_streaming_source(read_seek: Arc<dyn StreamingSource>) -> Self {
         Reader::Streaming(StreamingReader::new(read_seek))
     }
-    /// creates reader from `StreamingSource` implementation with cache
-    #[cfg(reader_opt_ext_cache)]
-    pub fn from_streaming_source_with_cache(
-        read_seek: Arc<dyn StreamingSource>,
-        cache: &'c mut ReaderCache,
-    ) -> Self {
-        Reader::Streaming(StreamingReader::new_with_cache(read_seek, cache))
-    }
 }
 
 #[cfg(feature = "streaming")]
-impl<'a> ByteReader<'a> for Reader<'a, '_> {
+impl<'a> ByteReader<'a> for Reader<'a> {
     #[inline]
     fn at_end(&self) -> bool {
         match self {
@@ -469,22 +452,6 @@ impl<'a> ByteReader<'a> for Reader<'a, '_> {
             Reader::Streaming(reader) => reader.findr_needle(needle),
         }
     }
-
-    #[inline]
-    fn set_marker(&mut self) {
-        match self {
-            Reader::Slice(reader) => reader.set_marker(),
-            Reader::Streaming(reader) => reader.set_marker(),
-        }
-    }
-
-    #[inline]
-    fn take_marked(&mut self) -> Option<ReadBytes<'a>> {
-        match self {
-            Reader::Slice(reader) => reader.take_marked(),
-            Reader::Streaming(reader) => reader.take_marked(),
-        }
-    }
 }
 
 /// A reader for reading bytes and PDF objects.
@@ -494,8 +461,6 @@ pub struct SliceReader<'a> {
     pub data: ReadBytes<'a>,
     /// The current byte-offset.
     pub offset: usize,
-    /// Current marker.
-    pub marker: Option<usize>,
 }
 
 impl<'a> SliceReader<'a> {
@@ -511,7 +476,6 @@ impl<'a> SliceReader<'a> {
         Self {
             data: read,
             offset: 0,
-            marker: None,
         }
     }
 }
@@ -698,128 +662,45 @@ impl<'a> ByteReader<'a> for SliceReader<'a> {
     fn findr_needle(&mut self, needle: &[u8]) -> Option<usize> {
         util::findr_needle(&self.data[..self.offset], needle)
     }
-
-    #[inline]
-    fn set_marker(&mut self) {
-        if self.marker.is_some() {
-            panic!("marker has already been set")
-        }
-        self.marker = Some(self.offset)
-    }
-
-    #[inline]
-    fn take_marked(&mut self) -> Option<ReadBytes<'a>> {
-        let marker = self.marker.take().expect("marker has not been set");
-        if marker <= self.offset {
-            self.range(marker..self.offset)
-        } else {
-            None
-        }
-    }
 }
 
 // Configuration for StreamingReader
 
-/// size of cache buffers
+/// size of cache buffer
 #[cfg(feature = "streaming")]
 const BUFFER_SIZE: usize = 500;
-/// count of cache buffers
-#[cfg(all(feature = "streaming", reader_opt_multi_buffer))]
-const BUFFER_COUNT: usize = 3;
 
 #[derive(Clone, Debug)]
 #[cfg(feature = "streaming")]
-pub struct StreamingReader<'c> {
+pub struct StreamingReader {
     data: Arc<dyn StreamingSource>,
     offset: usize,
     len: usize,
-    marker: Option<RecordingMarker>,
-    cache: CacheInstance<'c>,
-}
-
-/// Marker object to record bytes behind marker into
-#[cfg(feature = "streaming")]
-#[derive(Clone, Debug)]
-struct RecordingMarker {
-    /// position where marker has been set
-    start: usize,
-    /// data behind marker that has already been read
-    #[cfg(reader_opt_recording_marker)]
-    data: Vec<u8>,
+    cache: ReaderCache,
 }
 
 #[cfg(feature = "streaming")]
-impl<'c> StreamingReader<'c> {
+impl StreamingReader {
     fn new(data: Arc<dyn StreamingSource>) -> Self {
         let len = data.len().unwrap();
         Self {
             data: data,
             offset: 0,
             len: len,
-            marker: None,
-            cache: ReaderCache::default().into(),
-        }
-    }
-
-    #[cfg(reader_opt_ext_cache)]
-    fn new_with_cache(data: Arc<dyn StreamingSource>, cache: &'c mut ReaderCache) -> Self {
-        let len = data.len().unwrap();
-        Self {
-            data: data,
-            offset: 0,
-            len: len,
-            marker: None,
-            cache: cache.into(),
+            cache: ReaderCache::default(),
         }
     }
 
     #[inline]
     fn read_buf(&mut self, range: Range<usize>) -> Option<&[u8]> {
-        self.cache.as_mut().read_buf(range, self.len, |read_range| {
+        self.cache.read_buf(range, self.len, |read_range| {
             self.data.read(read_range).unwrap()
         })
-    }
-
-    /// catches up the marker if needed
-    ///
-    /// * returns `Some` with the offset how far the marker is ahead of the requested position
-    /// * returns `None` if requested position is before marker
-    #[cfg(reader_opt_recording_marker)]
-    fn catch_up_marker(&mut self, pos: usize) -> Option<usize> {
-        let marker = self.marker.as_mut()?;
-        if marker.start > pos {
-            return None;
-        }
-        let marker_end = marker.start + marker.data.len();
-        if marker_end >= pos {
-            return Some(marker_end - pos);
-        }
-
-        let range = marker_end..pos;
-        let read_data = self.range(range)?;
-        self.marker
-            .as_mut()?
-            .data
-            .extend_from_slice(read_data.as_ref());
-        Some(0)
-    }
-
-    /// adds content to marker
-    ///  
-    /// when calling, make sure to have called `catch_up_marker` beforehand and pass the provided offset
-    #[cfg(reader_opt_recording_marker)]
-    fn record_marker(&mut self, data: &[u8], offset: usize) -> Option<()> {
-        if offset >= data.len() {
-            return Some(());
-        }
-        let marker = self.marker.as_mut()?;
-        marker.data.extend_from_slice(&data[offset..]);
-        Some(())
     }
 }
 
 #[cfg(feature = "streaming")]
-impl ByteReader<'static> for StreamingReader<'_> {
+impl ByteReader<'static> for StreamingReader {
     #[inline]
     fn at_end(&self) -> bool {
         self.offset >= self.len
@@ -862,41 +743,15 @@ impl ByteReader<'static> for StreamingReader<'_> {
 
     #[inline]
     fn read_bytes(&mut self, len: usize) -> Option<ReadBytes<'static>> {
-        #[cfg(reader_opt_recording_marker)]
-        let record = if self.marker.is_some() {
-            self.catch_up_marker(self.offset)
-        } else {
-            None
-        };
-
         let read: ReadBytes<'_> = self.peek_bytes(len)?.into_owned().into();
-
-        #[cfg(reader_opt_recording_marker)]
-        if let Some(offset) = record {
-            self.record_marker(read.as_ref(), offset);
-        }
-
         self.offset += len;
         Some(read)
     }
 
     #[inline]
     fn read_byte(&mut self) -> Option<u8> {
-        #[cfg(reader_opt_recording_marker)]
-        let record = if self.marker.is_some() {
-            self.catch_up_marker(self.offset)
-        } else {
-            None
-        };
-
         let v = self.peek_byte()?;
-
-        #[cfg(reader_opt_recording_marker)]
-        if let Some(offset) = record {
-            self.record_marker(&[v], offset);
-        }
         self.offset += 1;
-
         Some(v)
     }
 
@@ -1050,97 +905,12 @@ impl ByteReader<'static> for StreamingReader<'_> {
             prev = chunk[..needle.len().min(chunk.len())].to_vec();
         }
     }
-
-    fn set_marker(&mut self) {
-        if self.marker.is_some() {
-            panic!("marker has already been set")
-        }
-        self.marker = Some(RecordingMarker {
-            start: self.offset,
-            #[cfg(reader_opt_recording_marker)]
-            data: Vec::new(),
-        })
-    }
-
-    fn take_marked(&mut self) -> Option<ReadBytes<'static>> {
-        if self.marker.is_none() {
-            panic!("marker has not been set")
-        }
-
-        #[cfg(reader_opt_recording_marker)]
-        {
-            self.catch_up_marker(self.offset)?;
-            let mut marker = self.marker.take().unwrap();
-            marker.data.truncate(self.offset - marker.start);
-            Some(marker.data.into())
-        }
-        #[cfg(not(reader_opt_recording_marker))]
-        {
-            let marker = self.marker.take().unwrap();
-            self.range(marker.start..self.offset)
-        }
-    }
-}
-
-#[cfg(feature = "streaming")]
-#[derive(Debug)]
-enum CacheInstance<'c> {
-    Owned(ReaderCache),
-    Borrowed(&'c mut ReaderCache),
-}
-
-#[cfg(feature = "streaming")]
-impl From<ReaderCache> for CacheInstance<'static> {
-    fn from(value: ReaderCache) -> Self {
-        Self::Owned(value)
-    }
-}
-
-#[cfg(feature = "streaming")]
-impl<'c> From<&'c mut ReaderCache> for CacheInstance<'c> {
-    fn from(value: &'c mut ReaderCache) -> Self {
-        Self::Borrowed(value)
-    }
-}
-
-#[cfg(feature = "streaming")]
-impl AsRef<ReaderCache> for CacheInstance<'_> {
-    fn as_ref(&self) -> &ReaderCache {
-        match self {
-            CacheInstance::Owned(reader_cache) => reader_cache,
-            CacheInstance::Borrowed(reader_cache) => reader_cache,
-        }
-    }
-}
-
-#[cfg(feature = "streaming")]
-impl AsMut<ReaderCache> for CacheInstance<'_> {
-    fn as_mut<'s>(&'s mut self) -> &'s mut ReaderCache {
-        match self {
-            CacheInstance::Owned(reader_cache) => reader_cache,
-            CacheInstance::Borrowed(reader_cache) => reader_cache,
-        }
-    }
-}
-
-#[cfg(feature = "streaming")]
-impl Clone for CacheInstance<'_> {
-    fn clone(&self) -> Self {
-        CacheInstance::Owned(self.as_ref().clone())
-    }
 }
 
 #[cfg(feature = "streaming")]
 #[derive(Clone, Debug, Default)]
 pub struct ReaderCache {
     /// buffers for accelerating access
-    #[cfg(reader_opt_multi_buffer)]
-    buffers: [CacheBuffer; BUFFER_COUNT],
-    /// LRU counter to fill `CacheBuffer::used` with upon use
-    #[cfg(reader_opt_multi_buffer)]
-    lru_counter: u64,
-    /// buffers for accelerating access
-    #[cfg(not(reader_opt_multi_buffer))]
     buffer: CacheBuffer,
 }
 
@@ -1151,9 +921,6 @@ struct CacheBuffer {
     range: Range<usize>,
     /// actual buffered data
     data: Vec<u8>,
-    /// LRU index, the higher the more recently used
-    #[cfg(reader_opt_multi_buffer)]
-    used: u64,
 }
 
 #[cfg(feature = "streaming")]
@@ -1162,8 +929,6 @@ impl Default for CacheBuffer {
         Self {
             range: 0..0,
             data: Vec::new(),
-            #[cfg(reader_opt_multi_buffer)]
-            used: 0,
         }
     }
 }
@@ -1185,116 +950,22 @@ impl ReaderCache {
             return None;
         }
 
-        #[cfg(reader_opt_multi_buffer)]
-        {
-            let found_hit = self.buffers.iter().enumerate().find_map(|(index, buffer)| {
-                let buf_start = buffer.range.start;
-                let buf_end = buffer.range.end;
-                if range.start >= buf_start && range.end <= buf_end {
-                    Some((index, range.start - buf_start..range.end - buf_start))
-                } else {
-                    None
-                }
-            });
-
-            if let Some((index, range)) = found_hit {
-                let buffer = &mut self.buffers[index];
-                buffer.used = self.lru_counter;
-                self.lru_counter += 1;
-                Some(&buffer.data[range])
-            } else {
-                self.handle_cache_miss(range, data_len, read_data)
-            }
-        }
-        #[cfg(not(reader_opt_multi_buffer))]
-        {
-            let buffer = &mut self.buffer;
-            let buf_start = buffer.range.start;
-            let buf_end = buffer.range.end;
-            if range.start >= buf_start && range.end <= buf_end {
-                Some(&buffer.data[range.start - buf_start..range.end - buf_start])
-            } else {
-                let new_start = range.start;
-                let new_end = (new_start + BUFFER_SIZE).min(data_len);
-                let new_range = new_start..new_end;
-                let bytes = read_data(new_range.clone())?;
-                *buffer = CacheBuffer {
-                    range: new_range,
-                    data: bytes,
-                };
-                Some(&buffer.data[0..(range.end - range.start)])
-            }
-        }
-    }
-
-    #[cfg(reader_opt_multi_buffer)]
-    fn handle_cache_miss(
-        &mut self,
-        range: Range<usize>,
-        data_len: usize,
-        read_data: impl FnOnce(Range<usize>) -> Option<Vec<u8>>,
-    ) -> Option<&[u8]> {
-        let new_start = range.start;
-        let new_end = (new_start + BUFFER_SIZE).min(data_len);
-        let new_range = new_start..new_end;
-        let (cached_start, inner_range, cached_end) = self.get_overlap(new_range.clone());
-        let bytes = if inner_range.is_empty() {
-            let mut bytes = Vec::with_capacity(range.len());
-            bytes.extend_from_slice(cached_start);
-            bytes.extend_from_slice(cached_end);
-            bytes
+        let buffer = &mut self.buffer;
+        let buf_start = buffer.range.start;
+        let buf_end = buffer.range.end;
+        if range.start >= buf_start && range.end <= buf_end {
+            Some(&buffer.data[range.start - buf_start..range.end - buf_start])
         } else {
-            let read_bytes = read_data(inner_range)?;
-            if !cached_start.is_empty() || !cached_end.is_empty() {
-                let mut bytes = Vec::with_capacity(range.len());
-                bytes.extend_from_slice(cached_start);
-                bytes.extend(read_bytes);
-                bytes.extend_from_slice(cached_end);
-                bytes
-            } else {
-                read_bytes
-            }
-        };
-        let buffer = self
-            .buffers
-            .iter_mut()
-            .min_by(|a, b| a.used.cmp(&b.used))
-            .unwrap();
-        *buffer = CacheBuffer {
-            range: new_range,
-            data: bytes,
-            used: self.lru_counter,
-        };
-        self.lru_counter += 1;
-        Some(&buffer.data[0..(range.end - range.start)])
-    }
-
-    #[cfg(reader_opt_multi_buffer)]
-    #[inline]
-    fn get_overlap(&self, range: Range<usize>) -> (&[u8], Range<usize>, &[u8]) {
-        let start = self
-            .buffers
-            .iter()
-            .filter(|b| !range.contains(&b.range.start) && range.contains(&b.range.end))
-            .max_by(|a, b| a.range.end.cmp(&b.range.end))
-            .map(|b| &b.data[(range.start - b.range.start)..])
-            .unwrap_or_default();
-        let mut end = self
-            .buffers
-            .iter()
-            .filter(|b| range.contains(&b.range.start) && !range.contains(&b.range.end))
-            .min_by(|a, b| a.range.start.cmp(&b.range.start))
-            .map(|b| &b.data[..(b.data.len() - (b.range.end - range.end))])
-            .unwrap_or_default();
-
-        if start.len() + end.len() > range.len() {
-            // start and end are overlapping, truncate end
-            let overlap = start.len() + end.len() - range.len();
-            end = &end[overlap..];
+            let new_start = range.start;
+            let new_end = (new_start + BUFFER_SIZE).min(data_len);
+            let new_range = new_start..new_end;
+            let bytes = read_data(new_range.clone())?;
+            *buffer = CacheBuffer {
+                range: new_range,
+                data: bytes,
+            };
+            Some(&buffer.data[0..(range.end - range.start)])
         }
-
-        let inner_range = (range.start + start.len())..(range.end - end.len());
-        (start, inner_range, end)
     }
 }
 

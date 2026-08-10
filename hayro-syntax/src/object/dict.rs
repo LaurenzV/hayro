@@ -174,7 +174,7 @@ impl Display for Dict<'_> {
 }
 
 impl Skippable for Dict<'_> {
-    fn skip(r: &mut Reader<'_, '_>, is_content_stream: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.forward_tag(b"<<")?;
 
         loop {
@@ -202,13 +202,13 @@ impl Skippable for Dict<'_> {
 }
 
 impl<'a> Readable<'a> for Dict<'a> {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         read_inner(r, ctx, Some(b"<<"), b">>")
     }
 }
 
 fn read_inner<'a>(
-    r: &mut Reader<'a, '_>,
+    r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
@@ -251,7 +251,7 @@ pub(crate) struct DictProbe<'a> {
 // the dictionaries we need without allocating the whole hash map.
 // If the above TODOs are ever resolved, we can probably remove this method.
 pub(crate) fn probe_dict<'a>(
-    r: &mut Reader<'a, '_>,
+    r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
@@ -284,34 +284,14 @@ pub(crate) fn probe_dict<'a>(
 }
 
 fn parse_dict_with<'a, F>(
-    r: &mut Reader<'a, '_>,
-    ctx: &ReaderContext<'a>,
-    start_tag: Option<&[u8]>,
-    end_tag: &[u8],
-    on_entry: F,
-) -> Option<ReadBytes<'a>>
-where
-    F: FnMut(Name<'a>, usize, &Reader<'a, '_>) -> Option<()>,
-{
-    r.set_marker();
-    match parse_dict_with_inner(r, ctx, start_tag, end_tag, on_entry) {
-        Some(()) => r.take_marked(),
-        None => {
-            r.take_marked();
-            None
-        }
-    }
-}
-
-fn parse_dict_with_inner<'a, F>(
-    r: &mut Reader<'a, '_>,
+    r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
     mut on_entry: F,
-) -> Option<()>
+) -> Option<ReadBytes<'a>>
 where
-    F: FnMut(Name<'a>, usize, &Reader<'a, '_>) -> Option<()>,
+    F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
 {
     let start_offset = r.offset();
 
@@ -326,7 +306,7 @@ where
         // Normal dictionaries end with '>>', inline image dictionaries end with BD.
         if let Some(()) = r.peek_tag(end_tag) {
             r.forward_tag(end_tag)?;
-            break Some(());
+            break r.range(start_offset..r.offset());
         } else {
             let Some(name) = r.read_without_context::<Name<'_>>() else {
                 if start_tag.is_some() {
@@ -377,7 +357,7 @@ impl<'a> InlineImageDict<'a> {
 }
 
 impl<'a> Readable<'a> for InlineImageDict<'a> {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         Some(Self(read_inner(r, ctx, None, b"ID")?))
     }
 }

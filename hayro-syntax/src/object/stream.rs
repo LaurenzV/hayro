@@ -206,7 +206,7 @@ impl Display for Stream<'_> {
 }
 
 impl Skippable for Stream<'_> {
-    fn skip(_: &mut Reader<'_, '_>, _: bool) -> Option<()> {
+    fn skip(_: &mut Reader<'_>, _: bool) -> Option<()> {
         // A stream can never appear in a dict/array, so it should never be skipped.
         warn!("attempted to skip a stream object");
 
@@ -215,7 +215,7 @@ impl Skippable for Stream<'_> {
 }
 
 impl<'a> Readable<'a> for Stream<'a> {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 
         if dict.contains_key(F) {
@@ -293,7 +293,7 @@ impl FilterResult<'_> {
     }
 }
 
-fn parse_proper<'a>(r: &mut Reader<'a, '_>, dict: &Dict<'a>) -> Option<Stream<'a>> {
+fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     let length = dict.get::<u32>(LENGTH)?;
 
     r.skip_white_spaces_and_comments();
@@ -308,7 +308,7 @@ fn parse_proper<'a>(r: &mut Reader<'a, '_>, dict: &Dict<'a>) -> Option<Stream<'a
     Some(Stream::new(data, dict.clone()))
 }
 
-fn parse_fallback<'a>(r: &mut Reader<'a, '_>, dict: &Dict<'a>) -> Option<Stream<'a>> {
+fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     let stream_offset = r.find_needle(b"stream")?;
     r.jump(stream_offset);
     r.forward_tag(b"stream")?;

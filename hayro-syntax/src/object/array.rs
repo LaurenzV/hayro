@@ -82,7 +82,7 @@ impl Display for Array<'_> {
 object!(Array<'a>, Array);
 
 impl Skippable for Array<'_> {
-    fn skip(r: &mut Reader<'_, '_>, is_content_stream: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.forward_tag(b"[")?;
 
         loop {
@@ -106,7 +106,7 @@ impl Default for Array<'_> {
 }
 
 impl<'a> Readable<'a> for Array<'a> {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let bytes = r.skip_read::<Array<'_>>(ctx.in_content_stream())?;
 
         Some(Self {
@@ -118,7 +118,7 @@ impl<'a> Readable<'a> for Array<'a> {
 
 /// An iterator over the items of an array.
 pub struct ArrayIter<'a> {
-    reader: Reader<'a, 'static>,
+    reader: Reader<'a>,
     ctx: ReaderContext<'a>,
 }
 
@@ -178,7 +178,7 @@ where
 
 /// An iterator over the array that allows reading a different object each time.
 pub struct FlexArrayIter<'a> {
-    reader: Reader<'a, 'static>,
+    reader: Reader<'a>,
     ctx: ReaderContext<'a>,
 }
 
@@ -247,7 +247,7 @@ where
 }
 
 impl<'a, T: ObjectLike<'a> + Copy + Default, const C: usize> Readable<'a> for [T; C] {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }
@@ -275,7 +275,7 @@ impl<'a, T: ObjectLike<'a>> TryFrom<Object<'a>> for Vec<T> {
 }
 
 impl<'a, T: ObjectLike<'a>> Readable<'a> for Vec<T> {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }
@@ -309,7 +309,7 @@ impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> TryFr
 impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> Readable<'a>
     for SmallVec<T>
 {
-    fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }

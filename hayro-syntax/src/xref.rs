@@ -16,12 +16,8 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
-#[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-use crate::reader::ReaderCache;
 use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt};
 use crate::reader::{ReadBytes, Reader};
-#[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-use crate::sync::Mutex;
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
 use crate::{PdfData, object};
@@ -31,8 +27,6 @@ use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
 use core::ops::Deref;
-#[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-use core::ops::DerefMut;
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -291,12 +285,8 @@ impl XRef {
         // and then populate the data.
         let trailer_data = TrailerData::dummy();
 
-        #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-        let cache = data.make_cache();
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
             data: Arc::new(Data::new(data)),
-            #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-            read_cache: cache.map(|c| Arc::new(Mutex::new(c))),
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             decryptor: Arc::new(Decryptor::None),
             has_ocgs: false,
@@ -567,27 +557,11 @@ impl XRef {
             EntryType::Normal(offset) => {
                 ctx.set_in_object_stream(false);
 
-                #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                let mut r_cache = repr.read_cache.as_ref().map(|c| c.lock().unwrap().clone());
-                #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                let mut r = repr.data.get().reader_with_cache(r_cache.as_mut());
-                #[cfg(not(all(feature = "streaming", reader_opt_ext_cache)))]
                 let mut r = repr.data.get().reader();
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
                     if object.id() == &id {
-                        #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-                        if let Some(r_cache) = r_cache {
-                            // store cache for reuse later
-                            *repr
-                                .read_cache
-                                .as_ref()
-                                .unwrap()
-                                .lock()
-                                .unwrap()
-                                .deref_mut() = r_cache;
-                        }
                         return Some(object.get());
                     }
                 } else {
@@ -701,8 +675,6 @@ impl TrailerData {
 #[derive(Debug, Clone)]
 struct SomeRepr {
     data: Arc<Data>,
-    #[cfg(all(feature = "streaming", reader_opt_ext_cache))]
-    read_cache: Option<Arc<Mutex<ReaderCache>>>,
     map: Arc<RwLock<MapRepr>>,
     metadata: Arc<Metadata>,
     decryptor: Arc<Decryptor>,
@@ -813,7 +785,7 @@ pub(super) struct SubsectionHeader {
 }
 
 impl Readable<'_> for SubsectionHeader {
-    fn read(r: &mut Reader<'_, '_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.skip_white_spaces();
         let start = r.read_without_context::<u32>()?;
         r.skip_white_spaces();
@@ -827,7 +799,7 @@ impl Readable<'_> for SubsectionHeader {
 /// Populate the xref table, and return the trailer dict.
 fn populate_from_xref_table<'a>(
     data: &PdfData,
-    reader: &mut Reader<'a, '_>,
+    reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
 ) -> Option<ReadBytes<'a>> {
@@ -880,7 +852,7 @@ fn populate_from_xref_table<'a>(
 
 fn populate_from_xref_stream<'a>(
     data: &PdfData,
-    reader: &mut Reader<'a, '_>,
+    reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
     visited: &mut BTreeSet<usize>,
 ) -> Option<ReadBytes<'a>> {
@@ -965,7 +937,7 @@ fn xref_stream_num(data: &[u8]) -> Option<u32> {
 }
 
 fn xref_stream_subsection<'a>(
-    xref_reader: &mut Reader<'a, '_>,
+    xref_reader: &mut Reader<'a>,
     start: u32,
     num_elements: u32,
     f1_len: u8,
@@ -1038,7 +1010,7 @@ fn xref_stream_subsection<'a>(
 }
 
 fn read_xref_table_trailer<'a>(
-    reader: &mut Reader<'a, '_>,
+    reader: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
 ) -> Option<Dict<'a>> {
     reader.skip_white_spaces();
@@ -1057,11 +1029,11 @@ fn read_xref_table_trailer<'a>(
     reader.read_with_context::<Dict<'_>>(ctx)
 }
 
-fn get_decryptor<'a>(trailer_dict: &Dict<'a>, password: &[u8]) -> Result<Decryptor, XRefError> {
-    if let Some(encryption_dict) = trailer_dict.get::<Dict<'a>>(ENCRYPT) {
+fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, XRefError> {
+    if let Some(encryption_dict) = trailer_dict.get::<Dict<'_>>(ENCRYPT) {
         let id = if let Some(id) = trailer_dict
-            .get::<Array<'a>>(ID)
-            .and_then(|a| a.flex_iter().next::<object::String<'a>>())
+            .get::<Array<'_>>(ID)
+            .and_then(|a| a.flex_iter().next::<object::String<'_>>())
         {
             id.to_vec()
         } else {

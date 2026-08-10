@@ -65,7 +65,7 @@ pub(crate) fn is_eol_character(char: u8) -> bool {
 pub(crate) struct Comment<'a>(pub(crate) ReadBytes<'a>);
 
 impl Skippable for Comment<'_> {
-    fn skip(r: &mut Reader<'_, '_>, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.forward_tag(b"%")?;
         r.forward_while(|b| !is_eol_character(b));
 
@@ -74,7 +74,7 @@ impl Skippable for Comment<'_> {
 }
 
 impl<'a> Readable<'a> for Comment<'a> {
-    fn read(r: &mut Reader<'a, '_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext<'_>) -> Option<Self> {
         let bytes = r.skip_read::<Comment<'_>>(false)?;
         let bytes = bytes.clone_range(1..bytes.len());
 
