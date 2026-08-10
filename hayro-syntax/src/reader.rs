@@ -241,7 +241,7 @@ impl<'a> ReaderContext<'a> {
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a, '_>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
-        let mut r = Reader::from_slice(b);
+        let mut r = Reader::new(b);
         Self::read(&mut r, &ReaderContext::dummy())
     }
 }

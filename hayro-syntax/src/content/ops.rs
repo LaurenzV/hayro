@@ -318,7 +318,7 @@ f
                 BeginMarkedContentWithProperties(name, object),
             )) => {
                 assert_eq!(name.as_ref(), b"Span");
-                assert_eq!(object, &Object::Name(Name::new_unescaped_slice(b"Name")));
+                assert_eq!(object, &Object::Name(Name::new_unescaped(b"Name")));
             }
             other => panic!("unexpected instruction: {other:?}"),
         }

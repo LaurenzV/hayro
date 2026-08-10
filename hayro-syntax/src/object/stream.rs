@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn display() {
-        let mut reader = Reader::from_slice(b"<< /Length 3 >> stream\nabc\nendstream");
+        let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
         let stream = reader
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn stream() {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::from_slice(data);
+        let mut r = Reader::new(data);
         let stream = r
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn stream_fallback() {
         let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::from_slice(data);
+        let mut r = Reader::new(data);
         let stream = r
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();

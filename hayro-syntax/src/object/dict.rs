@@ -85,7 +85,7 @@ impl<'a> Dict<'a> {
     pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
-        Reader::from_slice(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
+        Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
     }
 
     /// Returns an iterator over all keys in the dictionary.
@@ -141,7 +141,7 @@ impl Debug for Dict<'_> {
         let mut debug_struct = f.debug_struct("Dict");
 
         if let Some(offsets) = self.offsets() {
-            let mut r = Reader::from_slice(self.data());
+            let mut r = Reader::new(self.data());
 
             for (key, val) in offsets {
                 r.jump(*val);
@@ -1046,7 +1046,7 @@ mod tests {
     use crate::reader::{ReaderContext, ReaderExt};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
-        Reader::from_slice(data).read_with_context::<Dict<'_>>(&ReaderContext::dummy())
+        Reader::new(data).read_with_context::<Dict<'_>>(&ReaderContext::dummy())
     }
 
     #[test]
@@ -1071,10 +1071,7 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 1);
-        assert!(
-            dict.get::<Number>(Name::new_unescaped_slice(b"Hi"))
-                .is_some()
-        );
+        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
     }
 
     #[test]
@@ -1083,14 +1080,8 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 2);
-        assert!(
-            dict.get::<Number>(Name::new_unescaped_slice(b"Hi"))
-                .is_some()
-        );
-        assert!(
-            dict.get::<bool>(Name::new_unescaped_slice(b"Second"))
-                .is_some()
-        );
+        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
+        assert!(dict.get::<bool>(Name::new_unescaped(b"Second")).is_some());
     }
 
     #[test]
@@ -1107,32 +1098,29 @@ mod tests {
                 >>
 >>";
 
-        let dict = Reader::from_slice(data.as_bytes())
+        let dict = Reader::new(data.as_bytes())
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
+        assert!(dict.get::<Name<'_>>(Name::new_unescaped(b"Type")).is_some());
         assert!(
-            dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Type"))
+            dict.get::<Name<'_>>(Name::new_unescaped(b"Subtype"))
                 .is_some()
         );
         assert!(
-            dict.get::<Name<'_>>(Name::new_unescaped_slice(b"Subtype"))
+            dict.get::<Number>(Name::new_unescaped(b"Version"))
                 .is_some()
         );
         assert!(
-            dict.get::<Number>(Name::new_unescaped_slice(b"Version"))
+            dict.get::<i32>(Name::new_unescaped(b"IntegerItem"))
                 .is_some()
         );
         assert!(
-            dict.get::<i32>(Name::new_unescaped_slice(b"IntegerItem"))
+            dict.get::<string::String<'_>>(Name::new_unescaped(b"StringItem"))
                 .is_some()
         );
         assert!(
-            dict.get::<string::String<'_>>(Name::new_unescaped_slice(b"StringItem"))
-                .is_some()
-        );
-        assert!(
-            dict.get::<Dict<'_>>(Name::new_unescaped_slice(b"Subdictionary"))
+            dict.get::<Dict<'_>>(Name::new_unescaped(b"Subdictionary"))
                 .is_some()
         );
     }
@@ -1157,7 +1145,7 @@ mod tests {
     fn inline_dict() {
         let dict_data = b"/W 17 /H 17 /CS /RGB /BPC 8 /F [ /A85 /LZW ] ID ";
 
-        let dict = Reader::from_slice(&dict_data[..])
+        let dict = Reader::new(&dict_data[..])
             .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
             .unwrap();
 

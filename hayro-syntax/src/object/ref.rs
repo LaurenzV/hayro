@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn ref_1() {
         assert_eq!(
-            Reader::from_slice("34 1 R".as_bytes())
+            Reader::new("34 1 R".as_bytes())
                 .read_without_context::<ObjRef>()
                 .unwrap(),
             ObjRef::new(34, 1)
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn ref_trailing() {
         assert_eq!(
-            Reader::from_slice("256 0 R (hi)".as_bytes())
+            Reader::new("256 0 R (hi)".as_bytes())
                 .read_without_context::<ObjRef>()
                 .unwrap(),
             ObjRef::new(256, 0)
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn ref_invalid_1() {
         assert!(
-            Reader::from_slice("256 R".as_bytes())
+            Reader::new("256 R".as_bytes())
                 .read_without_context::<ObjRef>()
                 .is_none()
         );
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn ref_invalid_2() {
         assert!(
-            Reader::from_slice("256 257".as_bytes())
+            Reader::new("256 257".as_bytes())
                 .read_without_context::<ObjRef>()
                 .is_none()
         );

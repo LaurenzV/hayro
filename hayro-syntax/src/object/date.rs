@@ -24,7 +24,7 @@ pub struct DateTime {
 
 impl DateTime {
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        let mut reader = Reader::from_slice(bytes);
+        let mut reader = Reader::new(bytes);
 
         reader.forward_tag(b"D:")?;
 

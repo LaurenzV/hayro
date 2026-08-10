@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
 
-    let mut reader = Reader::from_slice(data);
+    let mut reader = Reader::new(data);
 
     let mut read_byte = || -> Option<u8> {
         loop {

@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn null() {
         assert_eq!(
-            Reader::from_slice("null".as_bytes())
+            Reader::new("null".as_bytes())
                 .read_without_context::<Null>()
                 .unwrap(),
             Null
@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn null_trailing() {
         assert_eq!(
-            Reader::from_slice("nullabs".as_bytes())
+            Reader::new("nullabs".as_bytes())
                 .read_without_context::<Null>()
                 .unwrap(),
             Null

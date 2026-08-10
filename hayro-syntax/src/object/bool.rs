@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn bool_true() {
         assert!(
-            Reader::from_slice("true".as_bytes())
+            Reader::new("true".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );
@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn bool_false() {
         assert!(
-            !Reader::from_slice("false".as_bytes())
+            !Reader::new("false".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn bool_trailing() {
         assert!(
-            Reader::from_slice("trueabdf".as_bytes())
+            Reader::new("trueabdf".as_bytes())
                 .read_without_context::<bool>()
                 .unwrap()
         );

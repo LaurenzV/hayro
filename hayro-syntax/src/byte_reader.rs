@@ -254,13 +254,13 @@ pub enum Reader<'a, 'c> {
 
 #[cfg(feature = "streaming")]
 impl<'a, 'c> Reader<'a, 'c> {
+    /// creates reader from byte-slice
+    pub fn new(slice: &'a [u8]) -> Self {
+        Reader::Slice(SliceReader::new(slice))
+    }
     /// creates reader from `ReadBytes`
     pub fn from_read(read: ReadBytes<'a>) -> Self {
-        Reader::Slice(SliceReader::new(read))
-    }
-    /// creates reader from byte-slice
-    pub fn from_slice(slice: &'a [u8]) -> Self {
-        Reader::Slice(SliceReader::new(slice.into()))
+        Reader::Slice(SliceReader::from_read(read))
     }
     /// creates reader from `StreamingSource` implementation
     pub fn from_streaming_source(read_seek: Arc<dyn StreamingSource>) -> Self {
@@ -499,34 +499,20 @@ pub struct SliceReader<'a> {
 }
 
 impl<'a> SliceReader<'a> {
-    /// Create a new reader.
+    /// creates reader from byte-slice
     #[inline]
-    pub fn new(data: ReadBytes<'a>) -> Self {
+    pub fn new(slice: &'a [u8]) -> Self {
+        SliceReader::from_read(slice.into())
+    }
+
+    /// creates reader from `ReadBytes`
+    #[inline]
+    pub fn from_read(read: ReadBytes<'a>) -> Self {
         Self {
-            data,
+            data: read,
             offset: 0,
             marker: None,
         }
-    }
-
-    /// Create a new reader at the given offset.
-    #[inline]
-    pub fn new_with(data: ReadBytes<'a>, offset: usize) -> Self {
-        Self {
-            data,
-            offset,
-            marker: None,
-        }
-    }
-
-    #[cfg(not(feature = "streaming"))]
-    pub fn from_read(read: ReadBytes<'a>) -> Self {
-        Self::new(read)
-    }
-
-    #[cfg(not(feature = "streaming"))]
-    pub fn from_slice(slice: &'a [u8]) -> Self {
-        SliceReader::new(slice.into())
     }
 }
 
@@ -1330,7 +1316,7 @@ mod tests {
     #[test]
     fn peek_bytes_rejects_overflowing_len() {
         let bytes = b"abc";
-        let mut reader = SliceReader::new(bytes.into());
+        let mut reader = SliceReader::new(bytes);
         assert!(reader.peek_bytes(usize::MAX).is_none());
     }
 }

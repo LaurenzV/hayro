@@ -312,7 +312,7 @@ impl XRef {
         let decryptor = {
             match &input {
                 XRefInput::TrailerDictData(trailer_dict_data) => {
-                    let mut r = Reader::from_slice(trailer_dict_data.as_ref());
+                    let mut r = Reader::new(trailer_dict_data.as_ref());
 
                     let trailer_dict = r
                         .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -334,7 +334,7 @@ impl XRef {
 
         let (trailer_data, has_ocgs, metadata) = match input {
             XRefInput::TrailerDictData(trailer_dict_data) => {
-                let mut r = Reader::from_slice(trailer_dict_data.as_ref());
+                let mut r = Reader::new(trailer_dict_data.as_ref());
 
                 let trailer_dict = r
                     .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
@@ -909,7 +909,7 @@ fn populate_from_xref_stream<'a>(
     }
 
     let xref_data = stream.decoded().ok()?;
-    let mut xref_reader = Reader::from_slice(xref_data.as_ref());
+    let mut xref_reader = Reader::new(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array<'_>>(INDEX) {
         let iter = arr.iter::<(u32, u32)>();
@@ -1086,7 +1086,7 @@ impl<'a> ObjectStream<'a> {
         let num_objects = inner.dict().get::<usize>(N)?;
         let first_offset = inner.dict().get::<usize>(FIRST)?;
 
-        let mut r = Reader::from_slice(data);
+        let mut r = Reader::new(data);
 
         let mut offsets = vec![];
 
@@ -1110,7 +1110,7 @@ impl<'a> ObjectStream<'a> {
         T: ObjectLike<'a>,
     {
         let offset = self.offsets.get(index as usize)?.1;
-        let mut r = Reader::from_slice(self.data);
+        let mut r = Reader::new(self.data);
         r.jump(offset);
         r.skip_white_spaces_and_comments();
 
@@ -1182,7 +1182,7 @@ mod tests {
     #[test]
     fn xref_table_trailer_rejects_overflowing_entry_skip() {
         let data = b"xref\n0 999999999999999999999\ntrailer\n<<>>";
-        let mut reader = Reader::from_slice(data);
+        let mut reader = Reader::new(data);
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
     }
 }

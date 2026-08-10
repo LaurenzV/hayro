@@ -340,7 +340,7 @@ mod tests {
     use crate::reader::{ReaderContext, ReaderExt};
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
-        let mut r = Reader::from_slice(data);
+        let mut r = Reader::new(data);
         r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
     }
 

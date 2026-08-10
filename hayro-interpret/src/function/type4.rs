@@ -415,7 +415,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 }
 
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
-    let mut r = Reader::from_slice(data);
+    let mut r = Reader::new(data);
     parse_procedure_inner(&mut r)
 }
 

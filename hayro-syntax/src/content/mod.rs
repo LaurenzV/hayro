@@ -108,7 +108,7 @@ impl<'a> UntypedIter<'a> {
     /// Create a new untyped iterator.
     pub fn new(data: &'a [u8]) -> Self {
         Self {
-            reader: Reader::from_slice(data),
+            reader: Reader::new(data),
             stack: Stack::new(),
             operator: None,
         }
@@ -117,7 +117,7 @@ impl<'a> UntypedIter<'a> {
     /// Create a new empty untyped iterator.
     pub fn empty() -> Self {
         Self {
-            reader: Reader::from_slice(&[]),
+            reader: Reader::new(&[]),
             stack: Stack::new(),
             operator: None,
         }
@@ -204,7 +204,7 @@ impl<'a> UntypedIter<'a> {
                             let tail = self
                                 .reader
                                 .range(self.reader.offset() + 2..self.reader.len())?; // safe to take tail, since this reader is always in memory 
-                            let mut find_reader = Reader::from_slice(tail.as_ref());
+                            let mut find_reader = Reader::new(tail.as_ref());
 
                             while !find_reader.at_end() {
                                 let next_ei = find_reader.find_needle(b"EI");

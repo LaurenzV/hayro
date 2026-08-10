@@ -333,13 +333,13 @@ mod tests {
     use crate::xref::XRef;
 
     fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {
-        Reader::from_slice(data)
+        Reader::new(data)
             .read_with_context::<Array<'_>>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.iter::<Object<'_>>().collect::<Vec<_>>())
     }
 
     fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object<'_>>>> {
-        Reader::from_slice(data)
+        Reader::new(data)
             .read_with_context::<Array<'_>>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.raw_iter().collect::<Vec<_>>())
     }

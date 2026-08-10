@@ -77,7 +77,7 @@ impl PdfData {
     /// create reader from pdf-data
     pub(crate) fn reader(&self) -> Reader<'_, '_> {
         match self {
-            PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
+            PdfData::Buffer(inner) => Reader::new((**inner).as_ref()),
             #[cfg(feature = "streaming")]
             PdfData::Streaming(read_seek) => Reader::from_streaming_source(read_seek.clone()),
         }
@@ -90,7 +90,7 @@ impl PdfData {
         cache: Option<&'c mut ReaderCache>,
     ) -> Reader<'_, 'c> {
         match self {
-            PdfData::Buffer(inner) => Reader::from_slice((**inner).as_ref()),
+            PdfData::Buffer(inner) => Reader::new((**inner).as_ref()),
             PdfData::Streaming(read_seek) => match cache {
                 Some(cache) => Reader::from_streaming_source_with_cache(read_seek.clone(), cache),
                 None => Reader::from_streaming_source(read_seek.clone()),
