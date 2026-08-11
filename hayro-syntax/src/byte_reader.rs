@@ -33,7 +33,7 @@ impl<'a> ReadBytes<'a> {
     #[cfg(not(feature = "streaming"))]
     #[inline]
     pub fn inner(&self) -> &'a [u8] {
-        &self.0
+        self.0
     }
 
     #[cfg(feature = "streaming")]
@@ -145,16 +145,16 @@ impl<'a> From<Vec<u8>> for ReadBytes<'a> {
     }
 }
 
-impl<'a> Into<Cow<'a, [u8]>> for ReadBytes<'a> {
+impl<'a> From<ReadBytes<'a>> for Cow<'a, [u8]> {
     #[inline]
-    fn into(self) -> Cow<'a, [u8]> {
+    fn from(val: ReadBytes<'a>) -> Self {
         #[cfg(not(feature = "streaming"))]
         {
-            Cow::Borrowed(self.0)
+            Cow::Borrowed(val.0)
         }
         #[cfg(feature = "streaming")]
         {
-            self.0
+            val.0
         }
     }
 }
@@ -684,9 +684,9 @@ impl StreamingReader {
     fn new(data: Arc<dyn StreamingSource>) -> Self {
         let len = data.len().unwrap();
         Self {
-            data: data,
+            data,
             offset: 0,
-            len: len,
+            len,
             cache: ReaderCache::default(),
         }
     }
@@ -876,9 +876,8 @@ impl ByteReader<'static> for StreamingReader {
             let chunk_end = pos.saturating_add(1000).min(self.len);
             chunk.extend(self.data.read(pos..chunk_end).unwrap()?);
             pos = chunk_end;
-            match util::find_needle(chunk.as_slice(), needle) {
-                Some(chunk_pos) => return Some(chunk_pos + pos - prev_size),
-                None => (),
+            if let Some(chunk_pos) = util::find_needle(chunk.as_slice(), needle) {
+                return Some(chunk_pos + pos - prev_size);
             }
             if chunk_end == self.len {
                 return None;
@@ -895,9 +894,8 @@ impl ByteReader<'static> for StreamingReader {
             pos = pos.saturating_sub(1000);
             let mut chunk = self.data.read(pos..end_pos).unwrap().unwrap();
             chunk.extend(prev);
-            match util::findr_needle(chunk.as_slice(), needle) {
-                Some(chunk_pos) => return Some(chunk_pos + pos),
-                None => (),
+            if let Some(chunk_pos) = util::findr_needle(chunk.as_slice(), needle) {
+                return Some(chunk_pos + pos);
             }
             if pos == 0 {
                 return None;
