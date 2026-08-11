@@ -166,6 +166,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn stream_jpx_3() { run_render_test("stream_jpx_3", "pdfs/custom/stream_jpx_3.pdf", Some("2..=2")); }
 #[test] fn stream_jpx_5() { run_render_test("stream_jpx_5", "pdfs/custom/stream_jpx_5.pdf", None); }
 #[test] fn stream_jpx_6() { run_render_test("stream_jpx_6", "pdfs/custom/stream_jpx_6.pdf", None); }
+#[test] fn stroke_hairline_large_ctm() { run_render_test("stroke_hairline_large_ctm", "pdfs/custom/stroke_hairline_large_ctm.pdf", None); }
 #[test] fn text_filled_complex_paint() { run_render_test("text_filled_complex_paint", "pdfs/custom/text_filled_complex_paint.pdf", None); }
 #[test] fn text_rendering_1() { run_render_test("text_rendering_1", "pdfs/custom/text_rendering_1.pdf", None); }
 #[test] fn text_rendering_2() { run_render_test("text_rendering_2", "pdfs/custom/text_rendering_2.pdf", None); }

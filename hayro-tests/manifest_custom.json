@@ -685,6 +685,10 @@
     "file": "pdfs/custom/stream_jpx_6.pdf"
   },
   {
+    "id": "stroke_hairline_large_ctm",
+    "file": "pdfs/custom/stroke_hairline_large_ctm.pdf"
+  },
+  {
     "id": "text_filled_complex_paint",
     "file": "pdfs/custom/text_filled_complex_paint.pdf"
   },
