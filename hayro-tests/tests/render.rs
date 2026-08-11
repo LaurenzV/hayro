@@ -110,6 +110,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn page_rotation_270() { run_render_test("page_rotation_270", "pdfs/custom/page_rotation_270.pdf", None); }
 #[test] fn page_rotation_90() { run_render_test("page_rotation_90", "pdfs/custom/page_rotation_90.pdf", None); }
 #[test] fn page_rotation_none() { run_render_test("page_rotation_none", "pdfs/custom/page_rotation_none.pdf", None); }
+#[test] fn path_as_rect() { run_render_test("path_as_rect", "pdfs/custom/path_as_rect.pdf", None); }
 #[test] fn path_rendering_1() { run_render_test("path_rendering_1", "pdfs/custom/path_rendering_1.pdf", None); }
 #[test] fn path_rendering_10() { run_render_test("path_rendering_10", "pdfs/custom/path_rendering_10.pdf", None); }
 #[test] fn path_rendering_11() { run_render_test("path_rendering_11", "pdfs/custom/path_rendering_11.pdf", None); }

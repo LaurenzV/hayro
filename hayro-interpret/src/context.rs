@@ -379,7 +379,8 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
     let bbox = path.fast_bounding_box();
     let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
     let mut corners = [false; 4];
-    let mut vertices: Vec<Point> = Vec::with_capacity(5);
+    let mut first_point = None;
+    let mut previous_point = None;
 
     let mut check_point = |p: Point| {
         corners[0] |= p.x.is_nearly_equal(min_x) && p.y.is_nearly_equal(min_y);
@@ -396,17 +397,21 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
                 }
 
                 check_point(*p);
-                vertices.push(*p);
+                first_point = Some(*p);
+                previous_point = Some(*p);
             }
             PathEl::LineTo(l) => {
+                let previous = previous_point?;
+                if !previous.x.is_nearly_equal(l.x) && !previous.y.is_nearly_equal(l.y) {
+                    return None;
+                }
+
                 check_point(*l);
-                vertices.push(*l);
+                previous_point = Some(*l);
             }
             PathEl::QuadTo(_, _) => return None,
             PathEl::CurveTo(_, _, _) => return None,
-            // A ClosePath anywhere but the final element splits the path
-            // into a closed subpath plus trailing edges — not a rectangle
-            // outline, whatever the corner coverage says.
+            // A mid-path close creates multiple contours.
             PathEl::ClosePath => {
                 if idx != path.elements().len() - 1 {
                     return None;
@@ -419,34 +424,12 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
         return None;
     }
 
-    // Touching all four bbox corners does not make a path a rectangle: a
-    // self-intersecting bowtie ("50 50 m 150 150 l 50 150 l 150 50 l h" —
-    // e.g. a P&ID valve symbol) touches every corner too, and classifying
-    // it as a rect fills/strokes/clips the FULL bbox where the fill rule
-    // should cancel the crossing (both rules leave two triangles).
-    // Require the traversal to be a genuine rectangle outline: exactly
-    // four distinct vertices — an explicit closing line back to the start
-    // is allowed and dropped — and every consecutive edge (with
-    // wraparound) axis-aligned and non-degenerate, i.e. its endpoints
-    // share EXACTLY one coordinate. A bowtie's diagonal shares neither, a
-    // repeated vertex shares both; either falls through to `draw_path`,
-    // which renders the true geometry under both fill rules. True
-    // rectangles from any start corner in either direction (including the
-    // `re` operator's output) still pass and keep the fast path.
-    if vertices.len() == 5 {
-        let (first, last) = (vertices[0], vertices[4]);
-        if !(last.x.is_nearly_equal(first.x) && last.y.is_nearly_equal(first.y)) {
+    // Corner coverage alone also accepts self-intersecting bowties.
+    if matches!(path.elements().last(), Some(PathEl::LineTo(_))) {
+        let (Some(first), Some(last)) = (first_point, previous_point) else {
             return None;
-        }
-        vertices.truncate(4);
-    }
-    if vertices.len() != 4 {
-        return None;
-    }
-    for i in 0..4 {
-        let a = vertices[i];
-        let b = vertices[(i + 1) % 4];
-        if a.x.is_nearly_equal(b.x) == a.y.is_nearly_equal(b.y) {
+        };
+        if !last.x.is_nearly_equal(first.x) || !last.y.is_nearly_equal(first.y) {
             return None;
         }
     }

@@ -454,6 +454,10 @@
     "file": "pdfs/custom/page_rotation_none.pdf"
   },
   {
+    "id": "path_as_rect",
+    "file": "pdfs/custom/path_as_rect.pdf"
+  },
+  {
     "id": "path_rendering_1",
     "file": "pdfs/custom/path_rendering_1.pdf"
   },
