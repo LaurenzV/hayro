@@ -371,68 +371,35 @@ impl<'a> Context<'a> {
 }
 
 pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
-    // One MoveTo, three LineTo, one ClosePath
-    if path.elements().len() != 5 {
-        return None;
-    }
-
-    let bbox = path.fast_bounding_box();
-    let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
-    let mut corners = [false; 4];
-    let mut first_point = None;
-    let mut previous_point = None;
-
-    let mut check_point = |p: Point| {
-        corners[0] |= p.x.is_nearly_equal(min_x) && p.y.is_nearly_equal(min_y);
-        corners[1] |= p.x.is_nearly_equal(min_x) && p.y.is_nearly_equal(max_y);
-        corners[2] |= p.x.is_nearly_equal(max_x) && p.y.is_nearly_equal(min_y);
-        corners[3] |= p.x.is_nearly_equal(max_x) && p.y.is_nearly_equal(max_y);
+    let points = match path.elements() {
+        [
+            PathEl::MoveTo(first),
+            PathEl::LineTo(second),
+            PathEl::LineTo(third),
+            PathEl::LineTo(fourth),
+            PathEl::ClosePath,
+        ] => [*first, *second, *third, *fourth, *first],
+        [
+            PathEl::MoveTo(first),
+            PathEl::LineTo(second),
+            PathEl::LineTo(third),
+            PathEl::LineTo(fourth),
+            PathEl::LineTo(last),
+        ] if first.x.is_nearly_equal(last.x) && first.y.is_nearly_equal(last.y) => {
+            [*first, *second, *third, *fourth, *last]
+        }
+        _ => return None,
     };
 
-    for (idx, el) in path.elements().iter().enumerate() {
-        match el {
-            PathEl::MoveTo(p) => {
-                if idx != 0 {
-                    return None;
-                }
-
-                check_point(*p);
-                first_point = Some(*p);
-                previous_point = Some(*p);
-            }
-            PathEl::LineTo(l) => {
-                let previous = previous_point?;
-                if !previous.x.is_nearly_equal(l.x) && !previous.y.is_nearly_equal(l.y) {
-                    return None;
-                }
-
-                check_point(*l);
-                previous_point = Some(*l);
-            }
-            PathEl::QuadTo(_, _) => return None,
-            PathEl::CurveTo(_, _, _) => return None,
-            // A mid-path close creates multiple contours.
-            PathEl::ClosePath => {
-                if idx != path.elements().len() - 1 {
-                    return None;
-                }
-            }
-        }
-    }
-
-    if !(corners[0] && corners[1] && corners[2] && corners[3]) {
-        return None;
-    }
-
-    // Corner coverage alone also accepts self-intersecting bowties.
-    if matches!(path.elements().last(), Some(PathEl::LineTo(_))) {
-        let (Some(first), Some(last)) = (first_point, previous_point) else {
-            return None;
-        };
-        if !last.x.is_nearly_equal(first.x) || !last.y.is_nearly_equal(first.y) {
+    let mut previous_axis = None;
+    for edge in points.windows(2) {
+        let same_x = edge[0].x.is_nearly_equal(edge[1].x);
+        let same_y = edge[0].y.is_nearly_equal(edge[1].y);
+        if same_x == same_y || previous_axis == Some(same_x) {
             return None;
         }
+        previous_axis = Some(same_x);
     }
 
-    Some(bbox)
+    Some(path.fast_bounding_box())
 }
