@@ -1,7 +1,7 @@
 // Keep in sync with `hayro-postscript/src/string/ascii_85.rs`.
 
-use crate::reader::ByteReader;
 use crate::reader::Reader;
+use crate::reader::ReaderBase;
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 

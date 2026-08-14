@@ -3,8 +3,8 @@
 use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
-use crate::reader::{ByteReader, Readable, ReaderContext, Skippable};
 use crate::reader::{ReadBytes, Reader};
+use crate::reader::{Readable, ReaderBase, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
 use core::borrow::Borrow;
 use core::fmt::{self, Debug, Display, Formatter};

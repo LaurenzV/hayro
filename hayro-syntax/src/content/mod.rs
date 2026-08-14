@@ -39,7 +39,7 @@ use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
 use crate::object::{Array, Null, Number, Object, Stream};
 use crate::reader::Reader;
-use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use core::array;
 use core::fmt::{Debug, Display, Formatter};

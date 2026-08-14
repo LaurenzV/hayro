@@ -5,7 +5,7 @@ use crate::filter::ascii_hex;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 use core::borrow::Borrow;

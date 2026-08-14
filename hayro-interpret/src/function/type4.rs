@@ -2,7 +2,7 @@ use crate::function::{Clamper, Values};
 use hayro_syntax::content;
 use hayro_syntax::object::Number;
 use hayro_syntax::object::Stream;
-use hayro_syntax::reader::{ByteReader, Reader};
+use hayro_syntax::reader::{Reader, ReaderBase};
 use hayro_syntax::reader::{ReaderContext, ReaderExt};
 use smallvec::SmallVec;
 use std::array;

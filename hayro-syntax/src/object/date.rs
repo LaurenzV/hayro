@@ -1,4 +1,4 @@
-use crate::byte_reader::{ByteReader, Reader};
+use crate::byte_reader::{Reader, ReaderBase};
 use core::str::FromStr;
 
 /// A date time.

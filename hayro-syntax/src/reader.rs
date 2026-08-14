@@ -8,7 +8,7 @@ use smallvec::{SmallVec, smallvec};
 
 #[cfg(feature = "streaming")]
 pub use crate::byte_reader::ReaderCache;
-pub use crate::byte_reader::{ByteReader, ReadBytes, Reader};
+pub use crate::byte_reader::{ReadBytes, Reader, ReaderBase};
 
 /// Extension trait for the `Reader` struct.
 pub trait ReaderExt<'a> {

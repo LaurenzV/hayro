@@ -4,7 +4,7 @@ use crate::PdfData;
 use crate::object::Object;
 use crate::page::Pages;
 use crate::page::cached::CachedPages;
-use crate::reader::ByteReader;
+use crate::reader::ReaderBase;
 use crate::sync::Arc;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 

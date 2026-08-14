@@ -3,7 +3,7 @@
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{ByteReader, Readable, ReaderContext, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, Skippable};
 use core::fmt::{Display, Formatter};
 
 /// The null object.

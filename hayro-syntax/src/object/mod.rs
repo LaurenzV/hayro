@@ -12,7 +12,7 @@ pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
-use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use core::fmt::{Debug, Display, Formatter};
 
 mod bool;

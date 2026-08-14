@@ -10,7 +10,7 @@ use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::ReadBytes;
 use crate::reader::Reader;
-use crate::reader::{ByteReader, Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use crate::util::OptionLog;
 use alloc::borrow::Cow;

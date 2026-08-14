@@ -159,7 +159,7 @@ impl<'a> From<ReadBytes<'a>> for Cow<'a, [u8]> {
     }
 }
 
-pub trait ByteReader<'a> {
+pub trait ReaderBase<'a> {
     /// Returns `true` if the reader has reached the end of the data.
     fn at_end(&self) -> bool;
 
@@ -260,7 +260,7 @@ impl<'a> Reader<'a> {
 }
 
 #[cfg(feature = "streaming")]
-impl<'a> ByteReader<'a> for Reader<'a> {
+impl<'a> ReaderBase<'a> for Reader<'a> {
     #[inline]
     fn at_end(&self) -> bool {
         match self {
@@ -480,7 +480,7 @@ impl<'a> SliceReader<'a> {
     }
 }
 
-impl<'a> ByteReader<'a> for SliceReader<'a> {
+impl<'a> ReaderBase<'a> for SliceReader<'a> {
     #[inline]
     fn at_end(&self) -> bool {
         self.offset >= self.data.len()
@@ -700,7 +700,7 @@ impl StreamingReader {
 }
 
 #[cfg(feature = "streaming")]
-impl ByteReader<'static> for StreamingReader {
+impl ReaderBase<'static> for StreamingReader {
     #[inline]
     fn at_end(&self) -> bool {
         self.offset >= self.len
@@ -983,7 +983,7 @@ fn range_from_bounds<T: RangeBounds<usize>>(bounds: T, len: usize) -> Range<usiz
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteReader, SliceReader};
+    use super::{ReaderBase, SliceReader};
 
     #[test]
     fn peek_bytes_rejects_overflowing_len() {
