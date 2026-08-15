@@ -14,6 +14,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn color_space_lab() { run_render_test("color_space_lab", "pdfs/custom/color_space_lab.pdf", None); }
 #[test] fn color_space_separation_1() { run_render_test("color_space_separation_1", "pdfs/custom/color_space_separation_1.pdf", None); }
 #[test] fn color_space_separation_2() { run_render_test("color_space_separation_2", "pdfs/custom/color_space_separation_2.pdf", None); }
+#[test] fn fill_degenerate_large_ctm() { run_render_test("fill_degenerate_large_ctm", "pdfs/custom/fill_degenerate_large_ctm.pdf", None); }
 #[test] fn fill_degenerate_rotated() { run_render_test("fill_degenerate_rotated", "pdfs/custom/fill_degenerate_rotated.pdf", None); }
 #[test] fn fill_degenerate_small_ctm() { run_render_test("fill_degenerate_small_ctm", "pdfs/custom/fill_degenerate_small_ctm.pdf", None); }
 #[test] fn filter_flate_1bit() { run_render_test("filter_flate_1bit", "pdfs/custom/filter_flate_1bit.pdf", None); }

@@ -75,9 +75,9 @@ pub(crate) fn fill_path_impl<'a>(
                 path.move_to((bbox.x0, bbox.y0));
                 path.line_to((bbox.x1, bbox.y1));
 
+                let scale = x_advance.length().max(y_advance.length()) as f32;
                 let stroke_props = StrokeProps {
-                    // TODO: Make dependent on transform?
-                    line_width: 0.001,
+                    line_width: if scale > 0.0 { 1.0 / scale } else { 0.001 },
                     line_join: Join::Bevel,
                     line_cap: Cap::Butt,
                     ..Default::default()
