@@ -17,14 +17,8 @@ pub(crate) fn decode(
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
-    // Real-world producers mis-stamp /Rows below the image's true /Height
-    // (e.g. duplicating /Columns into /Rows), and honoring the smaller
-    // value truncates the decode: the undecoded remainder of the image
-    // renders as a solid block of sample 0. PDFium, Acrobat, and pdf.js
-    // all decode to the image height in that case, so clamp /Rows up to
-    // it. /Rows above the height is preserved (the decoder stops at
-    // end-of-data/EOFB regardless), and non-image streams pass height 0,
-    // making the clamp a no-op there.
+    // In case `Rows` is smaller than image height, take the image height.
+    // Seems to match what Chromium does.
     let rows = params
         .get::<u32>(ROWS)
         .unwrap_or(0)
