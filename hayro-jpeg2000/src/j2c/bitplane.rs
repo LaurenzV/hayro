@@ -275,21 +275,20 @@ impl CoefficientState {
 pub(crate) struct Coefficient(u32);
 
 impl Coefficient {
-    pub(crate) fn reconstructed(&self, state: &CoefficientState) -> i32 {
+    pub(crate) fn reconstructed(&self, state: &CoefficientState, irreversible: bool) -> f32 {
         let mut magnitude = (self.0 & !0x80000000) as i32;
         // Map sign (0 for positive, 1 for negative) to 1, -1.
         magnitude *= 1 - 2 * (self.sign() as i32);
 
-        // See Formula E-6: In case the coefficient doesn't have full precision,
-        // we need to apply a reconstruction bias. The recommended value is
-        // 1/2.
+        // See Formulas E-6 to E-8: Apply the reconstruction midpoint unless a
+        // reversible coefficient has been fully decoded, in which case it is exact.
         let bit_position = state.decoded_bit_position();
-        if magnitude != 0 && bit_position != 0 {
-            let offset = 1 << (bit_position - 1);
-            magnitude += if magnitude > 0 { offset } else { -offset };
+        if magnitude != 0 && (irreversible || bit_position != 0) {
+            let offset = 0.5 * (1_u32 << bit_position) as f32;
+            return magnitude as f32 + if magnitude > 0 { offset } else { -offset };
         }
 
-        magnitude
+        magnitude as f32
     }
 
     fn set_sign(&mut self, sign: u8) {
