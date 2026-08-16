@@ -122,6 +122,7 @@ impl Readable<'_> for Number {
 
 #[inline(always)]
 fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
+    let start_offset = r.offset();
     let negative = match r.peek_byte()? {
         b'-' => {
             r.forward();
@@ -138,18 +139,23 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     let mut has_dot = false;
     let mut decimal_shift: u32 = 0;
     let mut has_digits = false;
+    let mut overflowed = false;
+    let mut number_end = None;
 
     loop {
         match r.peek_byte() {
             Some(b'0'..=b'9') => {
                 let d = r.read_byte().unwrap();
-                mantissa = mantissa
-                    // Using `saturating` would arguably be better here, but
-                    // profiling showed that it seems to be more expensive, at least
-                    // on ARM. Since such large numbers shouldn't appear anyway,
-                    // it doesn't really matter a lot what mode we use.
-                    .wrapping_mul(10)
-                    .wrapping_add((d - b'0') as u64);
+                if !overflowed {
+                    if let Some(value) = mantissa
+                        .checked_mul(10)
+                        .and_then(|v| v.checked_add((d - b'0') as u64))
+                    {
+                        mantissa = value;
+                    } else {
+                        overflowed = true;
+                    }
+                }
                 has_digits = true;
                 if has_dot {
                     decimal_shift += 1;
@@ -161,6 +167,7 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
             }
             // Some weird PDFs have trailing minus in the fraction of number.
             Some(b'-') if has_digits => {
+                number_end = Some(r.offset());
                 r.forward();
                 r.forward_while(is_digit_or_minus);
                 break;
@@ -181,6 +188,20 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     // without any white space in-between.
     if r.peek_byte().is_some_and(is_regular_character) {
         return None;
+    }
+
+    let integer_overflow = !has_dot && mantissa > i64::MAX as u64;
+
+    if overflowed || integer_overflow {
+        let end_offset = number_end.unwrap_or_else(|| r.offset());
+        let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
+
+        if !has_dot && let Ok(value) = number.parse::<i64>() {
+            return Some(Number(InternalNumber::Integer(value)));
+        }
+
+        let value = number.parse::<f64>().ok()?;
+        return Some(Number(InternalNumber::Real(value)));
     }
 
     if !has_dot {
@@ -392,13 +413,12 @@ mod tests {
     }
 
     #[test]
-    fn int_min_does_not_panic() {
-        assert_eq!(
-            Reader::new("-9223372036854775808".as_bytes())
-                .read_without_context::<i64>()
-                .unwrap(),
-            i64::MIN
-        );
+    fn int_min_stays_integer() {
+        let number = Reader::new("-9223372036854775808".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(number.0, super::InternalNumber::Integer(i64::MIN));
+        assert_eq!(number.as_i64(), i64::MIN);
     }
 
     #[test]
@@ -552,5 +572,67 @@ mod tests {
                 .unwrap(),
             4294966260
         );
+    }
+
+    #[test]
+    fn twenty_digit_real_does_not_wrap() {
+        let got = Reader::new("190.50000762939453225".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert_eq!(got, 190.500_007_629_394_53);
+    }
+
+    #[test]
+    fn nineteen_digit_real_stays_exact() {
+        let got = Reader::new("190.5000076293945313".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert_eq!(got, 190.500_007_629_394_53);
+    }
+
+    #[test]
+    fn oversized_integer_uses_float_fallback() {
+        let n = Reader::new("9999999999999999999".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(n.as_f64(), 9_999_999_999_999_999_999_u64 as f64);
+        assert_eq!(n.as_i64(), i64::MAX);
+    }
+
+    #[test]
+    fn oversized_negative_integer_uses_float_fallback() {
+        let n = Reader::new("-1234567890123456789012345".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap();
+        assert_eq!(n.as_f64(), -1.234_567_890_123_456_8e24);
+        assert_eq!(n.as_i64(), i64::MIN);
+    }
+
+    #[test]
+    fn integer_overflow_then_fraction_uses_float_fallback() {
+        let got = Reader::new("12345678901234567890123.456".as_bytes())
+            .read_without_context::<Number>()
+            .unwrap()
+            .as_f64();
+        assert_eq!(got, 1.234_567_890_123_456_8e22);
+    }
+
+    #[test]
+    fn f32_max_uses_float_fallback() {
+        let got = Reader::new("340282346638528859811704183484516925440".as_bytes())
+            .read_without_context::<f32>()
+            .unwrap();
+        assert_eq!(got, f32::MAX);
+    }
+
+    #[test]
+    fn float_fallback_ignores_trailing_minus() {
+        let input = "1234567890123456789012345-123".as_bytes();
+        let mut reader = Reader::new(input);
+        let got = reader.read_without_context::<Number>().unwrap().as_f64();
+        assert_eq!(got, 1.234_567_890_123_456_8e24);
+        assert_eq!(reader.offset(), input.len());
     }
 }
