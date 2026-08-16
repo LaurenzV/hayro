@@ -597,6 +597,7 @@ mod tests {
         let n = Reader::new("9999999999999999999".as_bytes())
             .read_without_context::<Number>()
             .unwrap();
+        assert_eq!(n.as_f64(), 9_999_999_999_999_999_999_u64 as f64);
         assert_eq!(n.as_i64(), i64::MAX);
     }
 
