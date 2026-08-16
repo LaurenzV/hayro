@@ -9,7 +9,9 @@ use alloc::vec::Vec;
 
 use super::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use super::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
-use super::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
+use super::codestream::{
+    ComponentInfo, Header, ProgressionOrder, QuantizationStyle, WaveletTransform,
+};
 use super::idwt::IDWTOutput;
 use super::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
@@ -338,6 +340,7 @@ fn decode_sub_band_bitplanes(
 
     let quantised =
         component_info.quantization_info.quantization_style != QuantizationStyle::NoQuantization;
+    let irreversible = component_info.wavelet_transform() == WaveletTransform::Irreversible97;
     let dequantization_step = {
         if !quantised {
             1.0
@@ -412,7 +415,7 @@ fn decode_sub_band_bitplanes(
                 for ((output, coefficient), coefficient_state) in
                     out_row.iter_mut().zip(coefficients).zip(coefficient_states)
                 {
-                    *output = coefficient.reconstructed(coefficient_state, quantised);
+                    *output = coefficient.reconstructed(coefficient_state, irreversible);
                     *output *= dequantization_step;
                 }
 

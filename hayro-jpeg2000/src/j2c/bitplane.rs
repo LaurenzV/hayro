@@ -275,33 +275,20 @@ impl CoefficientState {
 pub(crate) struct Coefficient(u32);
 
 impl Coefficient {
-    pub(crate) fn reconstructed(&self, state: &CoefficientState, quantised: bool) -> f32 {
+    pub(crate) fn reconstructed(&self, state: &CoefficientState, irreversible: bool) -> f32 {
         let mut magnitude = (self.0 & !0x80000000) as i32;
         // Map sign (0 for positive, 1 for negative) to 1, -1.
         magnitude *= 1 - 2 * (self.sign() as i32);
-        if magnitude == 0 {
-            return 0.0;
+
+        // See Formulas E-6 to E-8: Apply the reconstruction midpoint unless a
+        // reversible coefficient has been fully decoded, in which case it is exact.
+        let bit_position = state.decoded_bit_position();
+        if magnitude != 0 && (irreversible || bit_position != 0) {
+            let offset = 0.5 * (1_u32 << bit_position) as f32;
+            return magnitude as f32 + if magnitude > 0 { offset } else { -offset };
         }
 
-        // Formula E-6 reconstructs a nonzero coefficient at `r * 2 ^ (Mb - Nb)` above its
-        // decoded magnitude, with r = 1/2 the usual midpoint. `Mb - Nb` is the number of
-        // magnitude bits that were never coded, so it is zero once a coefficient is fully
-        // decoded -- and the term is then r itself rather than nothing, because a
-        // quantisation interval of width Delta still surrounds the value.
-        //
-        // Without quantisation there is no such interval: a fully decoded coefficient is
-        // exact, and offsetting it by half would move a lossless image.
-        let bit_position = state.decoded_bit_position();
-        let offset = if bit_position == 0 {
-            if quantised {
-                0.5
-            } else {
-                return magnitude as f32;
-            }
-        } else {
-            0.5 * (1_u32 << bit_position) as f32
-        };
-        magnitude as f32 + if magnitude > 0 { offset } else { -offset }
+        magnitude as f32
     }
 
     fn set_sign(&mut self, sign: u8) {
