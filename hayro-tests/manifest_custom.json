@@ -252,6 +252,10 @@
     "file": "pdfs/custom/image_ccit_4.pdf"
   },
   {
+    "id": "image_ccitt_rows_below_height",
+    "file": "pdfs/custom/image_ccitt_rows_below_height.pdf"
+  },
+  {
     "id": "image_cmyk_icc_jpg",
     "file": "pdfs/custom/image_cmyk_icc_jpg.pdf"
   },

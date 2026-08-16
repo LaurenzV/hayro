@@ -61,6 +61,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn image_ccit_1() { run_render_test("image_ccit_1", "pdfs/custom/image_ccit_1.pdf", None); }
 #[test] fn image_ccit_3() { run_render_test("image_ccit_3", "pdfs/custom/image_ccit_3.pdf", None); }
 #[test] fn image_ccit_4() { run_render_test("image_ccit_4", "pdfs/custom/image_ccit_4.pdf", None); }
+#[test] fn image_ccitt_rows_below_height() { run_render_test("image_ccitt_rows_below_height", "pdfs/custom/image_ccitt_rows_below_height.pdf", None); }
 #[test] fn image_cmyk_icc_jpg() { run_render_test("image_cmyk_icc_jpg", "pdfs/custom/image_cmyk_icc_jpg.pdf", None); }
 #[test] fn image_cmyk_jpg() { run_render_test("image_cmyk_jpg", "pdfs/custom/image_cmyk_jpg.pdf", None); }
 #[test] fn image_inline_2() { run_render_test("image_inline_2", "pdfs/custom/image_inline_2.pdf", None); }
