@@ -858,6 +858,7 @@ dependencies = [
  "hayro-ccitt",
  "hayro-jbig2",
  "hayro-jpeg2000",
+ "jpeg-decoder",
  "log",
  "md5",
  "memchr",
