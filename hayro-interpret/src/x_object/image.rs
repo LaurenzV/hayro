@@ -1,4 +1,4 @@
-use super::decode::{DecodedImage, DecodedMask, decode_image, decode_mask};
+use super::decode::{DecodedImage, DecodedMask, decode_image, decode_mask, downsample_luma};
 use super::xobject_oc;
 use crate::WarningSinkFn;
 use crate::cache::Cache;
@@ -203,7 +203,20 @@ impl<'a> ImageXObject<'a> {
             return None;
         }
 
-        decode_mask(self, target_dimension)
+        let mut decoded = decode_mask(self, target_dimension)?;
+
+        // Downsample the top-level stencil/`ImageMask` luma toward the
+        // hint. This is the only external call site for a genuine stencil
+        // mask (painted directly, not as another image's SMask/Mask) --
+        // `resolve_alpha`/`resolve_matte` in `decode::image` call
+        // `decode_mask` directly and are unaffected, so their internally
+        // resolved alpha stays native until `ImageDecoder::decode` performs
+        // its own downsample pass at the end.
+        if let Some(t) = target_dimension {
+            downsample_luma(&mut decoded.luma, self.width, self.height, t);
+        }
+
+        Some(decoded)
     }
 
     pub(crate) fn decoded_image(
