@@ -4,7 +4,7 @@ use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
-use crate::error::{DecodingError, Result};
+use crate::error::{DecodingError, Result, ValidationError};
 use alloc::vec;
 use core::iter;
 use core::ops::Range;
@@ -16,11 +16,14 @@ pub(crate) fn build(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> 
 }
 
 fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
-    let mut total_coefficients = 0;
+    let mut total_coefficients = 0_usize;
 
     for component_tile in tile.component_tiles() {
-        total_coefficients +=
-            component_tile.rect.width() as usize * component_tile.rect.height() as usize;
+        let component_samples = usize::try_from(component_tile.rect.area())
+            .map_err(|_| ValidationError::ImageTooLarge)?;
+        total_coefficients = total_coefficients
+            .checked_add(component_samples)
+            .ok_or(ValidationError::ImageTooLarge)?;
     }
 
     if storage.coefficients.is_empty() {
@@ -29,7 +32,7 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
     } else {
         storage.coefficients.resize(total_coefficients, 0.0);
     }
-    let mut coefficient_counter = 0;
+    let mut coefficient_counter = 0_usize;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         let d_start = storage.decompositions.len();
@@ -59,9 +62,13 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
-            let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
-            let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
-            coefficient_counter += added_coefficients;
+            let added_coefficients = usize::try_from(sub_band_rect.area())
+                .map_err(|_| ValidationError::ImageTooLarge)?;
+            let next_coefficient_counter = coefficient_counter
+                .checked_add(added_coefficients)
+                .ok_or(ValidationError::ImageTooLarge)?;
+            let coefficients = coefficient_counter..next_coefficient_counter;
+            coefficient_counter = next_coefficient_counter;
 
             let idx = storage.sub_bands.len();
             storage.sub_bands.push(SubBand {

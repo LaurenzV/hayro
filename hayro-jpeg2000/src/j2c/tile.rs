@@ -79,28 +79,30 @@ impl<'a> Tile<'a> {
         let rect = {
             let size_data = &header.size_data;
 
-            let x_coord = size_data.tile_x_coord(idx);
-            let y_coord = size_data.tile_y_coord(idx);
+            let x_coord = u64::from(size_data.tile_x_coord(idx));
+            let y_coord = u64::from(size_data.tile_y_coord(idx));
 
             // See B-7, B-8, B-9 and B-10.
-            let x0 = u32::max(
-                size_data.tile_x_offset + x_coord * size_data.tile_width,
-                size_data.image_area_x_offset,
-            );
-            let y0 = u32::max(
-                size_data.tile_y_offset + y_coord * size_data.tile_height,
-                size_data.image_area_y_offset,
-            );
+            let x0 = u64::max(
+                u64::from(size_data.tile_x_offset) + x_coord * u64::from(size_data.tile_width),
+                u64::from(size_data.image_area_x_offset),
+            ) as u32;
+            let y0 = u64::max(
+                u64::from(size_data.tile_y_offset) + y_coord * u64::from(size_data.tile_height),
+                u64::from(size_data.image_area_y_offset),
+            ) as u32;
 
             // Note that `x1` and `y1` are exclusive.
-            let x1 = u32::min(
-                size_data.tile_x_offset + (x_coord + 1) * size_data.tile_width,
-                size_data.reference_grid_width,
-            );
-            let y1 = u32::min(
-                size_data.tile_y_offset + (y_coord + 1) * size_data.tile_height,
-                size_data.reference_grid_height,
-            );
+            let x1 = u64::min(
+                u64::from(size_data.tile_x_offset)
+                    + (x_coord + 1) * u64::from(size_data.tile_width),
+                u64::from(size_data.reference_grid_width),
+            ) as u32;
+            let y1 = u64::min(
+                u64::from(size_data.tile_y_offset)
+                    + (y_coord + 1) * u64::from(size_data.tile_height),
+                u64::from(size_data.reference_grid_height),
+            ) as u32;
 
             IntRect::from_ltrb(x0, y0, x1, y1)
         };
@@ -132,8 +134,9 @@ pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
     main_header: &'a Header<'a>,
 ) -> Result<Vec<Tile<'a>>> {
-    let mut tiles = (0..main_header.size_data.num_tiles() as usize)
-        .map(|idx| Tile::new(idx as u32, main_header))
+    let tile_count = main_header.size_data.num_tiles()?;
+    let mut tiles = (0..tile_count)
+        .map(|idx| Tile::new(idx, main_header))
         .collect::<Vec<_>>();
 
     let mut tile_part_idx = 0;
@@ -165,7 +168,7 @@ fn parse_tile_part<'a>(
 
     let tile_part_header = sot_marker(reader).ok_or(MarkerError::ParseFailure("SOT"))?;
 
-    if tile_part_header.tile_index as u32 >= main_header.size_data.num_tiles() {
+    if tile_part_header.tile_index as u32 >= main_header.size_data.num_tiles()? {
         bail!(TileError::InvalidIndex);
     }
 
@@ -799,7 +802,7 @@ mod tests {
 
         assert_eq!(size_data.num_x_tiles(), 4);
         assert_eq!(size_data.num_y_tiles(), 4);
-        assert_eq!(size_data.num_tiles(), 16);
+        assert_eq!(size_data.num_tiles().unwrap(), 16);
 
         let header = Header {
             size_data,
