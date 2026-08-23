@@ -37,4 +37,3 @@ memchr = { version = "2.7.6"}
 [dev-dependencies]
 hayro-syntax = { workspace = true }
 image = {  workspace = true }
-sitro = { workspace = true }
