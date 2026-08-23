@@ -52,7 +52,6 @@ skrifa = { version = "0.46.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
 pdf-writer = { version = "0.15.0" }
-sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }

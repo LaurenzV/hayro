@@ -7,7 +7,6 @@ use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};
 use resvg::tiny_skia::{Color, Pixmap, PixmapPaint};
 use resvg::usvg::{Options, Transform, Tree};
-use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
@@ -338,13 +337,7 @@ pub fn run_svg_test(name: &str, file_path: &str, range_str: Option<&str>) {
     check_render(name, SVG_SNAPSHOTS_PATH.clone(), converted);
 }
 
-pub fn run_write_test(
-    name: &str,
-    file_path: &str,
-    page_indices: &[usize],
-    renderer: Renderer,
-    page: bool,
-) {
+pub fn run_write_test(name: &str, file_path: &str, page_indices: &[usize], page: bool) {
     let hayro_pdf = load_pdf(file_path);
 
     let buf = if page {
@@ -359,9 +352,8 @@ pub fn run_write_test(
         std::fs::write(STORE_PATH.join(format!("{name}.pdf")), &buf).unwrap();
     }
 
-    let rendered = renderer
-        .render_as_png(&buf, &RenderOptions::default())
-        .unwrap();
+    let pdf = Pdf::new(buf).unwrap();
+    let rendered = render_pdf(&pdf, name, interpreter_settings(), None);
     check_render(name, WRITE_SNAPSHOTS_PATH.clone(), rendered);
 }
 
