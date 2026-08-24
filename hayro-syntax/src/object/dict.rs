@@ -4,8 +4,8 @@ use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
-use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ReadBytes, Reader};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
 use crate::sync::FxHashMap;
 use alloc::format;
@@ -45,10 +45,10 @@ impl<'a> Dict<'a> {
     }
 
     /// Get the raw bytes underlying to the dictionary.
-    pub fn data(&self) -> &'a [u8] {
+    pub fn data(&self) -> &ReadBytes<'a> {
         match &self.0 {
-            Inner::Empty => &[],
-            Inner::Some(repr) => repr.data,
+            Inner::Empty => &ReadBytes::EMPTY,
+            Inner::Some(repr) => &repr.data,
         }
     }
 
@@ -117,8 +117,8 @@ impl<'a> Dict<'a> {
         T: Readable<'a>,
     {
         let offset = *self.offsets()?.get(key.as_ref())?;
-
-        Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
+        Reader::from_read(self.data().clone_range(offset..))
+            .read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -242,7 +242,7 @@ fn read_inner<'a>(
 }
 
 pub(crate) struct DictProbe<'a> {
-    pub(crate) data: &'a [u8],
+    pub(crate) data: ReadBytes<'a>,
     pub(crate) has_root: bool,
     pub(crate) has_type: bool,
 }
@@ -289,11 +289,10 @@ fn parse_dict_with<'a, F>(
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
     mut on_entry: F,
-) -> Option<&'a [u8]>
+) -> Option<ReadBytes<'a>>
 where
     F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
 {
-    let dict_data = r.tail()?;
     let start_offset = r.offset();
 
     // Inline image dictionaries don't start with '<<'.
@@ -307,9 +306,7 @@ where
         // Normal dictionaries end with '>>', inline image dictionaries end with BD.
         if let Some(()) = r.peek_tag(end_tag) {
             r.forward_tag(end_tag)?;
-            let end_offset = r.offset() - start_offset;
-
-            break Some(&dict_data[..end_offset]);
+            break r.range(start_offset..r.offset());
         } else {
             let Some(name) = r.read_without_context::<Name<'_>>() else {
                 if start_tag.is_some() {
@@ -346,7 +343,7 @@ where
 object!(Dict<'a>, Dict);
 
 struct Repr<'a> {
-    data: &'a [u8],
+    data: ReadBytes<'a>,
     offsets: FxHashMap<Name<'a>, usize>,
     ctx: ReaderContext<'a>,
 }

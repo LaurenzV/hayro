@@ -1,4 +1,5 @@
 use crate::reader::Reader;
+use crate::reader::ReaderBase;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -17,7 +18,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
                     break;
                 };
 
-                decoded.extend(bytes);
+                decoded.extend(bytes.as_ref());
             }
             _ => {
                 let length = 257 - length as usize;

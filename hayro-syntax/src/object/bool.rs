@@ -3,7 +3,7 @@
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 
 impl Skippable for bool {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
@@ -17,7 +17,7 @@ impl Skippable for bool {
 
 impl Readable<'_> for bool {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        match r.skip::<Self>(true)? {
+        match r.skip_read::<Self>(true)?.as_ref() {
             b"true" => Some(true),
             b"false" => Some(false),
             _ => None,

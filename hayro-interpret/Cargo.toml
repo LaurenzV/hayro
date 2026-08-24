@@ -33,6 +33,8 @@ embed-fonts = []
 # Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["hayro-cmap/embed-cmaps"]
 logging = ["dep:log", "hayro-syntax/logging"]
+# Steam data using provided source
+streaming = ["hayro-syntax/streaming"]
 
 [lints]
 workspace = true

@@ -12,7 +12,7 @@ pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use core::fmt::{Debug, Display, Formatter};
 
 mod bool;
@@ -180,7 +180,7 @@ impl Skippable for Object<'_> {
             b'n' => Null::skip(r, is_content_stream),
             b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
-            b'<' => match r.peek_bytes(2)? {
+            b'<' => match r.peek_bytes(2)?.as_ref() {
                 // A stream can never appear in a dict/array, so it should never be skipped.
                 b"<<" => Dict::skip(r, is_content_stream),
                 _ => String::skip(r, is_content_stream),
@@ -201,7 +201,7 @@ impl<'a> Readable<'a> for Object<'a> {
             b'n' => Self::Null(Null::read(r, ctx)?),
             b't' | b'f' => Self::Boolean(bool::read(r, ctx)?),
             b'/' => Self::Name(Name::read(r, ctx)?),
-            b'<' => match r.peek_bytes(2)? {
+            b'<' => match r.peek_bytes(2)?.as_ref() {
                 b"<<" => {
                     let mut cloned = r.clone();
                     let dict = Dict::read(&mut cloned, ctx)?;
