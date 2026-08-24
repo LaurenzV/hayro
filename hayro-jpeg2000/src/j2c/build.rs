@@ -3,7 +3,7 @@
 use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
-use super::tile::{ComponentTile, ResolutionTile, Tile};
+use super::tile::{ResolutionTile, Tile};
 use crate::error::{DecodingError, Result, ValidationError};
 use alloc::vec;
 use core::iter;
@@ -11,30 +11,12 @@ use core::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
-///
-/// `skipped_resolution_levels` is how many of the highest resolution levels the
-/// decoder was asked to leave out (see `DecodeSettings::target_resolution`).
-/// Their packets are still described here, because a packet header is what says
-/// how long its body is and the packets of a tile-part are read in sequence — but
-/// their coefficients are never decoded, so no storage is reserved for them.
 pub(crate) fn build(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
 ) -> Result<()> {
     build_decompositions(tile, storage, skipped_resolution_levels)
-}
-
-/// The number of resolution levels of `component_tile` that will be decoded.
-///
-/// At least one: the number of levels skipped is clamped, where it is read, to one
-/// below the smallest count any component of the image has.
-fn decoded_resolution_levels(component_tile: &ComponentTile<'_>, skipped: u8) -> u8 {
-    component_tile
-        .component_info
-        .num_resolution_levels()
-        .saturating_sub(skipped)
-        .max(1)
 }
 
 fn build_decompositions(
@@ -45,18 +27,11 @@ fn build_decompositions(
     let mut total_coefficients = 0_usize;
 
     for component_tile in tile.component_tiles() {
-        // The sub-bands of resolution levels 0 to r partition the rectangle of
-        // resolution level r (B-15), so the highest level that will be decoded
-        // states exactly how many coefficients the sub-bands below it need. With
-        // nothing skipped that is the component tile's own rectangle, which is what
-        // this used to be unconditionally — and a decode asked to stop early still
-        // allocated the full-resolution image.
-        let top = ResolutionTile::new(
-            component_tile,
-            decoded_resolution_levels(&component_tile, skipped_resolution_levels) - 1,
-        );
-        let component_samples =
-            usize::try_from(top.rect.area()).map_err(|_| ValidationError::ImageTooLarge)?;
+        let decoded_resolutions =
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
+        let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
+        let component_samples = usize::try_from(top_resolution.rect.area())
+            .map_err(|_| ValidationError::ImageTooLarge)?;
         total_coefficients = total_coefficients
             .checked_add(component_samples)
             .ok_or(ValidationError::ImageTooLarge)?;
@@ -72,7 +47,7 @@ fn build_decompositions(
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         let decoded_resolutions =
-            decoded_resolution_levels(&component_tile, skipped_resolution_levels);
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let d_start = storage.decompositions.len();
         let mut resolution_tiles = component_tile.resolution_tiles();
 
@@ -100,9 +75,7 @@ fn build_decompositions(
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
-            // A resolution level that will not be decoded gets an empty range: its
-            // code-blocks are still walked so that the packets can be read past, but
-            // nothing ever writes a coefficient of it.
+            // No need to allocate coefficients for skipped resolution levels.
             let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
                 usize::try_from(sub_band_rect.area()).map_err(|_| ValidationError::ImageTooLarge)?
             } else {
