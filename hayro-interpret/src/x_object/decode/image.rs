@@ -1,5 +1,8 @@
 use super::mask::decode_mask;
-use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, unpack_samples};
+use super::{
+    DecodeContext, decode_context, decode_u8_samples, downsample_image_data, downsample_luma,
+    fix_image_length, unpack_samples,
+};
 use crate::color::{ColorComponents, ToLuma, ToRgb};
 use crate::interpret::state::ActiveTransferFunction;
 use crate::x_object::image::ImageXObject;
@@ -44,7 +47,28 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
 
     fn decode(mut self) -> Option<DecodedImage> {
         let mut image = self.decode_image()?;
-        let alpha = self.decode_alpha(&mut image);
+        let mut alpha = self.decode_alpha(&mut image);
+
+        // Downsample the final color data and, independently, its optional
+        // alpha channel toward the target-dimension hint. This complements
+        // the syntax-level scaled decode some filters already do (DCT, JPX):
+        // it applies uniformly, after decoding, regardless of which filter
+        // produced `image`/`alpha`, catching every filter that doesn't have
+        // its own scaled-decode path. `alpha` was resolved above via the
+        // untouched, native-resolution `decode_mask`/`resolve_matte` path,
+        // so it can carry different native dimensions than `image` (an
+        // SMask/Mask needn't match its image's size) -- reconstruct its own
+        // dict-space dimensions from its still-native `scale_factors` rather
+        // than reaching back into the mask's own `ImageXObject`.
+        if let Some(t) = self.target_dimension {
+            downsample_image_data(&mut image, self.obj.width, self.obj.height, t);
+
+            if let Some(a) = &mut alpha {
+                let dict_w = ((a.width as f32 * a.scale_factors.0).round() as u32).max(1);
+                let dict_h = ((a.height as f32 * a.scale_factors.1).round() as u32).max(1);
+                downsample_luma(a, dict_w, dict_h, t);
+            }
+        }
 
         Some(DecodedImage { image, alpha })
     }
