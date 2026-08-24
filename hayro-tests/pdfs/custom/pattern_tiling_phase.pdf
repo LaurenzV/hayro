@@ -1,0 +1,302 @@
+%PDF-1.5
+1 0 obj
+<</Type/Catalog/Pages 2 0 R>>
+endobj
+2 0 obj
+<</Type/Pages/Kids[3 0 R 8 0 R]/Count 2>>
+endobj
+3 0 obj
+<</Type/Page/Parent 2 0 R/MediaBox[0 0 640 400]/Resources<</Pattern<</P1 5 0 R/P2 6 0 R>>/ColorSpace<</CS0[/Pattern]>>>>/Contents 4 0 R>>
+endobj
+4 0 obj
+<</Length 5120>>
+stream
+% Page 1: human-verification page. Pitch exactly 12 x 6 pt; every
+% coordinate is a small integer. Dot centers at (26+12i, 24+6j); the
+% blue seam at x=320 lies exactly midway between dot columns 314 and
+% 326. P2 = P1 shifted 600 XSteps in pattern space (e: 20 + 7200):
+% the SAME infinite lattice. Correct renderer: one seamless lattice,
+% every red cross dead-centered on a dot, at any rendering scale.
+q /CS0 cs /P1 scn 20 20 300 360 re f Q
+q /CS0 cs /P2 scn 320 20 300 360 re f Q
+q 0 0 1 RG 0.5 w 320 20 m 320 380 l S Q
+q 1 0 0 RG 0.4 w
+ 22  24 m  30  24 l S  26  20 m  26  28 l S
+ 22  72 m  30  72 l S  26  68 m  26  76 l S
+ 22 120 m  30 120 l S  26 116 m  26 124 l S
+ 22 168 m  30 168 l S  26 164 m  26 172 l S
+ 22 216 m  30 216 l S  26 212 m  26 220 l S
+ 22 264 m  30 264 l S  26 260 m  26 268 l S
+ 22 312 m  30 312 l S  26 308 m  26 316 l S
+ 22 360 m  30 360 l S  26 356 m  26 364 l S
+ 70  24 m  78  24 l S  74  20 m  74  28 l S
+ 70  72 m  78  72 l S  74  68 m  74  76 l S
+ 70 120 m  78 120 l S  74 116 m  74 124 l S
+ 70 168 m  78 168 l S  74 164 m  74 172 l S
+ 70 216 m  78 216 l S  74 212 m  74 220 l S
+ 70 264 m  78 264 l S  74 260 m  74 268 l S
+ 70 312 m  78 312 l S  74 308 m  74 316 l S
+ 70 360 m  78 360 l S  74 356 m  74 364 l S
+118  24 m 126  24 l S 122  20 m 122  28 l S
+118  72 m 126  72 l S 122  68 m 122  76 l S
+118 120 m 126 120 l S 122 116 m 122 124 l S
+118 168 m 126 168 l S 122 164 m 122 172 l S
+118 216 m 126 216 l S 122 212 m 122 220 l S
+118 264 m 126 264 l S 122 260 m 122 268 l S
+118 312 m 126 312 l S 122 308 m 122 316 l S
+118 360 m 126 360 l S 122 356 m 122 364 l S
+166  24 m 174  24 l S 170  20 m 170  28 l S
+166  72 m 174  72 l S 170  68 m 170  76 l S
+166 120 m 174 120 l S 170 116 m 170 124 l S
+166 168 m 174 168 l S 170 164 m 170 172 l S
+166 216 m 174 216 l S 170 212 m 170 220 l S
+166 264 m 174 264 l S 170 260 m 170 268 l S
+166 312 m 174 312 l S 170 308 m 170 316 l S
+166 360 m 174 360 l S 170 356 m 170 364 l S
+214  24 m 222  24 l S 218  20 m 218  28 l S
+214  72 m 222  72 l S 218  68 m 218  76 l S
+214 120 m 222 120 l S 218 116 m 218 124 l S
+214 168 m 222 168 l S 218 164 m 218 172 l S
+214 216 m 222 216 l S 218 212 m 218 220 l S
+214 264 m 222 264 l S 218 260 m 218 268 l S
+214 312 m 222 312 l S 218 308 m 218 316 l S
+214 360 m 222 360 l S 218 356 m 218 364 l S
+262  24 m 270  24 l S 266  20 m 266  28 l S
+262  72 m 270  72 l S 266  68 m 266  76 l S
+262 120 m 270 120 l S 266 116 m 266 124 l S
+262 168 m 270 168 l S 266 164 m 266 172 l S
+262 216 m 270 216 l S 266 212 m 266 220 l S
+262 264 m 270 264 l S 266 260 m 266 268 l S
+262 312 m 270 312 l S 266 308 m 266 316 l S
+262 360 m 270 360 l S 266 356 m 266 364 l S
+310  24 m 318  24 l S 314  20 m 314  28 l S
+310  72 m 318  72 l S 314  68 m 314  76 l S
+310 120 m 318 120 l S 314 116 m 314 124 l S
+310 168 m 318 168 l S 314 164 m 314 172 l S
+310 216 m 318 216 l S 314 212 m 314 220 l S
+310 264 m 318 264 l S 314 260 m 314 268 l S
+310 312 m 318 312 l S 314 308 m 314 316 l S
+310 360 m 318 360 l S 314 356 m 314 364 l S
+358  24 m 366  24 l S 362  20 m 362  28 l S
+358  72 m 366  72 l S 362  68 m 362  76 l S
+358 120 m 366 120 l S 362 116 m 362 124 l S
+358 168 m 366 168 l S 362 164 m 362 172 l S
+358 216 m 366 216 l S 362 212 m 362 220 l S
+358 264 m 366 264 l S 362 260 m 362 268 l S
+358 312 m 366 312 l S 362 308 m 362 316 l S
+358 360 m 366 360 l S 362 356 m 362 364 l S
+406  24 m 414  24 l S 410  20 m 410  28 l S
+406  72 m 414  72 l S 410  68 m 410  76 l S
+406 120 m 414 120 l S 410 116 m 410 124 l S
+406 168 m 414 168 l S 410 164 m 410 172 l S
+406 216 m 414 216 l S 410 212 m 410 220 l S
+406 264 m 414 264 l S 410 260 m 410 268 l S
+406 312 m 414 312 l S 410 308 m 410 316 l S
+406 360 m 414 360 l S 410 356 m 410 364 l S
+454  24 m 462  24 l S 458  20 m 458  28 l S
+454  72 m 462  72 l S 458  68 m 458  76 l S
+454 120 m 462 120 l S 458 116 m 458 124 l S
+454 168 m 462 168 l S 458 164 m 458 172 l S
+454 216 m 462 216 l S 458 212 m 458 220 l S
+454 264 m 462 264 l S 458 260 m 458 268 l S
+454 312 m 462 312 l S 458 308 m 458 316 l S
+454 360 m 462 360 l S 458 356 m 458 364 l S
+502  24 m 510  24 l S 506  20 m 506  28 l S
+502  72 m 510  72 l S 506  68 m 506  76 l S
+502 120 m 510 120 l S 506 116 m 506 124 l S
+502 168 m 510 168 l S 506 164 m 506 172 l S
+502 216 m 510 216 l S 506 212 m 506 220 l S
+502 264 m 510 264 l S 506 260 m 506 268 l S
+502 312 m 510 312 l S 506 308 m 506 316 l S
+502 360 m 510 360 l S 506 356 m 506 364 l S
+550  24 m 558  24 l S 554  20 m 554  28 l S
+550  72 m 558  72 l S 554  68 m 554  76 l S
+550 120 m 558 120 l S 554 116 m 554 124 l S
+550 168 m 558 168 l S 554 164 m 554 172 l S
+550 216 m 558 216 l S 554 212 m 554 220 l S
+550 264 m 558 264 l S 554 260 m 554 268 l S
+550 312 m 558 312 l S 554 308 m 554 316 l S
+550 360 m 558 360 l S 554 356 m 554 364 l S
+598  24 m 606  24 l S 602  20 m 602  28 l S
+598  72 m 606  72 l S 602  68 m 602  76 l S
+598 120 m 606 120 l S 602 116 m 602 124 l S
+598 168 m 606 168 l S 602 164 m 602 172 l S
+598 216 m 606 216 l S 602 212 m 602 220 l S
+598 264 m 606 264 l S 602 260 m 602 268 l S
+598 312 m 606 312 l S 602 308 m 602 316 l S
+598 360 m 606 360 l S 602 356 m 602 364 l S
+Q
+
+endstream
+endobj
+5 0 obj
+<</Type/Pattern/PatternType 1/PaintType 1/TilingType 3/BBox[0 0 50 50]/XStep 50/YStep 50/Matrix[0.24 0 0 0.12 20 21]/Length 21>>
+stream
+0 g
+17 17 16 16 re
+f
+
+endstream
+endobj
+6 0 obj
+<</Type/Pattern/PatternType 1/PaintType 1/TilingType 3/BBox[0 0 50 50]/XStep 50/YStep 50/Matrix[0.24 0 0 0.12 7220 21]/Length 21>>
+stream
+0 g
+17 17 16 16 re
+f
+
+endstream
+endobj
+8 0 obj
+<</Type/Page/Parent 2 0 R/MediaBox[0 0 640 400]/Resources<</Pattern<</P3 10 0 R/P4 11 0 R>>/ColorSpace<</CS1[/Pattern]>>>>/Contents 9 0 R>>
+endobj
+9 0 obj
+<</Length 4791>>
+stream
+% Page 2: regression page. Same construction with pitch 12.5 x 6.25 pt
+% (matrix scale 0.25/0.125, exact binary fractions), so a scale-1.0
+% snapshot has a 12.5 px horizontal step - the worst-case fraction.
+% Dot centers at (25+12.5i, 25+6.25j); crosses on the integer 50 pt
+% grid (every 4th column / 8th row). P4 = P3 + 600 XSteps (e: +7500).
+% The blue seam at x=318.75 is midway between columns 312.5 and 325.
+q /CS1 cs /P3 scn 20 20 298.75 360 re f Q
+q /CS1 cs /P4 scn 318.75 20 301.25 360 re f Q
+q 0 0 1 RG 0.5 w 318.75 20 m 318.75 380 l S Q
+q 1 0 0 RG 0.4 w
+ 21  25 m  29  25 l S  25  21 m  25  29 l S
+ 21  75 m  29  75 l S  25  71 m  25  79 l S
+ 21 125 m  29 125 l S  25 121 m  25 129 l S
+ 21 175 m  29 175 l S  25 171 m  25 179 l S
+ 21 225 m  29 225 l S  25 221 m  25 229 l S
+ 21 275 m  29 275 l S  25 271 m  25 279 l S
+ 21 325 m  29 325 l S  25 321 m  25 329 l S
+ 21 375 m  29 375 l S  25 371 m  25 379 l S
+ 71  25 m  79  25 l S  75  21 m  75  29 l S
+ 71  75 m  79  75 l S  75  71 m  75  79 l S
+ 71 125 m  79 125 l S  75 121 m  75 129 l S
+ 71 175 m  79 175 l S  75 171 m  75 179 l S
+ 71 225 m  79 225 l S  75 221 m  75 229 l S
+ 71 275 m  79 275 l S  75 271 m  75 279 l S
+ 71 325 m  79 325 l S  75 321 m  75 329 l S
+ 71 375 m  79 375 l S  75 371 m  75 379 l S
+121  25 m 129  25 l S 125  21 m 125  29 l S
+121  75 m 129  75 l S 125  71 m 125  79 l S
+121 125 m 129 125 l S 125 121 m 125 129 l S
+121 175 m 129 175 l S 125 171 m 125 179 l S
+121 225 m 129 225 l S 125 221 m 125 229 l S
+121 275 m 129 275 l S 125 271 m 125 279 l S
+121 325 m 129 325 l S 125 321 m 125 329 l S
+121 375 m 129 375 l S 125 371 m 125 379 l S
+171  25 m 179  25 l S 175  21 m 175  29 l S
+171  75 m 179  75 l S 175  71 m 175  79 l S
+171 125 m 179 125 l S 175 121 m 175 129 l S
+171 175 m 179 175 l S 175 171 m 175 179 l S
+171 225 m 179 225 l S 175 221 m 175 229 l S
+171 275 m 179 275 l S 175 271 m 175 279 l S
+171 325 m 179 325 l S 175 321 m 175 329 l S
+171 375 m 179 375 l S 175 371 m 175 379 l S
+221  25 m 229  25 l S 225  21 m 225  29 l S
+221  75 m 229  75 l S 225  71 m 225  79 l S
+221 125 m 229 125 l S 225 121 m 225 129 l S
+221 175 m 229 175 l S 225 171 m 225 179 l S
+221 225 m 229 225 l S 225 221 m 225 229 l S
+221 275 m 229 275 l S 225 271 m 225 279 l S
+221 325 m 229 325 l S 225 321 m 225 329 l S
+221 375 m 229 375 l S 225 371 m 225 379 l S
+271  25 m 279  25 l S 275  21 m 275  29 l S
+271  75 m 279  75 l S 275  71 m 275  79 l S
+271 125 m 279 125 l S 275 121 m 275 129 l S
+271 175 m 279 175 l S 275 171 m 275 179 l S
+271 225 m 279 225 l S 275 221 m 275 229 l S
+271 275 m 279 275 l S 275 271 m 275 279 l S
+271 325 m 279 325 l S 275 321 m 275 329 l S
+271 375 m 279 375 l S 275 371 m 275 379 l S
+321  25 m 329  25 l S 325  21 m 325  29 l S
+321  75 m 329  75 l S 325  71 m 325  79 l S
+321 125 m 329 125 l S 325 121 m 325 129 l S
+321 175 m 329 175 l S 325 171 m 325 179 l S
+321 225 m 329 225 l S 325 221 m 325 229 l S
+321 275 m 329 275 l S 325 271 m 325 279 l S
+321 325 m 329 325 l S 325 321 m 325 329 l S
+321 375 m 329 375 l S 325 371 m 325 379 l S
+371  25 m 379  25 l S 375  21 m 375  29 l S
+371  75 m 379  75 l S 375  71 m 375  79 l S
+371 125 m 379 125 l S 375 121 m 375 129 l S
+371 175 m 379 175 l S 375 171 m 375 179 l S
+371 225 m 379 225 l S 375 221 m 375 229 l S
+371 275 m 379 275 l S 375 271 m 375 279 l S
+371 325 m 379 325 l S 375 321 m 375 329 l S
+371 375 m 379 375 l S 375 371 m 375 379 l S
+421  25 m 429  25 l S 425  21 m 425  29 l S
+421  75 m 429  75 l S 425  71 m 425  79 l S
+421 125 m 429 125 l S 425 121 m 425 129 l S
+421 175 m 429 175 l S 425 171 m 425 179 l S
+421 225 m 429 225 l S 425 221 m 425 229 l S
+421 275 m 429 275 l S 425 271 m 425 279 l S
+421 325 m 429 325 l S 425 321 m 425 329 l S
+421 375 m 429 375 l S 425 371 m 425 379 l S
+471  25 m 479  25 l S 475  21 m 475  29 l S
+471  75 m 479  75 l S 475  71 m 475  79 l S
+471 125 m 479 125 l S 475 121 m 475 129 l S
+471 175 m 479 175 l S 475 171 m 475 179 l S
+471 225 m 479 225 l S 475 221 m 475 229 l S
+471 275 m 479 275 l S 475 271 m 475 279 l S
+471 325 m 479 325 l S 475 321 m 475 329 l S
+471 375 m 479 375 l S 475 371 m 475 379 l S
+521  25 m 529  25 l S 525  21 m 525  29 l S
+521  75 m 529  75 l S 525  71 m 525  79 l S
+521 125 m 529 125 l S 525 121 m 525 129 l S
+521 175 m 529 175 l S 525 171 m 525 179 l S
+521 225 m 529 225 l S 525 221 m 525 229 l S
+521 275 m 529 275 l S 525 271 m 525 279 l S
+521 325 m 529 325 l S 525 321 m 525 329 l S
+521 375 m 529 375 l S 525 371 m 525 379 l S
+571  25 m 579  25 l S 575  21 m 575  29 l S
+571  75 m 579  75 l S 575  71 m 575  79 l S
+571 125 m 579 125 l S 575 121 m 575 129 l S
+571 175 m 579 175 l S 575 171 m 575 179 l S
+571 225 m 579 225 l S 575 221 m 575 229 l S
+571 275 m 579 275 l S 575 271 m 575 279 l S
+571 325 m 579 325 l S 575 321 m 575 329 l S
+571 375 m 579 375 l S 575 371 m 575 379 l S
+Q
+
+endstream
+endobj
+10 0 obj
+<</Type/Pattern/PatternType 1/PaintType 1/TilingType 3/BBox[0 0 50 50]/XStep 50/YStep 50/Matrix[0.25 0 0 0.125 18.75 21.875]/Length 21>>
+stream
+0 g
+17 17 16 16 re
+f
+
+endstream
+endobj
+11 0 obj
+<</Type/Pattern/PatternType 1/PaintType 1/TilingType 3/BBox[0 0 50 50]/XStep 50/YStep 50/Matrix[0.25 0 0 0.125 7518.75 21.875]/Length 21>>
+stream
+0 g
+17 17 16 16 re
+f
+
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000054 00000 n 
+0000000111 00000 n 
+0000000264 00000 n 
+0000005434 00000 n 
+0000005617 00000 n 
+0000000000 65535 f 
+0000005802 00000 n 
+0000005957 00000 n 
+0000010798 00000 n 
+0000010990 00000 n 
+trailer
+<</Size 12/Root 1 0 R>>
+startxref
+11184
+%%EOF
