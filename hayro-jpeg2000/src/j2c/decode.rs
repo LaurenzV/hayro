@@ -23,7 +23,7 @@ use super::progression::{
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
-use crate::error::{DecodingError, Result, TileError, bail};
+use crate::error::{DecodingError, Result, TileError, ValidationError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::math::SimdBuffer;
 use crate::reader::BitReader;
@@ -41,7 +41,7 @@ pub(crate) fn decode<'a>(
         bail!(TileError::Invalid);
     }
 
-    ctx.reset(header, &tiles[0]);
+    ctx.reset(header, &tiles[0])?;
 
     for tile in &tiles {
         trace!(
@@ -109,21 +109,23 @@ pub struct DecoderContext<'a> {
 }
 
 impl DecoderContext<'_> {
-    fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
+    fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) -> Result<()> {
         self.tile_decode_context.reset();
         self.storage.reset();
 
         self.channel_data.clear();
+        let sample_count = (header.size_data.image_width() as usize)
+            .checked_mul(header.size_data.image_height() as usize)
+            .ok_or(ValidationError::ImageTooLarge)?;
         // TODO: SIMD Buffers should be reused across runs!
         for info in &initial_tile.component_infos {
             self.channel_data.push(ComponentData {
-                container: SimdBuffer::zeros(
-                    header.size_data.image_width() as usize
-                        * header.size_data.image_height() as usize,
-                ),
+                container: SimdBuffer::zeros(sample_count),
                 bit_depth: info.size_info.precision,
             });
         }
+
+        Ok(())
     }
 }
 

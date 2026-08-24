@@ -44,6 +44,7 @@ pub(crate) fn read_header<'a>(
     }
 
     let mut size_data = size_marker(reader)?;
+    size_data.num_tiles()?;
 
     let mut cod = None;
     let mut qcd = None;
@@ -503,20 +504,29 @@ impl SizeData {
     }
 
     /// The total number of tiles.
-    pub(crate) fn num_tiles(&self) -> u32 {
-        self.num_x_tiles() * self.num_y_tiles()
+    pub(crate) fn num_tiles(&self) -> Result<u32> {
+        let tile_count = self
+            .num_x_tiles()
+            .checked_mul(self.num_y_tiles())
+            .ok_or(ValidationError::ImageTooLarge)?;
+
+        Ok(tile_count)
     }
 
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        (self.reference_grid_width - self.image_area_x_offset)
-            .div_ceil(self.x_shrink_factor * self.x_resolution_shrink_factor)
+        let divisor = u64::from(self.x_shrink_factor) * u64::from(self.x_resolution_shrink_factor);
+        let width =
+            u64::from(self.reference_grid_width - self.image_area_x_offset).div_ceil(divisor);
+        width as u32
     }
 
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        (self.reference_grid_height - self.image_area_y_offset)
-            .div_ceil(self.y_shrink_factor * self.y_resolution_shrink_factor)
+        let divisor = u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor);
+        let height =
+            u64::from(self.reference_grid_height - self.image_area_y_offset).div_ceil(divisor);
+        height as u32
     }
 }
 
@@ -567,14 +577,6 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
             bail!(ValidationError::InvalidComponentMetadata);
         }
-    }
-
-    const MAX_DIMENSIONS: usize = 60000;
-
-    if size_data.image_width() as usize > MAX_DIMENSIONS
-        || size_data.image_height() as usize > MAX_DIMENSIONS
-    {
-        bail!(ValidationError::ImageTooLarge);
     }
 
     Ok(size_data)
