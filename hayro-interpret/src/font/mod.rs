@@ -94,6 +94,8 @@ impl Glyph<'_> {
     ///
     /// **For Type3 Fonts:**
     /// 1. `ToUnicode` cmap
+    /// 2. Glyph name → Unicode (via Adobe Glyph List)
+    /// 3. Unicode naming conventions (e.g., "uni0041", "u0041")
     ///
     /// Returns `None` if the Unicode value could not be determined.
     ///
@@ -103,6 +105,20 @@ impl Glyph<'_> {
         match self {
             Glyph::Outline(g) => g.as_unicode(),
             Glyph::Type3(g) => g.as_unicode(),
+        }
+    }
+
+    /// Return the original character code that selected this glyph in the
+    /// content stream.
+    ///
+    /// For simple fonts this is the single byte from the string operand, and
+    /// for CID fonts it is the code resolved by the encoding `CMap`. Consumers
+    /// performing text extraction can use this as a last-resort input when
+    /// [`Glyph::as_unicode`] returns `None`.
+    pub fn char_code(&self) -> u32 {
+        match self {
+            Glyph::Outline(g) => g.char_code(),
+            Glyph::Type3(g) => g.char_code(),
         }
     }
 }
@@ -198,6 +214,11 @@ impl OutlineGlyph {
         self.id
     }
 
+    /// Get the original character code that selected this glyph.
+    pub fn char_code(&self) -> u32 {
+        self.char_code
+    }
+
     /// Get the advance width for this glyph.
     ///
     /// The advance width is how far to move horizontally after drawing
@@ -245,9 +266,14 @@ impl<'a> Type3Glyph<'a> {
 
     /// Returns the Unicode code point for this glyph, if available.
     ///
-    /// Note: Type3 fonts can only provide Unicode via `ToUnicode` cmap.
+    /// See [`Glyph::as_unicode`] for details on the fallback chain used.
     pub fn as_unicode(&self) -> Option<BfString> {
         self.font.char_code_to_unicode(self.char_code)
+    }
+
+    /// Get the original character code that selected this glyph.
+    pub fn char_code(&self) -> u32 {
+        self.char_code
     }
 }
 
