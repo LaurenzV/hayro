@@ -143,7 +143,7 @@ fn decode_tile<'a, 'b>(
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build::build(tile, storage)?;
+    build::build(tile, storage, header.skipped_resolution_levels)?;
     // Next, we parse the layers/segments for each code block.
     segment::parse(tile, progression_iterator, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the

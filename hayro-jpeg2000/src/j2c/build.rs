@@ -11,15 +11,26 @@ use core::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
-pub(crate) fn build(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
-    build_decompositions(tile, storage)
+pub(crate) fn build(
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage<'_>,
+    skipped_resolution_levels: u8,
+) -> Result<()> {
+    build_decompositions(tile, storage, skipped_resolution_levels)
 }
 
-fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
+fn build_decompositions(
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage<'_>,
+    skipped_resolution_levels: u8,
+) -> Result<()> {
     let mut total_coefficients = 0_usize;
 
     for component_tile in tile.component_tiles() {
-        let component_samples = usize::try_from(component_tile.rect.area())
+        let decoded_resolutions =
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
+        let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
+        let component_samples = usize::try_from(top_resolution.rect.area())
             .map_err(|_| ValidationError::ImageTooLarge)?;
         total_coefficients = total_coefficients
             .checked_add(component_samples)
@@ -35,6 +46,8 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
     let mut coefficient_counter = 0_usize;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
+        let decoded_resolutions =
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let d_start = storage.decompositions.len();
         let mut resolution_tiles = component_tile.resolution_tiles();
 
@@ -62,8 +75,12 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
-            let added_coefficients = usize::try_from(sub_band_rect.area())
-                .map_err(|_| ValidationError::ImageTooLarge)?;
+            // No need to allocate coefficients for skipped resolution levels.
+            let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
+                usize::try_from(sub_band_rect.area()).map_err(|_| ValidationError::ImageTooLarge)?
+            } else {
+                0
+            };
             let next_coefficient_counter = coefficient_counter
                 .checked_add(added_coefficients)
                 .ok_or(ValidationError::ImageTooLarge)?;
