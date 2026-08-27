@@ -124,6 +124,7 @@ impl Default for InterpreterSettings {
 
 #[derive(Copy, Clone, Debug)]
 /// Warnings that can occur while interpreting a PDF file.
+#[non_exhaustive]
 pub enum InterpreterWarning {
     /// An unsupported font kind was encountered.
     ///
@@ -131,6 +132,9 @@ pub enum InterpreterWarning {
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
+    /// An annotation has an `AP` dictionary, but its normal appearance could not
+    /// be selected or loaded, so the annotation was not drawn.
+    UnresolvedAnnotationAppearance,
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -205,6 +209,8 @@ pub fn interpret_page<'a>(
                 apx.draw(resources, context, device);
                 context.pop_root_transform();
                 context.restore_state(device);
+            } else if annot.get::<Dict<'_>>(AP).is_some() {
+                (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
             }
         }
     }
