@@ -208,11 +208,21 @@ pub struct RenderSettings {
     pub x_scale: f32,
     /// How much the contents should be scaled into the y direction.
     pub y_scale: f32,
+    /// How far the viewport should be shifted to the right, in device pixels
+    /// (i.e. after the scale factors have been applied). A value of `0.0` anchors
+    /// the viewport at the left edge of the page.
+    pub x_offset: f32,
+    /// How far the viewport should be shifted downwards, in device pixels
+    /// (i.e. after the scale factors have been applied). A value of `0.0` anchors
+    /// the viewport at the top edge of the page.
+    pub y_offset: f32,
     /// The width of the viewport. If this is set to `None`, the width will be chosen
-    /// automatically based on the scale factor and the dimensions of the PDF.
+    /// automatically based on the scale factor, the dimensions of the PDF and the
+    /// horizontal offset, so that the viewport extends to the right edge of the page.
     pub width: Option<u16>,
     /// The height of the viewport. If this is set to `None`, the height will be chosen
-    /// automatically based on the scale factor and the dimensions of the PDF.
+    /// automatically based on the scale factor, the dimensions of the PDF and the
+    /// vertical offset, so that the viewport extends to the bottom edge of the page.
     pub height: Option<u16>,
     /// The background color. Determines the color of the base
     /// rectangle during rendering to a pixmap.
@@ -224,6 +234,8 @@ impl Default for RenderSettings {
         Self {
             x_scale: 1.0,
             y_scale: 1.0,
+            x_offset: 0.0,
+            y_offset: 0.0,
             width: None,
             height: None,
             bg_color: TRANSPARENT,
@@ -239,9 +251,14 @@ pub fn render<'a>(
     render_settings: &RenderSettings,
 ) -> Pixmap {
     let (x_scale, y_scale) = (render_settings.x_scale, render_settings.y_scale);
+    let (x_offset, y_offset) = (render_settings.x_offset, render_settings.y_offset);
     let (width, height) = page.render_dimensions();
-    let (scaled_width, scaled_height) = ((width * x_scale) as f64, (height * y_scale) as f64);
-    let initial_transform = Affine::scale_non_uniform(x_scale as f64, y_scale as f64)
+    let (scaled_width, scaled_height) = (
+        (width * x_scale - x_offset).max(0.0) as f64,
+        (height * y_scale - y_offset).max(0.0) as f64,
+    );
+    let initial_transform = Affine::translate((-x_offset as f64, -y_offset as f64))
+        * Affine::scale_non_uniform(x_scale as f64, y_scale as f64)
         * page.initial_transform(true).to_kurbo();
 
     let (pix_width, pix_height) = (
