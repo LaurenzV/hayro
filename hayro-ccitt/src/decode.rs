@@ -58,19 +58,31 @@ impl BitReader<'_> {
     /// Decode a white run length.
     #[inline(always)]
     fn decode_white_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&WHITE_STATES)
-            // See 0506179.pdf. We are lenient and check whether perhaps
-            // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&BLACK_STATES))
+        // See 0506179.pdf. We are lenient and check whether perhaps the
+        // opposite color works.
+        //
+        // The reader is restored before the retry. `decode_run_inner` consumes
+        // bits as it walks the state machine and does not put them back when it
+        // gives up, so without this the fallback starts somewhere in the middle
+        // of the code it is meant to read. It then usually succeeds -- on the
+        // wrong bits -- and every run after it is shifted, which turns one bad
+        // code into a garbled image rather than one bad run.
+        let saved = self.clone();
+        self.decode_run_inner(&WHITE_STATES).or_else(|_| {
+            *self = saved;
+            self.decode_run_inner(&BLACK_STATES)
+        })
     }
 
     /// Decode a black run length.
     #[inline(always)]
     fn decode_black_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&BLACK_STATES)
-            // See 0506179.pdf. We are lenient and check whether perhaps
-            // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&WHITE_STATES))
+        // See 0506179.pdf. Same restore-before-retry as `decode_white_run`.
+        let saved = self.clone();
+        self.decode_run_inner(&BLACK_STATES).or_else(|_| {
+            *self = saved;
+            self.decode_run_inner(&WHITE_STATES)
+        })
     }
 
     /// Decode a run length for the specified color.
@@ -154,5 +166,59 @@ impl BitReader<'_> {
 
             return count;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bit_reader::BitReader;
+
+    /// A failed run decode must not move the reader on.
+    ///
+    /// `decode_run_inner` consumes bits as it walks the state machine and does
+    /// not put them back when it gives up, so the lenient retry with the
+    /// opposite colour table used to start somewhere inside the code it was
+    /// meant to read. It then usually succeeds -- on the wrong bits -- and
+    /// every run after it is shifted, which turns one bad code into a garbled
+    /// image rather than one bad run.
+    ///
+    /// Stated as the invariant rather than on one crafted stream: over every
+    /// two-byte input where the white table fails and the black table
+    /// succeeds, the lenient decode must return what the black table returns
+    /// and leave the reader where the black table left it. Brute force, so
+    /// nothing here depends on hand-derived codes being right.
+    #[test]
+    fn a_failed_decode_leaves_the_reader_where_it_started() {
+        let mut checked = 0;
+        for hi in 0..=u8::MAX {
+            for lo in 0..=u8::MAX {
+                let data = [hi, lo];
+
+                let mut white_only = BitReader::new(&data);
+                if white_only.decode_run_inner(&WHITE_STATES).is_ok() {
+                    continue;
+                }
+                let mut black_only = BitReader::new(&data);
+                let Ok(black) = black_only.decode_run_inner(&BLACK_STATES) else {
+                    continue;
+                };
+
+                let mut lenient = BitReader::new(&data);
+                assert_eq!(
+                    lenient.decode_white_run().ok(),
+                    Some(black),
+                    "lenient decode of {data:02x?} disagreed with the black table"
+                );
+                assert_eq!(
+                    lenient.byte_pos(),
+                    black_only.byte_pos(),
+                    "lenient decode of {data:02x?} left the reader elsewhere"
+                );
+                checked += 1;
+            }
+        }
+        // A search that finds nothing proves nothing.
+        assert!(checked > 0, "no input exercised the fallback");
     }
 }
