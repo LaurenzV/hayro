@@ -122,12 +122,24 @@ impl<'a> Stream<'a> {
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
-            Cow::Owned(
-                ctx.xref()
-                    .decrypt(self.obj_id(), self.data, DecryptionTarget::Stream)
-                    // TODO: MAybe an error would be better?
-                    .unwrap_or_default(),
-            )
+            // The object id, and no substitute for it.
+            //
+            // `obj_id()` below falls back to 0 0 for a stream that carries no
+            // identifier, which a crafted PDF can produce. Handing that to
+            // `decrypt` does not fail: the per-object key is derived FROM the
+            // identifier, so a wrong identifier yields a wrong key and RC4 or
+            // AES then returns plausible bytes that are not the stream. The
+            // caller cannot tell the difference, and neither can a filter --
+            // which is worse than not decrypting at all.
+            match self.dict.obj_id() {
+                Some(obj_id) => Cow::Owned(
+                    ctx.xref()
+                        .decrypt(obj_id, self.data, DecryptionTarget::Stream)
+                        // TODO: MAybe an error would be better?
+                        .unwrap_or_default(),
+                ),
+                None => Cow::Borrowed(self.data),
+            }
         } else {
             Cow::Borrowed(self.data)
         }
