@@ -145,10 +145,22 @@ impl Renderer<'_> {
                         let x_step = xs * t.x_step;
                         let y_step = ys * t.y_step;
 
+                        let pix_width = x_step.abs().round().max(1.0) as u16;
+                        let pix_height = y_step.abs().round().max(1.0) as u16;
+
+                        // The pixmap tiles with an integer pixel period, while the paint
+                        // transform below maps that period back to the exact device step.
+                        // Rasterizing the cell at `xs`/`ys` directly would make every
+                        // repetition slide by the step's rounding residue, which accumulates
+                        // into visible pitch and phase error for fine patterns. Instead,
+                        // rasterize at the scale where one step spans the pixmap exactly;
+                        // this only changes the scale of the cell content by up to half a
+                        // pixel per step.
+                        let xs = pix_width as f32 / t.x_step.abs();
+                        let ys = pix_height as f32 / t.y_step.abs();
+
                         let scaled_width = bbox.width() as f32 * xs;
                         let scaled_height = bbox.height() as f32 * ys;
-                        let pix_width = x_step.abs().round() as u16;
-                        let pix_height = y_step.abs().round() as u16;
 
                         let mut renderer = self.child(pix_width, pix_height);
                         renderer.inside_pattern = true;
