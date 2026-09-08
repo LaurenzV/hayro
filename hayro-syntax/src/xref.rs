@@ -381,16 +381,6 @@ impl XRef {
         Ok(xref)
     }
 
-    fn is_repaired(&self) -> bool {
-        match &self.0 {
-            Inner::Dummy => false,
-            Inner::Some(r) => {
-                let locked = r.map.get();
-                locked.repaired
-            }
-        }
-    }
-
     pub(crate) fn dummy() -> &'static Self {
         &DUMMY_XREF
     }
@@ -482,8 +472,19 @@ impl XRef {
             unreachable!();
         };
 
-        let mut locked = r.map.try_put().unwrap();
-        assert!(!locked.repaired);
+        // Block until concurrent readers of the map have drained;
+        // `get_with` drops its read guard before calling `repair`, so no
+        // thread ever waits here while holding the map lock. Several
+        // threads can race into `repair` after each observing a broken
+        // entry: the first one rebuilds the map and the others simply
+        // return once the write lock is theirs, making the repair
+        // idempotent. In the uncontended (single-threaded) case the lock
+        // is acquired immediately and `repaired` is false, because the
+        // caller checked it before calling `repair`.
+        let mut locked = r.map.put();
+        if locked.repaired {
+            return;
+        }
 
         let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
         locked.xref_map = xref_map;
@@ -541,7 +542,10 @@ impl XRef {
             return None;
         };
 
-        let locked = repr.map.try_get().unwrap();
+        // A blocking read: another thread might be repairing the xref
+        // table at this very moment, in which case we need to wait for the
+        // repaired map instead of panicking on a failed try-lock.
+        let locked = repr.map.get();
 
         let mut r = Reader::new(repr.data.get().as_ref());
 
@@ -550,6 +554,17 @@ impl XRef {
             // shall be treated as a reference to the null object.
             None
         })?;
+        // Snapshot the repaired flag under the same guard as the entry
+        // read. If parsing the entry fails below, the question to ask is
+        // "did the entry come from the pre-repair or the post-repair
+        // map?", not "is the map repaired by now?": with concurrent
+        // readers, a thread that read a stale pre-repair entry could
+        // otherwise observe another thread's repair that completed in the
+        // meantime, conclude that repairing has already been tried for
+        // its object, and silently resolve it as null, where the
+        // single-threaded path would repair and retry. Without
+        // concurrency, the snapshot and a fresh read are the same value.
+        let was_repaired = locked.repaired;
         drop(locked);
 
         let mut ctx = ctx.clone();
@@ -574,7 +589,13 @@ impl XRef {
                 };
 
                 // The xref table is broken, try to repair if not already repaired.
-                if self.is_repaired() {
+                // This branches on the snapshot taken above: an entry from
+                // the pre-repair map must retry against the repaired map
+                // even if another thread finished the repair in the
+                // meantime (`repair` is idempotent and blocks until the
+                // map is repaired, so the retry below reads the repaired
+                // entry either way).
+                if was_repaired {
                     error!(
                         "attempt was made at repairing xref, but object {id:?} still couldn't be read"
                     );
@@ -1150,5 +1171,177 @@ mod tests {
         let data = b"xref\n0 999999999999999999999\ntrailer\n<<>>";
         let mut reader = Reader::new(data);
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
+    }
+
+    /// The number of objects with deliberately broken xref entries in
+    /// [`broken_xref_pdf`].
+    #[cfg(feature = "std")]
+    const NUM_BROKEN: usize = 8;
+    /// The object number of the first broken object in [`broken_xref_pdf`].
+    #[cfg(feature = "std")]
+    const FIRST_BROKEN: usize = 3;
+
+    /// Build a PDF whose catalog and page tree entries are valid (so that
+    /// loading it does not trigger a repair), but whose xref entries for
+    /// objects `3..(3 + NUM_BROKEN)` point into the header, where neither
+    /// parsing nor skipping an indirect object succeeds. Resolving any of
+    /// those objects therefore takes the repair path. The `filler`
+    /// objects only make the file larger so that the full-file scan of a
+    /// repair takes long enough for concurrent readers to actually race
+    /// it.
+    #[cfg(feature = "std")]
+    fn broken_xref_pdf(filler: usize) -> Vec<u8> {
+        use alloc::format;
+        use alloc::string::String;
+        use alloc::vec::Vec;
+
+        let mut pdf: Vec<u8> = b"%PDF-1.4\n".to_vec();
+        let mut offsets: Vec<usize> = Vec::new();
+
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n");
+
+        for i in 0..NUM_BROKEN {
+            let obj_num = FIRST_BROKEN + i;
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(
+                format!("{obj_num} 0 obj\n<< /V {} >>\nendobj\n", 100 + obj_num).as_bytes(),
+            );
+        }
+
+        let first_filler = FIRST_BROKEN + NUM_BROKEN;
+        let filler_payload = "A".repeat(2000);
+        for i in 0..filler {
+            let obj_num = first_filler + i;
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(
+                format!("{obj_num} 0 obj\n<< /Filler ({filler_payload}) >>\nendobj\n").as_bytes(),
+            );
+        }
+
+        let size = first_filler + filler;
+        let xref_pos = pdf.len();
+        let mut table = String::from("xref\n");
+        table.push_str(&format!("0 {size}\n"));
+        table.push_str("0000000000 65535 f\r\n");
+        for (i, offset) in offsets.iter().enumerate() {
+            let obj_num = i + 1;
+            let broken = (FIRST_BROKEN..FIRST_BROKEN + NUM_BROKEN).contains(&obj_num);
+            // Offset 2 points at the `DF-1.4` bytes of the header, where
+            // both reading and skipping an indirect object fail.
+            let offset = if broken { 2 } else { *offset };
+            table.push_str(&format!("{offset:010} 00000 n\r\n"));
+        }
+        table.push_str(&format!(
+            "trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF"
+        ));
+        pdf.extend_from_slice(table.as_bytes());
+
+        pdf
+    }
+
+    /// Every thread resolves its own broken object, so all of them race
+    /// into the repair path at once. The losing threads must wait for the
+    /// winning repair and then converge on the repaired table instead of
+    /// panicking on a failed try-lock or on a repeated repair.
+    #[cfg(feature = "std")]
+    #[test]
+    fn concurrent_repair_of_broken_xref_does_not_panic() {
+        use crate::object::dict::Dict;
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const ITERATIONS: usize = 16;
+
+        let data = broken_xref_pdf(300);
+        let wrong = AtomicUsize::new(0);
+
+        for _ in 0..ITERATIONS {
+            let pdf = crate::pdf::Pdf::new(data.clone()).unwrap();
+            let barrier = Barrier::new(NUM_BROKEN);
+
+            std::thread::scope(|s| {
+                for t in 0..NUM_BROKEN {
+                    let barrier = &barrier;
+                    let pdf = &pdf;
+                    let wrong = &wrong;
+                    s.spawn(move || {
+                        barrier.wait();
+
+                        let obj_num = (FIRST_BROKEN + t) as i32;
+                        let id = ObjectIdentifier::new(obj_num, 0);
+                        let value = pdf
+                            .xref()
+                            .get::<Dict<'_>>(id)
+                            .and_then(|d| d.get::<i32>(b"V"));
+
+                        if value != Some(100 + obj_num) {
+                            wrong.fetch_add(1, Ordering::Relaxed);
+                        }
+                    });
+                }
+            });
+        }
+
+        assert_eq!(
+            wrong.load(Ordering::Relaxed),
+            0,
+            "some objects failed to resolve after a concurrent xref repair"
+        );
+    }
+
+    /// All threads resolve the same broken objects. A thread that read a
+    /// stale pre-repair entry and then lost the repair race to another
+    /// thread must still retry against the repaired table instead of
+    /// silently resolving the object as null.
+    #[cfg(feature = "std")]
+    #[test]
+    fn concurrent_repair_does_not_null_pre_repair_entries() {
+        use crate::object::dict::Dict;
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const THREADS: usize = 8;
+        const ITERATIONS: usize = 24;
+
+        let data = broken_xref_pdf(300);
+        let wrong = AtomicUsize::new(0);
+
+        for _ in 0..ITERATIONS {
+            let pdf = crate::pdf::Pdf::new(data.clone()).unwrap();
+            let barrier = Barrier::new(THREADS);
+
+            std::thread::scope(|s| {
+                for _ in 0..THREADS {
+                    let barrier = &barrier;
+                    let pdf = &pdf;
+                    let wrong = &wrong;
+                    s.spawn(move || {
+                        barrier.wait();
+
+                        for i in 0..NUM_BROKEN {
+                            let obj_num = (FIRST_BROKEN + i) as i32;
+                            let id = ObjectIdentifier::new(obj_num, 0);
+                            let value = pdf
+                                .xref()
+                                .get::<Dict<'_>>(id)
+                                .and_then(|d| d.get::<i32>(b"V"));
+
+                            if value != Some(100 + obj_num) {
+                                wrong.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        assert_eq!(
+            wrong.load(Ordering::Relaxed),
+            0,
+            "a lost repair race silently resolved objects as null"
+        );
     }
 }
