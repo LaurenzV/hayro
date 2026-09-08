@@ -3,7 +3,9 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{Width, read_encoding, read_widths};
-use crate::font::{Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, read_to_unicode};
+use crate::font::{
+    Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, glyph_name_to_unicode, read_to_unicode,
+};
 use crate::interpret::state::TextState;
 use crate::util::RectExt;
 use crate::x_object::soft_mask::SoftMask;
@@ -79,12 +81,16 @@ impl<'a> Type3<'a> {
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+        self.code_to_ps_name(code)
+            .map(|g| self.glyph_simulator.string_to_glyph(g))
+            .unwrap_or(GlyphId::NOTDEF)
+    }
+
+    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
         self.encodings
             .get(&code)
             .map(|s| s.as_str())
             .or_else(|| self.encoding.map_code(code))
-            .map(|g| self.glyph_simulator.string_to_glyph(g))
-            .unwrap_or(GlyphId::NOTDEF)
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> f32 {
@@ -96,10 +102,24 @@ impl<'a> Type3<'a> {
     }
 
     pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {
-        // Type3 fonts can only provide Unicode via ToUnicode CMap.
-        self.to_unicode
-            .as_ref()
-            .and_then(|t| t.lookup_bf_string(char_code))
+        if let Some(to_unicode) = &self.to_unicode
+            && let Some(c) = to_unicode.lookup_bf_string(char_code)
+        {
+            // Skip null character mappings and fall back to glyph name
+            // lookup. Some PDFs have incorrect ToUnicode mappings that map
+            // to U+0000.
+            if c != BfString::Char('\0') {
+                return Some(c);
+            }
+        }
+
+        // Like simple outline fonts, fall back to the glyph name selected
+        // by the encoding.
+        u8::try_from(char_code)
+            .ok()
+            .and_then(|code| self.code_to_ps_name(code))
+            .and_then(glyph_name_to_unicode)
+            .map(BfString::Char)
     }
 
     pub(crate) fn render_glyph(
