@@ -30,6 +30,8 @@ embed-cmaps = ["hayro-interpret/embed-cmaps"]
 logging = ["hayro-interpret/logging"]
 # Enable SIMD-accelerated image resizing in pic-scale.
 simd = ["pic-scale/neon", "pic-scale/rdm", "pic-scale/sse", "pic-scale/avx"]
+# Steam data using provided source
+streaming = ["hayro-interpret/streaming"]
 
 [lints]
 workspace = true

@@ -4,11 +4,13 @@ use crate::PdfData;
 use crate::object::Object;
 use crate::page::Pages;
 use crate::page::cached::CachedPages;
-use crate::reader::Reader;
+use crate::reader::ReaderBase;
 use crate::sync::Arc;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 
 pub use crate::crypto::DecryptionError;
+#[cfg(feature = "streaming")]
+pub use crate::data::{FileSource, StreamingSource};
 use crate::metadata::Metadata;
 
 /// A PDF file.
@@ -46,7 +48,7 @@ impl Pdf {
     ) -> Result<Self, LoadPdfError> {
         let data = data.into();
         let password = password.as_bytes();
-        let version = find_version(data.as_ref()).unwrap_or(PdfVersion::Pdf10);
+        let version = find_version(&data).unwrap_or(PdfVersion::Pdf10);
         let xref = match root_xref(data.clone(), password) {
             Ok(x) => x,
             Err(e) => match e {
@@ -107,15 +109,17 @@ impl Pdf {
     }
 }
 
-fn find_version(data: &[u8]) -> Option<PdfVersion> {
-    let data = &data[..data.len().min(2000)];
-    let mut r = Reader::new(data);
+fn find_version(data: &PdfData) -> Option<PdfVersion> {
+    let mut r = data.reader();
 
-    while r.forward_tag(b"%PDF-").is_none() {
-        r.read_byte()?;
+    for _ in 0..2000 {
+        if r.forward_tag(b"%PDF-").is_some() {
+            return PdfVersion::from_bytes(r.read_bytes(3)?.as_ref());
+        }
+        r.skip_bytes(1)?;
     }
 
-    PdfVersion::from_bytes(r.tail()?)
+    None
 }
 
 /// The version of a PDF document.

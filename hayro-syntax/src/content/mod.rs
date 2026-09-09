@@ -39,9 +39,8 @@ use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
 use crate::object::{Array, Null, Number, Object, Stream};
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::find_needle;
 use core::array;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
@@ -172,26 +171,27 @@ impl<'a> UntypedIter<'a> {
                     // One whitespace after "ID".
                     self.reader.read_white_space()?;
 
-                    let stream_data = self.reader.tail()?;
                     let start_offset = self.reader.offset();
 
-                    'outer: while let Some(pos) = find_needle(self.reader.tail()?, b"EI") {
-                        self.reader.read_bytes(pos)?;
+                    'outer: while let Some(pos) = self.reader.find_needle(b"EI") {
+                        self.reader.skip_bytes(pos)?;
 
-                        if self.reader.peek_bytes(2) == Some(b"EI") {
+                        if self.reader.peek_bytes(2).as_ref().map(|e| e.as_ref()) == Some(b"EI") {
                             // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
                             if self
                                 .reader
                                 .peek_bytes(3)
                                 .is_some_and(|b| !is_white_space_character(b[2]))
                             {
-                                self.reader.read_bytes(3)?;
+                                self.reader.skip_bytes(3)?;
 
                                 continue;
                             }
 
-                            let end_offset = self.reader.offset() - start_offset;
-                            let image_data = &stream_data[..end_offset];
+                            let image_data = self
+                                .reader
+                                .range(start_offset..self.reader.offset())
+                                .unwrap();
 
                             let stream = Stream::new(image_data, dict.clone());
 
@@ -201,13 +201,14 @@ impl<'a> UntypedIter<'a> {
                             // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
-                            let tail = &self.reader.tail()?[2..];
-                            let mut find_reader = Reader::new(tail);
+                            let tail = self
+                                .reader
+                                .range(self.reader.offset() + 2..self.reader.len())?; // safe to take tail, since this reader is always in memory 
+                            let mut find_reader = Reader::new(tail.as_ref());
 
                             while !find_reader.at_end() {
-                                let remaining = find_reader.tail()?;
-                                let next_ei = find_needle(remaining, b"EI");
-                                let next_bi = find_needle(remaining, b"BI");
+                                let next_ei = find_reader.find_needle(b"EI");
+                                let next_bi = find_reader.find_needle(b"BI");
 
                                 let (next_pos, is_ei) = match (next_ei, next_bi) {
                                     (Some(ei), Some(bi)) if ei <= bi => (ei, true),
@@ -217,7 +218,7 @@ impl<'a> UntypedIter<'a> {
                                     (None, None) => break,
                                 };
 
-                                find_reader.read_bytes(next_pos)?;
+                                find_reader.jump(next_pos);
 
                                 if is_ei {
                                     let analyze_data = &tail[..find_reader.offset()];
@@ -225,7 +226,7 @@ impl<'a> UntypedIter<'a> {
                                     // If there is any binary data in-between, we for sure
                                     // have not reached the end.
                                     if analyze_data.iter().any(|c| !c.is_ascii()) {
-                                        self.reader.read_bytes(2)?;
+                                        self.reader.skip_bytes(2)?;
                                         continue 'outer;
                                     }
 
@@ -237,7 +238,7 @@ impl<'a> UntypedIter<'a> {
                                     // stream and there should be at least one text-related
                                     // operator that can be parsed correctly.
 
-                                    let mut iter = TypedIter::new(tail);
+                                    let mut iter = TypedIter::new(tail.as_ref());
                                     let mut found = false;
                                     let mut counter = 0;
 
@@ -271,14 +272,14 @@ impl<'a> UntypedIter<'a> {
                                     if !found {
                                         // Seems like the data in-between is not a valid content
                                         // stream, so we are likely still within the image data.
-                                        self.reader.read_bytes(2)?;
+                                        self.reader.skip_bytes(2)?;
                                         continue 'outer;
                                     }
                                 } else {
                                     // Possibly another inline image, if so, the previously found "EI"
                                     // is indeed the end of data.
                                     let mut cloned = find_reader.clone();
-                                    cloned.read_bytes(2)?;
+                                    cloned.skip_bytes(2)?;
                                     if cloned
                                         .read_without_context::<InlineImageDict<'_>>()
                                         .is_some()
@@ -292,7 +293,7 @@ impl<'a> UntypedIter<'a> {
 
                             self.stack.push(Object::Stream(stream))?;
 
-                            self.reader.read_bytes(2)?;
+                            self.reader.skip_bytes(2)?;
                             self.reader.skip_white_spaces();
 
                             break;

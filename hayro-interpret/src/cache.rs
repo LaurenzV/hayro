@@ -64,7 +64,7 @@ impl<T: CacheKey, U: CacheKey> CacheKey for (T, U) {
 
 impl CacheKey for Dict<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(self.data())
+        hash128(self.data().as_ref())
     }
 }
 
@@ -106,7 +106,7 @@ impl CacheKey for Name<'_> {
 
 impl CacheKey for Array<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(self.data())
+        hash128(self.data().as_ref())
     }
 }
 

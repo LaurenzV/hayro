@@ -8,10 +8,11 @@ use crate::object::Name;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
+use crate::reader::ReadBytes;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::{OptionLog, find_needle};
+use crate::util::OptionLog;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
@@ -26,7 +27,7 @@ struct FiltersAndParams<'a> {
 #[derive(Clone)]
 pub struct Stream<'a> {
     dict: Dict<'a>,
-    data: &'a [u8],
+    data: ReadBytes<'a>,
 }
 
 impl PartialEq for Stream<'_> {
@@ -55,7 +56,7 @@ pub struct ImageDecodeParams {
 }
 
 impl<'a> Stream<'a> {
-    pub(crate) fn new(data: &'a [u8], dict: Dict<'a>) -> Self {
+    pub(crate) fn new(data: ReadBytes<'a>, dict: Dict<'a>) -> Self {
         Self { dict, data }
     }
 
@@ -124,12 +125,12 @@ impl<'a> Stream<'a> {
         {
             Cow::Owned(
                 ctx.xref()
-                    .decrypt(self.obj_id(), self.data, DecryptionTarget::Stream)
+                    .decrypt(self.obj_id(), self.data.as_ref(), DecryptionTarget::Stream)
                     // TODO: MAybe an error would be better?
                     .unwrap_or_default(),
             )
         } else {
-            Cow::Borrowed(self.data)
+            self.data.clone().into()
         }
     }
 
@@ -308,8 +309,8 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let stream_offset = find_needle(r.tail()?, b"stream")?;
-    r.read_bytes(stream_offset)?;
+    let stream_offset = r.find_needle(b"stream")?;
+    r.jump(stream_offset);
     r.forward_tag(b"stream")?;
 
     r.forward_tag(b"\n")
@@ -317,16 +318,15 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
-    let tail = r.tail()?;
-    let endstream_offset = find_needle(tail, b"endstream")?;
-    let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
-    let data = tail.get(..data_end)?;
+    let end_pos = r.find_needle(b"endstream")?;
+    let data = r.read_bytes(end_pos - r.offset())?;
+    let data_end = trim_trailing_ascii_whitespace(data.as_ref());
+    let data_inner = data.clone_range(..data_end);
 
-    r.read_bytes(endstream_offset)?;
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    Some(Stream::new(data, dict.clone()))
+    Some(Stream::new(data_inner, dict.clone()))
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
@@ -388,7 +388,7 @@ mod tests {
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
-        assert_eq!(stream.data, b"abcdefghij");
+        assert_eq!(stream.data.as_ref(), b"abcdefghij");
     }
 
     #[test]
@@ -399,6 +399,6 @@ mod tests {
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
-        assert_eq!(stream.data, b"abcdefghij");
+        assert_eq!(stream.data.as_ref(), b"abcdefghij");
     }
 }
