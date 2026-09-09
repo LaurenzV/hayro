@@ -131,6 +131,9 @@ pub enum InterpreterWarning {
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
+    /// An annotation declares an `AP` entry, but no appearance stream could be
+    /// selected from it, so the annotation was not drawn.
+    UnresolvedAnnotationAppearance,
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -205,6 +208,8 @@ pub fn interpret_page<'a>(
                 apx.draw(resources, context, device);
                 context.pop_root_transform();
                 context.restore_state(device);
+            } else if annot.get::<Dict<'_>>(AP).is_some() {
+                (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
             }
         }
     }
