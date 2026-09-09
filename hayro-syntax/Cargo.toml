@@ -10,9 +10,14 @@ license = { workspace = true }
 readme = "README.md"
 
 [features]
-default = ["std", "images"]
+default = ["std", "images", "jpeg-decoder"]
 std = ["hayro-jbig2?/std", "hayro-jpeg2000?/std", "dep:rustc-hash", "zune-jpeg?/std"]
 images = ["dep:zune-jpeg", "dep:hayro-ccitt", "dep:hayro-jbig2", "dep:hayro-jpeg2000"]
+# Use `jpeg-decoder`'s IDCT-scaled decoding to satisfy a DCTDecode image's
+# `ImageDecodeParams::target_dimension` hint directly during decode (falling
+# back to the regular `images` decode path otherwise). Requires `std`, since
+# `jpeg-decoder` decodes from `std::io::Read` unconditionally.
+jpeg-decoder = ["dep:jpeg-decoder", "std"]
 unsafe = [
     "std",
     "dep:flate2",
@@ -35,6 +40,7 @@ zune-jpeg = { workspace = true, optional = true }
 hayro-ccitt = { workspace = true, optional = true }
 hayro-jbig2 = { workspace = true, optional = true }
 hayro-jpeg2000 = { workspace = true, optional = true }
+jpeg-decoder = { workspace = true, optional = true }
 
 [lints]
 workspace = true

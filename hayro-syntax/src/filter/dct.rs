@@ -24,6 +24,11 @@ pub(crate) fn decode(
     // are too large (if they are too small, they will just be padded later on).
     let data = maybe_patch_jpeg_dimensions(data, image_params)?;
 
+    #[cfg(feature = "jpeg-decoder")]
+    if let Some(scaled) = try_scaled_decode(&data, params, image_params) {
+        return Some(scaled);
+    }
+
     let options = DecoderOptions::default()
         .set_max_width(u16::MAX as usize)
         .set_max_height(u16::MAX as usize);
@@ -94,6 +99,83 @@ pub(crate) fn decode(
 
     Some(FilterResult {
         data: Cow::Owned(decoded),
+        image_data: Some(image_data),
+    })
+}
+
+/// Attempt an IDCT-scaled decode via `jpeg-decoder`, honoring
+/// `image_params.target_dimension`, to avoid paying full-resolution decode
+/// time and memory for an image that the renderer will only ever composite
+/// at a much smaller size.
+///
+/// Returns `None` (never a wrong answer) on any error or unmet
+/// precondition; the caller then falls through to the existing
+/// full-resolution `zune-jpeg` path.
+#[cfg(feature = "jpeg-decoder")]
+fn try_scaled_decode(
+    data: &[u8],
+    params: &Dict<'_>,
+    image_params: &ImageDecodeParams,
+) -> Option<FilterResult<'static>> {
+    let (target_w, target_h) = image_params.target_dimension?;
+    if target_w < 1 || target_h < 1 {
+        return None;
+    }
+
+    // `jpeg_decoder::Decoder::scale` takes `u16` dimensions; bail (rather
+    // than truncate) if the hint is somehow outside that range.
+    if target_w > u16::MAX as u32 || target_h > u16::MAX as u32 {
+        return None;
+    }
+
+    // Conservative: only bother if we can at least halve both dimensions.
+    // Safe from overflow: both operands are bounded by u16::MAX above.
+    if image_params.width < 2 * target_w || image_params.height < 2 * target_h {
+        return None;
+    }
+
+    // `jpeg-decoder` doesn't apply a PDF /DecodeParms ColorTransform
+    // override; skip when one is present rather than risk diverging from
+    // zune-jpeg's color handling.
+    if params.get::<u8>(COLOR_TRANSFORM).is_some() {
+        return None;
+    }
+
+    // The `MultiBand` override path (num_components outside 1/3, e.g. spot
+    // colors) isn't handled by the scaled decoder; fall through for those.
+    if let Some(n) = image_params.num_components
+        && !matches!(n, 1 | 3)
+    {
+        return None;
+    }
+
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(data));
+    decoder.read_info().ok()?;
+    let info = decoder.info()?;
+
+    // Only the dominant scanned-document cases: grayscale and YCbCr/RGB.
+    // CMYK32 and L16 fall through to zune-jpeg.
+    let color_space = match info.pixel_format {
+        jpeg_decoder::PixelFormat::L8 => ImageColorSpace::Gray,
+        jpeg_decoder::PixelFormat::RGB24 => ImageColorSpace::Rgb,
+        _ => return None,
+    };
+
+    let req_w = target_w.min(u16::MAX as u32) as u16;
+    let req_h = target_h.min(u16::MAX as u32) as u16;
+    let (actual_w, actual_h) = decoder.scale(req_w, req_h).ok()?;
+    let pixels = decoder.decode().ok()?;
+
+    let image_data = ImageData {
+        alpha: None,
+        color_space: Some(color_space),
+        bits_per_component: 8,
+        width: actual_w as u32,
+        height: actual_h as u32,
+    };
+
+    Some(FilterResult {
+        data: Cow::Owned(pixels),
         image_data: Some(image_data),
     })
 }
