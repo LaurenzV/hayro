@@ -214,8 +214,7 @@ pub struct RenderSettings {
     /// The height of the viewport. If this is set to `None`, the height will be chosen
     /// automatically based on the scale factor and the dimensions of the PDF.
     pub height: Option<u16>,
-    /// The background color. Determines the color of the base
-    /// rectangle during rendering to a pixmap.
+    /// The background color used to initialize the output pixmap.
     pub bg_color: AlphaColor<Srgb>,
 }
 
@@ -266,10 +265,6 @@ pub fn render<'a>(
     let global = GlobalState::new(cache);
     let mut device = Renderer::new(pix_width, pix_height, vc_settings, &global);
 
-    device.ctx.set_paint(render_settings.bg_color);
-    device
-        .ctx
-        .fill_rect(&Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64));
     let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
     clip_path.apply_affine(initial_transform);
     device.push_clip_path(&ClipPath {
@@ -277,16 +272,20 @@ pub fn render<'a>(
         fill: FillRule::NonZero,
     });
 
-    device.push_transparency_group(1.0, None, BlendMode::Normal);
     interpret_page(page, &mut state, &mut device);
-
-    device.pop_transparency_group();
 
     device.pop_clip();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
     let mut resources = vello_cpu::Resources::default();
-    device.ctx.render(&mut pixmap, &mut resources);
+    device.ctx.render_with(
+        &mut pixmap,
+        &mut resources,
+        vello_cpu::RasterizerSettings {
+            target_init: vello_cpu::TargetInit::Clear(render_settings.bg_color),
+            ..Default::default()
+        },
+    );
 
     pixmap
 }

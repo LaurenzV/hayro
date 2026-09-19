@@ -1,6 +1,6 @@
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::{ClipPath, FillRule};
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{Affine, BezPath, Rect};
 
 impl Renderer<'_> {
     pub(super) fn push_clip_path_inner(&mut self, clip_path: &BezPath, fill: FillRule) {
@@ -18,10 +18,12 @@ impl Renderer<'_> {
     }
 
     pub(super) fn push_clip_rect(&mut self, rect: &Rect) {
-        self.push_clip_path_inner(&rect.to_path(0.1), FillRule::NonZero);
+        self.ctx.set_fill_rule(convert_fill_rule(FillRule::NonZero));
+        self.ctx.set_transform(Affine::IDENTITY);
+        self.ctx.push_clip_rect(rect);
     }
 
     pub(super) fn pop_clip(&mut self) {
-        self.ctx.pop_clip_path();
+        self.ctx.pop_clip();
     }
 }

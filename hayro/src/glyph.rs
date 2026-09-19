@@ -116,7 +116,7 @@ impl Renderer<'_> {
 
     fn finish_run(&mut self, clip_path: Option<BezPath>) {
         if clip_path.is_some() {
-            self.ctx.pop_clip_path();
+            self.ctx.pop_clip();
         }
     }
 
