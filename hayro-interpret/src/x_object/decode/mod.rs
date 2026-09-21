@@ -8,6 +8,7 @@ use crate::InterpreterWarning;
 use crate::color::ColorSpace;
 use crate::function::interpolate;
 use crate::x_object::image::{ImageKind, ImageXObject};
+use crate::{ImageData, LumaData};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::dict::keys::*;
@@ -109,6 +110,122 @@ fn decode_context<'a>(
         bits_per_component,
         decode_arr,
     })
+}
+
+/// Integer box-filter downsample, in place. Only acts (reallocating `data`)
+/// when the image is at least 2x `target` in both dimensions; otherwise a
+/// no-op -- no reallocation, `width`/`height`/`data` left untouched.
+/// `num_components` is 3 for RGB, 1 for luma/alpha.
+///
+/// Averages each `k`x`k` window per channel, dividing by the actual sample
+/// count in that window (partial windows at the right/bottom edges when `k`
+/// doesn't evenly divide the source dimensions).
+pub(crate) fn downsample_to_target(
+    data: &mut Vec<u8>,
+    num_components: usize,
+    width: &mut u32,
+    height: &mut u32,
+    target: (u32, u32),
+) {
+    let (tw, th) = target;
+    let (w, h) = (*width, *height);
+
+    if w == 0 || h == 0 || num_components == 0 {
+        return;
+    }
+
+    let k = (w / (2 * tw.max(1))).min(h / (2 * th.max(1)));
+
+    if k < 2 {
+        return;
+    }
+
+    let new_w = w.div_ceil(k);
+    let new_h = h.div_ceil(k);
+
+    let mut out = vec![0_u8; new_w as usize * new_h as usize * num_components];
+    // `num_components` is always 1 or 3 here (luma or RGB); 4 gives headroom.
+    let mut sums = [0_u64; 4];
+
+    for oy in 0..new_h {
+        let y0 = oy * k;
+        let y1 = (y0 + k).min(h);
+
+        for ox in 0..new_w {
+            let x0 = ox * k;
+            let x1 = (x0 + k).min(w);
+
+            let count = u64::from(y1 - y0) * u64::from(x1 - x0);
+            if count == 0 {
+                continue;
+            }
+
+            sums[..num_components].fill(0);
+
+            for y in y0..y1 {
+                let row_base = y as usize * w as usize * num_components;
+
+                for x in x0..x1 {
+                    let px_base = row_base + x as usize * num_components;
+
+                    for (c, sum) in sums.iter_mut().enumerate().take(num_components) {
+                        *sum += u64::from(data[px_base + c]);
+                    }
+                }
+            }
+
+            let out_base = (oy as usize * new_w as usize + ox as usize) * num_components;
+            for (c, sum) in sums.iter().enumerate().take(num_components) {
+                out[out_base + c] = (*sum / count) as u8;
+            }
+        }
+    }
+
+    *data = out;
+    *width = new_w;
+    *height = new_h;
+}
+
+/// Downsample a final `ImageData` (post color-space conversion, so this
+/// works uniformly regardless of which syntax-level filter produced it)
+/// toward `target`, recomputing `scale_factors` as `dict_dim / new_dim` --
+/// the same invariant `decode_context` establishes above (`scale_x =
+/// obj.width as f32 / d.width as f32`), just re-derived against the shrunk
+/// dimensions instead of the originally-decoded ones.
+pub(crate) fn downsample_image_data(
+    image: &mut ImageData,
+    dict_w: u32,
+    dict_h: u32,
+    target: (u32, u32),
+) {
+    match image {
+        ImageData::Rgb(d) => {
+            downsample_to_target(&mut d.data, 3, &mut d.width, &mut d.height, target);
+            d.scale_factors = (
+                dict_w as f32 / d.width as f32,
+                dict_h as f32 / d.height as f32,
+            );
+        }
+        ImageData::Luma(d) => {
+            downsample_to_target(&mut d.data, 1, &mut d.width, &mut d.height, target);
+            d.scale_factors = (
+                dict_w as f32 / d.width as f32,
+                dict_h as f32 / d.height as f32,
+            );
+        }
+    }
+}
+
+/// Same treatment as `downsample_image_data`, for a standalone alpha/
+/// stencil-mask `LumaData`. `dict_w`/`dict_h` are the mask's own dict
+/// dimensions (which can differ from the color image it accompanies) --
+/// callers derive them from whichever `ImageXObject` decoded this luma.
+pub(crate) fn downsample_luma(luma: &mut LumaData, dict_w: u32, dict_h: u32, target: (u32, u32)) {
+    downsample_to_target(&mut luma.data, 1, &mut luma.width, &mut luma.height, target);
+    luma.scale_factors = (
+        dict_w as f32 / luma.width as f32,
+        dict_h as f32 / luma.height as f32,
+    );
 }
 
 #[must_use]
