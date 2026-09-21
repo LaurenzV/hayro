@@ -1,5 +1,5 @@
 use crate::Renderer;
-use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x32};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Point, Rect};
@@ -647,8 +647,12 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
         for chunk in data.chunks_exact_mut(32) {
             let rgba = u8x32::from_slice(simd, chunk);
             let alphas = rgba.splat_4th();
-            let premultiplied = (simd.widen_u8x32(rgba) * simd.widen_u8x32(alphas)).div_255();
-            let premultiplied = simd.narrow_u16x32(premultiplied);
+            let (rgba_low, rgba_high) = simd.widen_u8x32(rgba);
+            let (alpha_low, alpha_high) = simd.widen_u8x32(alphas);
+            let premultiplied = simd.narrow_u16x16(
+                (rgba_low * alpha_low).div_255(),
+                (rgba_high * alpha_high).div_255(),
+            );
             alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
         }
     }
@@ -667,7 +671,7 @@ trait Div255Ext {
     fn div_255(self) -> Self;
 }
 
-impl<S: Simd> Div255Ext for u16x32<S> {
+impl<S: Simd> Div255Ext for u16x16<S> {
     #[inline(always)]
     fn div_255(self) -> Self {
         (self + Self::splat(self.simd, 255)) >> 8
