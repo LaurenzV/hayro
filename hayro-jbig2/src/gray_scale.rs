@@ -175,6 +175,7 @@ fn decode_arithmetic(
 ///
 /// The closure `decode_next` is called for each bitplane, receiving the bitplane
 /// index (`GSBPP`-1 down to 0) and a zeroed bitmap to decode into.
+#[inline(never)]
 fn decode_bitplanes<F>(
     width: u32,
     height: u32,
