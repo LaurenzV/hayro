@@ -3,8 +3,8 @@
 use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
-use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{ReadBytes, Reader};
+use crate::reader::{Readable, ReaderBase, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::marker::PhantomData;
@@ -13,7 +13,7 @@ use smallvec::SmallVec;
 /// An array of PDF objects.
 #[derive(Clone)]
 pub struct Array<'a> {
-    data: &'a [u8],
+    data: ReadBytes<'a>,
     ctx: ReaderContext<'a>,
 }
 
@@ -28,7 +28,7 @@ impl PartialEq for Array<'_> {
 impl<'a> Array<'a> {
     /// Returns an iterator over the objects of the array.
     pub fn raw_iter(&self) -> ArrayIter<'a> {
-        ArrayIter::new(self.data, &self.ctx)
+        ArrayIter::new(self.data.clone(), &self.ctx)
     }
 
     /// Returns an iterator over the resolved objects of the array.
@@ -40,17 +40,17 @@ impl<'a> Array<'a> {
     where
         T: ObjectLike<'a>,
     {
-        ResolvedArrayIter::new(self.data, &self.ctx)
+        ResolvedArrayIter::new(self.data.clone(), &self.ctx)
     }
 
     /// Return a flex iterator over the items in the array.
     pub fn flex_iter(&self) -> FlexArrayIter<'a> {
-        FlexArrayIter::new(self.data, &self.ctx)
+        FlexArrayIter::new(self.data.clone(), &self.ctx)
     }
 
     /// Return the raw data of the array.
-    pub fn data(&self) -> &'a [u8] {
-        self.data
+    pub fn data(&self) -> &ReadBytes<'a> {
+        &self.data
     }
 }
 
@@ -107,10 +107,10 @@ impl Default for Array<'_> {
 
 impl<'a> Readable<'a> for Array<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let bytes = r.skip::<Array<'_>>(ctx.in_content_stream())?;
+        let bytes = r.skip_read::<Array<'_>>(ctx.in_content_stream())?;
 
         Some(Self {
-            data: &bytes[1..bytes.len() - 1],
+            data: bytes.clone_range(1..bytes.len() - 1),
             ctx: ctx.clone(),
         })
     }
@@ -123,9 +123,9 @@ pub struct ArrayIter<'a> {
 }
 
 impl<'a> ArrayIter<'a> {
-    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
+    fn new(data: ReadBytes<'a>, ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::from_read(data),
             ctx: ctx.clone(),
         }
     }
@@ -157,7 +157,7 @@ pub struct ResolvedArrayIter<'a, T> {
 }
 
 impl<'a, T> ResolvedArrayIter<'a, T> {
-    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
+    fn new(data: ReadBytes<'a>, ctx: &ReaderContext<'a>) -> Self {
         Self {
             flex_iter: FlexArrayIter::new(data, ctx),
             phantom_data: PhantomData,
@@ -183,9 +183,9 @@ pub struct FlexArrayIter<'a> {
 }
 
 impl<'a> FlexArrayIter<'a> {
-    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
+    fn new(data: ReadBytes<'a>, ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::from_read(data),
             ctx: ctx.clone(),
         }
     }
