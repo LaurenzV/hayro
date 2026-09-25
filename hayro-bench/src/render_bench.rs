@@ -1,5 +1,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
+use hayro::vello_cpu::peniko::ImageAlphaType;
 use image::{ColorType, ImageEncoder, codecs::png::PngEncoder};
 use pdfium_render::prelude::*;
 use std::env;
@@ -211,11 +212,7 @@ impl RenderBackend for HayroRenderBackend {
                         hayro::render(page, &cache, &interpreter_settings, &render_settings);
                     let width = pixmap.width() as u32;
                     let height = pixmap.height() as u32;
-                    let rgba = pixmap
-                        .take_unpremultiplied()
-                        .into_iter()
-                        .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
-                        .collect();
+                    let rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);
 
                     PageBitmap {
                         page_index,
