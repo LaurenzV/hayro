@@ -24,10 +24,6 @@ fn build_decompositions(
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
 ) -> Result<()> {
-    // The components of a tile are decoded one after another, and each one is
-    // done with its coefficients once its IDWT has run. The coefficient
-    // storage therefore only needs to hold one component at a time, and the
-    // coefficient ranges of each component start at zero.
     let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
