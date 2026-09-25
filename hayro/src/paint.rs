@@ -153,7 +153,8 @@ impl Renderer<'_> {
                         let pix_width = x_step.abs().round() as u16;
                         let pix_height = y_step.abs().round() as u16;
 
-                        let mut renderer = self.child(pix_width, pix_height);
+                        let mut ctx = self.child_context(pix_width, pix_height);
+                        let mut renderer = Renderer::new(&mut ctx, self.global);
                         renderer.inside_pattern = true;
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));

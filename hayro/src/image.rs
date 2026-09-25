@@ -567,7 +567,8 @@ impl Renderer<'_> {
                                         interpolate: stencil.interpolate,
                                         scale_factors: stencil.scale_factors,
                                     });
-                                    let mut sub_renderer = self.child(width, height);
+                                    let mut ctx = self.child_context(width, height);
+                                    let mut sub_renderer = Renderer::new(&mut ctx, self.global);
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));

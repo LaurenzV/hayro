@@ -3,11 +3,14 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
+use hayro::hayro_interpret::util::TransformExt;
 use hayro::hayro_syntax::Pdf;
-use hayro::{RenderCache, RenderSettings, render};
+use hayro::kurbo::Affine;
+use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
+use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
+use hayro::{RenderCache, RenderSettings, render, render_into};
 use std::path::Path;
 use std::sync::Arc;
-use vello_cpu::color::palette::css::WHITE;
 
 fn load_asset(name: &str) -> Option<(FontData, u32)> {
     let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/assets");
@@ -23,10 +26,6 @@ fn main() {
 
     let file = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
     let output_dir = std::env::args().nth(2).unwrap_or_else(|| ".".to_string());
-    let scale = std::env::args()
-        .nth(3)
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(1.0);
 
     // Create output directory if it doesn't exist
     std::fs::create_dir_all(&output_dir).unwrap();
@@ -82,18 +81,73 @@ fn main() {
         ..Default::default()
     };
 
-    let render_settings = RenderSettings {
-        x_scale: scale,
-        y_scale: scale,
-        bg_color: WHITE,
-        ..Default::default()
-    };
+    // This cache should be reused across multiple pages.
     let cache = RenderCache::new();
+    let mut ctx = RenderContext::new(0, 0);
+    let mut pixmap = Pixmap::new(0, 0);
+    let mut resources = Resources::default();
 
     for (idx, page) in pdf.pages().iter().enumerate() {
-        let pixmap = render(page, &cache, &interpreter_settings, &render_settings);
+        // hayro provides two entry points for rendering PDFs.
+
+        // If all you need is the ability to convert a PDF page into an RGBA buffer
+        // and just setting a background + scale factor is enough, use `hayro::render`:
+        let settings = RenderSettings {
+            x_scale: 2.0,
+            y_scale: 2.0,
+            bg_color: WHITE,
+        };
+        let rendered = render(page, &cache, &interpreter_settings, &settings);
         let output_path = format!("{}/rendered_{idx}.png", output_dir);
-        std::fs::write(output_path, pixmap.into_png().unwrap()).unwrap();
+        std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
+
+        // If you need/want:
+        // - Support for rendering a page with arbitrary affine transforms or
+        // - more control over rendering and  the ability to more effectively reuse allocations
+        //   for render buffers
+        // You can instead use `hayro::render_into` to directly render into a `vello_cpu`
+        // `RenderContext`. However, this requires some more setup.
+        // The example below shows how you can render a page zoomed 50% into the center,
+        // and while reusing the `vello_cpu` `RenderContext` and `Pixmap`, which avoids
+        // unnecessary reallocations when rendering multiple pages.
+
+        // You can choose any size you desire, but in most cases you will likely want
+        // to base it on the dimensions of the PDF page.
+        let (width, height) = page.render_dimensions();
+
+        // Reset the context and pixmap to the requested size.
+        ctx.reset_and_resize(width as u16, height as u16);
+        pixmap.resize(ctx.width(), ctx.height());
+
+        // Zoom in by 50%, keeping the page center at the viewport center.
+        let transform = Affine::translate((ctx.width() as f64 / 2.0, ctx.height() as f64 / 2.0))
+            * Affine::scale(1.5)
+            * Affine::translate((-width as f64 / 2.0, -height as f64 / 2.0))
+            // It is important that you always add this, so that rotated/cropped
+            // pages are handled correctly. Unless you know what you are doing!
+            * page.initial_transform(true).to_kurbo();
+
+        // Render into the render context.
+        render_into(page, &cache, &interpreter_settings, &mut ctx, transform);
+
+        // In case the `vello_cpu` `RenderContext` is multi-threaded, make sure to
+        // flush.
+        ctx.flush();
+
+        // Finally, rasterize the scene into the pixmap. See the `vello_cpu` documentation
+        // for more information!
+        ctx.render_with(
+            &mut pixmap,
+            &mut resources,
+            RasterizerSettings {
+                target_init: TargetInit::Clear(TRANSPARENT),
+                ..Default::default()
+            },
+        );
+
+        // Encode and save the PNG.
+        let output_path = format!("{}/rendered_{idx}_advanced.png", output_dir);
+        std::fs::write(output_path, pixmap.clone().into_png().unwrap()).unwrap();
     }
 }
 

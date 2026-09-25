@@ -126,9 +126,7 @@ impl PdfViewer {
             x_scale: scale,
             y_scale: scale,
             bg_color: WHITE,
-            ..Default::default()
         };
-
         let cache = RenderCache::new();
         let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
