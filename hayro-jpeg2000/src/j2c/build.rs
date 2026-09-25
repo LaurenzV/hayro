@@ -24,28 +24,32 @@ fn build_decompositions(
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
 ) -> Result<()> {
-    let mut total_coefficients = 0_usize;
+    // The components of a tile are decoded one after another, and each one is
+    // done with its coefficients once its IDWT has run. The coefficient
+    // storage therefore only needs to hold one component at a time, and the
+    // coefficient ranges of each component start at zero.
+    let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
         let decoded_resolutions =
             component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
-        let component_samples = usize::try_from(top_resolution.rect.area())
-            .map_err(|_| ValidationError::ImageTooLarge)?;
-        total_coefficients = total_coefficients
-            .checked_add(component_samples)
-            .ok_or(ValidationError::ImageTooLarge)?;
+        component_samples.push(
+            usize::try_from(top_resolution.rect.area())
+                .map_err(|_| ValidationError::ImageTooLarge)?,
+        );
     }
+    let max_coefficients = component_samples.iter().copied().max().unwrap_or(0);
 
     if storage.coefficients.is_empty() {
         // Fast path that requests pre-zeroed memory from the OS where available.
-        storage.coefficients = vec![0.0; total_coefficients];
+        storage.coefficients = vec![0.0; max_coefficients];
     } else {
-        storage.coefficients.resize(total_coefficients, 0.0);
+        storage.coefficients.resize(max_coefficients, 0.0);
     }
-    let mut coefficient_counter = 0_usize;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
+        let mut coefficient_counter = 0_usize;
         let decoded_resolutions =
             component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let d_start = storage.decompositions.len();
@@ -120,10 +124,11 @@ fn build_decompositions(
         storage.tile_decompositions.push(TileDecompositions {
             decompositions: d_start..d_end,
             first_ll_sub_band,
+            coefficient_count: coefficient_counter,
         });
-    }
 
-    assert_eq!(coefficient_counter, storage.coefficients.len());
+        assert_eq!(coefficient_counter, component_samples[component_idx]);
+    }
 
     Ok(())
 }

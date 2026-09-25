@@ -146,13 +146,20 @@ fn decode_tile<'a, 'b>(
     build::build(tile, storage, header.skipped_resolution_levels)?;
     // Next, we parse the layers/segments for each code block.
     segment::parse(tile, progression_iterator, header, storage)?;
-    // We then decode the bitplanes of each code block, yielding the
-    // (possibly dequantized) coefficients of each code block.
-    decode_component_tile_bit_planes(tile, tile_ctx, storage, header)?;
 
-    // Unlike before, we interleave the apply_idwt and store stages
-    // for each component tile so we can reuse allocations better.
+    // The remaining stages run one component at a time, so that the
+    // coefficient storage only ever holds the coefficients of a single
+    // component tile, and the IDWT output and scratch buffers are reused.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
+        if idx > 0 {
+            // Code-blocks cover their sub-bands, but don't rely on that: the
+            // storage still holds the coefficients of the previous component.
+            let count = storage.tile_decompositions[idx].coefficient_count;
+            storage.coefficients[..count].fill(0.0);
+        }
+        // We decode the bitplanes of each code block, yielding the
+        // (possibly dequantized) coefficients of each code block.
+        decode_component_tile_bit_planes(idx, tile, tile_ctx, storage, header)?;
         // Next, we apply the inverse discrete wavelet transform.
         idwt::apply(
             storage,
@@ -188,6 +195,9 @@ fn decode_tile<'a, 'b>(
 pub(crate) struct TileDecompositions {
     pub(crate) first_ll_sub_band: usize,
     pub(crate) decompositions: Range<usize>,
+    /// The number of coefficients of this component tile in the coefficient
+    /// storage, which holds one component tile at a time.
+    pub(crate) coefficient_count: usize,
 }
 
 impl TileDecompositions {
@@ -301,29 +311,28 @@ impl TileDecodeContext {
 }
 
 fn decode_component_tile_bit_planes<'a>(
+    component_idx: usize,
     tile: &Tile<'a>,
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'a>,
     header: &Header<'_>,
 ) -> Result<()> {
-    for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
-        // Only decode the resolution levels we actually care about.
-        for resolution in
-            0..component_info.num_resolution_levels() - header.skipped_resolution_levels
-        {
-            let tile_composition = &storage.tile_decompositions[tile_decompositions_idx];
-            let sub_band_iter = tile_composition.sub_band_iter(resolution, &storage.decompositions);
+    let component_info = &tile.component_infos[component_idx];
 
-            for sub_band_idx in sub_band_iter {
-                decode_sub_band_bitplanes(
-                    sub_band_idx,
-                    resolution,
-                    component_info,
-                    tile_ctx,
-                    storage,
-                    header,
-                )?;
-            }
+    // Only decode the resolution levels we actually care about.
+    for resolution in 0..component_info.num_resolution_levels() - header.skipped_resolution_levels {
+        let tile_composition = &storage.tile_decompositions[component_idx];
+        let sub_band_iter = tile_composition.sub_band_iter(resolution, &storage.decompositions);
+
+        for sub_band_idx in sub_band_iter {
+            decode_sub_band_bitplanes(
+                sub_band_idx,
+                resolution,
+                component_info,
+                tile_ctx,
+                storage,
+                header,
+            )?;
         }
     }
 
