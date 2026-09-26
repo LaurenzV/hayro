@@ -148,6 +148,12 @@ impl<T, const C: usize> SegmentList<T, C> {
         Self(core::array::from_fn(|_| OnceLock::new()))
     }
 
+    // Note that `get` does not synchronize with a concurrently running
+    // `get_or_init` on the same index: it returns `None` until the
+    // initializer has finished. Callers that need the value must use
+    // `get_or_init` instead (`Data::get_with` used to read initialized
+    // slots through `get` and silently lost the race).
+    #[cfg(test)]
     pub(crate) fn get(&self, i: usize) -> Option<&T> {
         let (s, k) = self.locate(i);
         let segment = self.0[s as usize].get()?;
