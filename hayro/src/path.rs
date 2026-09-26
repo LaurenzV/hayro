@@ -48,7 +48,7 @@ impl Renderer<'_> {
         }
         self.ctx.stroke_path(path);
         if clip_path.is_some() {
-            self.ctx.pop_clip_path();
+            self.ctx.pop_clip();
         }
     }
 
@@ -64,7 +64,7 @@ impl Renderer<'_> {
         self.ctx.fill_path(path);
 
         if clip_path.is_some() {
-            self.ctx.pop_clip_path();
+            self.ctx.pop_clip();
         }
     }
 
@@ -108,7 +108,7 @@ impl Renderer<'_> {
                 self.ctx.fill_rect(rect);
 
                 if clip_path.is_some() {
-                    self.ctx.pop_clip_path();
+                    self.ctx.pop_clip();
                 }
             }
             DrawMode::Stroke(s) => {

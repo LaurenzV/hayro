@@ -681,6 +681,13 @@ fn coding_style_parameters(
     let num_resolution_levels = num_decomposition_levels.checked_add(1)?;
     let code_block_width = reader.read_byte()?.checked_add(2)?;
     let code_block_height = reader.read_byte()?.checked_add(2)?;
+
+    // Table A.18.
+    if code_block_width > 10 || code_block_height > 10 || code_block_width + code_block_height > 12
+    {
+        return None;
+    }
+
     let code_block_style = CodeBlockStyle::from_u8(reader.read_byte()?);
     let transformation = WaveletTransform::from_u8(reader.read_byte()?).ok()?;
 

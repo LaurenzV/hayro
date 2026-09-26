@@ -2,6 +2,7 @@ use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderCache, RenderSettings};
 use vello_cpu::color::palette::css::WHITE;
+use vello_cpu::peniko::ImageAlphaType;
 use wasm_bindgen::prelude::*;
 
 struct ConsoleLogger;
@@ -125,9 +126,7 @@ impl PdfViewer {
             x_scale: scale,
             y_scale: scale,
             bg_color: WHITE,
-            ..Default::default()
         };
-
         let cache = RenderCache::new();
         let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
@@ -136,9 +135,7 @@ impl PdfViewer {
         result.set(0, JsValue::from(pixmap.width()));
         result.set(1, JsValue::from(pixmap.height()));
 
-        // Cast Vec<Rgba8> to Vec<u8>
-        let rgba_data = pixmap.take_unpremultiplied();
-        let byte_data: Vec<u8> = bytemuck::cast_vec(rgba_data);
+        let byte_data = pixmap.take_rgba8(ImageAlphaType::Alpha);
         result.set(2, JsValue::from(byte_data));
 
         Ok(result)
