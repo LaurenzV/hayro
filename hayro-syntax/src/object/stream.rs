@@ -122,12 +122,16 @@ impl<'a> Stream<'a> {
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
-            Cow::Owned(
-                ctx.xref()
-                    .decrypt(self.obj_id(), self.data, DecryptionTarget::Stream)
-                    // TODO: MAybe an error would be better?
-                    .unwrap_or_default(),
-            )
+            match self.dict.obj_id() {
+                Some(obj_id) => Cow::Owned(
+                    ctx.xref()
+                        .decrypt(obj_id, self.data, DecryptionTarget::Stream)
+                        // TODO: MAybe an error would be better?
+                        .unwrap_or_default(),
+                ),
+                // Should not be reachable, as streams always have IDs.
+                None => Cow::Borrowed(self.data),
+            }
         } else {
             Cow::Borrowed(self.data)
         }
