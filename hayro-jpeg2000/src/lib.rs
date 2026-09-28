@@ -583,6 +583,7 @@ fn resolve_palette_indices(
     };
 
     let mapping = boxes.component_mapping.as_ref().unwrap();
+    let max_index = palette.entries.len() as i64 - 1;
     let mut resolved = Vec::with_capacity(mapping.entries.len());
 
     for entry in &mapping.entries {
@@ -604,7 +605,8 @@ fn resolve_palette_indices(
                     Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
                 for &sample in component.container.truncated() {
-                    let index = math::round_f32(sample) as i64;
+                    // Lossy decoding can reconstruct indices outside the palette.
+                    let index = (math::round_f32(sample) as i64).clamp(0, max_index);
                     let value = palette
                         .map(index as usize, column_idx)
                         .ok_or(ColorError::PaletteResolutionFailed)?;
