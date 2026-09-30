@@ -48,17 +48,16 @@ phf = { version = "0.13.1", default-features = false }
 moxcms = { version = "0.8.1" }
 rustc-hash = { version = "2" }
 siphasher = "1"
-skrifa = { version = "0.43.0" }
+skrifa = { version = "0.46.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
-pdf-writer = { version = "0.15.0" }
-sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
+pdf-writer = { git = "https://github.com/typst/pdf-writer", rev = "fdf090125f1e7209fa630c4ca1f5f29910c87c93" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { git = "https://github.com/linebender/vello", rev = "dc23e93841d20060743e490ef49c1e0d0d22cf40", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { git = "https://github.com/linebender/vello", rev = "a9f11bbe752c391a2e420657d65cbd1fc97f4fae", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.9", default-features = false }
-fearless_simd = "0.6.0"
+fearless_simd = "1.0.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
 memchr = { version = "2.8.0", default-features = false, features = ["alloc"] }
 

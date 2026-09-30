@@ -1,0 +1,118 @@
+%PDF-1.3
+%‚„œ”
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Kids [ 3 0 R ]
+/Count 1
+>>
+endobj
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [ 0.0 0.0 200 100 ]
+/Resources <<
+/XObject <<
+/Im1 4 0 R
+>>
+>>
+/Contents 7 0 R
+/CropBox [ 0.0 0.0 200 100 ]
+>>
+endobj
+4 0 obj
+<<
+/Type /XObject
+/Subtype /Image
+/Width 16
+/Height 8
+/ColorSpace [ /Indexed /DeviceRGB 1 (\000\000\000\377\377\377) ]
+/BitsPerComponent 1
+/Filter [ /ASCIIHexDecode /CCITTFaxDecode ]
+/DecodeParms [ null <<
+/K -1
+/Columns 16
+/Rows 4
+>> ]
+/Length 17
+>>
+stream
+26A2FFE3E0020020>
+endstream
+endobj
+5 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+6 0 obj
+<<
+/Length 253
+>>
+stream
+q
+200 0 0 100 50 100 cm
+/Im1 Do
+Q
+0 G
+1 w
+50 100 200 100 re S
+362 100 200 100 re S
+0 g
+362 150 100 50 re f
+BT
+/F1 16 Tf
+50 255 Td
+(CCITT /Rows 4, image /Height 8) Tj
+ET
+BT
+/F1 13 Tf
+50 75 Td
+(Rendered image) Tj
+ET
+BT
+/F1 13 Tf
+362 75 Td
+(Expected) Tj
+ET
+endstream
+endobj
+7 0 obj
+<<
+/Length 31
+>>
+stream
+q
+200 0 0 100 0 0 cm
+/Im1 Do
+Q
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000288 00000 n 
+0000000589 00000 n 
+0000000659 00000 n 
+0000000963 00000 n 
+trailer
+<<
+/Size 8
+/Root 1 0 R
+>>
+startxref
+1044
+%%EOF

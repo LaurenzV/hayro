@@ -98,7 +98,7 @@ impl<'a> Readable<'a> for Operator<'a> {
 }
 
 /// An iterator over operators in the PDF content streams, providing raw access to the instructions.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
@@ -366,6 +366,7 @@ impl<'a> TypedIter<'a> {
 }
 
 /// An instruction (= operator and its operands) in a content stream.
+#[derive(Debug)]
 pub struct Instruction<'b, 'a> {
     /// The stack containing the operands.
     pub operands: &'b Stack<'a>,

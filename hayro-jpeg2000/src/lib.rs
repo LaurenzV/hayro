@@ -506,6 +506,11 @@ fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()
                     cielab_to_rgb(simd, image.decoded_components, bit_depth, cielab)
                 })?;
             }
+            EnumeratedColorspace::Ycck => {
+                dispatch!(Level::new(), simd => {
+                    ycck_to_cmyk(simd, image.decoded_components, bit_depth)
+                })?;
+            }
             _ => {}
         }
     }
@@ -522,7 +527,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
     {
         jp2::colr::ColorSpace::Enumerated(e) => {
             match e {
-                EnumeratedColorspace::Cmyk => ColorSpace::CMYK,
+                EnumeratedColorspace::Cmyk | EnumeratedColorspace::Ycck => ColorSpace::CMYK,
                 EnumeratedColorspace::Srgb => ColorSpace::RGB,
                 EnumeratedColorspace::RommRgb => {
                     // Use an ICC profile to process the RommRGB color space.
@@ -578,6 +583,7 @@ fn resolve_palette_indices(
     };
 
     let mapping = boxes.component_mapping.as_ref().unwrap();
+    let max_index = palette.entries.len() as i64 - 1;
     let mut resolved = Vec::with_capacity(mapping.entries.len());
 
     for entry in &mapping.entries {
@@ -599,7 +605,8 @@ fn resolve_palette_indices(
                     Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
                 for &sample in component.container.truncated() {
-                    let index = math::round_f32(sample) as i64;
+                    // Lossy decoding can reconstruct indices outside the palette.
+                    let index = (math::round_f32(sample) as i64).clamp(0, max_index);
                     let value = palette
                         .map(index as usize, column_idx)
                         .ok_or(ColorError::PaletteResolutionFailed)?;
@@ -706,6 +713,26 @@ fn cielab_to_rgb<S: Simd>(
 }
 
 #[inline(always)]
+fn ycck_to_cmyk<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
+    // Convert YCbCr to CMY, preserving K (T.801, Table M.25).
+    sycc_to_rgb(simd, components, bit_depth)?;
+
+    let max_value = ((1_u32 << bit_depth) - 1) as f32;
+    let max_v = f32x8::splat(simd, max_value);
+
+    for component in components.iter_mut().take(3) {
+        let mut chunks = component.container.chunks_exact_mut(SIMD_WIDTH);
+        for chunk in chunks.by_ref() {
+            (max_v - f32x8::from_slice(simd, chunk)).store(chunk);
+        }
+        for value in chunks.into_remainder() {
+            *value = max_value - *value;
+        }
+    }
+
+    Ok(())
+}
+
 fn sycc_to_rgb<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
     let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;

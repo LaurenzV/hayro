@@ -64,7 +64,8 @@ fn draw_soft_mask(
     height: u16,
     global: &GlobalState,
 ) -> Mask {
-    let mut renderer = Renderer::new(width, height, derive_settings(&settings), global);
+    let mut ctx = vello_cpu::RenderContext::new_with(width, height, derive_settings(&settings));
+    let mut renderer = Renderer::new(&mut ctx, global);
 
     let bg_color = mask.background_color().to_rgba();
     let apply_bg = bg_color.to_rgba8() != BLACK.to_rgba8().to_u8_array();

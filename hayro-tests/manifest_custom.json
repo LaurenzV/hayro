@@ -252,6 +252,10 @@
     "file": "pdfs/custom/image_ccit_4.pdf"
   },
   {
+    "id": "image_ccitt_rows_below_height",
+    "file": "pdfs/custom/image_ccitt_rows_below_height.pdf"
+  },
+  {
     "id": "image_cmyk_icc_jpg",
     "file": "pdfs/custom/image_cmyk_icc_jpg.pdf"
   },
@@ -683,6 +687,11 @@
   {
     "id": "stream_jpx_6",
     "file": "pdfs/custom/stream_jpx_6.pdf"
+  },
+  {
+    "id": "stroke_hairline_large_ctm",
+    "file": "pdfs/custom/stroke_hairline_large_ctm.pdf",
+    "comment": "lines in the tiling patterns are not rendered correctly yet"
   },
   {
     "id": "text_filled_complex_paint",
@@ -1213,5 +1222,11 @@
   {
     "id": "issue1276",
     "link": true
+  },
+  {
+    "id": "issue1334",
+    "link": true,
+    "first_page": 12,
+    "last_page": 12
   }
 ]

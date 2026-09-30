@@ -30,6 +30,10 @@ impl IntRect {
         self.y1 - self.y0
     }
 
+    pub(crate) fn area(&self) -> u64 {
+        u64::from(self.width()) * u64::from(self.height())
+    }
+
     pub(crate) fn intersect(&self, other: Self) -> Self {
         if self.x1 < other.x0 || other.x1 < self.x0 || self.y1 < other.y0 || other.y1 < self.y0 {
             Self::from_xywh(0, 0, 0, 0)

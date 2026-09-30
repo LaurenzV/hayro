@@ -31,6 +31,7 @@ use std::ops::DerefMut;
 
 pub use hayro_syntax;
 use hayro_syntax::Pdf;
+pub use pdf_writer;
 pub use pdf_writer::Settings as ChunkSettings;
 
 /// Apply the extraction queries to the given PDF and return the results.
@@ -118,6 +119,7 @@ pub enum ExtractionError {
 }
 
 /// The result of an extraction.
+#[derive(Debug)]
 pub struct ExtractionResult {
     /// The chunk containing all objects as well as their dependencies.
     pub chunk: Chunk,

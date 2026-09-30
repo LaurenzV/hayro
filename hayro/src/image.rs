@@ -1,5 +1,5 @@
 use crate::Renderer;
-use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x32};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Point, Rect};
@@ -8,7 +8,7 @@ use pic_scale::{
 };
 use std::sync::Arc;
 use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
-use vello_cpu::{Image, ImageSource, Mask, Pixmap, peniko};
+use vello_cpu::{Image, ImageSource, Mask, PixelMetadata, Pixmap, peniko};
 
 // Previously, we used `CatmullRom`. The problem with that one is that it
 // can have negative weights. If we pass a premultiplied buffer to
@@ -446,11 +446,14 @@ impl Renderer<'_> {
             rgba_data = padded_image;
         }
 
-        let pixmap = Pixmap::from_parts_with_opacity(
-            bytemuck::cast_vec(rgba_data),
+        let pixmap = Pixmap::from_parts(
+            rgba_data,
             img_width as u16,
             img_height as u16,
-            may_have_transparency,
+            PixelMetadata {
+                may_have_transparency,
+                ..Default::default()
+            },
         );
 
         self.draw_pixmap(
@@ -564,7 +567,8 @@ impl Renderer<'_> {
                                         interpolate: stencil.interpolate,
                                         scale_factors: stencil.scale_factors,
                                     });
-                                    let mut sub_renderer = self.child(width, height);
+                                    let mut ctx = self.child_context(width, height);
+                                    let mut sub_renderer = Renderer::new(&mut ctx, self.global);
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
@@ -589,7 +593,7 @@ impl Renderer<'_> {
                                 }
                                 self.ctx.fill_rect(&stencil_rect);
                                 if clip_path.is_some() {
-                                    self.ctx.pop_clip_path();
+                                    self.ctx.pop_clip();
                                 }
 
                                 self.ctx.pop_layer();
@@ -647,8 +651,12 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
         for chunk in data.chunks_exact_mut(32) {
             let rgba = u8x32::from_slice(simd, chunk);
             let alphas = rgba.splat_4th();
-            let premultiplied = (simd.widen_u8x32(rgba) * simd.widen_u8x32(alphas)).div_255();
-            let premultiplied = simd.narrow_u16x32(premultiplied);
+            let (rgba_low, rgba_high) = simd.widen_u8x32(rgba);
+            let (alpha_low, alpha_high) = simd.widen_u8x32(alphas);
+            let premultiplied = simd.narrow_u16x16(
+                (rgba_low * alpha_low).div_255(),
+                (rgba_high * alpha_high).div_255(),
+            );
             alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
         }
     }
@@ -667,7 +675,7 @@ trait Div255Ext {
     fn div_255(self) -> Self;
 }
 
-impl<S: Simd> Div255Ext for u16x32<S> {
+impl<S: Simd> Div255Ext for u16x16<S> {
     #[inline(always)]
     fn div_255(self) -> Self {
         (self + Self::splat(self.simd, 255)) >> 8

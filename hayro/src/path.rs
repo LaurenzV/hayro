@@ -10,7 +10,7 @@ impl Renderer<'_> {
         // specification. If we are stroking text, we reduce the threshold as it will otherwise
         // lead to very bold-looking text at low resolutions.
         let min_factor = max_factor(self.ctx.transform());
-        let mut line_width = stroke_props.line_width.max(0.01);
+        let mut line_width = stroke_props.line_width.max(0.01 / min_factor);
         let transformed_width = line_width * min_factor;
 
         // Only enforce line width if not inside of pattern or type 3 glyph.
@@ -48,7 +48,7 @@ impl Renderer<'_> {
         }
         self.ctx.stroke_path(path);
         if clip_path.is_some() {
-            self.ctx.pop_clip_path();
+            self.ctx.pop_clip();
         }
     }
 
@@ -64,7 +64,7 @@ impl Renderer<'_> {
         self.ctx.fill_path(path);
 
         if clip_path.is_some() {
-            self.ctx.pop_clip_path();
+            self.ctx.pop_clip();
         }
     }
 
@@ -108,7 +108,7 @@ impl Renderer<'_> {
                 self.ctx.fill_rect(rect);
 
                 if clip_path.is_some() {
-                    self.ctx.pop_clip_path();
+                    self.ctx.pop_clip();
                 }
             }
             DrawMode::Stroke(s) => {

@@ -4,34 +4,50 @@ use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
-use crate::error::{DecodingError, Result};
+use crate::error::{DecodingError, Result, ValidationError};
 use alloc::vec;
 use core::iter;
 use core::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
-pub(crate) fn build(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
-    build_decompositions(tile, storage)
+pub(crate) fn build(
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage<'_>,
+    skipped_resolution_levels: u8,
+) -> Result<()> {
+    build_decompositions(tile, storage, skipped_resolution_levels)
 }
 
-fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
-    let mut total_coefficients = 0;
+fn build_decompositions(
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage<'_>,
+    skipped_resolution_levels: u8,
+) -> Result<()> {
+    let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
-        total_coefficients +=
-            component_tile.rect.width() as usize * component_tile.rect.height() as usize;
+        let decoded_resolutions =
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
+        let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
+        component_samples.push(
+            usize::try_from(top_resolution.rect.area())
+                .map_err(|_| ValidationError::ImageTooLarge)?,
+        );
     }
+    let max_coefficients = component_samples.iter().copied().max().unwrap_or(0);
 
     if storage.coefficients.is_empty() {
         // Fast path that requests pre-zeroed memory from the OS where available.
-        storage.coefficients = vec![0.0; total_coefficients];
+        storage.coefficients = vec![0.0; max_coefficients];
     } else {
-        storage.coefficients.resize(total_coefficients, 0.0);
+        storage.coefficients.resize(max_coefficients, 0.0);
     }
-    let mut coefficient_counter = 0;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
+        let mut coefficient_counter = 0_usize;
+        let decoded_resolutions =
+            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let d_start = storage.decompositions.len();
         let mut resolution_tiles = component_tile.resolution_tiles();
 
@@ -59,9 +75,17 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
-            let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
-            let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
-            coefficient_counter += added_coefficients;
+            // No need to allocate coefficients for skipped resolution levels.
+            let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
+                usize::try_from(sub_band_rect.area()).map_err(|_| ValidationError::ImageTooLarge)?
+            } else {
+                0
+            };
+            let next_coefficient_counter = coefficient_counter
+                .checked_add(added_coefficients)
+                .ok_or(ValidationError::ImageTooLarge)?;
+            let coefficients = coefficient_counter..next_coefficient_counter;
+            coefficient_counter = next_coefficient_counter;
 
             let idx = storage.sub_bands.len();
             storage.sub_bands.push(SubBand {
@@ -96,10 +120,11 @@ fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>)
         storage.tile_decompositions.push(TileDecompositions {
             decompositions: d_start..d_end,
             first_ll_sub_band,
+            coefficient_count: coefficient_counter,
         });
-    }
 
-    assert_eq!(coefficient_counter, storage.coefficients.len());
+        assert_eq!(coefficient_counter, component_samples[component_idx]);
+    }
 
     Ok(())
 }

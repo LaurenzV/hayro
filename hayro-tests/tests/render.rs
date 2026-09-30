@@ -61,6 +61,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn image_ccit_1() { run_render_test("image_ccit_1", "pdfs/custom/image_ccit_1.pdf", None); }
 #[test] fn image_ccit_3() { run_render_test("image_ccit_3", "pdfs/custom/image_ccit_3.pdf", None); }
 #[test] fn image_ccit_4() { run_render_test("image_ccit_4", "pdfs/custom/image_ccit_4.pdf", None); }
+#[test] fn image_ccitt_rows_below_height() { run_render_test("image_ccitt_rows_below_height", "pdfs/custom/image_ccitt_rows_below_height.pdf", None); }
 #[test] fn image_cmyk_icc_jpg() { run_render_test("image_cmyk_icc_jpg", "pdfs/custom/image_cmyk_icc_jpg.pdf", None); }
 #[test] fn image_cmyk_jpg() { run_render_test("image_cmyk_jpg", "pdfs/custom/image_cmyk_jpg.pdf", None); }
 #[test] fn image_inline_2() { run_render_test("image_inline_2", "pdfs/custom/image_inline_2.pdf", None); }
@@ -166,6 +167,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn stream_jpx_3() { run_render_test("stream_jpx_3", "pdfs/custom/stream_jpx_3.pdf", Some("2..=2")); }
 #[test] fn stream_jpx_5() { run_render_test("stream_jpx_5", "pdfs/custom/stream_jpx_5.pdf", None); }
 #[test] fn stream_jpx_6() { run_render_test("stream_jpx_6", "pdfs/custom/stream_jpx_6.pdf", None); }
+#[test] fn stroke_hairline_large_ctm() { run_render_test("stroke_hairline_large_ctm", "pdfs/custom/stroke_hairline_large_ctm.pdf", None); }
 #[test] fn text_filled_complex_paint() { run_render_test("text_filled_complex_paint", "pdfs/custom/text_filled_complex_paint.pdf", None); }
 #[test] fn text_rendering_1() { run_render_test("text_rendering_1", "pdfs/custom/text_rendering_1.pdf", None); }
 #[test] fn text_rendering_2() { run_render_test("text_rendering_2", "pdfs/custom/text_rendering_2.pdf", None); }
@@ -296,6 +298,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn font_standard_widths_array() { run_render_test("font_standard_widths_array", "pdfs/custom/font_standard_widths_array.pdf", None); }
 #[test] fn issue1023() { run_render_test("issue1023", "pdfs/custom/issue1023.pdf", None); }
 #[test] fn issue1276() { run_render_test("issue1276", "downloads/custom/issue1276.pdf", None); }
+#[test] fn issue1334() { run_render_test("issue1334", "downloads/custom/issue1334.pdf", Some("12..=12")); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }

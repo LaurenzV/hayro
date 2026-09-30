@@ -8,7 +8,7 @@ use kurbo::{Affine, BezPath, Rect, Shape};
 use std::sync::Arc;
 use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
 use vello_cpu::peniko::{ColorStop, Gradient, ImageQuality, ImageSampler};
-use vello_cpu::{Image, ImageSource, PaintType, Pixmap, peniko};
+use vello_cpu::{Image, ImageSource, PaintType, PixelMetadata, Pixmap, peniko};
 
 impl Renderer<'_> {
     #[must_use]
@@ -103,11 +103,14 @@ impl Renderer<'_> {
                                 });
                             paint_transform = path_transform.inverse() * transform;
 
-                            let pixmap = Pixmap::from_parts_with_opacity(
-                                image,
+                            let pixmap = Pixmap::from_parts(
+                                bytemuck::cast_vec(image),
                                 width as u16,
                                 height as u16,
-                                may_have_transparency,
+                                PixelMetadata {
+                                    may_have_transparency,
+                                    ..Default::default()
+                                },
                             );
 
                             let image = Image {
@@ -162,7 +165,8 @@ impl Renderer<'_> {
                         let scaled_width = bbox.width() as f32 * xs;
                         let scaled_height = bbox.height() as f32 * ys;
 
-                        let mut renderer = self.child(pix_width, pix_height);
+                        let mut ctx = self.child_context(pix_width, pix_height);
+                        let mut renderer = Renderer::new(&mut ctx, self.global);
                         renderer.inside_pattern = true;
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));

@@ -4,7 +4,7 @@ pub(crate) const SIMD_WIDTH: usize = 8;
 mod inner {
     use super::SIMD_WIDTH;
     use core::ops::{BitAnd, BitOr, BitXor, BitXorAssign};
-    use fearless_simd::{Select, SimdBase, SimdInt};
+    use fearless_simd::{Select, SimdBase};
 
     pub(crate) use fearless_simd::{Level, Simd, dispatch};
 
