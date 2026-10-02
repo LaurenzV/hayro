@@ -15,6 +15,8 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use core::fmt::{Debug, Display, Formatter};
 
+const MAX_OBJECT_NESTING_DEPTH: usize = 64;
+
 mod bool;
 mod date;
 mod null;
@@ -176,18 +178,22 @@ impl<'a> ObjectRefLike<'a> for Object<'a> {
 
 impl Skippable for Object<'_> {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::skip_with_depth(r, is_content_stream, 0)
+    }
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
         match r.peek_byte()? {
             b'n' => Null::skip(r, is_content_stream),
             b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
             b'<' => match r.peek_bytes(2)? {
                 // A stream can never appear in a dict/array, so it should never be skipped.
-                b"<<" => Dict::skip(r, is_content_stream),
+                b"<<" => Dict::skip_with_depth(r, is_content_stream, depth),
                 _ => String::skip(r, is_content_stream),
             },
             b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
-            b'[' => Array::skip(r, is_content_stream),
+            b'[' => Array::skip_with_depth(r, is_content_stream, depth),
             // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
             // array
             _ => skip_name_like(r, false),
@@ -342,6 +348,18 @@ mod tests {
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);
         r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
+    }
+
+    #[test]
+    fn deeply_nested_arrays() {
+        let data = format!("{}0{}", "[".repeat(5000), "]".repeat(5000));
+        assert!(object_impl(data.as_bytes()).is_none());
+    }
+
+    #[test]
+    fn deeply_nested_dictionaries() {
+        let data = format!("{}0{}", "<< /X ".repeat(5000), " >>".repeat(5000));
+        assert!(object_impl(data.as_bytes()).is_none());
     }
 
     #[test]

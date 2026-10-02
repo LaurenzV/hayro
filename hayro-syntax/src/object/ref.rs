@@ -137,8 +137,12 @@ where
     T: Skippable,
 {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::skip_with_depth(r, is_content_stream, 0)
+    }
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
         r.skip::<ObjRef>(is_content_stream)
-            .or_else(|| r.skip::<T>(is_content_stream))
+            .or_else(|| r.skip_with_depth::<T>(is_content_stream, depth))
             .map(|_| {})
     }
 }

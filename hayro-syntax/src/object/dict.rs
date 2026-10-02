@@ -175,6 +175,14 @@ impl Display for Dict<'_> {
 
 impl Skippable for Dict<'_> {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::skip_with_depth(r, is_content_stream, 0)
+    }
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        if depth >= super::MAX_OBJECT_NESTING_DEPTH {
+            return None;
+        }
+
         r.forward_tag(b"<<")?;
 
         loop {
@@ -185,16 +193,16 @@ impl Skippable for Dict<'_> {
             } else {
                 let Some(_) = r.skip::<Name<'_>>(is_content_stream) else {
                     // In case there is garbage in-between, be lenient and just try to skip it.
-                    r.skip::<Object<'_>>(is_content_stream)?;
+                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
                     continue;
                 };
 
                 r.skip_white_spaces_and_comments();
 
                 if is_content_stream {
-                    r.skip::<Object<'_>>(is_content_stream)?;
+                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
                 } else {
-                    r.skip::<MaybeRef<Object<'_>>>(is_content_stream)?;
+                    r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
                 }
             }
         }
@@ -293,6 +301,7 @@ fn parse_dict_with<'a, F>(
 where
     F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
 {
+    let depth = usize::from(start_tag.is_some());
     let dict_data = r.tail()?;
     let start_offset = r.offset();
 
@@ -316,7 +325,7 @@ where
                     // In case there is garbage in-between, be lenient and just try to skip it.
                     // But only do this if we are parsing a proper dictionary as opposed to an
                     // inline dictionary.
-                    r.read::<Object<'_>>(ctx)?;
+                    r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
                     continue;
                 } else {
                     return None;
@@ -335,9 +344,9 @@ where
             on_entry(name, offset, r)?;
 
             if ctx.in_content_stream() {
-                r.skip::<Object<'_>>(ctx.in_content_stream())?;
+                r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
             } else {
-                r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream())?;
+                r.skip_with_depth::<MaybeRef<Object<'_>>>(ctx.in_content_stream(), depth)?;
             }
         }
     }
