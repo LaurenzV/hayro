@@ -2,7 +2,7 @@ use crate::Renderer;
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Rect};
 use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
 };
@@ -507,14 +507,9 @@ impl Renderer<'_> {
         self.ctx.set_paint_transform(Affine::IDENTITY);
         self.ctx.set_aliasing_threshold(Some(1));
 
-        let target_width = (transform * Point::new(image.width() as f64, 0.0))
-            .to_vec2()
-            .length()
-            .ceil() as u32;
-        let target_height = (transform * Point::new(0.0, image.height() as f64))
-            .to_vec2()
-            .length()
-            .ceil() as u32;
+        let (x, y) = x_y_advances(&transform);
+        let target_width = (x.length() * image.width() as f64).ceil() as u32;
+        let target_height = (y.length() * image.height() as f64).ceil() as u32;
 
         match image {
             hayro_interpret::Image::Stencil(s) => {
