@@ -336,7 +336,7 @@ impl Renderer<'_> {
                 out.extend_from_slice(&[*g, *g, *g, a]);
             }
             out
-        } else if matches!(&image_data, RenderImageData::Rgb(_)) && !has_alpha && needs_resize {
+        } else if matches!(&image_data, RenderImageData::Rgb(_)) && needs_resize {
             let RenderImageData::Rgb(rgb) = image_data else {
                 unreachable!()
             };
@@ -349,6 +349,16 @@ impl Renderer<'_> {
                 new_height,
                 ImagePixelFormat::Rgb,
             );
+            let resized_alpha = alpha_data.map(|alpha| {
+                self.resize_image_data(
+                    alpha.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Luma,
+                )
+            });
             additional_transform = Affine::scale_non_uniform(
                 img_width as f64 / new_width as f64,
                 img_height as f64 / new_height as f64,
@@ -357,8 +367,14 @@ impl Renderer<'_> {
             img_height = new_height;
 
             let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
-            for px in resized.chunks_exact(3) {
-                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            if let Some(alpha) = resized_alpha {
+                for (px, a) in resized.chunks_exact(3).zip(alpha) {
+                    out.extend_from_slice(&[px[0], px[1], px[2], a]);
+                }
+            } else {
+                for px in resized.chunks_exact(3) {
+                    out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
             }
             out
         } else {
