@@ -83,6 +83,14 @@ object!(Array<'a>, Array);
 
 impl Skippable for Array<'_> {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::skip_with_depth(r, is_content_stream, 0)
+    }
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        if depth >= super::MAX_OBJECT_NESTING_DEPTH {
+            return None;
+        }
+
         r.forward_tag(b"[")?;
 
         loop {
@@ -91,9 +99,9 @@ impl Skippable for Array<'_> {
             if let Some(()) = r.forward_tag(b"]") {
                 return Some(());
             } else if is_content_stream {
-                r.skip::<Object<'_>>(true)?;
+                r.skip_with_depth::<Object<'_>>(true, depth + 1)?;
             } else {
-                r.skip::<MaybeRef<Object<'_>>>(false)?;
+                r.skip_with_depth::<MaybeRef<Object<'_>>>(false, depth + 1)?;
             }
         }
     }

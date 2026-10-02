@@ -14,6 +14,11 @@ pub trait ReaderExt<'a> {
     fn read_with_context<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T>;
     fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]>;
+    fn skip_with_depth<T: Skippable>(
+        &mut self,
+        is_content_stream: bool,
+        depth: usize,
+    ) -> Option<&'a [u8]>;
     fn skip_white_spaces(&mut self);
     fn read_white_space(&mut self) -> Option<()>;
     fn skip_eol_characters(&mut self);
@@ -52,9 +57,18 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]> {
+        self.skip_with_depth::<T>(is_content_stream, 0)
+    }
+
+    #[inline]
+    fn skip_with_depth<T: Skippable>(
+        &mut self,
+        is_content_stream: bool,
+        depth: usize,
+    ) -> Option<&'a [u8]> {
         let old_offset = self.offset;
 
-        T::skip(self, is_content_stream).or_else(|| {
+        T::skip_with_depth(self, is_content_stream, depth).or_else(|| {
             self.offset = old_offset;
             None
         })?;
@@ -238,4 +252,8 @@ pub trait Readable<'a>: Sized {
 
 pub trait Skippable {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()>;
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, _: usize) -> Option<()> {
+        Self::skip(r, is_content_stream)
+    }
 }

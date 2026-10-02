@@ -2,7 +2,7 @@ use crate::Renderer;
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Rect};
 use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
 };
@@ -336,7 +336,7 @@ impl Renderer<'_> {
                 out.extend_from_slice(&[*g, *g, *g, a]);
             }
             out
-        } else if matches!(&image_data, RenderImageData::Rgb(_)) && !has_alpha && needs_resize {
+        } else if matches!(&image_data, RenderImageData::Rgb(_)) && needs_resize {
             let RenderImageData::Rgb(rgb) = image_data else {
                 unreachable!()
             };
@@ -349,6 +349,16 @@ impl Renderer<'_> {
                 new_height,
                 ImagePixelFormat::Rgb,
             );
+            let resized_alpha = alpha_data.map(|alpha| {
+                self.resize_image_data(
+                    alpha.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Luma,
+                )
+            });
             additional_transform = Affine::scale_non_uniform(
                 img_width as f64 / new_width as f64,
                 img_height as f64 / new_height as f64,
@@ -357,8 +367,14 @@ impl Renderer<'_> {
             img_height = new_height;
 
             let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
-            for px in resized.chunks_exact(3) {
-                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            if let Some(alpha) = resized_alpha {
+                for (px, a) in resized.chunks_exact(3).zip(alpha) {
+                    out.extend_from_slice(&[px[0], px[1], px[2], a]);
+                }
+            } else {
+                for px in resized.chunks_exact(3) {
+                    out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
             }
             out
         } else {
@@ -491,14 +507,9 @@ impl Renderer<'_> {
         self.ctx.set_paint_transform(Affine::IDENTITY);
         self.ctx.set_aliasing_threshold(Some(1));
 
-        let target_width = (transform * Point::new(image.width() as f64, 0.0))
-            .to_vec2()
-            .length()
-            .ceil() as u32;
-        let target_height = (transform * Point::new(0.0, image.height() as f64))
-            .to_vec2()
-            .length()
-            .ceil() as u32;
+        let (x, y) = x_y_advances(&transform);
+        let target_width = (x.length() * image.width() as f64).ceil() as u32;
+        let target_height = (y.length() * image.height() as f64).ceil() as u32;
 
         match image {
             hayro_interpret::Image::Stencil(s) => {
