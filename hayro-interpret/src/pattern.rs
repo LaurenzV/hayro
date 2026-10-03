@@ -34,20 +34,16 @@ pub enum Pattern<'a> {
 }
 
 impl<'a> Pattern<'a> {
-    pub(crate) fn new(
-        object: Object<'a>,
-        ctx: &Context<'a>,
-        resources: &Resources<'a>,
-    ) -> Option<Self> {
+    pub(crate) fn new(object: Object<'a>, ctx: &Context<'a>) -> Option<Self> {
         match object {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.interpreter_cache.object_cache,
                 ctx.get().graphics_state.non_stroke_alpha,
             )?)),
-            Object::Stream(stream) => Some(Self::Tiling(Box::new(TilingPattern::new(
-                stream, ctx, resources,
-            )?))),
+            Object::Stream(stream) => {
+                Some(Self::Tiling(Box::new(TilingPattern::new(stream, ctx)?)))
+            }
             _ => None,
         }
     }
@@ -140,7 +136,7 @@ pub struct TilingPattern<'a> {
     is_color: bool,
     pub(crate) stroke_paint: Color,
     pub(crate) non_stroking_paint: Color,
-    pub(crate) parent_resources: Resources<'a>,
+    resources: Resources<'a>,
     pub(crate) cache: InterpreterCache<'a>,
     pub(crate) settings: InterpreterSettings,
     pub(crate) xref: &'a XRef,
@@ -154,11 +150,7 @@ impl Debug for TilingPattern<'_> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub(crate) fn new(
-        stream: Stream<'a>,
-        ctx: &Context<'a>,
-        resources: &Resources<'a>,
-    ) -> Option<Self> {
+    pub(crate) fn new(stream: Stream<'a>, ctx: &Context<'a>) -> Option<Self> {
         let cache_key = stream.cache_key();
         let dict = stream.dict();
 
@@ -201,6 +193,7 @@ impl<'a> TilingPattern<'a> {
             state.graphics_state.stroke_alpha,
         );
         let nesting_depth = ctx.nesting_depth() + 1;
+        let resources = Resources::new(dict.get(RESOURCES).unwrap_or_default());
 
         Some(Self {
             cache_key,
@@ -214,7 +207,7 @@ impl<'a> TilingPattern<'a> {
             stroke_paint,
             non_stroking_paint,
             settings: ctx.settings.clone(),
-            parent_resources: resources.clone(),
+            resources,
             cache: ctx.interpreter_cache.clone(),
             xref: ctx.xref,
             nesting_depth,
@@ -242,10 +235,6 @@ impl<'a> TilingPattern<'a> {
         );
 
         let decoded = self.stream.decoded().ok()?;
-        let resources = Resources::from_parent(
-            self.stream.dict().get(RESOURCES).unwrap_or_default(),
-            self.parent_resources.clone(),
-        );
         let iter = TypedIter::new(decoded.as_ref());
 
         let clip_path = ClipPath {
@@ -255,7 +244,7 @@ impl<'a> TilingPattern<'a> {
         device.push_clip_path(&clip_path);
 
         if self.is_color {
-            interpret(iter, &resources, &mut context, device);
+            interpret(iter, &self.resources, &mut context, device);
         } else {
             let paint = if !is_stroke {
                 Paint::Color(self.non_stroking_paint.clone())
@@ -264,7 +253,7 @@ impl<'a> TilingPattern<'a> {
             };
 
             let mut device = StencilPatternDevice::new(device, paint.clone());
-            interpret(iter, &resources, &mut context, &mut device);
+            interpret(iter, &self.resources, &mut context, &mut device);
         }
 
         device.pop_clip();

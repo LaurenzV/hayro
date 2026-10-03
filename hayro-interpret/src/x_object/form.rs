@@ -16,7 +16,7 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
-    resources: Dict<'a>,
+    resources: Option<Resources<'a>>,
 }
 
 impl<'a> FormXObject<'a> {
@@ -24,7 +24,7 @@ impl<'a> FormXObject<'a> {
         let dict = stream.dict();
 
         let decoded = stream.decoded().ok()?;
-        let resources = dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default();
+        let resources = dict.get(RESOURCES).map(Resources::new);
 
         let matrix = Affine::new(
             dict.get::<[f64; 6]>(MATRIX)
@@ -98,7 +98,7 @@ impl<'a> FormXObject<'a> {
 
         interpret(
             iter,
-            &Resources::from_parent(self.resources.clone(), resources.clone()),
+            self.resources.as_ref().unwrap_or(resources),
             context,
             device,
         );

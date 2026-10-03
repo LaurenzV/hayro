@@ -743,3 +743,15 @@ fn encrypted_oob_length() {
     let file = include_bytes!("../pdfs/load/encrypted_oob_length.pdf");
     load_pdf(file);
 }
+
+#[test]
+fn deeply_nested_page_tree() {
+    let file = include_bytes!("../pdfs/load/deeply_nested_page_tree.pdf");
+    load_pdf(file);
+}
+
+#[test]
+fn page_tree_cycle_with_siblings() {
+    let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
+    load_pdf(file);
+}

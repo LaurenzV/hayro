@@ -16,16 +16,15 @@ mod primitive;
 use crate::primitive::{WriteDirect, WriteIndirect};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use hayro_syntax::object::Dict;
+use hayro_syntax::object::ObjRef;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{
     COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
 };
-use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Page, Resources, Rotation};
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
 use rustc_hash::FxHashMap;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
@@ -408,24 +407,16 @@ fn serialize_resources(
     ctx: &mut ExtractionContext<'_>,
     writer: &mut impl ResourcesExt,
 ) {
-    let ext_g_states = collect_resources(resources, |r| r.ext_g_states.clone());
-    let shadings = collect_resources(resources, |r| r.shadings.clone());
-    let patterns = collect_resources(resources, |r| r.patterns.clone());
-    let x_objects = collect_resources(resources, |r| r.x_objects.clone());
-    let color_spaces = collect_resources(resources, |r| r.color_spaces.clone());
-    let fonts = collect_resources(resources, |r| r.fonts.clone());
-    let properties = collect_resources(resources, |r| r.properties.clone());
-
     // Resource dictionary is always required (unless it can be inherited), so
     // let's just be safe and always write it.
-    let mut resources = writer.resources();
+    let mut output = writer.resources();
 
     macro_rules! write {
         ($name:ident, $key:expr) => {
-            if !$name.is_empty() {
-                let mut dict = resources.insert(Name($key)).dict();
+            if !resources.$name.is_empty() {
+                let mut dict = output.insert(Name($key)).dict();
 
-                for (name, obj) in $name {
+                for (name, obj) in resources.$name.entries() {
                     obj.write_direct(dict.insert(Name(name.deref())), ctx);
                 }
             }
@@ -439,34 +430,6 @@ fn serialize_resources(
     write!(color_spaces, COLORSPACE);
     write!(fonts, FONT);
     write!(properties, PROPERTIES);
-}
-
-fn collect_resources<'a>(
-    resources: &Resources<'a>,
-    get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-) -> BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>> {
-    let mut map = BTreeMap::new();
-    collect_resources_inner(resources, get_dict, &mut map);
-    map
-}
-
-fn collect_resources_inner<'a>(
-    resources: &Resources<'a>,
-    mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    map: &mut BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>>,
-) {
-    // Process parents first, so that duplicates get overridden by the current dictionary.
-    // Since for inheritance, the current dictionary always has priority over entries in the
-    // parent dictionary.
-    if let Some(parent) = resources.parent() {
-        collect_resources_inner(parent, get_dict.clone(), map);
-    }
-
-    let dict = get_dict(resources);
-
-    for (name, object) in dict.entries() {
-        map.insert(name, object);
-    }
 }
 
 pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {

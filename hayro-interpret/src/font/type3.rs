@@ -154,21 +154,18 @@ impl<'a> Type3<'a> {
             glyph.nesting_depth,
         );
 
-        let mut resources = Resources::from_parent(
-            self.dict.get(RESOURCES).unwrap_or_default(),
-            glyph.parent_resources.clone(),
-        );
-
-        // Technically not valid, but also support by Adobe Acrobat. See PDFBOX-5294.
-        if let Some(procs_resources) = program.dict().get::<Dict<'_>>(RESOURCES) {
-            resources = Resources::from_parent(procs_resources, resources);
-        }
+        let resources = program
+            .dict()
+            .get(RESOURCES)
+            .or_else(|| self.dict.get(RESOURCES))
+            .map(Resources::new);
+        let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
 
         if is_shape_glyph {
             let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
-            interpret(iter, &resources, &mut context, &mut device);
+            interpret(iter, resources, &mut context, &mut device);
         } else {
-            interpret(iter, &resources, &mut context, device);
+            interpret(iter, resources, &mut context, device);
         }
 
         Some(())

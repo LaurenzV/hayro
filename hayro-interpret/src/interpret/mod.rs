@@ -472,7 +472,7 @@ pub fn interpret<'a>(
                 context.get_mut().graphics_state.non_stroke_pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context, resources))
+                        .and_then(|d| Pattern::new(d, context))
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
@@ -481,7 +481,7 @@ pub fn interpret<'a>(
                 context.get_mut().graphics_state.stroke_pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context, resources))
+                        .and_then(|d| Pattern::new(d, context))
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {

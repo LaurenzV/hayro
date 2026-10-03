@@ -5,10 +5,13 @@ pub(crate) use std::collections::HashMap;
 pub(crate) use alloc::collections::BTreeMap as HashMap;
 
 #[cfg(feature = "std")]
-pub(crate) use rustc_hash::FxHashMap;
+pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 
 #[cfg(not(feature = "std"))]
 pub(crate) use alloc::collections::BTreeMap as FxHashMap;
+
+#[cfg(not(feature = "std"))]
+pub(crate) use alloc::collections::BTreeSet as FxHashSet;
 
 // Keep in sync with the implementation in `page`.
 #[cfg(feature = "std")]

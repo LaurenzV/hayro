@@ -6,32 +6,34 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::Rect;
 use crate::object::Stream;
+use crate::object::array::ArrayIter;
 use crate::object::dict::keys::*;
-use crate::object::{Object, ObjectLike};
+use crate::object::{MaybeRef, Object};
 use crate::reader::ReaderContext;
-use crate::sync::OnceLock;
+use crate::sync::{FxHashSet, OnceLock};
 use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
-use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]
-struct PagesContext {
+struct PagesContext<'a> {
     media_box: Option<Rect>,
     crop_box: Option<Rect>,
     rotate: Option<i32>,
+    resources: Dict<'a>,
 }
 
-impl PagesContext {
+impl PagesContext<'_> {
     fn new() -> Self {
         Self {
             media_box: None,
             crop_box: None,
             rotate: None,
+            resources: Dict::empty(),
         }
     }
 }
@@ -51,12 +53,7 @@ impl<'a> Pages<'a> {
     ) -> Option<Self> {
         let mut pages = vec![];
         let pages_ctx = PagesContext::new();
-        resolve_pages(
-            pages_dict,
-            &mut pages,
-            pages_ctx,
-            Resources::new(Dict::empty(), None, ctx),
-        )?;
+        resolve_pages(pages_dict, &mut pages, pages_ctx, ctx)?;
 
         Some(Self { pages, xref })
     }
@@ -70,12 +67,7 @@ impl<'a> Pages<'a> {
 
         for object in xref.objects() {
             if let Some(dict) = object.into_dict()
-                && let Some(page) = Page::new(
-                    &dict,
-                    &PagesContext::new(),
-                    Resources::new(Dict::empty(), None, ctx),
-                    true,
-                )
+                && let Some(page) = Page::new(&dict, &PagesContext::new(), ctx, true)
             {
                 pages.push(page);
             }
@@ -102,40 +94,75 @@ impl<'a> Deref for Pages<'a> {
     }
 }
 
+struct PageTreeFrame<'a> {
+    kids: ArrayIter<'a>,
+    ctx: PagesContext<'a>,
+}
+
+impl<'a> PageTreeFrame<'a> {
+    fn new(dict: &Dict<'a>, mut ctx: PagesContext<'a>) -> Option<Self> {
+        ctx.media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box);
+        ctx.crop_box = dict.get::<Rect>(CROP_BOX).or(ctx.crop_box);
+        ctx.rotate = dict.get::<i32>(ROTATE).or(ctx.rotate);
+        if let Some(resources) = dict.get::<Dict<'a>>(RESOURCES) {
+            ctx.resources = resources;
+        }
+
+        Some(Self {
+            kids: dict.get::<Array<'a>>(KIDS)?.raw_iter(),
+            ctx,
+        })
+    }
+}
+
 fn resolve_pages<'a>(
     pages_dict: &Dict<'a>,
     entries: &mut Vec<Page<'a>>,
-    mut ctx: PagesContext,
-    resources: Resources<'a>,
+    ctx: PagesContext<'a>,
+    reader_ctx: &ReaderContext<'a>,
 ) -> Option<()> {
-    if let Some(media_box) = pages_dict.get::<Rect>(MEDIA_BOX) {
-        ctx.media_box = Some(media_box);
+    let mut visited = FxHashSet::default();
+
+    if let Some(id) = pages_dict.obj_id() {
+        visited.insert(id);
     }
 
-    if let Some(crop_box) = pages_dict.get::<Rect>(CROP_BOX) {
-        ctx.crop_box = Some(crop_box);
-    }
+    let mut stack = vec![PageTreeFrame::new(pages_dict, ctx)?];
 
-    if let Some(rotate) = pages_dict.get::<i32>(ROTATE) {
-        ctx.rotate = Some(rotate);
-    }
+    while let Some(frame) = stack.last_mut() {
+        let Some(kid) = frame.kids.next() else {
+            stack.pop();
 
-    let resources = Resources::from_parent(
-        pages_dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default(),
-        resources.clone(),
-    );
+            continue;
+        };
 
-    let kids = pages_dict.get::<Array<'a>>(KIDS)?;
+        let dict = match kid {
+            MaybeRef::Ref(id) => {
+                if !visited.insert(id.into()) {
+                    continue;
+                }
 
-    for dict in kids.iter::<Dict<'_>>() {
+                reader_ctx
+                    .xref()
+                    .get_with::<Dict<'a>>(id.into(), reader_ctx)
+            }
+            MaybeRef::NotRef(object) => object.into_dict(),
+        };
+
+        let Some(dict) = dict else {
+            continue;
+        };
+
         match dict.get::<Name<'_>>(TYPE).as_deref() {
             Some(PAGES) => {
-                resolve_pages(&dict, entries, ctx.clone(), resources.clone());
+                if let Some(child) = PageTreeFrame::new(&dict, frame.ctx.clone()) {
+                    stack.push(child);
+                }
             }
             // Let's be lenient and assume it's a `Page` in case it's `None` or something else
             // (see corpus test case 0083781).
             _ => {
-                if let Some(page) = Page::new(&dict, &ctx, resources.clone(), false) {
+                if let Some(page) = Page::new(&dict, &frame.ctx, reader_ctx, false) {
                     entries.push(page);
                 }
             }
@@ -172,8 +199,8 @@ pub struct Page<'a> {
 impl<'a> Page<'a> {
     fn new(
         dict: &Dict<'a>,
-        ctx: &PagesContext,
-        resources: Resources<'a>,
+        ctx: &PagesContext<'a>,
+        reader_ctx: &ReaderContext<'a>,
         brute_force: bool,
     ) -> Option<Self> {
         // In general, pages without content are allowed, but in case we are brute-forcing
@@ -202,10 +229,9 @@ impl<'a> Page<'a> {
             _ => Rotation::None,
         };
 
-        let ctx = resources.ctx.clone();
-        let resources = Resources::from_parent(
-            dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default(),
-            resources,
+        let resources = Resources::new(
+            dict.get::<Dict<'a>>(RESOURCES)
+                .unwrap_or_else(|| ctx.resources.clone()),
         );
 
         Some(Self {
@@ -215,7 +241,7 @@ impl<'a> Page<'a> {
             rotation,
             page_streams: OnceLock::new(),
             resources,
-            ctx,
+            ctx: reader_ctx.clone(),
         })
     }
 
@@ -387,8 +413,6 @@ impl<'a> Page<'a> {
 /// A structure keeping track of the resources of a page.
 #[derive(Clone, Debug)]
 pub struct Resources<'a> {
-    parent: Option<Box<Self>>,
-    ctx: ReaderContext<'a>,
     /// The raw dictionary of external graphics states.
     pub ext_g_states: Dict<'a>,
     /// The raw dictionary of fonts.
@@ -406,15 +430,8 @@ pub struct Resources<'a> {
 }
 
 impl<'a> Resources<'a> {
-    /// Create a new `Resources` object from a dictionary with a parent.
-    pub fn from_parent(resources: Dict<'a>, parent: Self) -> Self {
-        let ctx = parent.ctx.clone();
-
-        Self::new(resources, Some(parent), &ctx)
-    }
-
     /// Create a new `Resources` object.
-    pub(crate) fn new(resources: Dict<'a>, parent: Option<Self>, ctx: &ReaderContext<'a>) -> Self {
+    pub fn new(resources: Dict<'a>) -> Self {
         let ext_g_states = resources.get::<Dict<'_>>(EXT_G_STATE).unwrap_or_default();
         let fonts = resources.get::<Dict<'_>>(FONT).unwrap_or_default();
         let color_spaces = resources.get::<Dict<'_>>(COLORSPACE).unwrap_or_default();
@@ -423,10 +440,7 @@ impl<'a> Resources<'a> {
         let shadings = resources.get::<Dict<'_>>(SHADING).unwrap_or_default();
         let properties = resources.get::<Dict<'_>>(PROPERTIES).unwrap_or_default();
 
-        let parent = parent.map(Box::new);
-
         Self {
-            parent,
             ext_g_states,
             fonts,
             color_spaces,
@@ -434,53 +448,37 @@ impl<'a> Resources<'a> {
             x_objects,
             patterns,
             shadings,
-            ctx: ctx.clone(),
         }
-    }
-
-    fn get_resource<T: ObjectLike<'a>>(&self, name: &Name<'_>, dict: &Dict<'a>) -> Option<T> {
-        dict.get::<T>(name.deref())
-    }
-
-    /// Get the parent in the resource, chain, if available.
-    pub fn parent(&self) -> Option<&Self> {
-        self.parent.as_deref()
     }
 
     /// Get an external graphics state by name.
     pub fn get_ext_g_state(&self, name: &Name<'_>) -> Option<Dict<'a>> {
-        self.get_resource::<Dict<'_>>(name, &self.ext_g_states)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_ext_g_state(name)))
+        self.ext_g_states.get(name)
     }
 
     /// Get a color space by name.
     pub fn get_color_space(&self, name: &Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name, &self.color_spaces)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_color_space(name)))
+        self.color_spaces.get(name)
     }
 
     /// Get a font by name.
     pub fn get_font(&self, name: &Name<'_>) -> Option<Dict<'a>> {
-        self.get_resource::<Dict<'_>>(name, &self.fonts)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_font(name)))
+        self.fonts.get(name)
     }
 
     /// Get a pattern by name.
     pub fn get_pattern(&self, name: &Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name, &self.patterns)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_pattern(name)))
+        self.patterns.get(name)
     }
 
     /// Get an x object by name.
     pub fn get_x_object(&self, name: &Name<'_>) -> Option<Stream<'a>> {
-        self.get_resource::<Stream<'_>>(name, &self.x_objects)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_x_object(name)))
+        self.x_objects.get(name)
     }
 
     /// Get a shading by name.
     pub fn get_shading(&self, name: &Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name, &self.shadings)
-            .or_else(|| self.parent.as_ref().and_then(|p| p.get_shading(name)))
+        self.shadings.get(name)
     }
 }
 
