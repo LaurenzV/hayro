@@ -199,10 +199,12 @@ impl Renderer<'_> {
         };
         let mut img_width = image_data.width();
         let mut img_height = image_data.height();
-        let interpolate = image_data.interpolate();
+        let interpolate = image_data.interpolate() || self.global.force_image_interpolation;
 
         if let Some(a) = &alpha_data
-            && (a.width != img_width || a.height != img_height || a.interpolate != interpolate)
+            && (a.width != img_width
+                || a.height != img_height
+                || (a.interpolate || self.global.force_image_interpolation) != interpolate)
         {
             return self.draw_image_with_alpha_mask(image_data, alpha_data.unwrap());
         }

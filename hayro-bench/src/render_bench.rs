@@ -174,7 +174,8 @@ impl RenderBackend for HayroRenderBackend {
         collect_bitmaps: bool,
     ) -> Result<DocumentRun, String> {
         let interpreter_settings = InterpreterSettings::default();
-        let render_settings = hayro::RenderSettings {
+        let render_settings = hayro::RenderSettings::default();
+        let pixmap_settings = hayro::PixmapSettings {
             bg_color: WHITE,
             ..Default::default()
         };
@@ -189,7 +190,13 @@ impl RenderBackend for HayroRenderBackend {
             let cache = hayro::RenderCache::new();
 
             for page in document.pages().iter() {
-                let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
+                let pixmap = hayro::render(
+                    page,
+                    &cache,
+                    &interpreter_settings,
+                    &render_settings,
+                    &pixmap_settings,
+                );
 
                 if iteration == 0 {
                     total_bytes += pixmap.width() as usize * pixmap.height() as usize * 4;
@@ -208,8 +215,13 @@ impl RenderBackend for HayroRenderBackend {
                 .iter()
                 .enumerate()
                 .map(|(page_index, page)| {
-                    let pixmap =
-                        hayro::render(page, &cache, &interpreter_settings, &render_settings);
+                    let pixmap = hayro::render(
+                        page,
+                        &cache,
+                        &interpreter_settings,
+                        &render_settings,
+                        &pixmap_settings,
+                    );
                     let width = pixmap.width() as u32;
                     let height = pixmap.height() as u32;
                     let rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);

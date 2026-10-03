@@ -8,7 +8,7 @@ use hayro::hayro_syntax::Pdf;
 use hayro::kurbo::Affine;
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
-use hayro::{RenderCache, RenderSettings, render, render_into};
+use hayro::{PixmapSettings, RenderCache, RenderSettings, render, render_into};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -83,6 +83,7 @@ fn main() {
 
     // This cache should be reused across multiple pages.
     let cache = RenderCache::new();
+    let render_settings = RenderSettings::default();
     let mut ctx = RenderContext::new(0, 0);
     let mut pixmap = Pixmap::new(0, 0);
     let mut resources = Resources::default();
@@ -92,12 +93,18 @@ fn main() {
 
         // If all you need is the ability to convert a PDF page into an RGBA buffer
         // and just setting a background + scale factor is enough, use `hayro::render`:
-        let settings = RenderSettings {
+        let pixmap_settings = PixmapSettings {
             x_scale: 2.0,
             y_scale: 2.0,
             bg_color: WHITE,
         };
-        let rendered = render(page, &cache, &interpreter_settings, &settings);
+        let rendered = render(
+            page,
+            &cache,
+            &interpreter_settings,
+            &render_settings,
+            &pixmap_settings,
+        );
         let output_path = format!("{}/rendered_{idx}.png", output_dir);
         std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
 
@@ -128,7 +135,14 @@ fn main() {
             * page.initial_transform(true).to_kurbo();
 
         // Render into the render context.
-        render_into(page, &cache, &interpreter_settings, &mut ctx, transform);
+        render_into(
+            page,
+            &cache,
+            &interpreter_settings,
+            &render_settings,
+            &mut ctx,
+            transform,
+        );
 
         // In case the `vello_cpu` `RenderContext` is multi-threaded, make sure to
         // flush.

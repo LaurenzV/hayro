@@ -72,14 +72,16 @@ pub(crate) struct GlobalState {
     level: Level,
     outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     scaler: Scaler,
+    force_image_interpolation: bool,
 }
 
 impl GlobalState {
-    pub(crate) fn new(cache: &RenderCache<'_>) -> Self {
+    pub(crate) fn new(cache: &RenderCache<'_>, settings: &RenderSettings) -> Self {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
+            force_image_interpolation: settings.force_image_interpolation,
         }
     }
 }
@@ -190,9 +192,16 @@ impl<'a> RenderCache<'a> {
     }
 }
 
-/// Settings for rendering a page to a pixmap.
-#[derive(Clone, Copy)]
+/// Settings for rendering a page.
+#[derive(Clone, Copy, Default)]
 pub struct RenderSettings {
+    /// Whether all images should forcibly be rendered with bilinear interpolation.
+    pub force_image_interpolation: bool,
+}
+
+/// Settings for the output pixmap.
+#[derive(Clone, Copy)]
+pub struct PixmapSettings {
     /// Horizontal scale factor.
     pub x_scale: f32,
     /// Vertical scale factor.
@@ -201,7 +210,7 @@ pub struct RenderSettings {
     pub bg_color: AlphaColor<Srgb>,
 }
 
-impl Default for RenderSettings {
+impl Default for PixmapSettings {
     fn default() -> Self {
         Self {
             x_scale: 1.0,
@@ -223,17 +232,25 @@ pub fn render<'a>(
     cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &RenderSettings,
+    pixmap_settings: &PixmapSettings,
 ) -> Pixmap {
     let (width, height) = page.render_dimensions();
     let mut ctx = RenderContext::new(
-        (width * render_settings.x_scale) as u16,
-        (height * render_settings.y_scale) as u16,
+        (width * pixmap_settings.x_scale) as u16,
+        (height * pixmap_settings.y_scale) as u16,
     );
     let transform = Affine::scale_non_uniform(
-        render_settings.x_scale as f64,
-        render_settings.y_scale as f64,
+        pixmap_settings.x_scale as f64,
+        pixmap_settings.y_scale as f64,
     ) * page.initial_transform(true).to_kurbo();
-    render_into(page, cache, interpreter_settings, &mut ctx, transform);
+    render_into(
+        page,
+        cache,
+        interpreter_settings,
+        render_settings,
+        &mut ctx,
+        transform,
+    );
     ctx.flush();
 
     let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
@@ -241,7 +258,7 @@ pub fn render<'a>(
         &mut pixmap,
         &mut vello_cpu::Resources::default(),
         vello_cpu::RasterizerSettings {
-            target_init: vello_cpu::TargetInit::Clear(render_settings.bg_color),
+            target_init: vello_cpu::TargetInit::Clear(pixmap_settings.bg_color),
             ..Default::default()
         },
     );
@@ -257,6 +274,7 @@ pub fn render_into<'a>(
     page: &'a Page<'a>,
     cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
     ctx: &mut RenderContext,
     transform: Affine,
 ) {
@@ -271,7 +289,7 @@ pub fn render_into<'a>(
     ctx.reset_mask();
     ctx.reset_filter_effect();
 
-    let global = GlobalState::new(cache);
+    let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
     let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
     clip_path.apply_affine(transform);
@@ -307,7 +325,8 @@ pub fn render_pdf(
                 page,
                 &cache,
                 &settings,
-                &RenderSettings {
+                &RenderSettings::default(),
+                &PixmapSettings {
                     x_scale: scale,
                     y_scale: scale,
                     bg_color: WHITE,
