@@ -8,7 +8,7 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
-use crate::error::{OverflowError, Result, bail};
+use crate::error::{OverflowError, ParseError, Result, bail};
 use crate::simd::{self, Level, Simd, u32x8};
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
@@ -131,6 +131,9 @@ fn decode_arithmetic(
                 let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
                 for y in 0..height {
+                    if decoder.is_exhausted() {
+                        bail!(ParseError::UnexpectedEof);
+                    }
                     gatherer.start_row(bitplane, y);
                     for x in 0..width {
                         gatherer.maybe_reload_buffers(bitplane, x);
