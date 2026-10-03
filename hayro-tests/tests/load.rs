@@ -4,7 +4,8 @@ use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
-use hayro_syntax::object::DateTime;
+use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
+use std::sync::Barrier;
 
 fn load_pdf(file: &[u8]) {
     let pdf = Pdf::new(file.to_vec());
@@ -754,4 +755,34 @@ fn deeply_nested_page_tree() {
 fn page_tree_cycle_with_siblings() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
     load_pdf(file);
+}
+
+#[test]
+fn concurrent_object_stream_resolution() {
+    let data = include_bytes!("../pdfs/load/concurrent_object_streams.pdf");
+
+    for _ in 0..32 {
+        let pdf = Pdf::new(data.to_vec()).unwrap();
+        let barrier = Barrier::new(8);
+
+        std::thread::scope(|scope| {
+            for thread in 0..8 {
+                let pdf = &pdf;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+
+                    // Objects 6..30 are split between two compressed object streams.
+                    for offset in 0..24 {
+                        let number = 6 + (thread * 12 + offset) % 24;
+                        let value = pdf
+                            .xref()
+                            .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
+                            .and_then(|dict| dict.get::<i32>(b"V"));
+                        assert_eq!(value, Some(100 + number));
+                    }
+                });
+            }
+        });
+    }
 }
