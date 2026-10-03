@@ -786,3 +786,38 @@ fn concurrent_object_stream_resolution() {
         });
     }
 }
+
+#[test]
+fn concurrent_xref_repair_does_not_panic() {
+    let data = include_bytes!("../pdfs/load/concurrent_xref_repair.pdf");
+
+    for _ in 0..32 {
+        let pdf = Pdf::new(data.to_vec()).unwrap();
+        let barrier = Barrier::new(8);
+
+        std::thread::scope(|scope| {
+            for thread in 0..8 {
+                let pdf = &pdf;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+
+                    if thread % 2 == 0 {
+                        let _ = pdf
+                            .xref()
+                            .get::<Dict<'_>>(ObjectIdentifier::new(3 + thread, 0));
+                    } else {
+                        // The catalog's offset is valid even before repair.
+                        assert!(pdf.xref().get::<Dict<'_>>(pdf.xref().root_id()).is_some());
+                    }
+                });
+            }
+        });
+
+        let value = pdf
+            .xref()
+            .get::<Dict<'_>>(ObjectIdentifier::new(3, 0))
+            .and_then(|dict| dict.get::<i32>(b"V"));
+        assert_eq!(value, Some(103));
+    }
+}

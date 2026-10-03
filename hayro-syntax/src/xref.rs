@@ -482,8 +482,10 @@ impl XRef {
             unreachable!();
         };
 
-        let mut locked = r.map.try_put().unwrap();
-        assert!(!locked.repaired);
+        let mut locked = r.map.put();
+        if locked.repaired {
+            return;
+        }
 
         let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
         locked.xref_map = xref_map;
@@ -541,7 +543,7 @@ impl XRef {
             return None;
         };
 
-        let locked = repr.map.try_get().unwrap();
+        let locked = repr.map.get();
 
         let mut r = Reader::new(repr.data.get().as_ref());
 
