@@ -381,16 +381,6 @@ impl XRef {
         Ok(xref)
     }
 
-    fn is_repaired(&self) -> bool {
-        match &self.0 {
-            Inner::Dummy => false,
-            Inner::Some(r) => {
-                let locked = r.map.get();
-                locked.repaired
-            }
-        }
-    }
-
     pub(crate) fn dummy() -> &'static Self {
         &DUMMY_XREF
     }
@@ -543,17 +533,14 @@ impl XRef {
             return None;
         };
 
-        let locked = repr.map.get();
+        // The flag must describe the map this entry came from.
+        let (entry, was_repaired) = {
+            let locked = repr.map.get();
+            // References to undefined objects are treated as null.
+            (*locked.xref_map.get(&id)?, locked.repaired)
+        };
 
         let mut r = Reader::new(repr.data.get().as_ref());
-
-        let entry = *locked.xref_map.get(&id).or({
-            // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
-            // shall be treated as a reference to the null object.
-            None
-        })?;
-        drop(locked);
-
         let mut ctx = ctx.clone();
         ctx.set_obj_number(id);
         ctx.set_in_content_stream(false);
@@ -576,7 +563,7 @@ impl XRef {
                 };
 
                 // The xref table is broken, try to repair if not already repaired.
-                if self.is_repaired() {
+                if was_repaired {
                     error!(
                         "attempt was made at repairing xref, but object {id:?} still couldn't be read"
                     );

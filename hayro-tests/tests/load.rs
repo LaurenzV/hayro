@@ -821,3 +821,33 @@ fn concurrent_xref_repair_does_not_panic() {
         assert_eq!(value, Some(103));
     }
 }
+
+#[test]
+fn concurrent_xref_repair_retries_original_entries() {
+    let data = include_bytes!("../pdfs/load/concurrent_xref_repair.pdf");
+
+    for _ in 0..32 {
+        let pdf = Pdf::new(data.to_vec()).unwrap();
+        let barrier = Barrier::new(8);
+
+        std::thread::scope(|scope| {
+            for thread in 0..8 {
+                let pdf = &pdf;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+
+                    // Objects 3..11 have incorrect xref offsets.
+                    for offset in 0..8 {
+                        let number = 3 + (thread + offset) % 8;
+                        let value = pdf
+                            .xref()
+                            .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
+                            .and_then(|dict| dict.get::<i32>(b"V"));
+                        assert_eq!(value, Some(100 + number));
+                    }
+                });
+            }
+        });
+    }
+}
