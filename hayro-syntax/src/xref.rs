@@ -582,11 +582,13 @@ impl XRef {
                 // Generation number is implicitly 0.
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
 
-                if obj_stream_id == id {
+                if obj_stream_id == id || ctx.parent_chain_contains(&id) {
                     warn!("cycle detected in object stream");
 
                     return None;
                 }
+
+                ctx.parent_chain_push(id);
 
                 let stream = self.get_with::<Stream<'_>>(obj_stream_id, &ctx)?;
                 let data = repr.data.get_with(obj_stream_id, &ctx)?;

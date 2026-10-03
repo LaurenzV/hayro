@@ -758,6 +758,12 @@ fn page_tree_cycle_with_siblings() {
 }
 
 #[test]
+fn object_stream_cycle() {
+    let file = include_bytes!("../pdfs/load/object_stream_cycle.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn concurrent_object_stream_resolution() {
     let data = include_bytes!("../pdfs/load/concurrent_object_streams.pdf");
 
