@@ -26,14 +26,14 @@ readme = "README.md"
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-hayro = { path = "hayro", version = "0.7.0", default-features = false }
-hayro-ccitt = { path = "hayro-ccitt", version = "0.3.0", default-features = false }
-hayro-interpret = { path = "hayro-interpret", version = "0.7.0", default-features = false }
-hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.4.0", default-features = false }
-hayro-jbig2 = { path = "hayro-jbig2", version = "0.3.0", default-features = false }
-hayro-syntax = { path = "hayro-syntax", version = "0.7.2", default-features = false }
-hayro-svg = { path = "hayro-svg", version = "0.7.0", default-features = false }
-hayro-write = { path = "hayro-write", version = "0.7.0", default-features = false }
+hayro = { path = "hayro", version = "0.8.0", default-features = false }
+hayro-ccitt = { path = "hayro-ccitt", version = "0.4.0", default-features = false }
+hayro-interpret = { path = "hayro-interpret", version = "0.8.0", default-features = false }
+hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.4.1", default-features = false }
+hayro-jbig2 = { path = "hayro-jbig2", version = "0.3.1", default-features = false }
+hayro-syntax = { path = "hayro-syntax", version = "0.8.0", default-features = false }
+hayro-svg = { path = "hayro-svg", version = "0.8.0", default-features = false }
+hayro-write = { path = "hayro-write", version = "0.8.0", default-features = false }
 hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
 hayro-cmap = { path = "hayro-cmap", version = "0.1.0", default-features = false }
 
@@ -51,7 +51,7 @@ siphasher = "1"
 skrifa = { version = "0.46.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
-pdf-writer = { git = "https://github.com/typst/pdf-writer", rev = "fdf090125f1e7209fa630c4ca1f5f29910c87c93" }
+pdf-writer = { version = "0.15" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }

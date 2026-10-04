@@ -678,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "hayro"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytemuck",
  "fearless_simd 1.0.0",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-ccitt"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "hayro-cmap"
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-interpret"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitflags",
  "hayro-cmap",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jbig2"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "fearless_simd 1.0.0",
@@ -774,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jpeg2000"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "criterion",
  "fearless_simd 1.0.0",
@@ -793,7 +793,7 @@ version = "0.1.0"
 
 [[package]]
 name = "hayro-svg"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64",
  "hayro-interpret",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "aes",
  "cbc",
@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-write"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
@@ -1129,7 +1129,8 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 [[package]]
 name = "pdf-writer"
 version = "0.15.0"
-source = "git+https://github.com/typst/pdf-writer?rev=fdf090125f1e7209fa630c4ca1f5f29910c87c93#fdf090125f1e7209fa630c4ca1f5f29910c87c93"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5e456864a7a304047bff84977dc6fb162bd956475d40ba50b2dcecaada7f753"
 dependencies = [
  "bitflags",
  "itoa",
