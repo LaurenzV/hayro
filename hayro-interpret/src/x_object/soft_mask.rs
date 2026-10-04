@@ -86,10 +86,15 @@ impl<'a> SoftMask<'a> {
         let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream<'_>>(G)?;
         let group = FormXObject::new(&group_stream)?;
-        let cs = ColorSpace::new(
-            group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
-            &context.interpreter_cache.object_cache,
-        )?;
+        // The color space of the group is only needed to interpret the backdrop
+        // color of luminosity masks. It is commonly left out for alpha masks
+        // (and sometimes for luminosity masks as well), so a missing or invalid
+        // entry must not cause the whole mask to be dropped.
+        let cs = group
+            .dict
+            .get::<Dict<'_>>(GROUP)
+            .and_then(|g| g.get::<Object<'_>>(CS))
+            .and_then(|cs| ColorSpace::new(cs, &context.interpreter_cache.object_cache));
         let transfer_function = dict
             .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
@@ -98,7 +103,18 @@ impl<'a> SoftMask<'a> {
             LUMINOSITY => {
                 let color = dict
                     .get::<ColorComponents>(BC)
-                    .map(|c| Color::new(cs, c, 1.0))
+                    .and_then(|c| {
+                        // Without a group color space, assume the device color
+                        // space with the same number of components.
+                        let cs = cs.or_else(|| match c.len() {
+                            1 => Some(ColorSpace::device_gray()),
+                            3 => Some(ColorSpace::device_rgb()),
+                            4 => Some(ColorSpace::device_cmyk()),
+                            _ => None,
+                        })?;
+
+                        Some(Color::new(cs, c, 1.0))
+                    })
                     .unwrap_or(Color::new(ColorSpace::device_gray(), smallvec![0.0], 1.0));
 
                 (MaskType::Luminosity, color)
