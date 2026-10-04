@@ -92,6 +92,9 @@ pub(crate) struct Renderer<'a> {
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
     pub(crate) in_type3_glyph: bool,
+    /// For each transparency group on the blend stack, whether it is a
+    /// knockout group.
+    pub(crate) knockout_groups: Vec<bool>,
 }
 
 impl<'r> Renderer<'r> {
@@ -102,6 +105,7 @@ impl<'r> Renderer<'r> {
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
             in_type3_glyph: false,
+            knockout_groups: Vec::new(),
         }
     }
 
@@ -112,8 +116,22 @@ impl<'r> Renderer<'r> {
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
         self.ctx.set_transform(props.transform);
         self.apply_soft_mask(props.soft_mask.as_ref());
-        self.ctx
-            .set_blend_mode(convert_blend_mode(props.blend_mode));
+
+        let blend_mode = if self.knockout_groups.last() == Some(&true) {
+            // An object in a knockout group is composited with the initial
+            // backdrop of the group, which is transparent in the (isolated)
+            // layer we render the group into. So it simply replaces what
+            // the earlier objects of the group painted, and anti-aliased
+            // edges are interpolated by coverage, which matches the
+            // shape-weighted average from the specification.
+            //
+            // Images are always wrapped in a separate transparency group by
+            // the interpreter and are therefore still composited normally.
+            peniko::BlendMode::new(Mix::Normal, Compose::Copy)
+        } else {
+            convert_blend_mode(props.blend_mode)
+        };
+        self.ctx.set_blend_mode(blend_mode);
     }
 
     fn apply_image_props(&mut self, props: &ImageDrawProps<'_>) {
@@ -143,7 +161,16 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
     ) {
-        Self::push_transparency_group(self, opacity, mask, blend_mode);
+        Self::push_transparency_group(self, opacity, mask, blend_mode, false);
+    }
+
+    fn push_knockout_group(
+        &mut self,
+        opacity: f32,
+        mask: Option<SoftMask<'a>>,
+        blend_mode: BlendMode,
+    ) {
+        Self::push_transparency_group(self, opacity, mask, blend_mode, true);
     }
 
     fn pop_clip(&mut self) {
