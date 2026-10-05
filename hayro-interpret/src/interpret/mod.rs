@@ -1,6 +1,6 @@
 use crate::FillRule;
 use crate::color::ColorSpace;
-use crate::context::Context;
+use crate::context::{Context, MAX_GRAPHICS_STATE_DEPTH};
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};
@@ -135,6 +135,9 @@ pub enum InterpreterWarning {
     /// An annotation has an `AP` dictionary, but its normal appearance could not
     /// be selected or loaded, so the annotation was not drawn.
     UnresolvedAnnotationAppearance,
+    /// The graphics state stack exceeded its maximum depth, so further `q` operators
+    /// (and their matching `Q` operators) were ignored.
+    GraphicsStateLimitExceeded,
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -236,12 +239,30 @@ pub fn interpret<'a>(
 ) {
     let num_states = context.num_states();
     let mut font_dict_cache = FxHashMap::<Name<'a>, Dict<'a>>::default();
+    // The number of `q` operators that were ignored because the graphics state stack was full
+    // and whose matching `Q` operators have not been encountered yet.
+    let mut ignored_saves = 0_usize;
+    let mut reported_state_limit = false;
 
     context.save_state();
 
     while let Some(op) = ops.next() {
         match op {
-            TypedInstruction::SaveState(_) => context.save_state(),
+            TypedInstruction::SaveState(_) => {
+                if context.num_states() >= MAX_GRAPHICS_STATE_DEPTH {
+                    if !reported_state_limit {
+                        warn!("graphics state stack is full, ignoring `q` operators");
+                        (context.settings.warning_sink)(
+                            InterpreterWarning::GraphicsStateLimitExceeded,
+                        );
+                        reported_state_limit = true;
+                    }
+
+                    ignored_saves += 1;
+                } else {
+                    context.save_state();
+                }
+            }
             TypedInstruction::StrokeColorDeviceRgb(s) => {
                 context.get_mut().graphics_state.stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().graphics_state.stroke_color =
@@ -421,7 +442,13 @@ pub fn interpret<'a>(
             TypedInstruction::ClipEvenOdd(_) => {
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
-            TypedInstruction::RestoreState(_) => context.restore_state(device),
+            TypedInstruction::RestoreState(_) => {
+                if ignored_saves > 0 {
+                    ignored_saves -= 1;
+                } else {
+                    context.restore_state(device);
+                }
+            }
             TypedInstruction::FlatnessTolerance(_) => {
                 // Ignore for now.
             }
@@ -757,5 +784,146 @@ pub fn interpret<'a>(
 
     while context.num_states() > num_states {
         context.restore_state(device);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font::GlyphRun;
+    use crate::{BlendMode, ClipPath, DrawMode, DrawProps, Image, ImageDrawProps, SoftMask};
+    use crate::{InterpreterCache, InterpreterSettings};
+    use hayro_syntax::Pdf;
+    use kurbo::{BezPath, Rect};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Records the transform of every path that is drawn.
+    #[derive(Default)]
+    struct PathRecorder(Vec<Affine>);
+
+    impl<'a> Device<'a> for PathRecorder {
+        fn draw_path(&mut self, _: &BezPath, props: DrawProps<'a>, _: &DrawMode) {
+            self.0.push(props.transform);
+        }
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+        fn draw_glyph_run(&mut self, _: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {}
+        fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+        fn pop_clip(&mut self) {}
+        fn pop_transparency_group(&mut self) {}
+    }
+
+    fn single_page_pdf(content: &[u8]) -> Pdf {
+        let mut objects = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R >>".to_vec(),
+        ];
+        let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+        stream.extend_from_slice(content);
+        stream.extend_from_slice(b"\nendstream");
+        objects.push(stream);
+
+        let mut data = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+        for (i, object) in objects.iter().enumerate() {
+            offsets.push(data.len());
+            data.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+            data.extend_from_slice(object);
+            data.extend_from_slice(b"\nendobj\n");
+        }
+        let xref = data.len();
+        data.extend_from_slice(
+            format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+        );
+        for offset in offsets {
+            data.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        data.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .as_bytes(),
+        );
+
+        Pdf::new(data).unwrap()
+    }
+
+    /// Interpret the content stream and return the transforms of all drawn paths, as well
+    /// as the number of `GraphicsStateLimitExceeded` warnings.
+    fn interpret_content(content: &[u8]) -> (Vec<Affine>, usize) {
+        let pdf = single_page_pdf(content);
+        let page = &pdf.pages()[0];
+        let warnings = Arc::new(AtomicUsize::new(0));
+        let settings = InterpreterSettings {
+            warning_sink: {
+                let warnings = warnings.clone();
+                Arc::new(move |w| {
+                    if matches!(w, InterpreterWarning::GraphicsStateLimitExceeded) {
+                        warnings.fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            },
+            ..Default::default()
+        };
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            &cache,
+            page.xref(),
+            settings,
+        );
+        let mut device = PathRecorder::default();
+        interpret_page(page, &mut context, &mut device);
+
+        (device.0, warnings.load(Ordering::Relaxed))
+    }
+
+    #[test]
+    fn graphics_state_flood_is_capped() {
+        let n = MAX_GRAPHICS_STATE_DEPTH * 64;
+        let mut content = b"q ".repeat(n);
+        content.extend_from_slice(b"0 0 1 1 re f ");
+        content.extend_from_slice(&b"Q ".repeat(n));
+        // Repeatedly hitting the limit within the same content stream is only reported once.
+        content.extend_from_slice(&b"q ".repeat(MAX_GRAPHICS_STATE_DEPTH));
+        content.extend_from_slice(&b"q Q ".repeat(n));
+
+        let (paths, warnings) = interpret_content(&content);
+
+        assert_eq!(paths.len(), 1);
+        assert_eq!(warnings, 1);
+    }
+
+    #[test]
+    fn ignored_save_states_keep_restores_balanced() {
+        // The `cm` is applied while the stack is full. Each `Q` that matches an ignored `q`
+        // must be ignored as well, so that the remaining `Q`s still pop exactly the states
+        // that were pushed, and the final path is drawn with the initial transform.
+        let n = MAX_GRAPHICS_STATE_DEPTH + 8;
+        let mut content = b"q ".repeat(n);
+        content.extend_from_slice(b"2 0 0 2 0 0 cm ");
+        content.extend_from_slice(&b"Q ".repeat(n));
+        content.extend_from_slice(b"0 0 1 1 re f");
+
+        let (paths, _) = interpret_content(&content);
+
+        assert_eq!(paths, vec![Affine::IDENTITY]);
+    }
+
+    #[test]
+    fn graphics_state_within_limit_is_not_reported() {
+        let n = MAX_GRAPHICS_STATE_DEPTH / 2;
+        let mut content = b"q ".repeat(n);
+        content.extend_from_slice(b"2 0 0 2 0 0 cm 0 0 1 1 re f ");
+        content.extend_from_slice(&b"Q ".repeat(n));
+        content.extend_from_slice(b"0 0 1 1 re f");
+
+        let (paths, warnings) = interpret_content(&content);
+
+        assert_eq!(paths, vec![Affine::scale(2.0), Affine::IDENTITY]);
+        assert_eq!(warnings, 0);
     }
 }
