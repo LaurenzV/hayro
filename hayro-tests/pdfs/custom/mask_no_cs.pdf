@@ -1,153 +1,52 @@
-%PDF-1.7
-%ÂµÂ¶
-
+%PDF-1.4
+%âãÏÓ
 1 0 obj
-<<
-  /Type /Catalog
-  /Pages 2 0 R
->>
+<< /Type /Catalog /Pages 2 0 R >>
 endobj
-
 2 0 obj
-<<
-  /Type /Pages
-  /Count 1
-  /Kids [ 3 0 R ]
->>
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
 endobj
-
 3 0 obj
-<<
-  /Type /Page
-  /Parent 2 0 R
-  /MediaBox [ 0 0 200 100 ]
-  /Resources <<
-    /ExtGState <<
-      /gs0 5 0 R
-      /gs1 7 0 R
-    >>
-  >>
-  /Contents 4 0 R
->>
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /ExtGState << /Left 5 0 R /Right 6 0 R >> >> /Contents 4 0 R >>
 endobj
-
 4 0 obj
-<<
-  /Length 77
->>
+<< /Length 96  >>
 stream
-q
-/gs0 gs
-0 0 1 rg
-10 10 80 80 re
-f
-Q
-q
-/gs1 gs
-1 0 0 rg
-110 10 80 80 re
-f
-Q
+q /Left gs 0 0 1 rg 10 10 80 80 re f Q
+q 1 0 0 1 100 0 cm /Right gs 0 0 1 rg 10 10 80 80 re f Q
 endstream
 endobj
-
 5 0 obj
-<<
-  /Type /ExtGState
-  /SMask <<
-    /Type /Mask
-    /S /Alpha
-    /G 6 0 R
-  >>
->>
+<< /SMask << /S /Alpha /G 7 0 R >> >>
 endobj
-
 6 0 obj
-<<
-  /Length 125
-  /Type /XObject
-  /Subtype /Form
-  /BBox [ 0 0 100 100 ]
-  /Group <<
-    /Type /Group
-    /S /Transparency
-  >>
-  /Resources <<
-    /ExtGState <<
-      /a0 9 0 R
-    >>
-  >>
->>
-stream
-/a0 gs
-0 g
-85 50 m
-85 69.33 69.33 85 50 85 c
-30.67 85 15 69.33 15 50 c
-15 30.67 30.67 15 50 15 c
-69.33 15 85 30.67 85 50 c
-f
-endstream
+<< /SMask << /S /Alpha /G 8 0 R >> >>
 endobj
-
 7 0 obj
-<<
-  /Type /ExtGState
-  /SMask <<
-    /Type /Mask
-    /S /Luminosity
-    /BC [ 1 ]
-    /G 8 0 R
-  >>
->>
-endobj
-
-8 0 obj
-<<
-  /Length 131
-  /Type /XObject
-  /Subtype /Form
-  /BBox [ 100 0 200 100 ]
-  /Group <<
-    /Type /Group
-    /S /Transparency
-  >>
->>
+<< /Length 26 /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency  >> /Resources << /ExtGState << /Half << /ca 0.5 >> >> >> >>
 stream
-0 g
-175 50 m
-175 63.81 163.81 75 150 75 c
-136.19 75 125 63.81 125 50 c
-125 36.19 136.19 25 150 25 c
-163.81 25 175 36.19 175 50 c
-f
+/Half gs 25 25 50 50 re f
 endstream
 endobj
-
-9 0 obj
-<<
-  /Type /ExtGState
-  /ca .5
->>
+8 0 obj
+<< /Length 26 /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency /CS /DeviceRGB >> /Resources << /ExtGState << /Half << /ca 0.5 >> >> >> >>
+stream
+/Half gs 25 25 50 50 re f
+endstream
 endobj
-
 xref
-0 10
+0 9
 0000000000 65535 f 
-0000000016 00000 n 
-0000000070 00000 n 
-0000000136 00000 n 
-0000000314 00000 n 
-0000000443 00000 n 
-0000000544 00000 n 
-0000000897 00000 n 
-0000001017 00000 n 
-0000001316 00000 n 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000267 00000 n 
+0000000413 00000 n 
+0000000466 00000 n 
+0000000519 00000 n 
+0000000729 00000 n 
 trailer
-<<
-  /Size 10
-  /Root 1 0 R
->>
+<< /Size 9 /Root 1 0 R >>
 startxref
-1366
+953
 %%EOF
