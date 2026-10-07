@@ -86,16 +86,16 @@ impl<'a> SoftMask<'a> {
         let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream<'_>>(G)?;
         let group = FormXObject::new(&group_stream)?;
-        let cs = ColorSpace::new(
-            group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
-            &context.interpreter_cache.object_cache,
-        )?;
         let transfer_function = dict
             .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
             .map(TransferFunction::new);
         let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
+                let cs = ColorSpace::new(
+                    group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
+                    &context.interpreter_cache.object_cache,
+                )?;
                 let color = dict
                     .get::<ColorComponents>(BC)
                     .map(|c| Color::new(cs, c, 1.0))
