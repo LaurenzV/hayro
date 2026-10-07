@@ -92,13 +92,24 @@ impl<'a> SoftMask<'a> {
             .map(TransferFunction::new);
         let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
-                let cs = ColorSpace::new(
-                    group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
-                    &context.interpreter_cache.object_cache,
-                )?;
+                let cs = group
+                    .dict
+                    .get::<Dict<'_>>(GROUP)
+                    .and_then(|g| g.get::<Object<'_>>(CS))
+                    .and_then(|cs| ColorSpace::new(cs, &context.interpreter_cache.object_cache));
                 let color = dict
                     .get::<ColorComponents>(BC)
-                    .map(|c| Color::new(cs, c, 1.0))
+                    .and_then(|c| {
+                        // Recover a missing group color space from the backdrop components.
+                        let cs = cs.or_else(|| match c.len() {
+                            1 => Some(ColorSpace::device_gray()),
+                            3 => Some(ColorSpace::device_rgb()),
+                            4 => Some(ColorSpace::device_cmyk()),
+                            _ => None,
+                        })?;
+
+                        Some(Color::new(cs, c, 1.0))
+                    })
                     .unwrap_or(Color::new(ColorSpace::device_gray(), smallvec![0.0], 1.0));
 
                 (MaskType::Luminosity, color)

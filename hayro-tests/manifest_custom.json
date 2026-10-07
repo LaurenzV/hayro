@@ -949,6 +949,10 @@
     "file": "pdfs/custom/mask_no_cs.pdf"
   },
   {
+    "id": "mask_luminosity_no_cs",
+    "file": "pdfs/custom/mask_luminosity_no_cs.pdf"
+  },
+  {
     "id": "resvg_masking_clipPath_mixed_clip_rule",
     "file": "pdfs/custom/resvg_masking_clipPath_mixed_clip_rule.pdf"
   },

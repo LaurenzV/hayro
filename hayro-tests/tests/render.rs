@@ -231,6 +231,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn mask_alpha() { run_render_test("mask_alpha", "pdfs/custom/mask_alpha.pdf", None); }
 #[test] fn mask_luminosity() { run_render_test("mask_luminosity", "pdfs/custom/mask_luminosity.pdf", None); }
 #[test] fn mask_no_cs() { run_render_test("mask_no_cs", "pdfs/custom/mask_no_cs.pdf", None); }
+#[test] fn mask_luminosity_no_cs() { run_render_test("mask_luminosity_no_cs", "pdfs/custom/mask_luminosity_no_cs.pdf", None); }
 #[test] fn resvg_masking_clipPath_mixed_clip_rule() { run_render_test("resvg_masking_clipPath_mixed_clip_rule", "pdfs/custom/resvg_masking_clipPath_mixed_clip_rule.pdf", None); }
 #[test] fn resvg_masking_clipPath_nested_clip_path() { run_render_test("resvg_masking_clipPath_nested_clip_path", "pdfs/custom/resvg_masking_clipPath_nested_clip_path.pdf", None); }
 #[test] fn resvg_masking_clipPath_overlapped_shapes_with_evenodd() { run_render_test("resvg_masking_clipPath_overlapped_shapes_with_evenodd", "pdfs/custom/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf", None); }

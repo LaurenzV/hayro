@@ -251,6 +251,15 @@ fn mask_no_cs() {
 }
 
 #[test]
+fn mask_luminosity_no_cs() {
+    run_svg_test(
+        "mask_luminosity_no_cs",
+        "pdfs/custom/mask_luminosity_no_cs.pdf",
+        None,
+    );
+}
+
+#[test]
 fn pdfjs_issue11279() {
     run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
 }
