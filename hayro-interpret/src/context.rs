@@ -20,6 +20,12 @@ use std::rc::Rc;
 /// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
 pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 
+/// Maximum number of graphics states that can be on the stack at the same time.
+///
+/// Further `q` operators are ignored (together with their matching `Q`), so that a content
+/// stream consisting of millions of `q` operators cannot exhaust memory.
+pub(crate) const MAX_GRAPHICS_STATE_DEPTH: usize = 4096;
+
 /// A cache used by the interpreter.
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
