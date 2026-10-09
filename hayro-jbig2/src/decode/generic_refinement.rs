@@ -412,6 +412,10 @@ pub(crate) fn decode_bitmap(
 
             // "3) Decode each row as follows:" (6.3.5.6)
             for y in 0..height {
+                if decoder.is_exhausted() {
+                    bail!(ParseError::UnexpectedEof);
+                }
+
                 // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
                 // coder" (6.3.5.6)
                 if $tpgron {

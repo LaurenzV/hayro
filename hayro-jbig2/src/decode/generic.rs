@@ -282,6 +282,10 @@ macro_rules! decode_loop {
 
         // "3) Decode each row as follows:" (6.2.5.7)
         for y in 0..height {
+            if decoder.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
             // coder" (6.2.5.7)
             if $tpgdon {
@@ -357,6 +361,10 @@ macro_rules! decode_default_template_fast_loop {
         let last_byte_bits = (($bitmap.width - 1) & (BYTE_BITS - 1)) + 1;
 
         for y in 0..$bitmap.height {
+            if $decoder.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             if $tpgdon {
                 let sltp = $decoder.read_bit(&mut $contexts[$sltp_context as usize]);
                 ltp = ltp != (sltp != 0);
