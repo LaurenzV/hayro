@@ -65,7 +65,9 @@ The crate is `no_std` compatible but requires an allocator to be available.
 */
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![forbid(unsafe_code)]
+// The `threads` feature needs one unsafe block (disjoint raw-ptr tile writes);
+// keep unsafe forbidden in every other configuration.
+#![cfg_attr(not(feature = "threads"), forbid(unsafe_code))]
 #![forbid(missing_docs)]
 
 extern crate alloc;
