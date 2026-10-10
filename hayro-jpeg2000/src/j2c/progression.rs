@@ -57,10 +57,6 @@ impl<'a> IteratorInput<'a> {
         layers.1 = layers.1.min(max_layer);
         components.1 = components.1.min(max_component);
 
-        assert!(resolutions.1 > resolutions.0);
-        assert!(layers.1 > layers.0);
-        assert!(components.1 > components.0);
-
         Self {
             layers,
             tile,
@@ -101,12 +97,33 @@ impl<'a> IteratorInput<'a> {
         self.components.1
     }
 
+    fn is_empty(&self) -> bool {
+        self.layers.0 >= self.layers.1
+            || self.resolutions.0 >= self.resolutions.1
+            || self.components.0 >= self.components.1
+    }
+
     fn component_tiles(&self) -> Vec<ComponentTile<'a>> {
         self.tile
             .component_infos
             .iter()
             .map(|c| ComponentTile::new(self.tile, c))
             .collect::<Vec<_>>()
+    }
+
+    /// The number of precincts of the given component at the given
+    /// resolution, or 0 if the component doesn't have that resolution.
+    fn num_precincts(
+        &self,
+        component_tiles: &[ComponentTile<'a>],
+        component_idx: u8,
+        resolution: u8,
+    ) -> u64 {
+        if component_idx >= self.max_comp() || resolution >= self.max_resolution(component_idx) {
+            return 0;
+        }
+
+        ResolutionTile::new(component_tiles[component_idx as usize], resolution).num_precincts()
     }
 }
 
@@ -119,44 +136,33 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
     let mut layer = input.min_layer();
     let mut resolution = input.min_resolution();
     let mut component_idx = input.min_comp();
-
-    let mut resolution_tile = ResolutionTile::new(component_tiles[0], resolution);
+    let mut num_precincts = input.num_precincts(&component_tiles, component_idx, resolution);
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if layer == input.max_layer() || resolution == input.total_max_resolution() {
+        if input.is_empty() || layer >= input.max_layer() {
             return None;
         }
 
-        if precinct == resolution_tile.num_precincts() {
-            loop {
-                precinct = 0;
-                component_idx += 1;
+        while precinct == num_precincts {
+            precinct = 0;
+            component_idx += 1;
 
-                if component_idx == input.max_comp() {
-                    component_idx = input.min_comp();
+            if component_idx == input.max_comp() {
+                component_idx = input.min_comp();
+                resolution += 1;
 
-                    resolution += 1;
+                if resolution == input.total_max_resolution() {
+                    resolution = input.min_resolution();
+                    layer += 1;
 
-                    if resolution == input.max_resolution(component_idx) {
-                        resolution = input.min_resolution();
-                        layer += 1;
-
-                        if layer == input.max_layer() {
-                            return None;
-                        }
+                    if layer == input.max_layer() {
+                        return None;
                     }
                 }
-
-                resolution_tile =
-                    ResolutionTile::new(component_tiles[component_idx as usize], resolution);
-
-                // Only yield if the resolution tile has precincts, otherwise
-                // we need to keep advancing.
-                if resolution_tile.num_precincts() != 0 {
-                    break;
-                }
             }
+
+            num_precincts = input.num_precincts(&component_tiles, component_idx, resolution);
         }
 
         let data = ProgressionData {
@@ -178,52 +184,36 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
 ) -> impl Iterator<Item = ProgressionData> + 'a {
     let component_tiles = input.component_tiles();
 
-    let mut layer = 0;
-    let mut resolution = 0;
-    let mut component_idx = 0;
-    let mut resolution_tile =
-        ResolutionTile::new(component_tiles[component_idx as usize], resolution);
+    let mut layer = input.min_layer();
+    let mut resolution = input.min_resolution();
+    let mut component_idx = input.min_comp();
+    let mut num_precincts = input.num_precincts(&component_tiles, component_idx, resolution);
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if layer == input.max_layer() || resolution == input.total_max_resolution() {
+        if input.is_empty() || resolution >= input.total_max_resolution() {
             return None;
         }
 
-        if precinct == resolution_tile.num_precincts() {
-            loop {
-                precinct = 0;
-                component_idx += 1;
+        while precinct == num_precincts {
+            precinct = 0;
+            component_idx += 1;
 
-                if component_idx == input.max_comp() {
-                    component_idx = 0;
-                    layer += 1;
+            if component_idx == input.max_comp() {
+                component_idx = input.min_comp();
+                layer += 1;
 
-                    if layer == input.max_layer() {
-                        layer = 0;
-                        resolution += 1;
+                if layer == input.max_layer() {
+                    layer = input.min_layer();
+                    resolution += 1;
 
-                        if resolution == input.total_max_resolution() {
-                            return None;
-                        }
+                    if resolution == input.total_max_resolution() {
+                        return None;
                     }
                 }
-
-                // If the given resolution level doesn't exist for the current
-                // component, continue.
-                if resolution >= input.max_resolution(component_idx) {
-                    continue;
-                }
-
-                resolution_tile =
-                    ResolutionTile::new(component_tiles[component_idx as usize], resolution);
-
-                // Only yield if the resolution tile has precincts, otherwise
-                // we need to keep advancing.
-                if resolution_tile.num_precincts() != 0 {
-                    break;
-                }
             }
+
+            num_precincts = input.num_precincts(&component_tiles, component_idx, resolution);
         }
 
         let data = ProgressionData {
@@ -258,26 +248,20 @@ fn position_progression_common<'a>(
     input: IteratorInput<'a>,
     sort: impl FnMut(&PrecinctStore, &PrecinctStore) -> Ordering,
 ) -> Option<impl Iterator<Item = ProgressionData> + 'a> {
+    let component_tiles = input.component_tiles();
     let mut elements = vec![];
 
-    for (component_idx, component) in input
-        .tile
-        .component_tiles()
-        .enumerate()
-        .skip(input.min_comp() as usize)
-        .take(input.max_comp() as usize - input.min_comp() as usize)
-    {
-        for (resolution, resolution_tile) in component
-            .resolution_tiles()
-            .enumerate()
-            .skip(input.min_resolution() as usize)
-            .take(input.total_max_resolution() as usize - input.min_resolution() as usize)
-        {
+    for component_idx in input.min_comp()..input.max_comp() {
+        let component_tile = component_tiles[component_idx as usize];
+
+        for resolution in input.min_resolution()..input.max_resolution(component_idx) {
+            let resolution_tile = ResolutionTile::new(component_tile, resolution);
+
             elements.extend(resolution_tile.precincts()?.map(|d| PrecinctStore {
                 precinct_y: d.r_y,
                 precinct_x: d.r_x,
-                component_idx: component_idx as u8,
-                resolution: resolution as u8,
+                component_idx,
+                resolution,
                 precinct_idx: d.idx,
             }));
         }
