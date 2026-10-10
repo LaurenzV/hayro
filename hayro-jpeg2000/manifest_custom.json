@@ -1,4 +1,9 @@
 [
   "ycck.jpx",
-  "palette_lossy.jp2"
+  "palette_lossy.jp2",
+  "mixed_resolution_levels_lrcp.j2k",
+  "mixed_resolution_levels_rlcp.j2k",
+  "mixed_resolution_levels_rpcl.j2k",
+  "mixed_resolution_levels_pcrl.j2k",
+  "mixed_resolution_levels_cprl.j2k"
 ]
