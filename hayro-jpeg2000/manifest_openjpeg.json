@@ -189,5 +189,6 @@
     "id": "p0_08_res1",
     "path": "p0_08.j2k",
     "target_resolution": [220, 200]
-  }
+  },
+  "e1_colr.j2c"
 ]

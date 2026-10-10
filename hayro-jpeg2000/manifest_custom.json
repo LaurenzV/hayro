@@ -5,5 +5,17 @@
   "mixed_resolution_levels_rlcp.j2k",
   "mixed_resolution_levels_rpcl.j2k",
   "mixed_resolution_levels_pcrl.j2k",
-  "mixed_resolution_levels_cprl.j2k"
+  "mixed_resolution_levels_cprl.j2k",
+  "poc_lrcp.j2k",
+  "poc_rlcp.j2k",
+  "poc_rpcl.j2k",
+  "poc_pcrl.j2k",
+  "poc_cprl.j2k",
+  "poc_main_header.j2k",
+  "poc_main_header_tile_override.j2k",
+  "poc_per_tile.j2k",
+  "poc_tile_parts.j2k",
+  "poc_clamped_values.j2k",
+  "poc_subsampled.j2k",
+  "poc_offset.j2k"
 ]
