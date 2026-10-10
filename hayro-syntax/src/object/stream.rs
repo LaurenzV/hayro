@@ -266,6 +266,7 @@ pub enum ImageColorSpace {
 }
 
 /// Additional data that is extracted from some image streams.
+#[derive(Debug)]
 pub struct ImageData {
     /// An optional alpha channel of the image.
     pub alpha: Option<Vec<u8>>,
@@ -280,6 +281,7 @@ pub struct ImageData {
 }
 
 /// The result of applying a filter.
+#[derive(Debug)]
 pub struct FilterResult<'a> {
     /// The decoded data.
     pub data: Cow<'a, [u8]>,
