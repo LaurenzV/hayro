@@ -190,5 +190,7 @@
     "path": "p0_08.j2k",
     "target_resolution": [220, 200]
   },
-  "e1_colr.j2c"
+  "e1_colr.j2c",
+  "p0_06.j2k",
+  "p0_15.j2k"
 ]

@@ -265,6 +265,17 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
                 ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::ParseFailure("PPT"))?);
             }
+            markers::RGN => {
+                reader.read_marker()?;
+                let (component_index, roi_shift) =
+                    codestream::rgn_marker(reader, num_components as u16)
+                        .ok_or(MarkerError::ParseFailure("RGN"))?;
+
+                tile.component_infos
+                    .get_mut(component_index as usize)
+                    .ok_or(ValidationError::InvalidComponentMetadata)?
+                    .roi_shift = roi_shift;
+            }
             markers::POC => {
                 reader.read_marker()?;
                 tile.progression_changes.extend(
@@ -780,6 +791,7 @@ mod tests {
             size_info: component_size_info_0,
             coding_style: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
+            roi_shift: 0,
         };
 
         let component_size_info_1 = ComponentSizeInfo {
@@ -792,6 +804,7 @@ mod tests {
             size_info: component_size_info_1,
             coding_style: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
+            roi_shift: 0,
         };
 
         let size_data = SizeData {

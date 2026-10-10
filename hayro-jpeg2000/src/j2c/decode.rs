@@ -341,10 +341,11 @@ fn decode_sub_band_bitplanes(
 
     let num_bitplanes = {
         let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
-        // Equation (E-2)
+        // Equations (E-2) and (H-3).
         let num_bitplanes = (component_info.quantization_info.guard_bits as u16)
             .checked_add(exponent)
             .and_then(|x| x.checked_sub(1))
+            .and_then(|x| x.checked_add(component_info.roi_shift as u16))
             .ok_or(DecodingError::InvalidBitplaneCount)?;
 
         if num_bitplanes > MAX_BITPLANE_COUNT as u16 {
@@ -391,7 +392,11 @@ fn decode_sub_band_bitplanes(
                 for ((output, coefficient), coefficient_state) in
                     out_row.iter_mut().zip(coefficients).zip(coefficient_states)
                 {
-                    *output = coefficient.reconstructed(coefficient_state, irreversible);
+                    *output = coefficient.reconstructed(
+                        coefficient_state,
+                        irreversible,
+                        component_info.roi_shift,
+                    );
                     *output *= dequantization_step;
                 }
 

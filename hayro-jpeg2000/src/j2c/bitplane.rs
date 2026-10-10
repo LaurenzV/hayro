@@ -275,14 +275,29 @@ impl CoefficientState {
 pub(crate) struct Coefficient(u32);
 
 impl Coefficient {
-    pub(crate) fn reconstructed(&self, state: &CoefficientState, irreversible: bool) -> f32 {
-        let mut magnitude = (self.0 & !0x80000000) as i32;
+    pub(crate) fn reconstructed(
+        &self,
+        state: &CoefficientState,
+        irreversible: bool,
+        roi_shift: u8,
+    ) -> f32 {
+        let mut magnitude = self.0 & !0x80000000;
+        let mut bit_position = state.decoded_bit_position();
+
+        // See H.1: The encoder scaled up the coefficients of the region of
+        // interest such that they are the only ones that are at least 2^s.
+        let roi_magnitude = magnitude.checked_shr(roi_shift as u32).unwrap_or(0);
+        if roi_magnitude != 0 {
+            magnitude = roi_magnitude;
+            bit_position = bit_position.saturating_sub(roi_shift);
+        }
+
+        let mut magnitude = magnitude as i32;
         // Map sign (0 for positive, 1 for negative) to 1, -1.
         magnitude *= 1 - 2 * (self.sign() as i32);
 
         // See Formulas E-6 to E-8: Apply the reconstruction midpoint unless a
         // reversible coefficient has been fully decoded, in which case it is exact.
-        let bit_position = state.decoded_bit_position();
         if magnitude != 0 && (irreversible || bit_position != 0) {
             let offset = 0.5 * (1_u32 << bit_position) as f32;
             return magnitude as f32 + if magnitude > 0 { offset } else { -offset };

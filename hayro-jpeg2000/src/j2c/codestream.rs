@@ -53,6 +53,7 @@ pub(crate) fn read_header<'a>(
     let num_components = size_data.component_sizes.len() as u16;
     let mut cod_components = vec![None; num_components as usize];
     let mut qcd_components = vec![None; num_components as usize];
+    let mut roi_shifts = vec![0; num_components as usize];
     let mut ppm_markers = vec![];
     let mut progression_changes = vec![];
 
@@ -85,7 +86,11 @@ pub(crate) fn read_header<'a>(
             }
             markers::RGN => {
                 reader.read_marker()?;
-                rgn_marker(reader).ok_or(MarkerError::ParseFailure("RGN"))?;
+                let (component_index, roi_shift) =
+                    rgn_marker(reader, num_components).ok_or(MarkerError::ParseFailure("RGN"))?;
+                *roi_shifts
+                    .get_mut(component_index as usize)
+                    .ok_or(MarkerError::ParseFailure("RGN"))? = roi_shift;
             }
             markers::TLM => {
                 reader.read_marker()?;
@@ -140,6 +145,7 @@ pub(crate) fn read_header<'a>(
                 })
                 .unwrap_or(cod.component_parameters.clone()),
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
+            roi_shift: roi_shifts[idx],
         })
         .collect();
 
@@ -229,6 +235,8 @@ pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
     pub(crate) coding_style: CodingStyleComponent,
     pub(crate) quantization_info: QuantizationInfo,
+    /// The scaling value of the region of interest, from the RGN marker.
+    pub(crate) roi_shift: u8,
 }
 
 impl ComponentInfo {
@@ -779,8 +787,22 @@ fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
 }
 
 /// RGN marker (A.6.3).
-fn rgn_marker(reader: &mut BitReader<'_>) -> Option<()> {
-    skip_marker_segment(reader)
+pub(crate) fn rgn_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, u8)> {
+    // Length.
+    let _ = reader.read_u16()?;
+
+    let component_index = if csiz < 257 {
+        reader.read_byte()? as u16
+    } else {
+        reader.read_u16()?
+    };
+
+    let roi_style = reader.read_byte()?;
+    let roi_shift = reader.read_byte()?;
+
+    // Only implicit ROIs (maximum shift) are defined (see Table A.25), so
+    // ignore any other style.
+    Some((component_index, if roi_style == 0 { roi_shift } else { 0 }))
 }
 
 pub(crate) fn skip_marker_segment(reader: &mut BitReader<'_>) -> Option<()> {
