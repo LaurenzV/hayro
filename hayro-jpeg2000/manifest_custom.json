@@ -18,5 +18,6 @@
   "poc_clamped_values.j2k",
   "poc_subsampled.j2k",
   "poc_offset.j2k",
-  "subsampled_precinct_position.j2k"
+  "subsampled_precinct_position.j2k",
+  "ppm_large_header.j2k"
 ]

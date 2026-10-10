@@ -144,7 +144,7 @@ pub struct Image<'a> {
     /// The codestream containing the data to decode.
     pub(crate) codestream: &'a [u8],
     /// The header of the J2C codestream.
-    pub(crate) header: Header<'a>,
+    pub(crate) header: Header,
     /// The JP2 boxes of the image. In the case of a raw codestream, we
     /// will synthesize the necessary boxes.
     pub(crate) boxes: ImageBoxes,
@@ -244,7 +244,7 @@ impl<'a> Image<'a> {
 
 pub(crate) fn resolve_alpha_and_color_space(
     boxes: &ImageBoxes,
-    header: &Header<'_>,
+    header: &Header,
     settings: &DecodeSettings,
 ) -> Result<(ColorSpace, bool)> {
     let mut num_components = header.component_infos.len();

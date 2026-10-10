@@ -135,7 +135,7 @@ impl<'a> IteratorInput<'a> {
 /// taking progression order changes into account (B.12.3).
 pub(crate) fn progression_iterator<'a>(
     tile: &'a Tile<'a>,
-    header: &Header<'_>,
+    header: &Header,
 ) -> Result<Box<dyn Iterator<Item = ProgressionData> + 'a>> {
     let progression_changes = if tile.progression_changes.is_empty() {
         &header.progression_changes

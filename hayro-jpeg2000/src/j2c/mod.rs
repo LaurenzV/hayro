@@ -24,7 +24,7 @@ pub use decode::DecoderContext;
 pub(crate) use decode::decode;
 
 pub(crate) struct ParsedCodestream<'a> {
-    pub(crate) header: Header<'a>,
+    pub(crate) header: Header,
     pub(crate) data: &'a [u8],
 }
 

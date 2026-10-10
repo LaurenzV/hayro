@@ -14,11 +14,11 @@ const MAX_RESOLUTION_COUNT: u8 = 32;
 const MAX_PRECINCT_EXPONENT: u8 = 31;
 
 #[derive(Debug)]
-pub(crate) struct Header<'a> {
+pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
-    pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
+    pub(crate) ppm_packets: Vec<PpmPacket>,
     pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) skipped_resolution_levels: u8,
     /// Whether strict mode is enabled for decoding.
@@ -28,18 +28,16 @@ pub(crate) struct Header<'a> {
 #[derive(Debug, Clone)]
 pub(crate) struct PpmMarkerData<'a> {
     pub(crate) sequence_idx: u8,
-    pub(crate) packets: Vec<PpmPacket<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PpmPacket<'a> {
     pub(crate) data: &'a [u8],
 }
+
+/// The packed packet headers of a single tile-part.
+pub(crate) type PpmPacket = Vec<u8>;
 
 pub(crate) fn read_header<'a>(
     reader: &mut BitReader<'a>,
     settings: &DecodeSettings,
-) -> Result<Header<'a>> {
+) -> Result<Header> {
     if reader.read_marker()? != markers::SIZ {
         bail!(MarkerError::Expected("SIZ"));
     }
@@ -181,17 +179,13 @@ pub(crate) fn read_header<'a>(
     size_data.x_resolution_shrink_factor *= 1 << skipped_resolution_levels;
     size_data.y_resolution_shrink_factor *= 1 << skipped_resolution_levels;
 
-    ppm_markers.sort_by(|p0, p1| p0.sequence_idx.cmp(&p1.sequence_idx));
+    let ppm_packets = ppm_packets(ppm_markers).ok_or(MarkerError::ParseFailure("PPM"))?;
 
     let header = Header {
         size_data,
         global_coding_style: cod.clone(),
         component_infos,
-        ppm_packets: ppm_markers
-            .into_iter()
-            .flat_map(|i| i.packets)
-            .filter_map(|p| if p.data.is_empty() { None } else { Some(p) })
-            .collect(),
+        ppm_packets,
         progression_changes,
         skipped_resolution_levels,
         strict: settings.strict,
@@ -202,7 +196,7 @@ pub(crate) fn read_header<'a>(
     Ok(header)
 }
 
-fn validate(header: &Header<'_>) -> Result<()> {
+fn validate(header: &Header) -> Result<()> {
     for info in &header.component_infos {
         let max_resolution_idx = info.coding_style.parameters.num_resolution_levels - 1;
         let quantization_style = info.quantization_info.quantization_style;
@@ -766,24 +760,32 @@ fn tlm_marker(reader: &mut BitReader<'_>) -> Option<()> {
 fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
     let segment_len = reader.read_u16()?.checked_sub(2)? as usize;
     let ppm_data = reader.read_bytes(segment_len)?;
+
+    let (&sequence_idx, data) = ppm_data.split_first()?;
+
+    Some(PpmMarkerData { sequence_idx, data })
+}
+
+/// Split the data of all PPM markers into the packet headers of each tile-part.
+fn ppm_packets(mut markers: Vec<PpmMarkerData<'_>>) -> Option<Vec<PpmPacket>> {
+    // The packet headers of a tile-part can continue in the next marker
+    // segment (A.7.4), so the segments need to be concatenated first.
+    markers.sort_by_key(|m| m.sequence_idx);
+    let data = markers
+        .iter()
+        .flat_map(|m| m.data)
+        .copied()
+        .collect::<Vec<_>>();
+
+    let mut reader = BitReader::new(&data);
     let mut packets = vec![];
 
-    let mut reader = BitReader::new(ppm_data);
-    let sequence_idx = reader.read_byte()?;
-
-    // TODO: Handle case where next packet doesn't have nppm parameter.
-
     while !reader.at_end() {
-        let packet_len = reader.read_u16()? as usize;
-        let data = reader.read_bytes(packet_len)?;
-
-        packets.push(PpmPacket { data });
+        let length = reader.read_u32()? as usize;
+        packets.push(reader.read_bytes(length)?.to_vec());
     }
 
-    Some(PpmMarkerData {
-        sequence_idx,
-        packets,
-    })
+    Some(packets)
 }
 
 /// RGN marker (A.6.3).

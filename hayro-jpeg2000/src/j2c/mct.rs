@@ -10,7 +10,7 @@ use crate::math::{Level, Simd, dispatch, f32x8};
 pub(crate) fn apply_inverse(
     components: &mut [ComponentData],
     component_infos: &[super::codestream::ComponentInfo],
-    header: &Header<'_>,
+    header: &Header,
 ) -> Result<()> {
     if components.len() < 3 {
         return if header.strict {

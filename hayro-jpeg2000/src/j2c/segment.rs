@@ -16,7 +16,7 @@ pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 pub(crate) fn parse<'a, 'b>(
     tile: &'b Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
-    header: &Header<'_>,
+    header: &Header,
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<()> {
     for tile_part in &tile.tile_parts {

@@ -23,7 +23,7 @@ use core::ops::Range;
 
 pub(crate) fn decode<'a>(
     data: &'a [u8],
-    header: &'a Header<'a>,
+    header: &'a Header,
     ctx: &mut DecoderContext<'a>,
 ) -> Result<()> {
     let mut reader = BitReader::new(data);
@@ -79,7 +79,7 @@ pub struct DecoderContext<'a> {
 }
 
 impl DecoderContext<'_> {
-    fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) -> Result<()> {
+    fn reset(&mut self, header: &Header, initial_tile: &Tile<'_>) -> Result<()> {
         self.tile_decode_context.reset();
         self.storage.reset();
 
@@ -101,7 +101,7 @@ impl DecoderContext<'_> {
 
 fn decode_tile<'a, 'b>(
     tile: &'b Tile<'a>,
-    header: &Header<'_>,
+    header: &Header,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut [ComponentData],
@@ -280,7 +280,7 @@ fn decode_component_tile_bit_planes<'a>(
     tile: &Tile<'a>,
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'a>,
-    header: &Header<'_>,
+    header: &Header,
 ) -> Result<()> {
     let component_info = &tile.component_infos[component_idx];
 
@@ -310,7 +310,7 @@ fn decode_sub_band_bitplanes(
     component_info: &ComponentInfo,
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'_>,
-    header: &Header<'_>,
+    header: &Header,
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
 
@@ -425,7 +425,7 @@ fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[Compo
 
 fn store<'a>(
     tile: &'a Tile<'a>,
-    header: &Header<'_>,
+    header: &Header,
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut ComponentData,
     component_info: &ComponentInfo,

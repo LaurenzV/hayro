@@ -80,7 +80,7 @@ impl<'a> TilePart<'a> {
 }
 
 impl<'a> Tile<'a> {
-    fn new(idx: u32, header: &Header<'_>) -> Self {
+    fn new(idx: u32, header: &Header) -> Self {
         let rect = {
             let size_data = &header.size_data;
 
@@ -138,7 +138,7 @@ impl<'a> Tile<'a> {
 /// Create the tiles and parse their constituent tile parts.
 pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header<'a>,
+    main_header: &'a Header,
 ) -> Result<Vec<Tile<'a>>> {
     let tile_count = main_header.size_data.num_tiles()?;
     let mut tiles = (0..tile_count)
@@ -164,7 +164,7 @@ pub(crate) fn parse<'a>(
 
 fn parse_tile_part<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header<'a>,
+    main_header: &'a Header,
     tiles: &mut [Tile<'a>],
     tile_part_idx: usize,
 ) -> Result<()> {
@@ -319,7 +319,7 @@ fn parse_tile_part<'a>(
     let mut headers: Vec<_> = ppt_headers.iter().map(|i| BitReader::new(i.data)).collect();
 
     if let Some(ppm_marker) = main_header.ppm_packets.get(tile_part_idx) {
-        headers.push(BitReader::new(ppm_marker.data));
+        headers.push(BitReader::new(ppm_marker));
     }
 
     let data = reader
