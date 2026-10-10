@@ -57,6 +57,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn fonts_type1_latex() { run_render_test("fonts_type1_latex", "pdfs/custom/fonts_type1_latex.pdf", None); }
 #[test] fn function_type0_1() { run_render_test("function_type0_1", "pdfs/custom/function_type0_1.pdf", None); }
 #[test] fn function_type0_2() { run_render_test("function_type0_2", "pdfs/custom/function_type0_2.pdf", None); }
+#[test] fn group_knockout() { run_render_test("group_knockout", "pdfs/custom/group_knockout.pdf", None); }
 #[test] fn image_1_bit_per_component() { run_render_test("image_1_bit_per_component", "pdfs/custom/image_1_bit_per_component.pdf", None); }
 #[test] fn image_ccit_1() { run_render_test("image_ccit_1", "pdfs/custom/image_ccit_1.pdf", None); }
 #[test] fn image_ccit_3() { run_render_test("image_ccit_3", "pdfs/custom/image_ccit_3.pdf", None); }

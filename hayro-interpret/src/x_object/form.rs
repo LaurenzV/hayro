@@ -15,6 +15,7 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) matrix: Affine,
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
+    is_knockout_group: bool,
     pub(crate) dict: Dict<'a>,
     resources: Option<Resources<'a>>,
 }
@@ -31,12 +32,15 @@ impl<'a> FormXObject<'a> {
                 .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
         );
         let bbox = dict.get::<[f32; 4]>(BBOX)?;
-        let is_transparency_group = dict.get::<Dict<'_>>(GROUP).is_some();
+        let group = dict.get::<Dict<'_>>(GROUP);
+        let is_transparency_group = group.is_some();
+        let is_knockout_group = group.is_some_and(|g| g.get::<bool>(K).unwrap_or(false));
 
         Some(Self {
             decoded,
             matrix,
             is_transparency_group,
+            is_knockout_group,
             bbox,
             dict: dict.clone(),
             resources,
@@ -74,11 +78,15 @@ impl<'a> FormXObject<'a> {
         context.push_root_transform();
 
         if self.is_transparency_group {
-            device.push_transparency_group(
-                context.get().graphics_state.non_stroke_alpha,
-                std::mem::take(&mut context.get_mut().graphics_state.soft_mask),
-                std::mem::take(&mut context.get_mut().graphics_state.blend_mode),
-            );
+            let opacity = context.get().graphics_state.non_stroke_alpha;
+            let mask = std::mem::take(&mut context.get_mut().graphics_state.soft_mask);
+            let blend_mode = std::mem::take(&mut context.get_mut().graphics_state.blend_mode);
+
+            if self.is_knockout_group {
+                device.push_knockout_group(opacity, mask, blend_mode);
+            } else {
+                device.push_transparency_group(opacity, mask, blend_mode);
+            }
 
             context.get_mut().graphics_state.non_stroke_alpha = 1.0;
             context.get_mut().graphics_state.stroke_alpha = 1.0;
