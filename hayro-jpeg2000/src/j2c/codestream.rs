@@ -19,6 +19,7 @@ pub(crate) struct Header<'a> {
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
     pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
+    pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) skipped_resolution_levels: u8,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
@@ -53,6 +54,7 @@ pub(crate) fn read_header<'a>(
     let mut cod_components = vec![None; num_components as usize];
     let mut qcd_components = vec![None; num_components as usize];
     let mut ppm_markers = vec![];
+    let mut progression_changes = vec![];
 
     loop {
         match reader.peek_marker().ok_or(MarkerError::Invalid)? {
@@ -96,6 +98,12 @@ pub(crate) fn read_header<'a>(
             markers::PPM => {
                 reader.read_marker()?;
                 ppm_markers.push(ppm_marker(reader).ok_or(MarkerError::ParseFailure("PPM"))?);
+            }
+            markers::POC => {
+                reader.read_marker()?;
+                progression_changes.extend(
+                    poc_marker(reader, num_components).ok_or(MarkerError::ParseFailure("POC"))?,
+                );
             }
             markers::CRG => {
                 reader.read_marker()?;
@@ -178,6 +186,7 @@ pub(crate) fn read_header<'a>(
             .flat_map(|i| i.packets)
             .filter_map(|p| if p.data.is_empty() { None } else { Some(p) })
             .collect(),
+        progression_changes,
         skipped_resolution_levels,
         strict: settings.strict,
     };
@@ -310,6 +319,17 @@ impl ProgressionOrder {
             _ => err!(ValidationError::InvalidProgressionOrder),
         }
     }
+}
+
+/// A progression order change, from the POC marker (A.6.6).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ProgressionChange {
+    pub(crate) resolution_start: u8,
+    pub(crate) component_start: u16,
+    pub(crate) layer_end: u16,
+    pub(crate) resolution_end: u8,
+    pub(crate) component_end: u16,
+    pub(crate) progression_order: ProgressionOrder,
 }
 
 /// Wavelet transformation type (Table A.20).
@@ -823,6 +843,39 @@ pub(crate) fn coc_marker(
     };
 
     Some((component_index, coc))
+}
+
+/// POC marker (A.6.6).
+pub(crate) fn poc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<Vec<ProgressionChange>> {
+    let length = reader.read_u16()?.checked_sub(2)?;
+    let mut reader = BitReader::new(reader.read_bytes(length as usize)?);
+
+    let read_component_index = |reader: &mut BitReader<'_>| {
+        if csiz < 257 {
+            reader.read_byte().map(u16::from)
+        } else {
+            reader.read_u16()
+        }
+    };
+
+    let entry_size = if csiz < 257 { 7 } else { 9 };
+
+    (0..length as usize / entry_size)
+        .map(|_| {
+            Some(ProgressionChange {
+                resolution_start: reader.read_byte()?,
+                component_start: read_component_index(&mut reader)?,
+                layer_end: reader.read_u16()?,
+                resolution_end: reader.read_byte()?,
+                component_end: match read_component_index(&mut reader)? {
+                    // See Table A.32.
+                    0 => 256,
+                    index => index,
+                },
+                progression_order: ProgressionOrder::from_u8(reader.read_byte()?).ok()?,
+            })
+        })
+        .collect()
 }
 
 /// QCD marker (A.6.4).

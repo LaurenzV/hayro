@@ -9,17 +9,9 @@ use alloc::vec::Vec;
 
 use super::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use super::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
-use super::codestream::{
-    ComponentInfo, Header, ProgressionOrder, QuantizationStyle, WaveletTransform,
-};
+use super::codestream::{ComponentInfo, Header, QuantizationStyle, WaveletTransform};
 use super::idwt::IDWTOutput;
-use super::progression::{
-    IteratorInput, ProgressionData, component_position_resolution_layer_progression,
-    layer_resolution_component_position_progression,
-    position_component_resolution_layer_progression,
-    resolution_layer_component_position_progression,
-    resolution_position_component_layer_progression,
-};
+use super::progression::{ProgressionData, progression_iterator};
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
@@ -53,29 +45,7 @@ pub(crate) fn decode<'a>(
             tile.rect.height(),
         );
 
-        let iter_input = IteratorInput::new(tile);
-
-        let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> =
-            match tile.progression_order {
-                ProgressionOrder::LayerResolutionComponentPosition => {
-                    Box::new(layer_resolution_component_position_progression(iter_input))
-                }
-                ProgressionOrder::ResolutionLayerComponentPosition => {
-                    Box::new(resolution_layer_component_position_progression(iter_input))
-                }
-                ProgressionOrder::ResolutionPositionComponentLayer => Box::new(
-                    resolution_position_component_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-                ProgressionOrder::PositionComponentResolutionLayer => Box::new(
-                    position_component_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-                ProgressionOrder::ComponentPositionResolutionLayer => Box::new(
-                    component_position_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-            };
+        let progression_iterator = progression_iterator(tile, header)?;
 
         decode_tile(
             tile,

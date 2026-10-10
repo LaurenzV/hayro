@@ -4,7 +4,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::build::{PrecinctData, SubBandType};
-use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
+use super::codestream::{
+    ComponentInfo, Header, ProgressionChange, ProgressionOrder, markers, skip_marker_segment,
+};
 use super::rect::IntRect;
 use crate::error::{MarkerError, Result, TileError, ValidationError, bail, err};
 use crate::j2c::codestream;
@@ -26,6 +28,9 @@ pub(crate) struct Tile<'a> {
     /// exclusive.
     pub(crate) rect: IntRect,
     pub(crate) progression_order: ProgressionOrder,
+    /// The progression order changes from the tile-part headers. If there
+    /// are any, they override the ones from the main header.
+    pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) num_layers: u8,
     pub(crate) mct: bool,
 }
@@ -117,6 +122,7 @@ impl<'a> Tile<'a> {
             // might be overridden.
             component_infos: header.component_infos.clone(),
             progression_order: header.global_coding_style.progression_order,
+            progression_changes: vec![],
             mct: header.global_coding_style.mct,
             num_layers: header.global_coding_style.num_layers,
         }
@@ -258,6 +264,13 @@ fn parse_tile_part<'a>(
 
                 reader.read_marker()?;
                 ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::ParseFailure("PPT"))?);
+            }
+            markers::POC => {
+                reader.read_marker()?;
+                tile.progression_changes.extend(
+                    codestream::poc_marker(reader, num_components as u16)
+                        .ok_or(MarkerError::ParseFailure("POC"))?,
+                );
             }
             markers::PLT => {
                 // Can be inferred ourselves.
@@ -826,6 +839,7 @@ mod tests {
             },
             component_infos: vec![],
             ppm_packets: vec![],
+            progression_changes: vec![],
             skipped_resolution_levels: 0,
             strict: false,
         };
