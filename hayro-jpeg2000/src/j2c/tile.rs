@@ -631,14 +631,14 @@ impl<'a> ResolutionTile<'a> {
         // as the start of the precinct, but instead have to advance to the
         // next multiple.
         if !r_x.is_multiple_of(precinct_x_step)
-            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(precinct_x_step)
+            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
         {
             r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
         }
 
         // Same as above.
         if !r_y.is_multiple_of(precinct_y_step)
-            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(precinct_y_step)
+            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
         {
             r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
         }
