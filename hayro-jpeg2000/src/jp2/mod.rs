@@ -38,13 +38,13 @@ pub struct DecodedImage<'a> {
 
 pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<Image<'a>> {
     let mut reader = BitReader::new(data);
-    let signature_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
+    let signature_box = r#box::read(&mut reader, settings.strict).ok_or(FormatError::InvalidBox)?;
 
     if signature_box.box_type != JP2_SIGNATURE {
         bail!(FormatError::InvalidSignature);
     }
 
-    let file_type_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
+    let file_type_box = r#box::read(&mut reader, settings.strict).ok_or(FormatError::InvalidBox)?;
 
     if file_type_box.box_type != FILE_TYPE {
         bail!(FormatError::InvalidFileType);
@@ -55,7 +55,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
-        let Some(current_box) = r#box::read(&mut reader) else {
+        let Some(current_box) = r#box::read(&mut reader, settings.strict) else {
             if settings.strict {
                 bail!(FormatError::InvalidBox);
             }
@@ -71,7 +71,8 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
 
                 // Read child boxes within JP2 Header box
                 while !jp2h_reader.at_end() {
-                    let child_box = r#box::read(&mut jp2h_reader).ok_or(FormatError::InvalidBox)?;
+                    let child_box = r#box::read(&mut jp2h_reader, settings.strict)
+                        .ok_or(FormatError::InvalidBox)?;
 
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {
