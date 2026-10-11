@@ -196,6 +196,17 @@ fn parse_tile_part<'a>(
     let mut ppt_headers = vec![];
 
     loop {
+        // Tile-parts need to contain at least an SOD marker (see Table A.5),
+        // but some files contain tile-parts that only consist of the SOT
+        // marker segment. Those don't contain any data and can be skipped.
+        if reader.offset() - start >= data_len {
+            return if main_header.strict {
+                err!(MarkerError::Expected("SOD"))
+            } else {
+                Ok(())
+            };
+        }
+
         let Some(marker) = reader.peek_marker() else {
             return if main_header.strict {
                 err!(MarkerError::Invalid)
