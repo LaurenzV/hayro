@@ -535,20 +535,38 @@ impl SizeData {
         Ok(tile_count)
     }
 
+    fn x_divisor(&self) -> u64 {
+        u64::from(self.x_shrink_factor) * u64::from(self.x_resolution_shrink_factor)
+    }
+
+    fn y_divisor(&self) -> u64 {
+        u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor)
+    }
+
+    /// The horizontal offset of the image area in the coordinate system of
+    /// the output image.
+    pub(crate) fn image_x_offset(&self) -> u32 {
+        u64::from(self.image_area_x_offset).div_ceil(self.x_divisor()) as u32
+    }
+
+    /// The vertical offset of the image area in the coordinate system of
+    /// the output image.
+    pub(crate) fn image_y_offset(&self) -> u32 {
+        u64::from(self.image_area_y_offset).div_ceil(self.y_divisor()) as u32
+    }
+
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        let divisor = u64::from(self.x_shrink_factor) * u64::from(self.x_resolution_shrink_factor);
-        let width =
-            u64::from(self.reference_grid_width - self.image_area_x_offset).div_ceil(divisor);
-        width as u32
+        // See B-1 and B-14.
+        u64::from(self.reference_grid_width).div_ceil(self.x_divisor()) as u32
+            - self.image_x_offset()
     }
 
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        let divisor = u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor);
-        let height =
-            u64::from(self.reference_grid_height - self.image_area_y_offset).div_ceil(divisor);
-        height as u32
+        // See B-1 and B-14.
+        u64::from(self.reference_grid_height).div_ceil(self.y_divisor()) as u32
+            - self.image_y_offset()
     }
 }
 

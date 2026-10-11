@@ -444,8 +444,8 @@ fn store<'a>(
     );
 
     let (image_x_offset, image_y_offset) = (
-        header.size_data.image_area_x_offset,
-        header.size_data.image_area_y_offset,
+        header.size_data.image_x_offset(),
+        header.size_data.image_y_offset(),
     );
 
     if scale_x == 1 && scale_y == 1 {
@@ -486,15 +486,6 @@ fn store<'a>(
         let x_shrink_factor = header.size_data.x_shrink_factor;
         let y_shrink_factor = header.size_data.y_shrink_factor;
 
-        let x_offset = header
-            .size_data
-            .image_area_x_offset
-            .div_ceil(x_shrink_factor);
-        let y_offset = header
-            .size_data
-            .image_area_y_offset
-            .div_ceil(y_shrink_factor);
-
         // Otherwise, copy sample by sample.
         for y in resolution_tile.rect.y0..resolution_tile.rect.y1 {
             let relative_y = (y - component_tile.rect.y0) as usize;
@@ -507,14 +498,20 @@ fn store<'a>(
                 let sample = idwt_output.coefficients
                     [relative_y * idwt_output.rect.width() as usize + relative_x];
 
-                for x_position in u32::max(reference_grid_x, x_offset)
-                    ..u32::min(reference_grid_x + scale_x as u32, image_width + x_offset)
+                for x_position in u32::max(reference_grid_x, image_x_offset)
+                    ..u32::min(
+                        reference_grid_x + scale_x as u32,
+                        image_width + image_x_offset,
+                    )
                 {
-                    for y_position in u32::max(reference_grid_y, y_offset)
-                        ..u32::min(reference_grid_y + scale_y as u32, image_height + y_offset)
+                    for y_position in u32::max(reference_grid_y, image_y_offset)
+                        ..u32::min(
+                            reference_grid_y + scale_y as u32,
+                            image_height + image_y_offset,
+                        )
                     {
-                        let pos = (y_position - y_offset) as usize * image_width as usize
-                            + (x_position - x_offset) as usize;
+                        let pos = (y_position - image_y_offset) as usize * image_width as usize
+                            + (x_position - image_x_offset) as usize;
 
                         channel_data.container[pos] = sample;
                     }
