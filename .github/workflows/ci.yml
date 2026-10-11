@@ -54,3 +54,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p hayro-tests -- "load::"
+      - run: cargo test -p hayro-ccitt

@@ -8,6 +8,10 @@ rust-version = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
+exclude = ["/tests/"]
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+image = { workspace = true, default-features = false, features = ["png"] }
