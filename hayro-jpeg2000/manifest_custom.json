@@ -21,5 +21,20 @@
   "subsampled_precinct_position.j2k",
   "ppm_large_header.j2k",
   "raw_ycbcr_all_subsampled.j2k",
-  "raw_rgb_all_subsampled.j2k"
+  "raw_rgb_all_subsampled.j2k",
+  {
+    "id": "raw_5_components",
+    "path": "raw_5_components.j2k",
+    "components": true
+  },
+  {
+    "id": "raw_5_components_mct",
+    "path": "raw_5_components_mct.j2k",
+    "components": true
+  },
+  {
+    "id": "raw_5_components_subsampled",
+    "path": "raw_5_components_subsampled.j2k",
+    "components": true
+  }
 ]

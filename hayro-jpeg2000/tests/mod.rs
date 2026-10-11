@@ -1,7 +1,9 @@
 #![allow(missing_docs)]
 
 use hayro_jpeg2000::{DecodeSettings, Image};
-use image::{ColorType, DynamicImage, ImageBuffer, ImageDecoder, ImageFormat, Rgba, RgbaImage};
+use image::{
+    ColorType, DynamicImage, ImageBuffer, ImageDecoder, ImageFormat, Luma, Rgba, RgbaImage,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -179,6 +181,10 @@ struct ManifestEntry {
     resolve_palette_indices: Option<bool>,
     #[serde(default)]
     target_resolution: Option<(u32, u32)>,
+    /// Render each component as a separate grayscale image instead of
+    /// rendering the image itself.
+    #[serde(default)]
+    components: bool,
 }
 
 struct AssetEntry {
@@ -186,6 +192,7 @@ struct AssetEntry {
     snapshot_stem: PathBuf,
     display_name: String,
     render: bool,
+    components: bool,
     decode_settings: DecodeSettings,
 }
 
@@ -195,6 +202,7 @@ impl AssetEntry {
         id: String,
         path: String,
         render: bool,
+        components: bool,
         decode_settings: DecodeSettings,
     ) -> Self {
         let display_name = format!("{namespace}/{id}");
@@ -205,6 +213,7 @@ impl AssetEntry {
             snapshot_stem,
             display_name,
             render,
+            components,
             decode_settings,
         }
     }
@@ -214,7 +223,9 @@ impl ManifestItem {
     fn into_asset(self, namespace: &str) -> AssetEntry {
         let default_settings = DecodeSettings::default();
         match self {
-            Self::Simple(id) => AssetEntry::new(namespace, id.clone(), id, true, default_settings),
+            Self::Simple(id) => {
+                AssetEntry::new(namespace, id.clone(), id, true, false, default_settings)
+            }
             Self::Detailed(entry) => {
                 let decode_settings = DecodeSettings {
                     resolve_palette_indices: entry
@@ -230,6 +241,7 @@ impl ManifestItem {
                     entry.id,
                     entry.path,
                     entry.render,
+                    entry.components,
                     decode_settings,
                 )
             }
@@ -291,28 +303,11 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     let image = image.unwrap();
-    let color_type = image.color_type();
-    let width = image.width();
-    let height = image.height();
-    let mut buf = vec![0_u8; image.total_bytes() as usize];
-    image.read_image(&mut buf).unwrap();
-
-    let rgba = match color_type {
-        ColorType::L8 => {
-            DynamicImage::ImageLuma8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::La8 => {
-            DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::Rgb8 => {
-            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::Rgba8 => {
-            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        _ => unimplemented!(),
-    }
-    .into_rgba8();
+    let rgba = if asset.components {
+        render_components(&image)
+    } else {
+        render_image(image)
+    };
 
     let reference_path = asset.snapshot_stem.with_extension("png");
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
@@ -432,4 +427,46 @@ fn is_pixel_different(lhs: Rgba<u8>, rhs: Rgba<u8>) -> bool {
         || lhs[1].abs_diff(rhs[1]) > THRESHOLD
         || lhs[2].abs_diff(rhs[2]) > THRESHOLD
         || lhs[3].abs_diff(rhs[3]) > THRESHOLD
+}
+
+fn render_image(image: Image<'_>) -> RgbaImage {
+    let color_type = image.color_type();
+    let width = image.width();
+    let height = image.height();
+    let mut buf = vec![0_u8; image.total_bytes() as usize];
+    image.read_image(&mut buf).unwrap();
+
+    match color_type {
+        ColorType::L8 => {
+            DynamicImage::ImageLuma8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::La8 => {
+            DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::Rgb8 => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::Rgba8 => {
+            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        _ => unimplemented!(),
+    }
+    .into_rgba8()
+}
+
+/// Lay out all components of the image next to each other as grayscale images.
+fn render_components(image: &Image<'_>) -> RgbaImage {
+    let width = image.width();
+    let height = image.height();
+    let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
+    let decoded = image.decode(&mut decoder_context).unwrap();
+    let num_components = decoded.components().len() as u32;
+    let data = decoded.data_u8();
+
+    let gray = ImageBuffer::from_fn(width * num_components, height, |x, y| {
+        let (component, x) = (x / width, x % width);
+        Luma([data[((y * width + x) * num_components + component) as usize]])
+    });
+
+    DynamicImage::ImageLuma8(gray).into_rgba8()
 }
