@@ -27,8 +27,15 @@ fn build_decompositions(
     let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
-        let decoded_resolutions =
-            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
+        // The number of skipped resolution levels is determined from the main
+        // header, but tile-part headers can reduce the number of resolution
+        // levels further.
+        let decoded_resolutions = component_tile
+            .component_info
+            .num_resolution_levels()
+            .checked_sub(skipped_resolution_levels)
+            .filter(|r| *r > 0)
+            .ok_or(ValidationError::InvalidComponentMetadata)?;
         let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
         component_samples.push(
             usize::try_from(top_resolution.rect.area())

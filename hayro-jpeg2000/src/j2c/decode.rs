@@ -438,6 +438,12 @@ fn store<'a>(
         component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels,
     );
 
+    // Resolution levels can be empty (B-14), in which case there is nothing
+    // to store.
+    if idwt_output.rect.width() == 0 || idwt_output.rect.height() == 0 {
+        return;
+    }
+
     let (scale_x, scale_y) = (
         component_info.size_info.horizontal_resolution,
         component_info.size_info.vertical_resolution,
@@ -488,11 +494,11 @@ fn store<'a>(
 
         // Otherwise, copy sample by sample.
         for y in resolution_tile.rect.y0..resolution_tile.rect.y1 {
-            let relative_y = (y - component_tile.rect.y0) as usize;
+            let relative_y = (y - idwt_output.rect.y0) as usize;
             let reference_grid_y = (scale_y as u32 * y) / y_shrink_factor;
 
             for x in resolution_tile.rect.x0..resolution_tile.rect.x1 {
-                let relative_x = (x - component_tile.rect.x0) as usize;
+                let relative_x = (x - idwt_output.rect.x0) as usize;
                 let reference_grid_x = (scale_x as u32 * x) / x_shrink_factor;
 
                 let sample = idwt_output.coefficients

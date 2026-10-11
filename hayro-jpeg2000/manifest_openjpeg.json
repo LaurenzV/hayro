@@ -171,6 +171,32 @@
     "target_resolution": [60, 60]
   },
   {
+    "id": "b1_mono_res2",
+    "path": "b1_mono.j2c",
+    "target_resolution": [75, 44]
+  },
+  {
+    "id": "b2_mono_res1",
+    "path": "b2_mono.j2c",
+    "target_resolution": [151, 89]
+  },
+  {
+    "id": "b3_mono_res1",
+    "path": "b3_mono.j2c",
+    "target_resolution": [151, 89]
+  },
+  {
+    "id": "p1_07_res1",
+    "path": "p1_07.j2k",
+    "target_resolution": [4, 6]
+  },
+  {
+    "id": "issue399_res2",
+    "path": "issue399.j2k",
+    "target_resolution": [75, 44],
+    "render": false
+  },
+  {
     "id": "zoo1_res2",
     "path": "zoo1.jp2",
     "target_resolution": [1200, 1200]
