@@ -322,9 +322,17 @@ fn parse_tile_part<'a>(
         headers.push(BitReader::new(ppm_marker));
     }
 
-    let data = reader
-        .read_bytes(remaining_bytes)
-        .ok_or(TileError::Invalid)?;
+    let data = match reader.read_bytes(remaining_bytes) {
+        Some(data) => data,
+        // The codestream might be truncated, in which case we decode as much
+        // as is available.
+        None if !main_header.strict => {
+            let data = reader.tail().ok_or(TileError::Invalid)?;
+            reader.jump_to_end();
+            data
+        }
+        None => bail!(TileError::Invalid),
+    };
 
     let tile_part = if !headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {
