@@ -9,9 +9,14 @@ repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
 exclude = ["/tests/"]
+autotests = false
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 image = { workspace = true, default-features = false, features = ["png"] }
+
+[[test]]
+name = "tests"
+path = "tests/main.rs"
