@@ -19,5 +19,7 @@
   "poc_subsampled.j2k",
   "poc_offset.j2k",
   "subsampled_precinct_position.j2k",
-  "ppm_large_header.j2k"
+  "ppm_large_header.j2k",
+  "raw_ycbcr_all_subsampled.j2k",
+  "raw_rgb_all_subsampled.j2k"
 ]
