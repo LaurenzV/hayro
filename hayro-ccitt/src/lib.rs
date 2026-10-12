@@ -38,7 +38,7 @@ use alloc::vec::Vec;
 
 mod bit_reader;
 mod decode;
-mod state_machine;
+mod tables;
 
 /// A specialized Result type for CCITT decoding operations.
 pub type Result<T> = core::result::Result<T, DecodeError>;

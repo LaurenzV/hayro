@@ -1,25 +1,4 @@
-//! State machine for decoding CCITT run-length codes.
-//!
-//! CCITT assigns binary codes to integers that indicate how many pixels are
-//! of that specific color. The binary codes vary depending on whether we are
-//! decoding black pixels or white pixels.
-//!
-//! To achieve this, we create a simple "state-machine" by building a tree
-//! of nodes, where each node represents one binary digit and can contain
-//! up two children based on whether the next digit is 0 or 1 (basically a
-//! huffman tree). Then, we simply can read bit by bit and traverse the
-//! tree to find the corresponding black/white code for the given bit sequence.
-
-/// The flag indicating whether the state is terminal.
-pub(crate) const TERMINAL: u16 = 0x8000;
-/// The mask used to get the actual value from a terminal state.
-pub(crate) const VALUE_MASK: u16 = 0x1FFF;
-/// An invalid state.
-pub(crate) const INVALID: u16 = 0xFFFF;
-/// List of states for white color codes.
-pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATING, &WHITE_MAKEUP);
-/// List of states for black color codes.
-pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
+//! Lookup tables for decoding CCITT run length codes.
 
 /// The number of bits used to look up a run length code. The longest code has
 /// 13 bits.
@@ -27,141 +6,81 @@ pub(crate) const LOOKUP_BITS: u32 = 13;
 /// The value of a lookup table entry whose bits don't start with a valid code.
 pub(crate) const LOOKUP_INVALID: u16 = 0xFFF;
 /// Lookup table for white run length codes.
-pub(crate) static WHITE_LOOKUP: [u16; 1 << LOOKUP_BITS] = build_lookup(&WHITE_STATES);
+pub(crate) static WHITE_LOOKUP: [u16; 1 << LOOKUP_BITS] =
+    build_lookup(&WHITE_TERMINATING, &WHITE_MAKEUP);
 /// Lookup table for black run length codes.
-pub(crate) static BLACK_LOOKUP: [u16; 1 << LOOKUP_BITS] = build_lookup(&BLACK_STATES);
+pub(crate) static BLACK_LOOKUP: [u16; 1 << LOOKUP_BITS] =
+    build_lookup(&BLACK_TERMINATING, &BLACK_MAKEUP);
 
 /// Build a lookup table that maps the next `LOOKUP_BITS` bits to the run length
 /// of the code they start with (lower 12 bits) and the length of that code
 /// (upper 4 bits).
 ///
 /// If the bits don't start with a valid code, the run length is
-/// `LOOKUP_INVALID` and the length is the number of bits after which the state
-/// machine detects that.
-const fn build_lookup(states: &[State]) -> [u16; 1 << LOOKUP_BITS] {
-    let mut table = [0; 1 << LOOKUP_BITS];
+/// `LOOKUP_INVALID` and the length is the number of bits up to and including
+/// the first bit that doesn't continue any code.
+const fn build_lookup(
+    terminating: &[(u16, u8, u16)],
+    makeup: &[(u16, u8, u16)],
+) -> [u16; 1 << LOOKUP_BITS] {
+    let code_tables = [terminating, makeup, &COMMON_MAKEUP];
+    let mut table = [LOOKUP_INVALID; 1 << LOOKUP_BITS];
+
+    let mut t = 0;
+    while t < code_tables.len() {
+        let codes = code_tables[t];
+        let mut c = 0;
+
+        while c < codes.len() {
+            let (run_length, length, code) = codes[c];
+            let shift = LOOKUP_BITS - length as u32;
+            let start = (code as usize) << shift;
+            let mut i = 0;
+
+            while i < 1 << shift {
+                table[start + i] = run_length | ((length as u16) << 12);
+                i += 1;
+            }
+
+            c += 1;
+        }
+
+        t += 1;
+    }
+
     let mut bits = 0;
 
     while bits < table.len() {
-        let mut state = 0;
-        let mut i = 0;
+        if table[bits] == LOOKUP_INVALID {
+            let mut longest_prefix = 0;
+            let mut t = 0;
 
-        table[bits] = loop {
-            let bit = (bits >> (LOOKUP_BITS - 1 - i)) & 1;
-            let transition = if bit == 0 {
-                states[state].on_0
-            } else {
-                states[state].on_1
-            };
+            while t < code_tables.len() {
+                let codes = code_tables[t];
+                let mut c = 0;
 
-            i += 1;
+                while c < codes.len() {
+                    let (_, length, code) = codes[c];
+                    let diff = (bits as u32 >> (LOOKUP_BITS - length as u32)) ^ code as u32;
+                    let prefix = length as u32 - (u32::BITS - diff.leading_zeros());
 
-            if transition == INVALID {
-                break LOOKUP_INVALID | ((i as u16) << 12);
-            } else if transition & TERMINAL != 0 {
-                break (transition & VALUE_MASK) | ((i as u16) << 12);
+                    if prefix > longest_prefix {
+                        longest_prefix = prefix;
+                    }
+
+                    c += 1;
+                }
+
+                t += 1;
             }
 
-            state = transition as usize;
-        };
+            table[bits] = LOOKUP_INVALID | (((longest_prefix + 1) as u16) << 12);
+        }
 
         bits += 1;
     }
 
     table
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct State {
-    pub(crate) on_0: u16,
-    pub(crate) on_1: u16,
-}
-
-impl State {
-    const fn new() -> Self {
-        Self {
-            on_0: INVALID,
-            on_1: INVALID,
-        }
-    }
-}
-
-/// Insert a single code into the state machine.
-/// Returns the new number of states.
-const fn insert_code<const N: usize>(
-    states: &mut [State; N],
-    mut num_states: usize,
-    run_length: u16,
-    code_length: u8,
-    code: u16,
-) -> usize {
-    let mut current_state: usize = 0;
-    let mut i: u8 = 0;
-
-    while i < code_length {
-        let bit = (code >> (code_length - 1 - i)) & 1;
-        let is_last_bit = i == code_length - 1;
-
-        let next = if bit == 0 {
-            states[current_state].on_0
-        } else {
-            states[current_state].on_1
-        };
-
-        if is_last_bit {
-            let result = TERMINAL | (run_length & VALUE_MASK);
-
-            if bit == 0 {
-                states[current_state].on_0 = result;
-            } else {
-                states[current_state].on_1 = result;
-            }
-        } else if next == INVALID {
-            // Create a new state.
-            let new_state = num_states;
-            num_states += 1;
-
-            if bit == 0 {
-                states[current_state].on_0 = new_state as u16;
-            } else {
-                states[current_state].on_1 = new_state as u16;
-            }
-            current_state = new_state;
-        } else {
-            // Follow existing transition.
-            current_state = next as usize;
-        }
-
-        i += 1;
-    }
-
-    num_states
-}
-
-const fn insert_codes<const N: usize, const M: usize>(
-    states: &mut [State; N],
-    mut num_states: usize,
-    codes: &[(u16, u8, u16); M],
-) -> usize {
-    let mut i = 0;
-    while i < codes.len() {
-        let (run_length, code_length, code) = codes[i];
-        num_states = insert_code(states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-    num_states
-}
-
-const fn build_run_states<const N: usize, const T: usize, const M: usize>(
-    terminating: &[(u16, u8, u16); T],
-    makeup: &[(u16, u8, u16); M],
-) -> [State; N] {
-    let mut states: [State; N] = [State::new(); N];
-    let mut num_states: usize = 1;
-    num_states = insert_codes(&mut states, num_states, terminating);
-    num_states = insert_codes(&mut states, num_states, makeup);
-    let _ = insert_codes(&mut states, num_states, &COMMON_MAKEUP);
-    states
 }
 
 /// White terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).

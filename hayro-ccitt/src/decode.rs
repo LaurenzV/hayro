@@ -1,5 +1,5 @@
 use crate::bit_reader::BitReader;
-use crate::state_machine::{BLACK_LOOKUP, LOOKUP_BITS, LOOKUP_INVALID, WHITE_LOOKUP};
+use crate::tables::{BLACK_LOOKUP, LOOKUP_BITS, LOOKUP_INVALID, WHITE_LOOKUP};
 use crate::{Color, DecodeError, Result};
 
 /// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
