@@ -480,14 +480,21 @@ fn decode_segments(
             }
             SegmentType::IntermediateGenericRefinementRegion => {
                 // Same logic as immediate refinement, but store result instead of combining.
-                let reference = seg
+                let referred_segment = seg
                     .header
                     .referred_to_segments
                     .first()
-                    .and_then(|&num| page_state.get_referred_segment(num))
-                    .unwrap_or(page_bitmap);
+                    .and_then(|&num| page_state.get_referred_segment(num));
 
                 let header = generic_refinement::parse(&mut reader)?;
+                let page_area;
+                let reference = match referred_segment {
+                    Some(referred_segment) => referred_segment,
+                    None => {
+                        page_area = page_bitmap_area(page_bitmap, &header.region_info)?;
+                        &page_area
+                    }
+                };
                 let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
                 page_state.store_region(seg.header.segment_number, region.bitmap);
             }
@@ -496,8 +503,11 @@ fn decode_segments(
                 // "3) Determine the buffer associated with the region segment that
                 // this segment refers to." (7.4.7.5)
                 //
-                // "2) If there are no referred-to segments, then use the page
-                // bitmap as the reference buffer." (7.4.7.5)
+                // "If this segment does not refer to another region segment, set
+                // GRREFERENCE to be a bitmap containing the current contents of the
+                // page buffer (see clause 8), restricted to the area of the page
+                // buffer specified by this segment's region segment information
+                // field." (7.4.7.4)
                 let referred_segment = seg
                     .header
                     .referred_to_segments
@@ -516,7 +526,14 @@ fn decode_segments(
                         scratch_buffers,
                     )?;
                 } else {
-                    let reference = referred_segment.unwrap_or(page_bitmap);
+                    let page_area;
+                    let reference = match referred_segment {
+                        Some(referred_segment) => referred_segment,
+                        None => {
+                            page_area = page_bitmap_area(page_bitmap, &header.region_info)?;
+                            &page_area
+                        }
+                    };
                     let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
                     page_bitmap.combine(
                         &region.bitmap,
@@ -661,6 +678,24 @@ impl PageState {
             .ok()
             .map(|idx| &self.huffman_tables[idx].1)
     }
+}
+
+fn page_bitmap_area(page: &Bitmap, region_info: &decode::RegionSegmentInfo) -> Result<Bitmap> {
+    let mut area = Bitmap::new_with(
+        region_info.width,
+        region_info.height,
+        region_info.x_location,
+        region_info.y_location,
+        false,
+    )?;
+    area.combine(
+        page,
+        -i32::try_from(region_info.x_location).unwrap_or(i32::MAX),
+        -i32::try_from(region_info.y_location).unwrap_or(i32::MAX),
+        CombinationOperator::Replace,
+    );
+
+    Ok(area)
 }
 
 /// Parse page information and initialize the page bitmap.

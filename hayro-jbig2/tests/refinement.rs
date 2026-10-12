@@ -53,7 +53,6 @@ fn page() {
 }
 
 #[test]
-#[ignore = "refinements of a page area must only see the page within the region (7.4.7.4)"]
 fn page_part() {
     check("refine_page_part", "truchet");
 }
