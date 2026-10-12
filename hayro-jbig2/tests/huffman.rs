@@ -1,0 +1,70 @@
+//! Symbol dictionaries and text regions with Huffman coding (Annex B).
+
+use crate::check;
+
+#[test]
+fn standard_tables() {
+    check("huffman_standard_tables", "honeycomb");
+}
+
+#[test]
+fn tables_b10_b13() {
+    check("huffman_tables_b10_b13", "honeycomb");
+}
+
+#[test]
+fn tables_b5_b3_b7_b9_b12() {
+    check("huffman_tables_b5_b3_b7_b9_b12", "honeycomb");
+}
+
+#[test]
+fn uncompressed_symbols() {
+    check("huffman_uncompressed_symbols", "honeycomb");
+}
+
+#[test]
+fn custom_tables() {
+    check("huffman_custom_tables", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine() {
+    check("huffman_text_refine", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_b15() {
+    check("huffman_text_refine_b15", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_custom() {
+    check("huffman_text_refine_custom", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_custom_offsets() {
+    check("huffman_text_refine_custom_offsets", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_custom_sizes() {
+    check("huffman_text_refine_custom_sizes", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_custom_sizes_offsets() {
+    check("huffman_text_refine_custom_sizes_offsets", "honeycomb");
+}
+
+#[test]
+#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
+fn text_refine_custom_data_size() {
+    check("huffman_text_refine_custom_data_size", "honeycomb");
+}

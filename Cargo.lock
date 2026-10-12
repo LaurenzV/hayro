@@ -768,10 +768,6 @@ dependencies = [
  "fearless_simd 1.0.0",
  "hayro-ccitt",
  "image",
- "indicatif",
- "rayon",
- "serde",
- "serde_json",
 ]
 
 [[package]]

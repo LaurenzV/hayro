@@ -8,7 +8,8 @@ rust-version = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
-exclude = ["/tests/", "/manifest_*.json", "/sync.py", "/generate_huffman_tables.py"]
+exclude = ["/tests/", "/generate_huffman_tables.py"]
+autotests = false
 
 [features]
 default = ["std", "image", "simd"]
@@ -26,12 +27,7 @@ workspace = true
 
 [dev-dependencies]
 image = { workspace = true, default-features = false, features = ["png"] }
-indicatif = { version = "0.17", features = ["rayon"] }
-rayon = "1.11"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 
 [[test]]
-name = "asset_suite"
-path = "tests/mod.rs"
-harness = false
+name = "tests"
+path = "tests/main.rs"
