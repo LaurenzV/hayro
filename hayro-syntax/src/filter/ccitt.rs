@@ -127,9 +127,7 @@ pub(crate) fn decode(
             return None;
         }
 
-        // Only keep complete bytes of a partially decoded row.
-        let len = decoder.row_start + decoder.x / 8;
-        decoder.output.resize(len, 0xFF);
+        decoder.output.truncate(decoder.row_start);
 
         (decoder.output, 1)
     } else {
