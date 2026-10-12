@@ -125,34 +125,23 @@ impl BitReader<'_> {
     /// EOL is defined as `000000000001` (11 zeros followed by a 1).
     /// Fill bits (T.4 Section 4.1.3) may precede the EOL as a variable-length
     /// string of zeros.
-    #[inline(always)]
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
 
-        // T.4 Section 4.1.2: EOL = 000000000001
-        // T.4 Section 4.1.3: Fill = variable length string of 0s before EOL
         loop {
-            let mut fill_bits = 0;
+            let mut reader = self.clone();
+            let mut zeros = 0;
 
-            // Let's limit the maximum number of fill bits to prevent
-            // exponential explosion in malformed files.
-            const MAX_FILL_BITS: usize = 24;
-
-            while fill_bits < MAX_FILL_BITS {
-                match self.peak_bits(fill_bits + 1) {
-                    Ok(0) => fill_bits += 1,
-                    _ => break,
+            loop {
+                match reader.read_bit() {
+                    Ok(0) => zeros += 1,
+                    Ok(_) if zeros >= 11 => break,
+                    _ => return count,
                 }
             }
 
-            if fill_bits >= 11 && self.peak_bits(fill_bits + 1) == Ok(1) {
-                // Found EOL with fill bits, consume all of it.
-                self.read_bits(fill_bits + 1).unwrap();
-                count += 1;
-                continue;
-            }
-
-            return count;
+            *self = reader;
+            count += 1;
         }
     }
 }

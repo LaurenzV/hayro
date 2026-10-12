@@ -22,6 +22,14 @@ fn eol_fill() {
 }
 
 #[test]
+fn long_fill() {
+    check("g3_1d_long_fill", "base", |s| {
+        s.encoding = G3_1D;
+        s.end_of_line = true;
+    });
+}
+
+#[test]
 fn rtc() {
     check("g3_1d_rtc", "base", |s| {
         s.encoding = G3_1D;
