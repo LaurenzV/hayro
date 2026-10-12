@@ -135,13 +135,19 @@ pub(crate) fn decode(
 
         impl Decoder for Luma8Decoder {
             fn push_pixels(&mut self, white: bool, count: u32) {
-                let len = count as usize;
+                let start = self.idx;
+                self.idx += count as usize;
 
-                if !white {
-                    self.output[self.idx..self.idx + len].fill(0x00);
+                if white {
+                    return;
                 }
 
-                self.idx += len;
+                // If the number of rows is unknown, the output grows on demand.
+                if self.output.len() < self.idx {
+                    self.output.resize(self.idx, 0xFF);
+                }
+
+                self.output[start..self.idx].fill(0x00);
             }
 
             fn next_line(&mut self) {
@@ -161,8 +167,8 @@ pub(crate) fn decode(
             return None;
         }
 
-        if result.is_err() {
-            decoder.output.truncate(decoder.idx);
+        if result.is_err() || rows == 0 {
+            decoder.output.resize(decoder.idx, 0xFF);
         }
 
         (decoder.output, 8)
@@ -195,5 +201,20 @@ mod tests {
 
         assert_eq!(decoded.data.as_ref(), &[0; 8]);
         assert_eq!(decoded.image_data.unwrap().height, 1);
+    }
+
+    #[test]
+    fn unknown_rows() {
+        let params = Dict::from_bytes(b"<< /K 0 /Columns 8 >>").unwrap();
+
+        let decoded = decode(&[0x35, 0x14], &params, &ImageDecodeParams::default()).unwrap();
+        assert_eq!(decoded.data.as_ref(), &[0; 8]);
+
+        let image_params = ImageDecodeParams {
+            is_indexed: true,
+            ..Default::default()
+        };
+        let decoded = decode(&[0x35, 0x14], &params, &image_params).unwrap();
+        assert_eq!(decoded.data.as_ref(), &[0]);
     }
 }
