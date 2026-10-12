@@ -80,9 +80,6 @@ pub enum EncodingMode {
 }
 
 /// Settings to apply during decoding.
-///
-/// Created with [`DecodeSettings::new`]. The defaults of all other settings
-/// match the defaults of the `CCITTFaxDecode` filter in PDF.
 #[derive(Copy, Clone, Debug)]
 #[non_exhaustive]
 pub struct DecodeSettings {
@@ -92,8 +89,9 @@ pub struct DecodeSettings {
     ///
     /// In case `end_of_block` has been set to true, decoding will run until
     /// the given number of rows have been decoded, or the `end_of_block` marker
-    /// has been encountered, whichever occurs first. If set to 0, decoding
-    /// runs until the end-of-block marker or the end of the data.
+    /// has been encountered, whichever occurs first.
+    ///
+    /// If set to 0, decoding runs until the end-of-block marker or the end of the data.
     pub rows: u32,
     /// Whether the stream _MAY_ contain an end-of-block marker
     /// (It doesn't have to. In that case this is set to `true` but there are
