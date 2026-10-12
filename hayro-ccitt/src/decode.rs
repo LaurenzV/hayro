@@ -1,5 +1,5 @@
 use crate::bit_reader::BitReader;
-use crate::state_machine::{BLACK_STATES, INVALID, State, TERMINAL, VALUE_MASK, WHITE_STATES};
+use crate::state_machine::{BLACK_LOOKUP, LOOKUP_BITS, LOOKUP_INVALID, WHITE_LOOKUP};
 use crate::{Color, DecodeError, Result};
 
 /// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
@@ -14,39 +14,30 @@ pub(crate) enum Mode {
 }
 
 impl BitReader<'_> {
-    /// Decode a run length using the given state machine (T.4 Section 4.1.1, T.6 Section 2.2.4).
+    /// Decode a run length using the given lookup table (T.4 Section 4.1.1, T.6 Section 2.2.4).
     ///
     /// Run lengths 0-63 use terminating codes.
     /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
     #[inline(always)]
-    fn decode_run_inner(&mut self, states: &[State]) -> Result<u32> {
+    fn decode_run_inner(&mut self, lookup: &[u16; 1 << LOOKUP_BITS]) -> Result<u32> {
         let mut total: u32 = 0;
-        let mut state: usize = 0;
 
         loop {
-            let bit = self.read_bit()?;
+            let entry = lookup[(self.peek_u32() >> (32 - LOOKUP_BITS)) as usize];
+            self.consume((entry >> 12) as usize)?;
 
-            let transition = if bit == 0 {
-                states[state].on_0
-            } else {
-                states[state].on_1
-            };
+            let len = entry & 0xFFF;
 
-            if transition == INVALID {
+            if len == LOOKUP_INVALID {
                 return Err(DecodeError::InvalidCode);
-            } else if transition & TERMINAL != 0 {
-                let len = (transition & VALUE_MASK) as u32;
-                total = total.checked_add(len).ok_or(DecodeError::Overflow)?;
+            }
 
-                // For decoding black/white runs, less than 64 means we have
-                // a terminating code.
-                if len < 64 {
-                    return Ok(total);
-                }
+            total = total.checked_add(len as u32).ok_or(DecodeError::Overflow)?;
 
-                state = 0;
-            } else {
-                state = transition as usize;
+            // For decoding black/white runs, less than 64 means we have
+            // a terminating code.
+            if len < 64 {
+                return Ok(total);
             }
         }
     }
@@ -54,19 +45,19 @@ impl BitReader<'_> {
     /// Decode a white run length.
     #[inline(always)]
     fn decode_white_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&WHITE_STATES)
+        self.decode_run_inner(&WHITE_LOOKUP)
             // See 0506179.pdf. We are lenient and check whether perhaps
             // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&BLACK_STATES))
+            .or_else(|_| self.decode_run_inner(&BLACK_LOOKUP))
     }
 
     /// Decode a black run length.
     #[inline(always)]
     fn decode_black_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&BLACK_STATES)
+        self.decode_run_inner(&BLACK_LOOKUP)
             // See 0506179.pdf. We are lenient and check whether perhaps
             // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&WHITE_STATES))
+            .or_else(|_| self.decode_run_inner(&WHITE_LOOKUP))
     }
 
     /// Decode a run length for the specified color.

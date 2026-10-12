@@ -38,6 +38,39 @@ impl<'a> BitReader<'a> {
         Ok(result)
     }
 
+    /// Return the next 32 bits without consuming them. Bits past the end of the
+    /// data are zero.
+    #[inline(always)]
+    pub(crate) fn peek_u32(&self) -> u32 {
+        let byte_pos = self.byte_pos();
+
+        let word = if let Some(bytes) = self.data.get(byte_pos..byte_pos + 8) {
+            u64::from_be_bytes(bytes.try_into().unwrap())
+        } else {
+            let mut bytes = [0; 8];
+            let rest = self.data.get(byte_pos..).unwrap_or_default();
+            bytes[..rest.len()].copy_from_slice(rest);
+            u64::from_be_bytes(bytes)
+        };
+
+        ((word << self.bit_pos()) >> 32) as u32
+    }
+
+    /// Consume the given number of bits.
+    #[inline(always)]
+    pub(crate) fn consume(&mut self, num_bits: usize) -> Result<()> {
+        let end = self.data.len() * 8;
+
+        if self.bit_offset + num_bits > end {
+            self.bit_offset = end;
+            return Err(DecodeError::UnexpectedEof);
+        }
+
+        self.bit_offset += num_bits;
+
+        Ok(())
+    }
+
     #[inline(always)]
     pub(crate) fn align(&mut self) {
         let bit_pos = self.bit_pos();

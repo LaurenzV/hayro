@@ -21,6 +21,56 @@ pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATIN
 /// List of states for black color codes.
 pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
 
+/// The number of bits used to look up a run length code. The longest code has
+/// 13 bits.
+pub(crate) const LOOKUP_BITS: u32 = 13;
+/// The value of a lookup table entry whose bits don't start with a valid code.
+pub(crate) const LOOKUP_INVALID: u16 = 0xFFF;
+/// Lookup table for white run length codes.
+pub(crate) static WHITE_LOOKUP: [u16; 1 << LOOKUP_BITS] = build_lookup(&WHITE_STATES);
+/// Lookup table for black run length codes.
+pub(crate) static BLACK_LOOKUP: [u16; 1 << LOOKUP_BITS] = build_lookup(&BLACK_STATES);
+
+/// Build a lookup table that maps the next `LOOKUP_BITS` bits to the run length
+/// of the code they start with (lower 12 bits) and the length of that code
+/// (upper 4 bits).
+///
+/// If the bits don't start with a valid code, the run length is
+/// `LOOKUP_INVALID` and the length is the number of bits after which the state
+/// machine detects that.
+const fn build_lookup(states: &[State]) -> [u16; 1 << LOOKUP_BITS] {
+    let mut table = [0; 1 << LOOKUP_BITS];
+    let mut bits = 0;
+
+    while bits < table.len() {
+        let mut state = 0;
+        let mut i = 0;
+
+        table[bits] = loop {
+            let bit = (bits >> (LOOKUP_BITS - 1 - i)) & 1;
+            let transition = if bit == 0 {
+                states[state].on_0
+            } else {
+                states[state].on_1
+            };
+
+            i += 1;
+
+            if transition == INVALID {
+                break LOOKUP_INVALID | ((i as u16) << 12);
+            } else if transition & TERMINAL != 0 {
+                break (transition & VALUE_MASK) | ((i as u16) << 12);
+            }
+
+            state = transition as usize;
+        };
+
+        bits += 1;
+    }
+
+    table
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct State {
     pub(crate) on_0: u16,
