@@ -135,19 +135,18 @@ pub(crate) fn decode(
 
         impl Decoder for Luma8Decoder {
             fn push_pixels(&mut self, white: bool, count: u32) {
-                let start = self.idx;
-                self.idx += count as usize;
+                let len = count as usize;
 
-                if white {
-                    return;
+                if !white {
+                    // If the number of rows is unknown, the output grows on demand.
+                    if self.output.len() < self.idx + len {
+                        self.output.resize(self.idx + len, 0xFF);
+                    }
+
+                    self.output[self.idx..self.idx + len].fill(0x00);
                 }
 
-                // If the number of rows is unknown, the output grows on demand.
-                if self.output.len() < self.idx {
-                    self.output.resize(self.idx, 0xFF);
-                }
-
-                self.output[start..self.idx].fill(0x00);
+                self.idx += len;
             }
 
             fn next_line(&mut self) {
