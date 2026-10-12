@@ -6,7 +6,6 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::iter;
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
 
 pub(crate) fn decode(
@@ -50,69 +49,74 @@ pub(crate) fn decode(
     let (decoded, bpc) = if image_params.is_indexed {
         struct BitPackDecoder {
             output: Vec<u8>,
+            stride: usize,
+            /// The bits of the last byte in a row that belong to the image.
+            last_byte_mask: u8,
+            row_start: usize,
+            x: usize,
             decoded_rows: u32,
-            buffer: u8,
-            bit_count: u8,
         }
 
         impl BitPackDecoder {
-            fn flush(&mut self) {
-                if self.bit_count > 0 {
-                    let padded = self.buffer << (8 - self.bit_count);
-                    self.output.push(padded);
-                    self.buffer = 0;
-                    self.bit_count = 0;
+            fn row(&mut self) -> &mut [u8] {
+                let end = self.row_start + self.stride;
+
+                // If the number of rows is unknown, the output grows on demand.
+                if self.output.len() < end {
+                    self.output.resize(end, 0xFF);
                 }
+
+                &mut self.output[self.row_start..end]
             }
         }
 
+        // The output is prefilled with white, so only black runs need to be
+        // written.
         impl Decoder for BitPackDecoder {
-            fn push_pixels(&mut self, white: bool, mut count: u32) {
-                if self.bit_count > 0 {
-                    let head = count.min(u32::from(8 - self.bit_count)) as u8;
-                    self.buffer <<= head;
-                    if white {
-                        self.buffer |= ((1_u16 << head) - 1) as u8;
-                    }
-                    self.bit_count += head;
-                    count -= u32::from(head);
+            fn push_pixels(&mut self, white: bool, count: u32) {
+                let start = self.x;
+                self.x += count as usize;
 
-                    if self.bit_count == 8 {
-                        self.output.push(self.buffer);
-                        self.buffer = 0;
-                        self.bit_count = 0;
-                    }
+                if white || count == 0 {
+                    return;
                 }
 
-                let full_bytes = count / 8;
-                if full_bytes > 0 {
-                    let byte = if white { 0xFF } else { 0x00 };
-                    self.output
-                        .extend(iter::repeat_n(byte, full_bytes as usize));
-                    count %= 8;
-                }
+                let end = self.x;
+                let row = self.row();
+                let (first, last) = (start / 8, (end - 1) / 8);
+                let first_mask = 0xFF_u8 >> (start % 8);
+                let last_mask = 0xFF_u8 << (7 - (end - 1) % 8);
 
-                if count > 0 {
-                    self.buffer = if white {
-                        ((1_u16 << count) - 1) as u8
-                    } else {
-                        0
-                    };
-                    self.bit_count = count as u8;
+                if first == last {
+                    row[first] &= !(first_mask & last_mask);
+                } else {
+                    row[first] &= !first_mask;
+                    row[first + 1..last].fill(0x00);
+                    row[last] &= !last_mask;
                 }
             }
 
             fn next_line(&mut self) {
+                let mask = self.last_byte_mask;
+
+                if let Some(last) = self.row().last_mut() {
+                    *last &= mask;
+                }
+
                 self.decoded_rows += 1;
-                self.flush();
+                self.row_start += self.stride;
+                self.x = 0;
             }
         }
 
+        let stride = (columns as usize).div_ceil(8);
         let mut decoder = BitPackDecoder {
-            output: Vec::new(),
+            output: vec![0xFF; stride.checked_mul(rows as usize)?],
+            stride,
+            last_byte_mask: 0xFF_u8 << ((8 - columns % 8) % 8),
+            row_start: 0,
+            x: 0,
             decoded_rows: 0,
-            buffer: 0,
-            bit_count: 0,
         };
         let mut context = DecoderContext::new(settings);
         let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
@@ -122,6 +126,10 @@ pub(crate) fn decode(
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;
         }
+
+        // Only keep complete bytes of a partially decoded row.
+        let len = decoder.row_start + decoder.x / 8;
+        decoder.output.resize(len, 0xFF);
 
         (decoder.output, 1)
     } else {
