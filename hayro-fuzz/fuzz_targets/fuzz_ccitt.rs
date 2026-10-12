@@ -18,7 +18,7 @@ impl hayro_ccitt::Decoder for Decoder {
 // [5]     end_of_line (bool)
 // [6]     rows_are_byte_aligned (bool)
 // [7]     encoding_mode (0=Group4, 1=Group3_1D, 2+=Group3_2D)
-// [8]     k parameter for Group3_2D
+// [8]     unused
 // [9]     invert_black (bool)
 // [10..]  CCITT encoded data
 
@@ -37,9 +37,7 @@ fuzz_target!(|data: &[u8]| {
     let encoding = match data[7] % 3 {
         0 => hayro_ccitt::EncodingMode::Group4,
         1 => hayro_ccitt::EncodingMode::Group3_1D,
-        _ => hayro_ccitt::EncodingMode::Group3_2D {
-            k: data[8].max(1) as u32,
-        },
+        _ => hayro_ccitt::EncodingMode::Group3_2D,
     };
     let invert_black = data[9] != 0;
 

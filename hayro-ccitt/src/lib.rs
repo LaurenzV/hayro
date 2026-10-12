@@ -50,8 +50,6 @@ pub enum DecodeError {
     UnexpectedEof,
     /// Invalid Huffman code sequence was encountered during decoding.
     InvalidCode,
-    /// A scanline didn't have the expected number of pixels.
-    LineLengthMismatch,
     /// Arithmetic overflow in run length or position calculation.
     Overflow,
 }
@@ -61,7 +59,6 @@ impl core::fmt::Display for DecodeError {
         match self {
             Self::UnexpectedEof => write!(f, "unexpected end of input"),
             Self::InvalidCode => write!(f, "invalid CCITT code sequence"),
-            Self::LineLengthMismatch => write!(f, "scanline length mismatch"),
             Self::Overflow => write!(f, "arithmetic overflow in position calculation"),
         }
     }
@@ -77,10 +74,7 @@ pub enum EncodingMode {
     /// Group 3 1D (MH).
     Group3_1D,
     /// Group 3 2D (MR).
-    Group3_2D {
-        /// The K parameter.
-        k: u32,
-    },
+    Group3_2D,
 }
 
 /// Settings to apply during decoding.
@@ -164,7 +158,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext)
     match ctx.settings.encoding {
         EncodingMode::Group4 => decode_group4(ctx, &mut reader, decoder)?,
         EncodingMode::Group3_1D => decode_group3_1d(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_2D { .. } => decode_group3_2d(ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_2D => decode_group3_2d(ctx, &mut reader, decoder)?,
     }
 
     reader.align();
@@ -188,7 +182,7 @@ fn decode_group3_1d(
             group3_recover(ctx, reader, decoder, line_start, e)?;
         }
 
-        ctx.next_line(decoder)?;
+        ctx.next_line(decoder);
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -223,7 +217,7 @@ fn decode_group3_2d(
             group3_recover(ctx, reader, decoder, line_start, e)?;
         }
 
-        ctx.next_line(decoder)?;
+        ctx.next_line(decoder);
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -265,7 +259,7 @@ fn group3_recover<'a>(
 fn group3_read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
     let mut eol_count = reader.read_eol_if_available();
 
-    if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D { .. }) {
+    if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D) {
         return eol_count;
     }
 
@@ -351,7 +345,7 @@ fn decode_group4(
         }
 
         decode_2d_line(ctx, reader, decoder)?;
-        ctx.next_line(decoder)?;
+        ctx.next_line(decoder);
 
         if ctx.settings.rows_are_byte_aligned {
             reader.align();
@@ -571,11 +565,7 @@ impl DecoderContext {
     }
 
     #[inline(always)]
-    fn next_line(&mut self, decoder: &mut impl Decoder) -> Result<()> {
-        if self.pixels_decoded != self.settings.columns {
-            return Err(DecodeError::LineLengthMismatch);
-        }
-
+    fn next_line(&mut self, decoder: &mut impl Decoder) {
         core::mem::swap(&mut self.ref_changes, &mut self.coding_changes);
         self.coding_changes.clear();
         self.pixels_decoded = 0;
@@ -586,7 +576,5 @@ impl DecoderContext {
         decoder.next_line();
 
         self.update_b();
-
-        Ok(())
     }
 }

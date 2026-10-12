@@ -38,7 +38,7 @@ pub(crate) fn decode(
         } else if k == 0 {
             EncodingMode::Group3_1D
         } else {
-            EncodingMode::Group3_2D { k: k as u32 }
+            EncodingMode::Group3_2D
         },
         invert_black: params.get::<bool>(BLACK_IS_1).unwrap_or(false),
     };

@@ -15,7 +15,7 @@ use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode, decode}
 use std::path::PathBuf;
 
 const G3_1D: EncodingMode = EncodingMode::Group3_1D;
-const G3_2D: EncodingMode = EncodingMode::Group3_2D { k: 2 };
+const G3_2D: EncodingMode = EncodingMode::Group3_2D;
 const G4: EncodingMode = EncodingMode::Group4;
 
 fn tests_dir() -> PathBuf {

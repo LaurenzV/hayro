@@ -1,5 +1,4 @@
 use crate::{G3_2D, check};
-use hayro_ccitt::EncodingMode;
 
 #[test]
 fn plain() {
@@ -64,7 +63,5 @@ fn all_1d() {
 
 #[test]
 fn irregular_tags() {
-    check("g3_2d_irregular_tags", "base", |s| {
-        s.encoding = EncodingMode::Group3_2D { k: 4 };
-    });
+    check("g3_2d_irregular_tags", "base", |s| s.encoding = G3_2D);
 }
