@@ -144,13 +144,6 @@ impl Color {
     }
 }
 
-/// Represents a color change at a specific index in a line.
-#[derive(Clone, Copy)]
-struct ColorChange {
-    idx: u32,
-    color: Color,
-}
-
 /// Decode the given image using the provided decoder context and decoder.
 ///
 /// If decoding was successful, the number of bytes that have been read in total
@@ -437,14 +430,18 @@ fn decode_2d_line(
 
 /// A reusable context for decoding CCITT images.
 pub struct DecoderContext {
-    /// Color changes in the reference line (previous line).
-    ref_changes: Vec<ColorChange>,
+    /// Positions of the color changes in the reference line (previous line).
+    ///
+    /// Since colors alternate and each line starts with white, changes at even
+    /// indices are changes to black and changes at odd indices to white.
+    ref_changes: Vec<u32>,
     /// The minimum index we need to start from when searching for b1.
     ref_pos: u32,
     /// The current index of b1.
     b1_idx: u32,
-    /// Color changes in the coding line (current line being decoded).
-    coding_changes: Vec<ColorChange>,
+    /// Positions of the color changes in the coding line (current line being
+    /// decoded).
+    coding_changes: Vec<u32>,
     /// Current position in the coding line (number of pixels decoded).
     pixels_decoded: u32,
     /// The width of a line in pixels (i.e. number of columns).
@@ -513,7 +510,8 @@ impl DecoderContext {
     fn b1(&self) -> u32 {
         self.ref_changes
             .get(self.b1_idx as usize)
-            .map_or(self.line_width, |c| c.idx)
+            .copied()
+            .unwrap_or(self.line_width)
     }
 
     /// "The next changing element to the right of b1, on the reference line."
@@ -521,32 +519,30 @@ impl DecoderContext {
     fn b2(&self) -> u32 {
         self.ref_changes
             .get(self.b1_idx as usize + 1)
-            .map_or(self.line_width, |c| c.idx)
+            .copied()
+            .unwrap_or(self.line_width)
     }
 
     /// Compute the new position of b1 (and implicitly b2).
     #[inline(always)]
     fn update_b(&mut self) {
-        // b1 refers to an element of the opposite color.
-        let target_color = self.color.opposite();
         // b1 must be strictly greater than a0.
         let min_idx = self.a0().map_or(0, |a| a + 1);
+        let mut idx = self.ref_pos as usize;
 
-        self.b1_idx = self.line_width;
-
-        for i in self.ref_pos..self.ref_changes.len() as u32 {
-            let change = &self.ref_changes[i as usize];
-
-            if change.idx < min_idx {
-                self.ref_pos = i + 1;
-                continue;
-            }
-
-            if change.color == target_color {
-                self.b1_idx = i;
-                break;
-            }
+        while self.ref_changes.get(idx).is_some_and(|&c| c < min_idx) {
+            idx += 1;
         }
+
+        self.ref_pos = idx as u32;
+
+        // b1 refers to an element of the opposite color, i.e. a change to black
+        // (even index) if the current color is white and vice versa.
+        if idx.is_multiple_of(2) != self.color.is_white() {
+            idx += 1;
+        }
+
+        self.b1_idx = idx as u32;
     }
 
     #[inline(always)]
@@ -556,21 +552,15 @@ impl DecoderContext {
         let white = self.color.is_white() ^ self.invert_black;
         decoder.push_pixels(white, count);
 
-        // Track the color change:
-        // - At start of line (no previous changes): only add if color differs from
-        //   imaginary white, i.e., only add if black.
-        // - Mid-line: only add if color differs from previous.
         if count > 0 {
-            let is_change = self
-                .coding_changes
-                .last()
-                .map_or(!self.color.is_white(), |last| last.color != self.color);
-            if is_change {
-                self.coding_changes.push(ColorChange {
-                    idx: self.pixels_decoded,
-                    color: self.color,
-                });
+            // Since colors alternate, an odd number of changes means that the
+            // last pixel is black.
+            let last_is_white = self.coding_changes.len().is_multiple_of(2);
+
+            if last_is_white != self.color.is_white() {
+                self.coding_changes.push(self.pixels_decoded);
             }
+
             self.pixels_decoded += count;
         }
     }
