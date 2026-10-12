@@ -17,12 +17,13 @@ pub(crate) fn decode(
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
-    // In case `Rows` is smaller than image height, take the image height.
-    // Seems to match what Chromium does.
-    let rows = params
-        .get::<u32>(ROWS)
-        .unwrap_or(0)
-        .max(image_params.height);
+    // `Rows` should match the height of the image, but in case it doesn't,
+    // the image height takes precedence (as in other viewers).
+    let rows = if image_params.height > 0 {
+        image_params.height
+    } else {
+        params.get::<u32>(ROWS).unwrap_or(0)
+    };
     let output_len = (columns as usize).checked_mul(rows as usize)?;
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
