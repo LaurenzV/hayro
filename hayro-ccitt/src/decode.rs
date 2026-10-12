@@ -2,10 +2,6 @@ use crate::bit_reader::BitReader;
 use crate::state_machine::{BLACK_STATES, INVALID, State, TERMINAL, VALUE_MASK, WHITE_STATES};
 use crate::{Color, DecodeError, Result};
 
-/// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
-/// Two consecutive EOL codes: 000000000001 000000000001.
-pub(crate) const EOFB: u32 = 0x1001;
-
 /// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {

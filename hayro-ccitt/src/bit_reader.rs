@@ -39,11 +39,6 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline(always)]
-    pub(crate) fn peak_bits(&mut self, num_bits: usize) -> Result<u32> {
-        self.clone().read_bits(num_bits)
-    }
-
-    #[inline(always)]
     pub(crate) fn align(&mut self) {
         let bit_pos = self.bit_pos();
 

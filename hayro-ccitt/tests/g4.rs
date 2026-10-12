@@ -29,3 +29,11 @@ fn byte_align_eofb() {
         s.end_of_block = true;
     });
 }
+
+#[test]
+fn eol() {
+    check("g4_eol", "base", |s| {
+        s.end_of_line = true;
+        s.end_of_block = true;
+    });
+}

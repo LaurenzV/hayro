@@ -32,7 +32,7 @@ extern crate alloc;
 
 use crate::bit_reader::BitReader;
 
-use crate::decode::{EOFB, Mode};
+use crate::decode::Mode;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -250,8 +250,11 @@ fn decode_group4(
     decoder: &mut impl Decoder,
 ) -> Result<()> {
     loop {
-        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
-            reader.read_bits(24)?;
+        // EOLs aren't part of Group 4, but PDF requires decoders to accept them
+        // anyway. An EOFB consists of two consecutive EOLs.
+        let eol_count = reader.read_eol_if_available();
+
+        if ctx.settings.end_of_block && eol_count >= 2 {
             break;
         }
 
