@@ -182,11 +182,11 @@ fn decode_group3_1d(
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available();
+    ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
         decode_1d_line(ctx, reader, decoder)?;
-        ctx.next_line(reader, decoder)?;
+        ctx.next_line(decoder)?;
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -204,7 +204,7 @@ fn decode_group3_2d(
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available();
+    ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
         let tag_bit = reader.read_bit()?;
@@ -215,7 +215,7 @@ fn decode_group3_2d(
             decode_2d_line(ctx, reader, decoder)?;
         }
 
-        ctx.next_line(reader, decoder)?;
+        ctx.next_line(decoder)?;
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -227,6 +227,15 @@ fn decode_group3_2d(
 
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
 fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> bool {
+    // If the data contains EOLs, we treat the zeros used for byte alignment as
+    // fill, so it doesn't matter whether the encoder aligned the start or the
+    // end of the EOL. Without EOLs, we need to align first, as the padding
+    // together with the leading zeros of the next line could otherwise be
+    // mistaken for an EOL.
+    if ctx.settings.rows_are_byte_aligned && !ctx.has_eols {
+        reader.align();
+    }
+
     let eol_count = reader.read_eol_if_available();
 
     // T.4 Section 4.1.4: "The end of a document transmission is indicated by
@@ -263,7 +272,11 @@ fn decode_group4(
         }
 
         decode_2d_line(ctx, reader, decoder)?;
-        ctx.next_line(reader, decoder)?;
+        ctx.next_line(decoder)?;
+
+        if ctx.settings.rows_are_byte_aligned {
+            reader.align();
+        }
     }
 
     Ok(())
@@ -358,6 +371,8 @@ pub struct DecoderContext {
     settings: DecodeSettings,
     /// Whether to invert black and white.
     invert_black: bool,
+    /// Whether the data contains EOLs.
+    has_eols: bool,
 }
 
 impl DecoderContext {
@@ -375,6 +390,7 @@ impl DecoderContext {
             decoded_rows: 0,
             settings,
             invert_black: settings.invert_black,
+            has_eols: false,
         }
     }
 
@@ -388,6 +404,7 @@ impl DecoderContext {
         self.color = Color::White;
         self.decoded_rows = 0;
         self.invert_black = self.settings.invert_black;
+        self.has_eols = false;
     }
 
     /// `a0` refers to the first changing element on the current line.
@@ -478,7 +495,7 @@ impl DecoderContext {
     }
 
     #[inline(always)]
-    fn next_line(&mut self, reader: &mut BitReader<'_>, decoder: &mut impl Decoder) -> Result<()> {
+    fn next_line(&mut self, decoder: &mut impl Decoder) -> Result<()> {
         if self.pixels_decoded != self.settings.columns {
             return Err(DecodeError::LineLengthMismatch);
         }
@@ -491,10 +508,6 @@ impl DecoderContext {
         self.color = Color::White;
         self.decoded_rows += 1;
         decoder.next_line();
-
-        if self.settings.rows_are_byte_aligned {
-            reader.align();
-        }
 
         self.update_b();
 

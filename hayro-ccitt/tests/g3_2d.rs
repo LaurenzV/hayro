@@ -40,6 +40,15 @@ fn byte_align_eol() {
 }
 
 #[test]
+fn byte_align_eol_fill() {
+    check("g3_2d_byte_align_eol_fill", "base", |s| {
+        s.encoding = G3_2D;
+        s.end_of_line = true;
+        s.rows_are_byte_aligned = true;
+    });
+}
+
+#[test]
 fn all_1d() {
     check("g3_2d_all_1d", "base", |s| s.encoding = G3_2D);
 }

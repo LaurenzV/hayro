@@ -56,6 +56,15 @@ fn byte_align_eol() {
 }
 
 #[test]
+fn byte_align_eol_fill() {
+    check("g3_1d_byte_align_eol_fill", "base", |s| {
+        s.encoding = G3_1D;
+        s.end_of_line = true;
+        s.rows_are_byte_aligned = true;
+    });
+}
+
+#[test]
 fn byte_align_rtc() {
     check("g3_1d_byte_align_rtc", "base", |s| {
         s.encoding = G3_1D;
