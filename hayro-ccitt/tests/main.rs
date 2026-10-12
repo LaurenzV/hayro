@@ -8,6 +8,7 @@ mod g3_1d;
 mod g3_2d;
 mod g4;
 mod modes;
+mod recovery;
 mod settings;
 
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode, decode};

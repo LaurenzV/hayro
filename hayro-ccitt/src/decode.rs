@@ -124,20 +124,48 @@ impl BitReader<'_> {
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
 
-        loop {
-            let mut reader = self.clone();
-            let mut zeros = 0;
-
-            loop {
-                match reader.read_bit() {
-                    Ok(0) => zeros += 1,
-                    Ok(_) if zeros >= 11 => break,
-                    _ => return count,
-                }
+        while let (zeros, Some(after)) = self.zero_run() {
+            if zeros < 11 {
+                break;
             }
 
-            *self = reader;
+            *self = after;
             count += 1;
+        }
+
+        count
+    }
+
+    /// Advance to the start of the next EOL (including any fill preceding it),
+    /// without consuming it. Returns `false` and doesn't advance if there is
+    /// none.
+    pub(crate) fn skip_to_eol(&mut self) -> bool {
+        let mut reader = self.clone();
+
+        while let (zeros, Some(after)) = reader.zero_run() {
+            if zeros >= 11 {
+                *self = reader;
+                return true;
+            }
+
+            reader = after;
+        }
+
+        false
+    }
+
+    /// Count the zeros at the current position and return a reader positioned
+    /// after the 1 that terminates them, if there is one.
+    fn zero_run(&self) -> (usize, Option<Self>) {
+        let mut reader = self.clone();
+        let mut zeros = 0;
+
+        loop {
+            match reader.read_bit() {
+                Ok(0) => zeros += 1,
+                Ok(_) => return (zeros, Some(reader)),
+                Err(_) => return (zeros, None),
+            }
         }
     }
 }

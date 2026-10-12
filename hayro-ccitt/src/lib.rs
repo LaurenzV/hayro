@@ -189,7 +189,12 @@ fn decode_group3_1d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
-        decode_1d_line(ctx, reader, decoder)?;
+        let line_start = reader.clone();
+
+        if let Err(e) = decode_1d_line(ctx, reader, decoder) {
+            group3_recover(ctx, reader, decoder, line_start, e)?;
+        }
+
         ctx.next_line(decoder)?;
 
         if group3_check_eob(ctx, reader) {
@@ -211,12 +216,18 @@ fn decode_group3_2d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
-        let tag_bit = reader.read_bit()?;
+        let line_start = reader.clone();
 
-        if tag_bit == 1 {
-            decode_1d_line(ctx, reader, decoder)?;
-        } else {
-            decode_2d_line(ctx, reader, decoder)?;
+        let result = reader.read_bit().and_then(|tag_bit| {
+            if tag_bit == 1 {
+                decode_1d_line(ctx, reader, decoder)
+            } else {
+                decode_2d_line(ctx, reader, decoder)
+            }
+        });
+
+        if let Err(e) = result {
+            group3_recover(ctx, reader, decoder, line_start, e)?;
         }
 
         ctx.next_line(decoder)?;
@@ -225,6 +236,30 @@ fn decode_group3_2d(
             break;
         }
     }
+
+    Ok(())
+}
+
+/// Recover from a damaged line by continuing at the next EOL.
+#[cold]
+fn group3_recover<'a>(
+    ctx: &mut DecoderContext,
+    reader: &mut BitReader<'a>,
+    decoder: &mut impl Decoder,
+    line_start: BitReader<'a>,
+    error: DecodeError,
+) -> Result<()> {
+    if !ctx.has_eols {
+        return Err(error);
+    }
+
+    // Valid data never contains an EOL, so the first EOL after the start of
+    // the line must be the one terminating it. Since the line won't be
+    // followed by an EOL from its start, `group3_check_eob` will skip to it.
+    *reader = line_start;
+
+    ctx.color = Color::White;
+    ctx.push_pixels(decoder, ctx.line_width - ctx.pixels_decoded);
 
     Ok(())
 }
@@ -240,7 +275,19 @@ fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> boo
         reader.align();
     }
 
-    let eol_count = reader.read_eol_if_available();
+    let mut eol_count = reader.read_eol_if_available();
+    let rows_done = ctx.decoded_rows == ctx.settings.rows;
+
+    // If a line isn't followed by an EOL even though the data contains EOLs,
+    // the line contained more data than expected, so we skip the rest.
+    if eol_count == 0 && ctx.has_eols && !rows_done && !reader.at_end() {
+        if reader.skip_to_eol() {
+            eol_count = reader.read_eol_if_available();
+        } else {
+            // There are no more EOLs, so don't search for them again.
+            ctx.has_eols = false;
+        }
+    }
 
     // T.4 Section 4.1.4: "The end of a document transmission is indicated by
     // sending six consecutive EOLs."
@@ -250,11 +297,7 @@ fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> boo
         return true;
     }
 
-    if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
-        return true;
-    }
-
-    false
+    rows_done || reader.at_end()
 }
 
 fn decode_group4(
