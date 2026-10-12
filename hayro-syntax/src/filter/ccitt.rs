@@ -42,7 +42,7 @@ pub(crate) fn decode(
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
     // into an RGBA8 image.
 
-    let (decoded, bpc) = if image_params.is_indexed {
+    let (decoded, bpc, decoded_rows) = if image_params.is_indexed {
         struct BitPackDecoder {
             output: Vec<u8>,
             stride: usize,
@@ -125,7 +125,7 @@ pub(crate) fn decode(
 
         decoder.output.truncate(decoder.row_start);
 
-        (decoder.output, 1)
+        (decoder.output, 1, decoder.decoded_rows)
     } else {
         struct Luma8Decoder {
             output: Vec<u8>,
@@ -171,7 +171,7 @@ pub(crate) fn decode(
             decoder.output.resize(decoder.idx, 0xFF);
         }
 
-        (decoder.output, 8)
+        (decoder.output, 8, decoder.decoded_rows)
     };
 
     Some(FilterResult {
@@ -181,7 +181,7 @@ pub(crate) fn decode(
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
             width: settings.columns,
-            height: rows,
+            height: if rows == 0 { decoded_rows } else { rows },
         }),
     })
 }
@@ -209,6 +209,7 @@ mod tests {
 
         let decoded = decode(&[0x35, 0x14], &params, &ImageDecodeParams::default()).unwrap();
         assert_eq!(decoded.data.as_ref(), &[0; 8]);
+        assert_eq!(decoded.image_data.unwrap().height, 1);
 
         let image_params = ImageDecodeParams {
             is_indexed: true,
@@ -216,5 +217,6 @@ mod tests {
         };
         let decoded = decode(&[0x35, 0x14], &params, &image_params).unwrap();
         assert_eq!(decoded.data.as_ref(), &[0]);
+        assert_eq!(decoded.image_data.unwrap().height, 1);
     }
 }
