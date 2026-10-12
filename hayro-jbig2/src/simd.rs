@@ -113,7 +113,7 @@ mod inner {
     impl Level {
         #[inline(always)]
         pub(crate) fn new() -> Self {
-            Level
+            Self
         }
     }
 
@@ -138,14 +138,13 @@ mod inner {
     impl<S: Simd> mask32x8<S> {
         #[inline(always)]
         pub(crate) fn select(self, if_true: u32x8<S>, if_false: u32x8<S>) -> u32x8<S> {
-            let mut result = [0u32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = if self.val[i] {
+            let result = core::array::from_fn(|i| {
+                if self.val[i] {
                     if_true.val[i]
                 } else {
                     if_false.val[i]
-                };
-            }
+                }
+            });
             u32x8 {
                 val: result,
                 _marker: PhantomData,
@@ -164,7 +163,7 @@ mod inner {
     impl<S: Simd> u32x8<S> {
         #[inline(always)]
         pub(crate) fn from_slice(_simd: S, slice: &[u32]) -> Self {
-            let mut val = [0u32; SIMD_WIDTH];
+            let mut val = [0_u32; SIMD_WIDTH];
             val.copy_from_slice(&slice[..SIMD_WIDTH]);
             Self {
                 val,
@@ -187,10 +186,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn simd_gt(self, other: Self) -> mask32x8<S> {
-            let mut result = [false; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] > other.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] > other.val[i]);
             mask32x8 {
                 val: result,
                 _marker: PhantomData,
@@ -202,10 +198,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn bitand(self, rhs: Self) -> Self {
-            let mut result = [0u32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] & rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] & rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -217,10 +210,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn bitor(self, rhs: Self) -> Self {
-            let mut result = [0u32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] | rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] | rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -232,10 +222,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn bitxor(self, rhs: Self) -> Self {
-            let mut result = [0u32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] ^ rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] ^ rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,

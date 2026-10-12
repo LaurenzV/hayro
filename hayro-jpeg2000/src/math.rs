@@ -176,7 +176,7 @@ mod inner {
     impl Level {
         #[inline(always)]
         pub(crate) fn new() -> Self {
-            Level
+            Self
         }
     }
 
@@ -191,7 +191,7 @@ mod inner {
     impl<S: Simd> f32x8<S> {
         #[inline(always)]
         pub(crate) fn from_slice(_simd: S, slice: &[f32]) -> Self {
-            let mut val = [0.0f32; SIMD_WIDTH];
+            let mut val = [0.0_f32; SIMD_WIDTH];
             val.copy_from_slice(&slice[..SIMD_WIDTH]);
             Self {
                 val,
@@ -209,10 +209,8 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn mul_add(self, mul: Self, addend: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::mul_add(self.val[i], mul.val[i], addend.val[i]);
-            }
+            let result =
+                core::array::from_fn(|i| super::mul_add(self.val[i], mul.val[i], addend.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -221,10 +219,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn floor(self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::floor_f32(self.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::floor_f32(self.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -272,10 +267,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn min(self, other: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::min_f32(self.val[i], other.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::min_f32(self.val[i], other.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -284,10 +276,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn max(self, other: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::max_f32(self.val[i], other.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::max_f32(self.val[i], other.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -299,10 +288,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn add(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] + rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] + rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -314,10 +300,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn sub(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] - rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] - rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -329,10 +312,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn mul(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] * rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] * rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -344,10 +324,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn add(self, rhs: f32) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] + rhs;
-            }
+            let result = core::array::from_fn(|i| self.val[i] + rhs);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -359,10 +336,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn mul(self, rhs: f32) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] * rhs;
-            }
+            let result = core::array::from_fn(|i| self.val[i] * rhs);
             Self {
                 val: result,
                 _marker: PhantomData,
