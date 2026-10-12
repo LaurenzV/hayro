@@ -25,23 +25,19 @@ pub(crate) fn decode(
         params.get::<u32>(ROWS).unwrap_or(0)
     };
     let output_len = (columns as usize).checked_mul(rows as usize)?;
-    let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
-    let settings = DecodeSettings {
-        columns,
-        rows,
-        end_of_block,
-        end_of_line: params.get::<bool>(END_OF_LINE).unwrap_or(false),
-        rows_are_byte_aligned: params.get::<bool>(ENCODED_BYTE_ALIGN).unwrap_or(false),
-        encoding: if k < 0 {
-            EncodingMode::Group4
-        } else if k == 0 {
-            EncodingMode::Group3_1D
-        } else {
-            EncodingMode::Group3_2D
-        },
-        invert_black: params.get::<bool>(BLACK_IS_1).unwrap_or(false),
+    let mut settings = DecodeSettings::new(columns, rows);
+    settings.end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
+    settings.end_of_line = params.get::<bool>(END_OF_LINE).unwrap_or(false);
+    settings.rows_are_byte_aligned = params.get::<bool>(ENCODED_BYTE_ALIGN).unwrap_or(false);
+    settings.encoding = if k < 0 {
+        EncodingMode::Group4
+    } else if k == 0 {
+        EncodingMode::Group3_1D
+    } else {
+        EncodingMode::Group3_2D
     };
+    settings.invert_black = params.get::<bool>(BLACK_IS_1).unwrap_or(false);
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted

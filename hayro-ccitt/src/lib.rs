@@ -45,6 +45,7 @@ pub type Result<T> = core::result::Result<T, DecodeError>;
 
 /// An error that can occur during CCITT decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DecodeError {
     /// Unexpected end of input while reading bits.
     UnexpectedEof,
@@ -68,6 +69,7 @@ impl core::error::Error for DecodeError {}
 
 /// The encoding mode for CCITT fax decoding.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EncodingMode {
     /// Group 4 (MMR).
     Group4,
@@ -78,7 +80,11 @@ pub enum EncodingMode {
 }
 
 /// Settings to apply during decoding.
+///
+/// Created with [`DecodeSettings::new`]. The defaults of all other settings
+/// match the defaults of the `CCITTFaxDecode` filter in PDF.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct DecodeSettings {
     /// How many columns the image has (i.e. its width).
     pub columns: u32,
@@ -86,22 +92,49 @@ pub struct DecodeSettings {
     ///
     /// In case `end_of_block` has been set to true, decoding will run until
     /// the given number of rows have been decoded, or the `end_of_block` marker
-    /// has been encountered, whichever occurs first.
+    /// has been encountered, whichever occurs first. If set to 0, decoding
+    /// runs until the end-of-block marker or the end of the data.
     pub rows: u32,
     /// Whether the stream _MAY_ contain an end-of-block marker
     /// (It doesn't have to. In that case this is set to `true` but there are
     /// no end-of-block markers, hayro-ccitt will still use the value of `rows`
     /// to determine when to stop decoding).
+    ///
+    /// Defaults to `true`.
     pub end_of_block: bool,
     /// Whether the stream contains end-of-line markers.
+    ///
+    /// Defaults to `false`.
     pub end_of_line: bool,
     /// Whether the data in the stream for each row is aligned to the byte
     /// boundary.
+    ///
+    /// Defaults to `false`.
     pub rows_are_byte_aligned: bool,
     /// The encoding mode used by the image.
+    ///
+    /// Defaults to [`EncodingMode::Group3_1D`].
     pub encoding: EncodingMode,
     /// Whether black and white should be inverted.
+    ///
+    /// Defaults to `false`.
     pub invert_black: bool,
+}
+
+impl DecodeSettings {
+    /// Creates new settings for an image with the given number of columns and
+    /// rows, using the default values for all other settings.
+    pub fn new(columns: u32, rows: u32) -> Self {
+        Self {
+            columns,
+            rows,
+            end_of_block: true,
+            end_of_line: false,
+            rows_are_byte_aligned: false,
+            encoding: EncodingMode::Group3_1D,
+            invert_black: false,
+        }
+    }
 }
 
 /// A decoder for CCITT images.

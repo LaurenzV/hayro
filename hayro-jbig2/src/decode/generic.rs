@@ -232,26 +232,21 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     let height = bitmap.height;
     let mut decoder = BitmapDecoder::new(bitmap);
 
-    let settings = hayro_ccitt::DecodeSettings {
-        columns: width,
-        rows: height,
-        // "If the number of bytes contained in the encoded bitmap is known in
-        // advance, then it is permissible for the data stream not to contain
-        // an EOFB" (6.2.6). But it _can_ contain it, which is what this
-        // flag indicates.
-        end_of_block: true,
-        end_of_line: false,
-        rows_are_byte_aligned: false,
-        encoding: hayro_ccitt::EncodingMode::Group4,
-        // "Pixels decoded by the MMR decoder having the value 'black' shall be
-        // treated as having the value 1. Pixels decoded by the MMR decoder
-        // having the value 'white' shall be treated as having the value 0."
-        // (6.2.6)
-        //
-        // hayro-ccitt uses 1 for white, 0 for black by default, so we need to
-        // invert to match JBIG2 convention.
-        invert_black: true,
-    };
+    let mut settings = hayro_ccitt::DecodeSettings::new(width, height);
+    // "If the number of bytes contained in the encoded bitmap is known in
+    // advance, then it is permissible for the data stream not to contain
+    // an EOFB" (6.2.6). But it _can_ contain it, which is what this
+    // flag indicates.
+    settings.end_of_block = true;
+    settings.encoding = hayro_ccitt::EncodingMode::Group4;
+    // "Pixels decoded by the MMR decoder having the value 'black' shall be
+    // treated as having the value 1. Pixels decoded by the MMR decoder
+    // having the value 'white' shall be treated as having the value 0."
+    // (6.2.6)
+    //
+    // hayro-ccitt uses 1 for white, 0 for black by default, so we need to
+    // invert to match JBIG2 convention.
+    settings.invert_black = true;
 
     // "An invocation of the generic region decoding procedure with MMR equal to
     // 1 shall consume an integral number of bytes, beginning and ending on a
