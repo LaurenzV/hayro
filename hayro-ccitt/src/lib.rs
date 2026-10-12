@@ -164,6 +164,10 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext)
     ctx.reset();
     let mut reader = BitReader::new(data);
 
+    if ctx.settings.columns == 0 {
+        return Ok(0);
+    }
+
     match ctx.settings.encoding {
         EncodingMode::Group4 => decode_group4(ctx, &mut reader, decoder)?,
         EncodingMode::Group3_1D => decode_group3_1d(ctx, &mut reader, decoder)?,
@@ -267,7 +271,7 @@ fn decode_group4(
             break;
         }
 
-        if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
+        if (ctx.settings.rows != 0 && ctx.decoded_rows == ctx.settings.rows) || reader.at_end() {
             break;
         }
 
