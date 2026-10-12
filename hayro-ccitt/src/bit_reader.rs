@@ -37,17 +37,6 @@ impl<'a> BitReader<'a> {
         Ok(bit)
     }
 
-    #[inline(always)]
-    pub(crate) fn read_bits(&mut self, num_bits: usize) -> Result<u32> {
-        let mut result = 0_u32;
-
-        for i in (0..num_bits).rev() {
-            result |= (self.read_bit()?) << i;
-        }
-
-        Ok(result)
-    }
-
     /// Return the next 32 bits without consuming them. Bits past the end of the
     /// data are zero.
     #[inline(always)]

@@ -69,42 +69,40 @@ impl BitReader<'_> {
         }
     }
 
-    /// Decode a 2D mode code.
+    /// Decode a 2D mode code (T.4 Table 4, T.6 Table 1).
     #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Result<Mode> {
-        if self.read_bit()? == 1 {
+        let bits = self.peek_u32();
+
+        if bits >> 31 == 1 {
+            self.consume(1)?;
             return Ok(Mode::Vertical(0));
         }
 
-        match self.read_bits(2)? {
-            0b01 => return Ok(Mode::Horizontal),
-            0b11 => return Ok(Mode::Vertical(1)),
-            0b10 => return Ok(Mode::Vertical(-1)),
-            0b00 => {}
-            _ => unreachable!(),
-        }
-
-        if self.read_bit()? == 1 {
-            return Ok(Mode::Pass);
-        }
-
-        if self.read_bit()? == 1 {
-            return Ok(if self.read_bit()? == 1 {
-                Mode::Vertical(2)
-            } else {
-                Mode::Vertical(-2)
-            });
-        }
-
-        if self.read_bit()? == 0 {
-            return Err(DecodeError::InvalidCode);
-        }
-
-        Ok(if self.read_bit()? == 1 {
-            Mode::Vertical(3)
+        let zeros = bits.leading_zeros();
+        // The bit following the first 1 determines the direction of vertical
+        // modes.
+        let offset = if (bits << zeros << 1) >> 31 == 1 {
+            1
         } else {
-            Mode::Vertical(-3)
-        })
+            -1
+        };
+
+        let (mode, len) = match zeros {
+            1 => (Mode::Vertical(offset), 3),
+            2 => (Mode::Horizontal, 3),
+            3 => (Mode::Pass, 4),
+            4 => (Mode::Vertical(2 * offset), 6),
+            5 => (Mode::Vertical(3 * offset), 7),
+            _ => {
+                self.consume(6)?;
+                return Err(DecodeError::InvalidCode);
+            }
+        };
+
+        self.consume(len)?;
+
+        Ok(mode)
     }
 
     /// Read EOL (End-of-Line) codes if present (T.4 Section 4.1.2).
