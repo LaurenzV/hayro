@@ -53,13 +53,11 @@ fn huffman_refine_one() {
 }
 
 #[test]
-#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
 fn huffman_aggregate() {
     check("symbol_huffman_aggregate", "honeycomb");
 }
 
 #[test]
-#[ignore = "refinement contexts must not be reset between symbol instances in Huffman text regions (7.4.3.2)"]
 fn huffman_refine_text_refine() {
     check("symbol_huffman_refine_text_refine", "honeycomb");
 }

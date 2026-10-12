@@ -373,7 +373,13 @@ fn decode_aggregation_bitmap(
     };
 
     let decode_ctx = if use_huffman {
-        DecodeContext::new_huffman(&mut ctx.h_ctx.reader, &header, &[], ctx.standard_tables)?
+        DecodeContext::new_huffman(
+            &mut ctx.h_ctx.reader,
+            &header,
+            &[],
+            ctx.standard_tables,
+            &mut ctx.a_ctx.refinement_region_contexts,
+        )?
     } else {
         let contexts = ctx
             .a_ctx

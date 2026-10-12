@@ -1,6 +1,5 @@
 //! Text region segment parsing and decoding (7.4.3, 6.4).
 
-use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
@@ -57,10 +56,21 @@ pub(crate) fn decode_into(
     bitmap: &mut Bitmap,
     scratch: &mut ScratchBuffers,
 ) -> Result<()> {
+    let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
+    scratch.contexts.clear();
+    scratch
+        .contexts
+        .resize(num_gr_contexts, ArithmeticDecoderContext::default());
+
     if header.flags.use_huffman {
         let mut reader = Reader::new(header.data);
-        let ctx =
-            DecodeContext::new_huffman(&mut reader, header, referred_tables, standard_tables)?;
+        let ctx = DecodeContext::new_huffman(
+            &mut reader,
+            header,
+            referred_tables,
+            standard_tables,
+            &mut scratch.contexts,
+        )?;
         decode_with(ctx, symbols, header, bitmap)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
@@ -68,12 +78,6 @@ pub(crate) fn decode_into(
         let num_symbols = symbols.len() as u32;
         let symbol_code_length = 32 - num_symbols.saturating_sub(1).leading_zeros();
         let mut contexts = TextRegionContexts::new(symbol_code_length);
-
-        let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
-        scratch.contexts.clear();
-        scratch
-            .contexts
-            .resize(num_gr_contexts, ArithmeticDecoderContext::default());
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
         decode_with(ctx, symbols, header, bitmap)?;
@@ -266,6 +270,7 @@ pub(crate) enum DecodeContext<'a, 'b> {
         reader: &'a mut Reader<'b>,
         tables: TextRegionHuffmanTables<'a>,
         symbol_codes: &'a HuffmanTable,
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     },
     Arithmetic {
         decoder: &'a mut ArithmeticDecoder<'b>,
@@ -280,6 +285,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         header: &'a TextRegionHeader<'_>,
         referred_tables: &'a [HuffmanTable],
         standard_tables: &'a StandardHuffmanTables,
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     ) -> Result<Self> {
         let huffman_flags = header
             .huffman_flags
@@ -295,6 +301,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             reader,
             tables,
             symbol_codes,
+            gr_contexts,
         })
     }
 
@@ -474,7 +481,12 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         refinement_at_pixels: &[AdaptiveTemplatePixel],
     ) -> Result<()> {
         match self {
-            DecodeContext::Huffman { reader, tables, .. } => {
+            DecodeContext::Huffman {
+                reader,
+                tables,
+                gr_contexts,
+                ..
+            } => {
                 let refinement_data_size = tables.refinement_size.decode_no_oob(reader)? as u32;
                 reader.align();
 
@@ -483,12 +495,10 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                     .ok_or(ParseError::UnexpectedEof)?;
 
                 let mut decoder = ArithmeticDecoder::new(refinement_data);
-                let num_context_bits = refinement_template.context_bits();
-                let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
                 generic_refinement::decode_bitmap(
                     &mut decoder,
-                    &mut contexts,
+                    gr_contexts,
                     refined,
                     reference_bitmap,
                     reference_x_offset,
