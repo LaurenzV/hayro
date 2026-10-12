@@ -264,6 +264,45 @@ fn group3_recover<'a>(
     Ok(())
 }
 
+/// Read consecutive EOLs.
+///
+/// In 2D data, an RTC consists of six times EOL + 1 (T.4 Section 4.2.4), so
+/// tag bits between EOLs are skipped as well, including the one after the last
+/// EOL of an RTC.
+fn group3_read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
+    let mut eol_count = reader.read_eol_if_available();
+
+    if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D { .. }) {
+        return eol_count;
+    }
+
+    while eol_count > 0 {
+        let mut next = reader.clone();
+
+        if next.read_bit() != Ok(1) {
+            break;
+        }
+
+        match next.read_eol_if_available() {
+            0 => {
+                // Unless this is the last tag bit of an RTC, it belongs to the
+                // next line.
+                if eol_count >= 6 {
+                    *reader = next;
+                }
+
+                break;
+            }
+            count => {
+                *reader = next;
+                eol_count += count;
+            }
+        }
+    }
+
+    eol_count
+}
+
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
 fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> bool {
     // If the data contains EOLs, we treat the zeros used for byte alignment as
@@ -275,14 +314,14 @@ fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> boo
         reader.align();
     }
 
-    let mut eol_count = reader.read_eol_if_available();
+    let mut eol_count = group3_read_eols(ctx, reader);
     let rows_done = ctx.decoded_rows == ctx.settings.rows;
 
     // If a line isn't followed by an EOL even though the data contains EOLs,
     // the line contained more data than expected, so we skip the rest.
     if eol_count == 0 && ctx.has_eols && !rows_done && !reader.at_end() {
         if reader.skip_to_eol() {
-            eol_count = reader.read_eol_if_available();
+            eol_count = group3_read_eols(ctx, reader);
         } else {
             // There are no more EOLs, so don't search for them again.
             ctx.has_eols = false;

@@ -23,6 +23,15 @@ fn eol_fill() {
 }
 
 #[test]
+fn rtc() {
+    check("g3_2d_rtc", "base", |s| {
+        s.encoding = G3_2D;
+        s.end_of_line = true;
+        s.end_of_block = true;
+    });
+}
+
+#[test]
 fn byte_align() {
     check("g3_2d_byte_align", "base", |s| {
         s.encoding = G3_2D;

@@ -1,4 +1,4 @@
-use crate::{G3_1D, check, check_consumed};
+use crate::{G3_1D, G3_2D, check, check_consumed};
 
 #[test]
 fn black_is_1() {
@@ -39,5 +39,15 @@ fn end_of_block_without_rtc() {
         s.encoding = G3_1D;
         s.end_of_line = true;
         s.end_of_block = true;
+    });
+}
+
+#[test]
+fn rows_unknown_rtc_2d() {
+    check("g3_2d_rtc", "base", |s| {
+        s.encoding = G3_2D;
+        s.end_of_line = true;
+        s.end_of_block = true;
+        s.rows = 0;
     });
 }
