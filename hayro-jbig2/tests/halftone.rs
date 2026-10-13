@@ -86,3 +86,33 @@ fn rotated_grid_skip_template3() {
 fn combination_operators() {
     check("halftone_combination_operators", "truchet");
 }
+
+#[test]
+fn tiles_xor() {
+    check("halftone_tiles_xor", "truchet");
+}
+
+#[test]
+fn tiles_and() {
+    check("halftone_tiles_and", "truchet");
+}
+
+#[test]
+fn tiles_xnor() {
+    check("halftone_tiles_xnor", "truchet");
+}
+
+#[test]
+fn tiles_replace() {
+    check("halftone_tiles_replace", "truchet");
+}
+
+#[test]
+fn large_patterns() {
+    check("halftone_large_patterns", "truchet");
+}
+
+#[test]
+fn tall_patterns() {
+    check("halftone_tall_patterns", "truchet");
+}
