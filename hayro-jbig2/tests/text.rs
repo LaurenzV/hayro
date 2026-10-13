@@ -58,6 +58,16 @@ fn refine_negative_delta_width() {
 }
 
 #[test]
+fn refine_positive_offset() {
+    check("text_refine_positive_offset", "honeycomb");
+}
+
+#[test]
+fn refine_large_offsets() {
+    check("text_refine_large_offsets", "honeycomb");
+}
+
+#[test]
 fn then_refine() {
     check("text_then_refine", "honeycomb");
 }

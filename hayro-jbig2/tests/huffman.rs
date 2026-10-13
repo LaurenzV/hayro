@@ -3,6 +3,11 @@
 use crate::check;
 
 #[test]
+fn text_refine_large_offsets() {
+    check("huffman_text_refine_large_offsets", "honeycomb");
+}
+
+#[test]
 #[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
 fn many_symbols() {
     check("huffman_many_symbols", "honeycomb");

@@ -28,6 +28,16 @@ fn refine_one() {
 }
 
 #[test]
+fn refine_offsets() {
+    check("symbol_refine_offsets", "honeycomb");
+}
+
+#[test]
+fn huffman_refine_offsets() {
+    check("symbol_huffman_refine_offsets", "honeycomb");
+}
+
+#[test]
 fn refine_one_custom_at() {
     check("symbol_refine_one_custom_at", "honeycomb");
 }
