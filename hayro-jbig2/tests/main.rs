@@ -6,6 +6,7 @@ mod file;
 mod generic;
 mod halftone;
 mod huffman;
+mod lenient;
 mod malformed;
 mod page;
 mod refinement;

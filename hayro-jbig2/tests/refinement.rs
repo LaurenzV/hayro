@@ -48,11 +48,6 @@ fn refined_region() {
 }
 
 #[test]
-fn page_part_intermediate() {
-    check("refine_page_part_intermediate", "truchet");
-}
-
-#[test]
 fn page() {
     check("refine_page", "truchet");
 }
