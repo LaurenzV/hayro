@@ -53,6 +53,16 @@ fn aggregate() {
 }
 
 #[test]
+fn aggregate_then_refine() {
+    check("symbol_aggregate_then_refine", "honeycomb");
+}
+
+#[test]
+fn huffman_aggregate_then_refine() {
+    check("symbol_huffman_aggregate_then_refine", "honeycomb");
+}
+
+#[test]
 fn refine_text_refine() {
     check("symbol_refine_text_refine", "honeycomb");
 }
