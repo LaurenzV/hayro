@@ -266,7 +266,7 @@ impl HuffmanTable {
         //         RANGELOW[NTEMP] = HTHIGH, NTEMP = NTEMP + 1
         //    This is the upper range table line for this table."
         lines.push(TableLine::upper(
-            current_range_low,
+            maximum_value,
             reader
                 .read_bits(prefix_length_bits)
                 .ok_or(HuffmanError::InvalidCode)? as u8,

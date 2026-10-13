@@ -56,3 +56,8 @@ fn missing_final_oob() {
 fn missing_final_oob_huffman() {
     check("lenient_missing_final_oob_huffman", "honeycomb");
 }
+
+#[test]
+fn table_past_hthigh() {
+    check("lenient_table_past_hthigh", "honeycomb");
+}
