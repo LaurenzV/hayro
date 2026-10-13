@@ -325,10 +325,14 @@ fn decode_aggregation_bitmap(
     let symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let symbol_id_table = if use_huffman {
-        Some(HuffmanTable::build_uniform(
-            ctx.total_symbols(),
-            symbol_code_length,
-        )?)
+        if ctx.h_ctx.aggregation_symbol_codes.is_none() {
+            ctx.h_ctx.aggregation_symbol_codes = Some(HuffmanTable::build_uniform(
+                ctx.total_symbols(),
+                symbol_code_length,
+            )?);
+        }
+
+        ctx.h_ctx.aggregation_symbol_codes.clone()
     } else {
         None
     };
@@ -529,6 +533,9 @@ struct HuffmanContext<'a> {
     /// `SDHUFFAGGINST`
     aggregation_instance_count_table: &'a HuffmanTable,
     export_run_length_table: &'a HuffmanTable,
+    /// The symbol ID codes of aggregations (6.5.8.2.3), which are the same
+    /// for all of them.
+    aggregation_symbol_codes: Option<HuffmanTable>,
     reader: Reader<'a>,
 }
 
@@ -587,6 +594,7 @@ impl<'a> HuffmanContext<'a> {
             collective_bitmap_size_table,
             aggregation_instance_count_table,
             export_run_length_table,
+            aggregation_symbol_codes: None,
         })
     }
 }
