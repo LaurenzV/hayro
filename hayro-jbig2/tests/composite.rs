@@ -23,6 +23,31 @@ fn and_xnor_refine() {
 }
 
 #[test]
+fn page_replace() {
+    check("composite_page_replace", "truchet");
+}
+
+#[test]
+fn page_default_pixel_and() {
+    check("composite_page_default_pixel_and", "truchet");
+}
+
+#[test]
+fn page_default_pixel_xnor() {
+    check("composite_page_default_pixel_xnor", "truchet");
+}
+
+#[test]
+fn page_default_pixel_replace() {
+    check("composite_page_default_pixel_replace", "truchet");
+}
+
+#[test]
+fn region_default_pixel() {
+    check("composite_region_default_pixel", "truchet");
+}
+
+#[test]
 fn or_xor_replace_text() {
     check("composite_or_xor_replace_text", "truchet");
 }
