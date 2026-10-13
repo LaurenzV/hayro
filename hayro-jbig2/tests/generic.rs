@@ -93,6 +93,11 @@ fn unknown_length() {
 }
 
 #[test]
+fn unknown_length_custom_at() {
+    check("generic_unknown_length_custom_at", "truchet");
+}
+
+#[test]
 fn trailing_7fff_stripped() {
     check("generic_trailing_7fff_stripped", "honeycomb");
 }

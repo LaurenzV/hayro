@@ -301,6 +301,16 @@ fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize> 
     let flags = scan.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let uses_mmr = (flags & 1) != 0;
 
+    // The AT flags (7.4.6.3) belong to the data part and can contain the end
+    // marker, so the search starts after them.
+    let at_bytes = match (uses_mmr, (flags >> 1) & 0x03, flags & 0x10 != 0) {
+        (true, _, _) => 0,
+        (false, 0, false) => 8,
+        (false, 0, true) => 24,
+        (false, _, _) => 2,
+    };
+    scan.skip_bytes(at_bytes).ok_or(ParseError::UnexpectedEof)?;
+
     // "if MMR is 1, they are preceded by the two-byte sequence 0x00 0x00;
     // if MMR is 0, they are preceded by the two-byte sequence 0xFF 0xAC."
     let end_marker: [u8; 2] = if uses_mmr { [0x00, 0x00] } else { [0xFF, 0xAC] };
