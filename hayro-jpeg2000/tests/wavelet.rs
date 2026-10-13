@@ -87,7 +87,6 @@ fn reduced_offset() {
 }
 
 #[test]
-#[ignore = "hayro leaves grid positions before the first sample of a subsampled component empty"]
 fn reduced_precinct_limited() {
     check_with(
         "wavelet_reduced_precinct_limited",

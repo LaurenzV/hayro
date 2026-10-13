@@ -31,7 +31,6 @@ fn single_row_odd_offset() {
 }
 
 #[test]
-#[ignore = "hayro leaves grid positions before the first sample of a subsampled component empty"]
 fn tall_narrow_subsampled_offset() {
     check(
         "codestream_tall_narrow_subsampled_offset",
