@@ -9,7 +9,7 @@ pub(crate) mod text;
 
 use crate::bitmap::Bitmap;
 use crate::decode::RefinementTemplate::{Template0, Template1};
-use crate::error::{ParseError, RegionError, Result, bail, err};
+use crate::error::{ParseError, RegionError, Result, err};
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -160,11 +160,6 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
 
     // "Bit 3: Colour extension flag (COLEXTFLAG)."
     let colour_extension = flags & 0x08 != 0;
-
-    // "Bits 4-7: Reserved; must be 0."
-    if flags & 0xF0 != 0 {
-        bail!(RegionError::InvalidCombinationOperator);
-    }
 
     Ok(RegionSegmentInfo {
         width,

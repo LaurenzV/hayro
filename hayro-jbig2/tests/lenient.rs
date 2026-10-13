@@ -26,3 +26,8 @@ fn refinement_of_immediate_region() {
 fn necessary_extension() {
     check("lenient_necessary_extension", "honeycomb");
 }
+
+#[test]
+fn reserved_region_flags() {
+    check("lenient_reserved_region_flags", "truchet");
+}
