@@ -3,6 +3,12 @@
 use crate::check;
 
 #[test]
+#[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
+fn many_symbols() {
+    check("huffman_many_symbols", "honeycomb");
+}
+
+#[test]
 fn standard_tables() {
     check("huffman_standard_tables", "honeycomb");
 }
@@ -25,6 +31,16 @@ fn uncompressed_symbols() {
 #[test]
 fn custom_tables() {
     check("huffman_custom_tables", "honeycomb");
+}
+
+#[test]
+fn symbol_id_run_codes() {
+    check("huffman_symbol_id_run_codes", "honeycomb");
+}
+
+#[test]
+fn trailing_unused_symbols() {
+    check("huffman_trailing_unused_symbols", "honeycomb");
 }
 
 #[test]
@@ -60,4 +76,9 @@ fn text_refine_custom_sizes_offsets() {
 #[test]
 fn text_refine_custom_data_size() {
     check("huffman_text_refine_custom_data_size", "honeycomb");
+}
+
+#[test]
+fn text_refine_global_tables() {
+    check("huffman_text_refine_global_tables", "honeycomb");
 }

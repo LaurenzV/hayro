@@ -8,6 +8,11 @@ fn basic() {
 }
 
 #[test]
+fn global() {
+    check("halftone_global", "maze");
+}
+
+#[test]
 fn template1() {
     check("halftone_template1", "maze");
 }

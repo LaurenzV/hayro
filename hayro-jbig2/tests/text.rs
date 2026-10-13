@@ -63,6 +63,11 @@ fn then_refine() {
 }
 
 #[test]
+fn large_integer() {
+    check("text_large_integer", "honeycomb");
+}
+
+#[test]
 fn composition() {
     check("text_composition", "honeycomb");
 }

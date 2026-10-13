@@ -63,6 +63,27 @@ fn huffman_refine_text_refine() {
 }
 
 #[test]
+fn refine_text_refine_export() {
+    check("symbol_refine_text_refine_export", "honeycomb");
+}
+
+#[test]
+fn huffman_refine_text_refine_export() {
+    check("symbol_huffman_refine_text_refine_export", "honeycomb");
+}
+
+#[test]
+fn global() {
+    check("symbol_global", "honeycomb");
+}
+
+#[test]
+#[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
+fn many_symbols() {
+    check("symbol_many_symbols", "honeycomb");
+}
+
+#[test]
 fn context_reuse() {
     check("symbol_context_reuse", "honeycomb");
 }
@@ -75,4 +96,9 @@ fn context_reuse_refine() {
 #[test]
 fn huffman_refine_after_arithmetic() {
     check("symbol_huffman_refine_after_arithmetic", "honeycomb");
+}
+
+#[test]
+fn huffman_context_reuse_refine() {
+    check("symbol_huffman_context_reuse_refine", "honeycomb");
 }
