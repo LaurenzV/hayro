@@ -36,3 +36,13 @@ fn reserved_region_flags() {
 fn reserved_segment_type() {
     check("lenient_reserved_segment_type", "truchet");
 }
+
+#[test]
+fn trailing_bytes() {
+    check("lenient_trailing_bytes", "honeycomb");
+}
+
+#[test]
+fn truncated_segment() {
+    check("lenient_truncated_segment", "truchet");
+}

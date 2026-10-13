@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use crate::error::{FormatError, ParseError, Result, bail};
+use crate::error::{DecodeError, FormatError, ParseError, Result, bail};
 use crate::reader::Reader;
 use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
@@ -165,7 +165,11 @@ pub(crate) fn parse_segments_sequential<'a>(
             break;
         }
 
-        let segment = parse_segment(reader, strict)?;
+        let segment = match parse_segment(reader, strict) {
+            Ok(segment) => segment,
+            Err(DecodeError::Parse(ParseError::UnexpectedEof)) if !strict => break,
+            Err(e) => return Err(e),
+        };
 
         // "If a file contains an end of file segment, it must be the last segment."
         // (7.4.11)
