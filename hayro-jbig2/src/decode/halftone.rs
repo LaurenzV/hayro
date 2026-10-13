@@ -307,12 +307,14 @@ fn render_patterns(
         for _ in 0..grid.width {
             let (x, y) = coords.get();
 
-            let pattern_index = gi[gi_idx] as usize;
+            let gray_value = gi[gi_idx] as usize;
             gi_idx += 1;
 
-            if pattern_index >= num_patterns {
+            if header.strict && gray_value >= num_patterns {
                 bail!(RegionError::GrayScaleOutOfRange);
             }
+
+            let pattern_index = gray_value.min(num_patterns - 1);
 
             // Check whether we can use the blit fast path.
             let shifted =

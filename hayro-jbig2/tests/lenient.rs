@@ -61,3 +61,8 @@ fn missing_final_oob_huffman() {
 fn table_past_hthigh() {
     check("lenient_table_past_hthigh", "honeycomb");
 }
+
+#[test]
+fn gray_value_out_of_range() {
+    check("lenient_gray_value_out_of_range", "maze");
+}
