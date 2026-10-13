@@ -147,6 +147,8 @@ pub(crate) fn decode(
 
     let retained_contexts = if ctx.header.flags.bitmap_context_retained {
         Some(RetainedContexts {
+            template: ctx.header.flags.template,
+            refinement_template: ctx.header.flags.refinement_template,
             generic_region: ctx.a_ctx.generic_region_contexts,
             refinement_region: ctx.a_ctx.refinement_region_contexts,
         })
@@ -162,6 +164,8 @@ pub(crate) fn decode(
 
 #[derive(Debug, Clone)]
 pub(crate) struct RetainedContexts {
+    pub(crate) template: Template,
+    pub(crate) refinement_template: RefinementTemplate,
     pub(crate) generic_region: Vec<ArithmeticDecoderContext>,
     pub(crate) refinement_region: Vec<ArithmeticDecoderContext>,
 }
@@ -480,6 +484,16 @@ impl<'a> ArithmeticContext<'a> {
         let (generic_region_contexts, refinement_region_contexts) =
             if header.flags.bitmap_context_used {
                 let ctx = input_contexts.ok_or(SymbolError::Invalid)?;
+
+                // "The values of [...] SDTEMPLATE, SDRTEMPLATE [...] must match the
+                // corresponding values from the symbol dictionary whose context
+                // values are being used." (7.4.2.2)
+                if ctx.template != header.flags.template
+                    || ctx.refinement_template != header.flags.refinement_template
+                {
+                    bail!(SymbolError::Invalid);
+                }
+
                 (ctx.generic_region.clone(), ctx.refinement_region.clone())
             } else {
                 let template = header.flags.template;

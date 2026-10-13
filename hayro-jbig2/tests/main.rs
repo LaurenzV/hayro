@@ -6,6 +6,7 @@ mod file;
 mod generic;
 mod halftone;
 mod huffman;
+mod malformed;
 mod page;
 mod refinement;
 mod symbol;
@@ -96,5 +97,16 @@ fn compare(stream: &str, reference: Bitmap) {
         if let Some(x) = actual.iter().zip(expected).position(|(a, e)| a != e) {
             panic!("{stream}: first mismatch at row {y}, column {x}");
         }
+    }
+}
+
+/// Decode `stream`, which is malformed, and check that it doesn't panic.
+fn check_malformed(stream: &str) {
+    let path = tests_dir().join("streams").join(format!("{stream}.jbig2"));
+    let data =
+        std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+
+    if let Ok(image) = hayro_jbig2::Image::new(&data) {
+        let _ = image.decode(&mut Collector::default());
     }
 }
