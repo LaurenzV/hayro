@@ -31,3 +31,8 @@ fn necessary_extension() {
 fn reserved_region_flags() {
     check("lenient_reserved_region_flags", "truchet");
 }
+
+#[test]
+fn reserved_segment_type() {
+    check("lenient_reserved_segment_type", "truchet");
+}

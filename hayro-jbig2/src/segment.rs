@@ -56,35 +56,36 @@ pub(crate) enum SegmentType {
     ColourPalette,
     /// Extension - see 7.4.14. (type 62)
     Extension,
+    /// "All other segment types are reserved and must not be used." (7.3)
+    Reserved,
 }
 
 impl SegmentType {
-    /// "All other segment types are reserved and must not be used." (7.3)
-    fn from_type_value(value: u8) -> Result<Self> {
+    fn from_type_value(value: u8) -> Self {
         match value {
-            0 => Ok(Self::SymbolDictionary),
-            4 => Ok(Self::IntermediateTextRegion),
-            6 => Ok(Self::ImmediateTextRegion),
-            7 => Ok(Self::ImmediateLosslessTextRegion),
-            16 => Ok(Self::PatternDictionary),
-            20 => Ok(Self::IntermediateHalftoneRegion),
-            22 => Ok(Self::ImmediateHalftoneRegion),
-            23 => Ok(Self::ImmediateLosslessHalftoneRegion),
-            36 => Ok(Self::IntermediateGenericRegion),
-            38 => Ok(Self::ImmediateGenericRegion),
-            39 => Ok(Self::ImmediateLosslessGenericRegion),
-            40 => Ok(Self::IntermediateGenericRefinementRegion),
-            42 => Ok(Self::ImmediateGenericRefinementRegion),
-            43 => Ok(Self::ImmediateLosslessGenericRefinementRegion),
-            48 => Ok(Self::PageInformation),
-            49 => Ok(Self::EndOfPage),
-            50 => Ok(Self::EndOfStripe),
-            51 => Ok(Self::EndOfFile),
-            52 => Ok(Self::Profiles),
-            53 => Ok(Self::Tables),
-            54 => Ok(Self::ColourPalette),
-            62 => Ok(Self::Extension),
-            _ => err!(SegmentError::UnknownType),
+            0 => Self::SymbolDictionary,
+            4 => Self::IntermediateTextRegion,
+            6 => Self::ImmediateTextRegion,
+            7 => Self::ImmediateLosslessTextRegion,
+            16 => Self::PatternDictionary,
+            20 => Self::IntermediateHalftoneRegion,
+            22 => Self::ImmediateHalftoneRegion,
+            23 => Self::ImmediateLosslessHalftoneRegion,
+            36 => Self::IntermediateGenericRegion,
+            38 => Self::ImmediateGenericRegion,
+            39 => Self::ImmediateLosslessGenericRegion,
+            40 => Self::IntermediateGenericRefinementRegion,
+            42 => Self::ImmediateGenericRefinementRegion,
+            43 => Self::ImmediateLosslessGenericRefinementRegion,
+            48 => Self::PageInformation,
+            49 => Self::EndOfPage,
+            50 => Self::EndOfStripe,
+            51 => Self::EndOfFile,
+            52 => Self::Profiles,
+            53 => Self::Tables,
+            54 => Self::ColourPalette,
+            62 => Self::Extension,
+            _ => Self::Reserved,
         }
     }
 }
@@ -140,7 +141,11 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>, strict: bool) -> Res
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-5: Segment type. See 7.3."
-    let segment_type = SegmentType::from_type_value(flags & 0x3F)?;
+    let segment_type = SegmentType::from_type_value(flags & 0x3F);
+
+    if strict && segment_type == SegmentType::Reserved {
+        bail!(SegmentError::UnknownType);
+    }
 
     // "Bit 6: Page association field size. See 7.2.6."
     let page_association_long = flags & 0x40 != 0;
