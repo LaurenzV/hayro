@@ -170,6 +170,11 @@ fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel;
 
 /// Decode a bitmap using MMR coding (6.2.6).
 pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usize> {
+    // hayro-ccitt treats 0 rows as "decode until the end of the data".
+    if bitmap.height == 0 {
+        return Ok(0);
+    }
+
     /// A decoder sink that writes decoded pixels into a `Bitmap`.
     struct BitmapDecoder<'a> {
         bitmap: &'a mut Bitmap,
