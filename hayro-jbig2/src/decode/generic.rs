@@ -266,8 +266,13 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
     // hayro-ccitt already aligns to the byte boundary before returning, so
     // nothing else to do here.
     let mut context = hayro_ccitt::DecoderContext::new(settings);
-    Ok(hayro_ccitt::decode(data, &mut decoder, &mut context)
-        .map_err(|_| RegionError::InvalidMmrData)?)
+    let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+
+    if strict && (result.is_err() || decoder.y < height) {
+        bail!(RegionError::InvalidMmrData);
+    }
+
+    Ok(result.unwrap_or(data.len()))
 }
 
 // I'm not sure why, but I was getting very weird codegen (with bad performance)

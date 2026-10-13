@@ -66,3 +66,8 @@ fn table_past_hthigh() {
 fn gray_value_out_of_range() {
     check("lenient_gray_value_out_of_range", "maze");
 }
+
+#[test]
+fn mmr_rows_missing() {
+    check("lenient_mmr_rows_missing", "truchet");
+}
