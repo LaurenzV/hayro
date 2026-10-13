@@ -23,7 +23,7 @@ fn load_jbig2(file: &[u8]) {
         fn next_line(&mut self) {}
     }
 
-    if let Ok(image) = hayro_jbig2::Image::new(file) {
+    if let Ok(image) = hayro_jbig2::Image::new(file, &hayro_jbig2::DecodeSettings::default()) {
         let mut ctx = DecoderContext::default();
         let _ = image.decode_with(&mut NullDecoder, &mut ctx);
     }

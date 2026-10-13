@@ -75,8 +75,8 @@ fn compare(stream: &str, reference: Bitmap) {
     let data =
         std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
 
-    let image =
-        hayro_jbig2::Image::new(&data).unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let image = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default())
+        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     let mut collector = Collector::default();
     image
         .decode(&mut collector)
@@ -107,7 +107,7 @@ fn check_malformed(stream: &str) {
     let data =
         std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
 
-    if let Ok(image) = hayro_jbig2::Image::new(&data) {
+    if let Ok(image) = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default()) {
         let _ = image.decode(&mut Collector::default());
     }
 }

@@ -54,8 +54,10 @@ pub enum SegmentError {
     UnknownType,
     /// Invalid referred-to segment count.
     InvalidReferredCount,
-    /// Segment refers to a larger segment number.
+    /// Segment refers to a segment it must not refer to.
     InvalidReference,
+    /// A segment other than an immediate generic region has an unknown length.
+    InvalidUnknownLength,
     /// Missing end marker for unknown-length region.
     MissingEndMarker,
     /// Missing required pattern dictionary.
@@ -191,7 +193,8 @@ impl fmt::Display for SegmentError {
         match self {
             Self::UnknownType => write!(f, "unknown or reserved segment type"),
             Self::InvalidReferredCount => write!(f, "invalid referred-to segment count"),
-            Self::InvalidReference => write!(f, "segment refers to larger segment number"),
+            Self::InvalidReference => write!(f, "segment refers to an invalid segment"),
+            Self::InvalidUnknownLength => write!(f, "unknown segment length for this type"),
             Self::MissingEndMarker => write!(f, "missing end marker for unknown-length region"),
             Self::MissingPatternDictionary => write!(f, "missing required pattern dictionary"),
         }

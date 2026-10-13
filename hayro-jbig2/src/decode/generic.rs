@@ -39,7 +39,7 @@ pub(crate) fn decode_into(
 
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        let _ = decode_bitmap_mmr(bitmap, data)?;
+        let _ = decode_bitmap_mmr(bitmap, data, header.strict)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
         ctx.contexts.clear();
@@ -71,16 +71,19 @@ pub(crate) struct GenericRegionHeader<'a> {
     pub(crate) tpgdon: bool,
     pub(crate) adaptive_template_pixels: [AdaptiveTemplatePixel; 4],
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 /// Parse a generic region segment header (7.4.6.1).
 pub(crate) fn parse<'a>(
     reader: &mut Reader<'a>,
     had_unknown_length: bool,
+    strict: bool,
 ) -> Result<GenericRegionHeader<'a>> {
     let mut region_info = parse_region_segment_info(reader)?;
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags & 0x01 != 0;
+
     let template = Template::from_byte(flags >> 1);
     let tpgdon = flags & 0x08 != 0;
     let ext_template = flags & 0x10 != 0;
@@ -116,6 +119,7 @@ pub(crate) fn parse<'a>(
         tpgdon,
         adaptive_template_pixels,
         data,
+        strict,
     })
 }
 
@@ -169,7 +173,7 @@ fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel;
 }
 
 /// Decode a bitmap using MMR coding (6.2.6).
-pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usize> {
+pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) -> Result<usize> {
     // hayro-ccitt treats 0 rows as "decode until the end of the data".
     if bitmap.height == 0 {
         return Ok(0);
@@ -252,6 +256,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     // hayro-ccitt uses 1 for white, 0 for black by default, so we need to
     // invert to match JBIG2 convention.
     settings.invert_black = true;
+    settings.strict = strict;
 
     // "An invocation of the generic region decoding procedure with MMR equal to
     // 1 shall consume an integral number of bytes, beginning and ending on a

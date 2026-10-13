@@ -642,7 +642,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
-        decode_bitmap_mmr(&mut bitmap, bitmap_data)?;
+        decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict)?;
         bitmap
     };
 
@@ -773,10 +773,14 @@ pub(crate) struct SymbolDictionaryHeader<'a> {
     pub(crate) num_exported_symbols: u32,
     pub(crate) num_new_symbols: u32,
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 /// Parse a symbol dictionary segment header (7.4.2.1).
-pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<SymbolDictionaryHeader<'a>> {
+pub(crate) fn parse<'a>(
+    reader: &mut Reader<'a>,
+    strict: bool,
+) -> Result<SymbolDictionaryHeader<'a>> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let use_huffman = flags_word & 0x0001 != 0;
     let use_refagg = flags_word & 0x0002 != 0;
@@ -854,5 +858,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<SymbolDictionaryHeade
         num_exported_symbols,
         num_new_symbols,
         data,
+        strict,
     })
 }

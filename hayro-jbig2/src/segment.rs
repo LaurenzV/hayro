@@ -127,7 +127,7 @@ pub(crate) struct Segment<'a> {
 }
 
 /// Parse a segment header (7.2).
-pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader> {
+pub(crate) fn parse_segment_header(reader: &mut Reader<'_>, strict: bool) -> Result<SegmentHeader> {
     // 7.2.2: Segment number
     // "This four-byte field contains the segment's segment number. The valid
     // range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive.
@@ -169,6 +169,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     let referred_to_count = if short_count < 7 {
         // Short form: "Bits 5-7: Count of referred-to segments. This field may
         // take on values between zero and four."
+
         short_count as u32
     } else {
         // Long form: "In the case where the field is in the long format (at least
@@ -239,6 +240,10 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // header is written."
     let data_length_raw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let data_length = if data_length_raw == 0xFFFFFFFF {
+        if strict && segment_type != SegmentType::ImmediateGenericRegion {
+            bail!(SegmentError::InvalidUnknownLength);
+        }
+
         None
     } else {
         Some(data_length_raw)
@@ -255,8 +260,8 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
 }
 
 /// Parse a complete segment (header + data).
-pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>> {
-    let header = parse_segment_header(reader)?;
+pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<Segment<'a>> {
+    let header = parse_segment_header(reader, strict)?;
     parse_segment_data(reader, header)
 }
 
@@ -350,7 +355,7 @@ mod tests {
         ];
 
         let mut reader = Reader::new(&data);
-        let header = parse_segment_header(&mut reader).unwrap();
+        let header = parse_segment_header(&mut reader, true).unwrap();
 
         // "0x00 0x00 0x00 0x20: This segment's number is 0x00000020, or 32 decimal."
         assert_eq!(header.segment_number, 32);
@@ -401,7 +406,7 @@ mod tests {
         ];
 
         let mut reader = Reader::new(&data);
-        let header = parse_segment_header(&mut reader).unwrap();
+        let header = parse_segment_header(&mut reader, true).unwrap();
 
         // "00 00 02 34: This segment's number is 0x00000234, or 564 decimal."
         assert_eq!(header.segment_number, 564);

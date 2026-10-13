@@ -6,3 +6,23 @@ use crate::check;
 fn intermediate_page_refinement() {
     check("lenient_intermediate_page_refinement", "truchet");
 }
+
+#[test]
+fn unknown_length_intermediate() {
+    check("lenient_unknown_length_intermediate", "truchet");
+}
+
+#[test]
+fn missing_reference() {
+    check("lenient_missing_reference", "honeycomb");
+}
+
+#[test]
+fn refinement_of_immediate_region() {
+    check("lenient_refinement_of_immediate_region", "truchet");
+}
+
+#[test]
+fn necessary_extension() {
+    check("lenient_necessary_extension", "honeycomb");
+}

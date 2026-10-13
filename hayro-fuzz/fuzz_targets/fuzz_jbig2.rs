@@ -3,7 +3,7 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    if let Ok(image) = hayro_jbig2::Image::new(data) {
+    if let Ok(image) = hayro_jbig2::Image::new(data, &hayro_jbig2::DecodeSettings::default()) {
         struct NullDecoder;
         impl hayro_jbig2::Decoder for NullDecoder {
             fn push_pixel(&mut self, _black: bool) {}

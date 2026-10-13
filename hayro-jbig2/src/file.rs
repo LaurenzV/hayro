@@ -62,11 +62,11 @@ pub(crate) struct File<'a> {
 const FILE_HEADER_ID: [u8; 8] = [0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// Parse a standalone JBIG2 file.
-pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>> {
+pub(crate) fn parse_file(data: &[u8], strict: bool) -> Result<File<'_>> {
     let mut reader = Reader::new(data);
 
     let header = parse_file_header(&mut reader)?;
-    let mut segments = parse_segments(&mut reader, header.organization)?;
+    let mut segments = parse_segments(&mut reader, header.organization, strict)?;
 
     // Technically shouldn't be necessary because the spec mandates that segments
     // are in sorted order, but just to be safe.
@@ -136,12 +136,15 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
 fn parse_segments<'a>(
     reader: &mut Reader<'a>,
     organization: FileOrganization,
+    strict: bool,
 ) -> Result<Vec<Segment<'a>>> {
     let mut segments = Vec::new();
 
     match organization {
-        FileOrganization::Sequential => parse_segments_sequential(reader, &mut segments)?,
-        FileOrganization::RandomAccess => parse_segments_random_access(reader, &mut segments)?,
+        FileOrganization::Sequential => parse_segments_sequential(reader, &mut segments, strict)?,
+        FileOrganization::RandomAccess => {
+            parse_segments_random_access(reader, &mut segments, strict)?;
+        }
     }
 
     Ok(segments)
@@ -155,13 +158,14 @@ fn parse_segments<'a>(
 pub(crate) fn parse_segments_sequential<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
+    strict: bool,
 ) -> Result<()> {
     loop {
         if reader.at_end() {
             break;
         }
 
-        let segment = parse_segment(reader)?;
+        let segment = parse_segment(reader, strict)?;
 
         // "If a file contains an end of file segment, it must be the last segment."
         // (7.4.11)
@@ -185,6 +189,7 @@ pub(crate) fn parse_segments_sequential<'a>(
 fn parse_segments_random_access<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
+    strict: bool,
 ) -> Result<()> {
     let mut headers = Vec::new();
 
@@ -193,7 +198,7 @@ fn parse_segments_random_access<'a>(
             break;
         }
 
-        let header = parse_segment_header(reader)?;
+        let header = parse_segment_header(reader, strict)?;
 
         // "If a file contains an end of file segment, it must be the last segment."
         // (7.4.11)

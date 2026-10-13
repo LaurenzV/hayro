@@ -27,7 +27,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let image = match hayro_jbig2::Image::new(&data) {
+    let image = match hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default()) {
         Ok(image) => image,
         Err(err) => {
             eprintln!("Failed to parse JBIG2: {err}");

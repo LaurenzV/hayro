@@ -32,7 +32,7 @@ pub(crate) fn decode(
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
     if header.mmr {
-        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data)?;
+        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data, header.strict)?;
     } else {
         let at_pixels = match header.template {
             Template::Template0 => [
@@ -194,12 +194,17 @@ pub(crate) struct PatternDictionaryHeader<'a> {
     /// `GRAYMAX`
     pub(crate) num_patterns: u32,
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 /// Parse a pattern dictionary segment header (7.4.4.1).
-pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<PatternDictionaryHeader<'a>> {
+pub(crate) fn parse<'a>(
+    reader: &mut Reader<'a>,
+    strict: bool,
+) -> Result<PatternDictionaryHeader<'a>> {
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags_byte & 0x01 != 0;
+
     let template = Template::from_byte(flags_byte >> 1);
     let pattern_width = reader
         .read_nonzero_byte()
@@ -217,5 +222,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<PatternDictionaryHead
         pattern_height,
         num_patterns,
         data,
+        strict,
     })
 }

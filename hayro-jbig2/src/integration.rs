@@ -5,7 +5,7 @@ use std::{
     io::{BufRead, Seek},
 };
 
-use crate::Image;
+use crate::{DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
@@ -78,7 +78,7 @@ impl Jbig2Decoder {
         let mut r = r;
         r.read_to_end(&mut input)?;
 
-        let image = Image::new(&input)?;
+        let image = Image::new(&input, &DecodeSettings::default())?;
 
         Ok(Self {
             width: image.width(),
@@ -105,12 +105,12 @@ impl ImageDecoder for Jbig2Decoder {
     where
         Self: Sized,
     {
-        let image = Image::new(&self.input)?;
+        let image = Image::new(&self.input, &DecodeSettings::default())?;
         decode_into_buf(&image, buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        let image = Image::new(&self.input)?;
+        let image = Image::new(&self.input, &DecodeSettings::default())?;
         decode_into_buf(&image, buf)
     }
 }
