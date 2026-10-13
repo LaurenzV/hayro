@@ -644,16 +644,16 @@ fn select_huffman_tables<'a>(
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
-    // "6) SBHUFFRDY"
-    let refinement_y = match flags.refinement_y_table {
+    // "6) SBHUFFRDX"
+    let refinement_x = match flags.refinement_x_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
-    // "7) SBHUFFRDX"
-    let refinement_x = match flags.refinement_x_table {
+    // "7) SBHUFFRDY"
+    let refinement_y = match flags.refinement_y_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom()?,
@@ -673,8 +673,8 @@ fn select_huffman_tables<'a>(
         delta_t,
         refinement_width,
         refinement_height,
-        refinement_y,
         refinement_x,
+        refinement_y,
         refinement_size,
     })
 }
@@ -745,8 +745,8 @@ pub(crate) struct TextRegionHuffmanTables<'a> {
     delta_t: &'a HuffmanTable,
     refinement_width: &'a HuffmanTable,
     refinement_height: &'a HuffmanTable,
-    refinement_y: &'a HuffmanTable,
     refinement_x: &'a HuffmanTable,
+    refinement_y: &'a HuffmanTable,
     refinement_size: &'a HuffmanTable,
 }
 
@@ -793,8 +793,8 @@ pub(crate) struct TextRegionHuffmanFlags {
     pub(crate) delta_t_table: u8,
     pub(crate) refinement_width_table: u8,
     pub(crate) refinement_height_table: u8,
-    pub(crate) refinement_y_table: u8,
     pub(crate) refinement_x_table: u8,
+    pub(crate) refinement_y_table: u8,
     pub(crate) refinement_size_table: u8,
 }
 
@@ -859,8 +859,8 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
     let delta_t_table = ((flags_word >> 4) & 0x03) as u8;
     let refinement_width_table = ((flags_word >> 6) & 0x03) as u8;
     let refinement_height_table = ((flags_word >> 8) & 0x03) as u8;
-    let refinement_y_table = ((flags_word >> 10) & 0x03) as u8;
-    let refinement_x_table = ((flags_word >> 12) & 0x03) as u8;
+    let refinement_x_table = ((flags_word >> 10) & 0x03) as u8;
+    let refinement_y_table = ((flags_word >> 12) & 0x03) as u8;
     let refinement_size_table = ((flags_word >> 14) & 0x01) as u8;
 
     Ok(TextRegionHuffmanFlags {
@@ -869,8 +869,8 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
         delta_t_table,
         refinement_width_table,
         refinement_height_table,
-        refinement_y_table,
         refinement_x_table,
+        refinement_y_table,
         refinement_size_table,
     })
 }

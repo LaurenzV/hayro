@@ -336,8 +336,8 @@ fn decode_aggregation_bitmap(
             delta_t_table: 0,
             refinement_width_table: 1,
             refinement_height_table: 1,
-            refinement_y_table: 1,
             refinement_x_table: 1,
+            refinement_y_table: 1,
             refinement_size_table: 0,
         })
     } else {

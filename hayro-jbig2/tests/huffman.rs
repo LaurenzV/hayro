@@ -59,6 +59,16 @@ fn text_refine_b15() {
 }
 
 #[test]
+fn text_refine_different_offset_tables() {
+    check("huffman_text_refine_different_offset_tables", "honeycomb");
+}
+
+#[test]
+fn text_refine_custom_x_offset() {
+    check("huffman_text_refine_custom_x_offset", "honeycomb");
+}
+
+#[test]
 fn text_refine_custom() {
     check("huffman_text_refine_custom", "honeycomb");
 }
