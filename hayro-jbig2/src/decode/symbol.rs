@@ -378,6 +378,7 @@ fn decode_aggregation_bitmap(
         symbol_id_table,
         segment_data_len: ctx.header.data.len(),
         data: &[], // Data comes from parent decoder context, not the header.
+        strict: ctx.header.strict,
     };
 
     let decode_ctx = if use_huffman {

@@ -46,3 +46,13 @@ fn trailing_bytes() {
 fn truncated_segment() {
     check("lenient_truncated_segment", "truchet");
 }
+
+#[test]
+fn missing_final_oob() {
+    check("lenient_missing_final_oob", "honeycomb");
+}
+
+#[test]
+fn missing_final_oob_huffman() {
+    check("lenient_missing_final_oob_huffman", "honeycomb");
+}

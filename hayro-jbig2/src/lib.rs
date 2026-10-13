@@ -365,7 +365,7 @@ fn decode_segments(
                 let (symbols, referred_tables) =
                     page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
 
-                let header = text::parse(&mut reader, symbols.len() as u32)?;
+                let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
 
                 if page_state.can_decode_directly(
                     page_bitmap,
@@ -401,7 +401,7 @@ fn decode_segments(
                 let (symbols, referred_tables) =
                     page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
 
-                let header = text::parse(&mut reader, symbols.len() as u32)?;
+                let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
                 let region = text::decode(
                     &header,
                     &symbols,

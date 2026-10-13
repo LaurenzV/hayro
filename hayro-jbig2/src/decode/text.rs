@@ -119,11 +119,6 @@ pub(crate) fn decode_with(
         let mut current_s = 0;
 
         loop {
-            // Prevent infinite loop for invalid files.
-            if instance_count > header.num_instances {
-                bail!(SymbolError::TooManySymbols);
-            }
-
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -131,6 +126,14 @@ pub(crate) fn decode_with(
                     .ok_or(OverflowError::PlacementCoordinate)?;
                 current_s = first_s;
                 first_symbol_in_strip = false;
+            } else if instance_count == header.num_instances {
+                let end_of_strip = ctx.read_delta_s();
+
+                if header.strict && end_of_strip?.is_some() {
+                    bail!(SymbolError::TooManyInstances);
+                }
+
+                break;
             } else {
                 let Some(delta_s) = ctx.read_delta_s()? else {
                     // OOB - end of strip.
@@ -815,6 +818,7 @@ pub(crate) struct TextRegionHeader<'a> {
     pub(crate) symbol_id_table: Option<HuffmanTable>,
     pub(crate) segment_data_len: usize,
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 impl TextRegionHeader<'_> {
@@ -882,7 +886,11 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
 }
 
 /// Parse a text region segment header (7.4.3.1).
-pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<TextRegionHeader<'a>> {
+pub(crate) fn parse<'a>(
+    reader: &mut Reader<'a>,
+    num_symbols: u32,
+    strict: bool,
+) -> Result<TextRegionHeader<'a>> {
     let segment_data_len = reader.tail().ok_or(ParseError::UnexpectedEof)?.len();
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
@@ -918,5 +926,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<Tex
         symbol_id_table,
         segment_data_len,
         data,
+        strict,
     })
 }
