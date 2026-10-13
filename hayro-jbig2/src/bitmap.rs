@@ -69,14 +69,20 @@ impl Bitmap {
         let stride = width.div_ceil(WORD_BITS);
         let default_word: Word = if default_pixel { !0 } else { 0 };
         let data = vec![default_word; stride as usize * height as usize];
-        Ok(Self {
+        let mut bitmap = Self {
             width,
             height,
             stride,
             data,
             x_location,
             y_location,
-        })
+        };
+
+        if default_pixel {
+            bitmap.clear_padding();
+        }
+
+        Ok(bitmap)
     }
 
     pub(crate) fn reinitialize(
@@ -100,7 +106,25 @@ impl Bitmap {
         self.data
             .resize(stride as usize * height as usize, default_word);
 
+        if default_pixel {
+            self.clear_padding();
+        }
+
         Ok(())
+    }
+
+    fn clear_padding(&mut self) {
+        let trailing = self.width % WORD_BITS;
+        if trailing == 0 {
+            return;
+        }
+
+        let mask: Word = !0 << (WORD_BITS - trailing);
+        for row in self.data.chunks_exact_mut(self.stride as usize) {
+            if let Some(last) = row.last_mut() {
+                *last &= mask;
+            }
+        }
     }
 
     /// Get a pixel value at (x, y).

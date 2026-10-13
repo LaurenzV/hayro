@@ -48,6 +48,11 @@ fn then_refine() {
 }
 
 #[test]
+fn then_refine_default_pixel() {
+    check("halftone_then_refine_default_pixel", "maze");
+}
+
+#[test]
 fn rotated_grid() {
     check("halftone_rotated_grid", "sphere");
 }

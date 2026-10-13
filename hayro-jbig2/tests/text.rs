@@ -73,6 +73,11 @@ fn then_refine() {
 }
 
 #[test]
+fn then_refine_default_pixel() {
+    check("text_then_refine_default_pixel", "honeycomb");
+}
+
+#[test]
 fn large_integer() {
     check("text_large_integer", "honeycomb");
 }
