@@ -112,3 +112,8 @@ fn huffman_refine_after_arithmetic() {
 fn huffman_context_reuse_refine() {
     check("symbol_huffman_context_reuse_refine", "honeycomb");
 }
+
+#[test]
+fn huffman_context_reuse_refine_table() {
+    check("symbol_huffman_context_reuse_refine_table", "honeycomb");
+}

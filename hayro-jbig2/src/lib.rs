@@ -343,8 +343,9 @@ fn decode_segments(
                 let retained_contexts = seg
                     .header
                     .referred_to_segments
-                    .last()
-                    .and_then(|&num| page_state.get_symbol_dictionary(num))
+                    .iter()
+                    .rev()
+                    .find_map(|&num| page_state.get_symbol_dictionary(num))
                     .and_then(|dict| dict.retained_contexts.as_ref());
 
                 let header = symbol::parse(&mut reader)?;
