@@ -56,3 +56,4 @@ jobs:
       - run: cargo test -p hayro-tests -- "load::"
       - run: cargo test -p hayro-ccitt
       - run: cargo test -p hayro-jbig2
+      - run: cargo test -p hayro-jpeg2000
