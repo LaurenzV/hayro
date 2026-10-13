@@ -49,14 +49,23 @@ pub(crate) fn decode_into(
         );
 
         // "6.2.5 Decoding using a template and arithmetic coding"
-        decode_bitmap_arithmetic_coding(
-            bitmap,
-            &mut decoder,
-            &mut ctx.contexts,
-            header.template,
-            header.tpgdon,
-            &header.adaptive_template_pixels,
-        )?;
+        match &header.adaptive_template_pixels {
+            GenericTemplatePixels::Regular(at_pixels) => decode_bitmap_arithmetic_coding(
+                bitmap,
+                &mut decoder,
+                &mut ctx.contexts,
+                header.template,
+                header.tpgdon,
+                at_pixels,
+            )?,
+            GenericTemplatePixels::Extended(at_pixels) => decode_bitmap_extended_template(
+                bitmap,
+                &mut decoder,
+                &mut ctx.contexts,
+                header.tpgdon,
+                at_pixels,
+            ),
+        }
     }
 
     Ok(())
@@ -69,9 +78,18 @@ pub(crate) struct GenericRegionHeader<'a> {
     pub(crate) mmr: bool,
     pub(crate) template: Template,
     pub(crate) tpgdon: bool,
-    pub(crate) adaptive_template_pixels: [AdaptiveTemplatePixel; 4],
+    pub(crate) adaptive_template_pixels: GenericTemplatePixels,
     pub(crate) data: &'a [u8],
     pub(crate) strict: bool,
+}
+
+/// The adaptive template pixels of a generic region (7.4.6.3).
+#[derive(Debug, Clone)]
+pub(crate) enum GenericTemplatePixels {
+    /// GBTEMPLATE 0 to 3.
+    Regular([AdaptiveTemplatePixel; 4]),
+    /// A1 to A12 of the extended template, if not all at their nominal locations.
+    Extended([AdaptiveTemplatePixel; 12]),
 }
 
 /// Parse a generic region segment header (7.4.6.1).
@@ -86,11 +104,32 @@ pub(crate) fn parse<'a>(
 
     let template = Template::from_byte(flags >> 1);
     let tpgdon = flags & 0x08 != 0;
-    let ext_template = flags & 0x10 != 0;
-    let adaptive_template_pixels = if mmr {
-        [AdaptiveTemplatePixel::default(); 4]
+    // The extended template only exists for GBTEMPLATE 0 (Table 2).
+    let ext_template = flags & 0x10 != 0 && !mmr && template == Template::Template0;
+    let adaptive_template_pixels = if ext_template {
+        let mut pixels = [AdaptiveTemplatePixel::default(); 12];
+        for pixel in &mut pixels {
+            *pixel = parse_adaptive_template_pixel(reader)?;
+        }
+
+        // At their nominal locations, the 12 AT pixels form the same contexts
+        // as template 0 with its default AT pixels.
+        let nominal = pixels
+            .iter()
+            .zip(EXTENDED_TEMPLATE_NOMINAL)
+            .all(|(pixel, (x, y))| pixel.x == x && pixel.y == y);
+
+        if nominal {
+            GenericTemplatePixels::Regular(
+                TEMPLATE0_DEFAULT.map(|(x, y)| AdaptiveTemplatePixel { x, y }),
+            )
+        } else {
+            GenericTemplatePixels::Extended(pixels)
+        }
+    } else if mmr {
+        GenericTemplatePixels::Regular([AdaptiveTemplatePixel::default(); 4])
     } else {
-        parse_adaptive_template_pixels(reader, template, ext_template)?
+        GenericTemplatePixels::Regular(parse_adaptive_template_pixels(reader, template)?)
     };
     let mut data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
@@ -127,30 +166,52 @@ pub(crate) fn parse<'a>(
 pub(crate) fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
     template: Template,
-    // TODO: Find a test with this flag.
-    _ext_template: bool,
 ) -> Result<[AdaptiveTemplatePixel; 4]> {
     let num_pixels = template.adaptive_template_pixels() as usize;
 
     let mut pixels = [AdaptiveTemplatePixel::default(); 4];
 
     for pixel in pixels.iter_mut().take(num_pixels) {
-        let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-        let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-
-        // Validate AT pixel location (6.2.5.4, Figure 7).
-        // AT pixels must reference already-decoded pixels:
-        // - y must be <= 0 (current row or above)
-        // - if y == 0, x must be < 0 (strictly to the left of current pixel)
-        if y > 0 || (y == 0 && x >= 0) {
-            bail!(TemplateError::InvalidAtPixel);
-        }
-
-        *pixel = AdaptiveTemplatePixel { x, y };
+        *pixel = parse_adaptive_template_pixel(reader)?;
     }
 
     Ok(pixels)
 }
+
+/// Parse the location of one adaptive template pixel (7.4.6.3).
+fn parse_adaptive_template_pixel(reader: &mut Reader<'_>) -> Result<AdaptiveTemplatePixel> {
+    let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+
+    // Validate AT pixel location (6.2.5.4, Figure 7).
+    // AT pixels must reference already-decoded pixels:
+    // - y must be <= 0 (current row or above)
+    // - if y == 0, x must be < 0 (strictly to the left of current pixel)
+    if y > 0 || (y == 0 && x >= 0) {
+        bail!(TemplateError::InvalidAtPixel);
+    }
+
+    Ok(AdaptiveTemplatePixel { x, y })
+}
+
+/// The default AT pixels of template 0 (Figure 3(a)).
+const TEMPLATE0_DEFAULT: [(i8, i8); 4] = [(3, -1), (-3, -1), (2, -2), (-2, -2)];
+
+/// The nominal locations of A1 to A12 (Figure 3(b)).
+const EXTENDED_TEMPLATE_NOMINAL: [(i8, i8); 12] = [
+    (-2, 0),
+    (0, -2),
+    (-2, -1),
+    (-1, -2),
+    (1, -2),
+    (2, -1),
+    (-3, 0),
+    (-4, 0),
+    (2, -2),
+    (3, -1),
+    (-2, -2),
+    (-3, -1),
+];
 
 /// Whether the adaptive template pixels correspond to the default ones.
 /// See Table 5.
@@ -458,14 +519,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     }
 
     let mut ctx_gatherer = ContextGatherer::new(template, adaptive_template_pixels);
-
-    // See Figure 8 - 11.
-    let sltp_context: u16 = match template {
-        Template::Template0 => 0b1001101100100101,
-        Template::Template1 => 0b0011110010101,
-        Template::Template2 => 0b0011100101,
-        Template::Template3 => 0b0110010101,
-    };
+    let sltp_context = sltp_context(template);
 
     if ctx_gatherer.use_default_at {
         match template {
@@ -544,6 +598,57 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     }
 
     Ok(())
+}
+
+/// The context used to decode SLTP (Figures 8 to 11).
+fn sltp_context(template: Template) -> u16 {
+    match template {
+        Template::Template0 => 0b1001101100100101,
+        Template::Template1 => 0b0011110010101,
+        Template::Template2 => 0b0011100101,
+        Template::Template3 => 0b0110010101,
+    }
+}
+
+/// The context bits of A1 to A12: the bits template 0 uses for their nominal
+/// locations, so that the SLTP context stays the same.
+const EXTENDED_TEMPLATE_BITS: [u32; 12] = [1, 13, 9, 14, 12, 5, 2, 3, 11, 4, 15, 10];
+
+/// Decode a bitmap with the extended template (6.2.5).
+fn decode_bitmap_extended_template(
+    bitmap: &mut Bitmap,
+    decoder: &mut ArithmeticDecoder<'_>,
+    contexts: &mut [ArithmeticDecoderContext],
+    tpgdon: bool,
+    at_pixels: &[AdaptiveTemplatePixel; 12],
+) {
+    let default_at_pixels = TEMPLATE0_DEFAULT.map(|(x, y)| AdaptiveTemplatePixel { x, y });
+    let mut ctx_gatherer = ContextGatherer::new(Template::Template0, &default_at_pixels);
+
+    let gather = |gatherer: &mut ContextGatherer<'_>, bitmap: &Bitmap, x: u32| {
+        let y = gatherer.cur_y;
+        let pixel = |dx: i32, dy: i32, bit: u32| {
+            let value = bitmap.get_pixel((x as i32 + dx) as u32, (y as i32 + dy) as u32);
+            (value as u16) << bit
+        };
+
+        let mut context = pixel(-1, 0, 0) | pixel(1, -1, 6) | pixel(0, -1, 7) | pixel(-1, -1, 8);
+        for (at, bit) in at_pixels.iter().zip(EXTENDED_TEMPLATE_BITS) {
+            context |= pixel(at.x as i32, at.y as i32, bit);
+        }
+
+        context
+    };
+
+    decode_loop!(
+        bitmap,
+        decoder,
+        contexts,
+        &mut ctx_gatherer,
+        tpgdon,
+        sltp_context(Template::Template0),
+        gather
+    );
 }
 
 pub(crate) struct ContextGatherer<'a> {

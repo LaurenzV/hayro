@@ -63,6 +63,21 @@ fn template0_custom_at_tpgdon() {
 }
 
 #[test]
+fn template0_ext() {
+    check("generic_template0_ext", "truchet");
+}
+
+#[test]
+fn template0_ext_custom_at() {
+    check("generic_template0_ext_custom_at", "truchet");
+}
+
+#[test]
+fn template0_ext_custom_at_tpgdon() {
+    check("generic_template0_ext_custom_at_tpgdon", "maze");
+}
+
+#[test]
 fn template0_tpgdon() {
     check("generic_template0_tpgdon", "maze");
 }
