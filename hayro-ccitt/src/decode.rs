@@ -111,9 +111,16 @@ impl BitReader<'_> {
     /// Fill bits (T.4 Section 4.1.3) may precede the EOL as a variable-length
     /// string of zeros.
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
+        self.read_eols(usize::MAX)
+    }
+
+    /// Like [`Self::read_eol_if_available`], but reads at most `max` EOLs.
+    pub(crate) fn read_eols(&mut self, max: usize) -> usize {
         let mut count = 0;
 
-        while let (zeros, Some(after)) = self.zero_run() {
+        while count < max
+            && let (zeros, Some(after)) = self.zero_run()
+        {
             if zeros < 11 {
                 break;
             }

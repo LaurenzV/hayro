@@ -1,6 +1,6 @@
 //! Pattern dictionaries and halftone regions (6.6, 6.7).
 
-use crate::check;
+use crate::{check, check_crop};
 
 #[test]
 fn basic() {
@@ -35,6 +35,11 @@ fn halftone_10_bitplanes() {
 #[test]
 fn halftone_10_bitplanes_mmr() {
     check("halftone_10_bitplanes_mmr", "maze");
+}
+
+#[test]
+fn mmr_bitplane_boundary() {
+    check_crop("halftone_mmr_bitplane_boundary", "maze", (63, 0, 27, 9));
 }
 
 #[test]

@@ -364,8 +364,14 @@ fn decode_group4(
 ) -> Result<()> {
     loop {
         // EOLs aren't part of Group 4, but PDF requires decoders to accept them
-        // anyway. An EOFB consists of two consecutive EOLs.
-        let eol_count = reader.read_eol_if_available();
+        // anyway. An EOFB consists of two consecutive EOLs. Data that follows
+        // an EOFB (after padding to a byte boundary) can start like another
+        // EOL, so no more than that is read.
+        let eol_count = if ctx.settings.end_of_block {
+            reader.read_eols(2)
+        } else {
+            reader.read_eol_if_available()
+        };
 
         if ctx.settings.end_of_block && eol_count >= 2 {
             break;

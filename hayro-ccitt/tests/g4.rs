@@ -18,6 +18,13 @@ fn eofb_pad_bits() {
 }
 
 #[test]
+fn eofb_trailing_data() {
+    check_consumed("g4_eofb_trailing_data", "base", Some(1086), |s| {
+        s.end_of_block = true;
+    });
+}
+
+#[test]
 fn byte_align() {
     check("g4_byte_align", "base", |s| s.rows_are_byte_aligned = true);
 }
