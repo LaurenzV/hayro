@@ -31,3 +31,10 @@ fn eol_flag_without_eols() {
         s.end_of_line = true;
     });
 }
+
+#[test]
+fn run_past_line_end_g3_1d() {
+    check("g3_1d_run_past_line_end", "g3_1d_run_past_line_end", |s| {
+        s.encoding = G3_1D;
+    });
+}

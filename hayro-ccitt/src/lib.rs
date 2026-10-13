@@ -117,6 +117,11 @@ pub struct DecodeSettings {
     ///
     /// Defaults to `false`.
     pub invert_black: bool,
+    /// Whether to reject data that violates the specification, instead of
+    /// decoding it as well as possible.
+    ///
+    /// Defaults to `false`.
+    pub strict: bool,
 }
 
 impl DecodeSettings {
@@ -131,6 +136,7 @@ impl DecodeSettings {
             rows_are_byte_aligned: false,
             encoding: EncodingMode::Group3_1D,
             invert_black: false,
+            strict: false,
         }
     }
 }
@@ -215,7 +221,7 @@ fn decode_group3_1d(
 
         ctx.next_line(decoder);
 
-        if group3_check_eob(ctx, reader) {
+        if group3_check_eob(ctx, reader)? {
             break;
         }
     }
@@ -250,7 +256,7 @@ fn decode_group3_2d(
 
         ctx.next_line(decoder);
 
-        if group3_check_eob(ctx, reader) {
+        if group3_check_eob(ctx, reader)? {
             break;
         }
     }
@@ -267,7 +273,7 @@ fn group3_recover<'a>(
     line_start: BitReader<'a>,
     error: DecodeError,
 ) -> Result<()> {
-    if !ctx.has_eols {
+    if !ctx.has_eols || ctx.settings.strict {
         return Err(error);
     }
 
@@ -277,9 +283,7 @@ fn group3_recover<'a>(
     *reader = line_start;
 
     ctx.color = Color::White;
-    ctx.push_pixels(decoder, ctx.line_width - ctx.pixels_decoded);
-
-    Ok(())
+    ctx.push_pixels(decoder, ctx.line_width - ctx.pixels_decoded)
 }
 
 /// Read consecutive EOLs.
@@ -322,7 +326,7 @@ fn group3_read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
 }
 
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
-fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> bool {
+fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<bool> {
     // If the data contains EOLs, we treat the zeros used for byte alignment as
     // fill, so it doesn't matter whether the encoder aligned the start or the
     // end of the EOL. Without EOLs, we need to align first, as the padding
@@ -338,6 +342,10 @@ fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> boo
     // If a line isn't followed by an EOL even though the data contains EOLs,
     // the line contained more data than expected, so we skip the rest.
     if eol_count == 0 && ctx.has_eols && !rows_done && !reader.at_end() {
+        if ctx.settings.strict {
+            return Err(DecodeError::InvalidCode);
+        }
+
         if reader.skip_to_eol() {
             eol_count = group3_read_eols(ctx, reader);
         } else {
@@ -351,10 +359,10 @@ fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> boo
     // PDFBOX-2778 has 7 EOL, although it should only be 6. Let's be lenient
     // and check with >=.
     if ctx.settings.end_of_block && eol_count >= 6 {
-        return true;
+        return Ok(true);
     }
 
-    rows_done || reader.at_end()
+    Ok(rows_done || reader.at_end())
 }
 
 fn decode_group4(
@@ -401,7 +409,7 @@ fn decode_1d_line(
 ) -> Result<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.color)?;
-        ctx.push_pixels(decoder, run_length);
+        ctx.push_pixels(decoder, run_length)?;
         ctx.color = ctx.color.opposite();
     }
 
@@ -421,7 +429,7 @@ fn decode_2d_line(
         match mode {
             // Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
             Mode::Pass => {
-                ctx.push_pixels(decoder, ctx.b2() - ctx.a0().unwrap_or(0));
+                ctx.push_pixels(decoder, ctx.b2() - ctx.a0().unwrap_or(0))?;
                 ctx.update_b();
                 // No color change happens in pass mode.
             }
@@ -436,7 +444,7 @@ fn decode_2d_line(
 
                 let a0 = ctx.a0().unwrap_or(0);
 
-                ctx.push_pixels(decoder, a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
+                ctx.push_pixels(decoder, a1.checked_sub(a0).ok_or(DecodeError::Overflow)?)?;
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
@@ -444,11 +452,11 @@ fn decode_2d_line(
             // Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
             Mode::Horizontal => {
                 let a0a1 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(decoder, a0a1);
+                ctx.push_pixels(decoder, a0a1)?;
                 ctx.color = ctx.color.opposite();
 
                 let a1a2 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(decoder, a1a2);
+                ctx.push_pixels(decoder, a1a2)?;
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
@@ -577,9 +585,14 @@ impl DecoderContext {
     }
 
     #[inline(always)]
-    fn push_pixels(&mut self, decoder: &mut impl Decoder, count: u32) {
-        // Make sure we don't have too many pixels (for invalid files).
-        let count = count.min(self.line_width - self.pixels_decoded);
+    fn push_pixels(&mut self, decoder: &mut impl Decoder, count: u32) -> Result<()> {
+        let remaining = self.line_width - self.pixels_decoded;
+
+        if count > remaining && self.settings.strict {
+            return Err(DecodeError::InvalidCode);
+        }
+
+        let count = count.min(remaining);
         let white = self.color.is_white() ^ self.invert_black;
         decoder.push_pixels(white, count);
 
@@ -594,6 +607,8 @@ impl DecoderContext {
 
             self.pixels_decoded += count;
         }
+
+        Ok(())
     }
 
     #[inline(always)]
