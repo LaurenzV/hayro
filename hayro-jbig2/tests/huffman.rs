@@ -29,6 +29,11 @@ fn tables_b5_b3_b7_b9_b12() {
 }
 
 #[test]
+fn table_b12_transposed() {
+    check("huffman_table_b12_transposed", "honeycomb");
+}
+
+#[test]
 fn uncompressed_symbols() {
     check("huffman_uncompressed_symbols", "honeycomb");
 }
