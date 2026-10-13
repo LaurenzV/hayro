@@ -1,4 +1,4 @@
-use crate::{check, check_consumed};
+use crate::{G4, check, check_consumed, check_malformed};
 
 #[test]
 fn plain() {
@@ -43,4 +43,9 @@ fn eol() {
         s.end_of_line = true;
         s.end_of_block = true;
     });
+}
+
+#[test]
+fn truncated() {
+    check_malformed("malformed_g4_truncated", 8, 2, |s| s.encoding = G4);
 }

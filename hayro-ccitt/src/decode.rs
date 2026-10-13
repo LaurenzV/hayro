@@ -82,7 +82,7 @@ impl BitReader<'_> {
         let zeros = bits.leading_zeros();
         // The bit following the first 1 determines the direction of vertical
         // modes.
-        let offset = if (bits << zeros << 1) >> 31 == 1 {
+        let offset = if bits.checked_shl(zeros + 1).unwrap_or(0) >> 31 == 1 {
             1
         } else {
             -1

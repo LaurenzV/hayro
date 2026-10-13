@@ -110,3 +110,21 @@ fn check_consumed(
         "{stream}: wrong number of bytes consumed"
     );
 }
+
+/// Decode `stream`, which is malformed, and check that it doesn't panic.
+fn check_malformed(
+    stream: &str,
+    columns: u32,
+    rows: u32,
+    configure: impl FnOnce(&mut DecodeSettings),
+) {
+    let path = tests_dir().join("streams").join(format!("{stream}.bin"));
+    let data =
+        std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+
+    let mut settings = DecodeSettings::new(columns, rows);
+    configure(&mut settings);
+
+    let mut ctx = DecoderContext::new(settings);
+    let _ = decode(&data, &mut Collector::default(), &mut ctx);
+}
