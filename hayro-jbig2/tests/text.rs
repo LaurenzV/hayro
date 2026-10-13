@@ -68,6 +68,16 @@ fn refine_large_offsets() {
 }
 
 #[test]
+fn instance_far_left() {
+    check("text_instance_far_left", "honeycomb");
+}
+
+#[test]
+fn refine_far_reference() {
+    check("text_refine_far_reference", "honeycomb");
+}
+
+#[test]
 fn then_refine() {
     check("text_then_refine", "honeycomb");
 }

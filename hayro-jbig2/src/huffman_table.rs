@@ -440,22 +440,25 @@ impl HuffmanNode {
 
                     // 2) "Read RANGELEN[I] bits. Let HTOFFSET be the value read."
                     // `HTOFFSET`
-                    let range_offset = reader
-                        .read_bits(leaf.range_length)
-                        .ok_or(HuffmanError::InvalidCode)?
-                        as i32;
+                    let range_offset = i64::from(
+                        reader
+                            .read_bits(leaf.range_length)
+                            .ok_or(HuffmanError::InvalidCode)?,
+                    );
 
                     // 4) "Otherwise, if table line I is the lower range table line for this
                     //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"
                     // 5) "Otherwise, set: HTVAL = RANGELOW[I] + HTOFFSET"
                     // `HTVAL`
                     let value = if leaf.is_lower {
-                        leaf.range_low - range_offset
+                        i64::from(leaf.range_low) - range_offset
                     } else {
-                        leaf.range_low + range_offset
+                        i64::from(leaf.range_low) + range_offset
                     };
 
-                    return Ok(Some(value));
+                    return Ok(Some(
+                        i32::try_from(value).map_err(|_| HuffmanError::InvalidCode)?,
+                    ));
                 }
                 Self::Empty => {
                     bail!(HuffmanError::InvalidCode);

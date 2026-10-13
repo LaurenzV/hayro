@@ -178,23 +178,29 @@ pub(crate) fn decode_with(
 
             let symbol_s = current_s;
 
+            let start = |end: i32, size: i32| {
+                end.checked_sub(size - 1)
+                    .ok_or(OverflowError::PlacementCoordinate)
+            };
             let (x, y) = if !header.flags.transposed {
                 match header.flags.reference_corner {
                     ReferenceCorner::TopLeft => (symbol_s, symbol_t),
-                    ReferenceCorner::TopRight => (symbol_s - symbol_width + 1, symbol_t),
-                    ReferenceCorner::BottomLeft => (symbol_s, symbol_t - symbol_height + 1),
-                    ReferenceCorner::BottomRight => {
-                        (symbol_s - symbol_width + 1, symbol_t - symbol_height + 1)
-                    }
+                    ReferenceCorner::TopRight => (start(symbol_s, symbol_width)?, symbol_t),
+                    ReferenceCorner::BottomLeft => (symbol_s, start(symbol_t, symbol_height)?),
+                    ReferenceCorner::BottomRight => (
+                        start(symbol_s, symbol_width)?,
+                        start(symbol_t, symbol_height)?,
+                    ),
                 }
             } else {
                 match header.flags.reference_corner {
                     ReferenceCorner::TopLeft => (symbol_t, symbol_s),
-                    ReferenceCorner::TopRight => (symbol_t - symbol_width + 1, symbol_s),
-                    ReferenceCorner::BottomLeft => (symbol_t, symbol_s - symbol_height + 1),
-                    ReferenceCorner::BottomRight => {
-                        (symbol_t - symbol_width + 1, symbol_s - symbol_height + 1)
-                    }
+                    ReferenceCorner::TopRight => (start(symbol_t, symbol_width)?, symbol_s),
+                    ReferenceCorner::BottomLeft => (symbol_t, start(symbol_s, symbol_height)?),
+                    ReferenceCorner::BottomRight => (
+                        start(symbol_t, symbol_width)?,
+                        start(symbol_s, symbol_height)?,
+                    ),
                 }
             };
 

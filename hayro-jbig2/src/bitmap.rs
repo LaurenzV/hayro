@@ -161,7 +161,7 @@ impl Bitmap {
         // TODO: Figure out how we can optimize this, especially since this is a
         // bottleneck for symbols/patterns.
         let dest_x_start = x.max(0);
-        let dest_x_end = (x + other.width as i32).min(self.width as i32);
+        let dest_x_end = x.saturating_add(other.width as i32).min(self.width as i32);
 
         if dest_x_start >= dest_x_end {
             return;
@@ -172,7 +172,7 @@ impl Bitmap {
         let dest_x_end = dest_x_end as u32;
 
         for src_y in 0..other.height {
-            let dest_y = y + src_y as i32;
+            let dest_y = y.saturating_add(src_y as i32);
             if dest_y < 0 || dest_y >= self.height as i32 {
                 continue;
             }
@@ -235,5 +235,19 @@ impl Bitmap {
         }
 
         self.data[(row * self.stride + word_idx) as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combine_far_away() {
+        let mut page = Bitmap::new(8, 8).unwrap();
+        let region = Bitmap::new_with(8, 8, 0, 0, true).unwrap();
+        page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or);
+        page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or);
+        assert!(page.data.iter().all(|&w| w == 0));
     }
 }

@@ -8,7 +8,7 @@ use super::{
 };
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, WORD_BITS, WORD_SHIFT, Word};
+use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT, Word};
 use crate::decode::generic::ContextGatherer;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
@@ -157,14 +157,19 @@ impl<'a> RefinementContextGatherer<'a> {
         reference_dx: i32,
         reference_dy: i32,
     ) -> Self {
+        // Bitmaps are at most `MAX_DIMENSION` pixels wide and high, so with
+        // larger offsets all reference pixels lie outside the reference bitmap
+        // anyway. Clamping keeps the coordinates within `i32`.
+        const MAX_OFFSET: i32 = 4 * MAX_DIMENSION as i32;
+
         let use_default_at =
             template == RefinementTemplate::Template0 && has_default_at_pixels(at_pixels);
         Self {
             template,
             at_pixels,
             use_default_at,
-            reference_dx,
-            reference_dy,
+            reference_dx: reference_dx.clamp(-MAX_OFFSET, MAX_OFFSET),
+            reference_dy: reference_dy.clamp(-MAX_OFFSET, MAX_OFFSET),
             reg_y: 0,
             reg_cur_x: 0,
             reg_m1: 0,
