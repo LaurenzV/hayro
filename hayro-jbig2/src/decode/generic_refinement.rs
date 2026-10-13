@@ -44,9 +44,6 @@ pub(crate) fn decode_into(
 ) -> Result<()> {
     let data = header.data;
 
-    // Validate that the region fits within the reference bitmap.
-    // When referring to another segment, dimensions must match exactly (7.4.7.5).
-    // When using the page bitmap as reference, the region must fit within the page.
     if header.region_info.width > reference.width || header.region_info.height > reference.height {
         bail!(RegionError::InvalidDimension);
     }

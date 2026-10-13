@@ -328,7 +328,7 @@ fn decode_aggregation_bitmap(
         if ctx.h_ctx.aggregation_symbol_codes.is_none() {
             ctx.h_ctx.aggregation_symbol_codes = Some(HuffmanTable::build_uniform(
                 ctx.total_symbols(),
-                symbol_code_length,
+                symbol_code_length.max(1),
             )?);
         }
 

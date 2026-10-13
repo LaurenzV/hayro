@@ -98,8 +98,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<
         bail!(OverflowError::GridDimension);
     }
 
-    // TODO: Check grid offsets as well.
-
     let grid_horizontal_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
     let grid_vertical_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
@@ -326,9 +324,6 @@ fn render_patterns(
                 let first_word = xu / WORD_BITS;
                 let offset = xu % WORD_BITS;
                 let two = offset != 0 && first_word + 1 < stride;
-
-                // TODO: It seems our current test suite only triggers for
-                // `Or`.
 
                 match op {
                     CombinationOperator::Or => {
