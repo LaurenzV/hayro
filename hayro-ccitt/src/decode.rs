@@ -42,30 +42,12 @@ impl BitReader<'_> {
         }
     }
 
-    /// Decode a white run length.
-    #[inline(always)]
-    fn decode_white_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&WHITE_LOOKUP)
-            // See 0506179.pdf. We are lenient and check whether perhaps
-            // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&BLACK_LOOKUP))
-    }
-
-    /// Decode a black run length.
-    #[inline(always)]
-    fn decode_black_run(&mut self) -> Result<u32> {
-        self.decode_run_inner(&BLACK_LOOKUP)
-            // See 0506179.pdf. We are lenient and check whether perhaps
-            // the opposite color works.
-            .or_else(|_| self.decode_run_inner(&WHITE_LOOKUP))
-    }
-
     /// Decode a run length for the specified color.
     #[inline(always)]
     pub(crate) fn decode_run(&mut self, color: Color) -> Result<u32> {
         match color {
-            Color::White => self.decode_white_run(),
-            Color::Black => self.decode_black_run(),
+            Color::White => self.decode_run_inner(&WHITE_LOOKUP),
+            Color::Black => self.decode_run_inner(&BLACK_LOOKUP),
         }
     }
 
