@@ -77,8 +77,6 @@ pub enum HuffmanError {
     UnexpectedOob,
     /// Huffman tree has conflicting codes (one code is a prefix of another).
     ConflictingCodes,
-    /// Prefix length exceeds maximum supported value.
-    PrefixLengthTooLarge,
 }
 
 /// Errors related to region parameters.
@@ -209,7 +207,6 @@ impl fmt::Display for HuffmanError {
             Self::MissingTables => write!(f, "not enough referred Huffman tables"),
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
             Self::ConflictingCodes => write!(f, "conflicting Huffman codes"),
-            Self::PrefixLengthTooLarge => write!(f, "Huffman prefix length too large"),
         }
     }
 }

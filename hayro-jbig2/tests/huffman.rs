@@ -49,6 +49,11 @@ fn custom_table_htlow_min() {
 }
 
 #[test]
+fn custom_table_long_prefixes() {
+    check("huffman_custom_table_long_prefixes", "honeycomb");
+}
+
+#[test]
 fn symbol_id_run_codes() {
     check("huffman_symbol_id_run_codes", "honeycomb");
 }
