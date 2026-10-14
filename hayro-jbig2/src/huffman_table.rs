@@ -150,7 +150,7 @@ impl HuffmanTable {
         node_index: u32,
         code: u32,
         prefix_length: u8,
-        range_low: i32,
+        range_low: i64,
         range_length: u8,
         is_lower: bool,
         is_out_of_band: bool,
@@ -252,9 +252,7 @@ impl HuffmanTable {
         //         RANGELOW[NTEMP] = HTLOW − 1, NTEMP = NTEMP + 1
         //    This is the lower range table line for this table."
         lines.push(TableLine::lower(
-            minimum_value
-                .checked_sub(1)
-                .ok_or(HuffmanError::InvalidCode)?,
+            i64::from(minimum_value) - 1,
             reader
                 .read_bits(prefix_length_bits)
                 .ok_or(HuffmanError::InvalidCode)? as u8,
@@ -295,7 +293,7 @@ pub(crate) struct TableLine {
     /// `RANGELOW` - The base value for computing the decoded value.
     /// For normal/upper lines: value = `range_low` + offset
     /// For lower lines: value = `range_low` - offset
-    pub(crate) range_low: i32,
+    pub(crate) range_low: i64,
     /// `PREFLEN` - Prefix code length.
     pub(crate) prefix_length: u8,
     /// `RANGELEN` - Number of additional bits.
@@ -310,7 +308,7 @@ impl TableLine {
     /// Create a normal table line.
     pub(crate) const fn new(range_low: i32, prefix_length: u8, range_length: u8) -> Self {
         Self {
-            range_low,
+            range_low: range_low as i64,
             prefix_length,
             range_length,
             is_lower: false,
@@ -319,7 +317,7 @@ impl TableLine {
     }
 
     /// Create a lower range line (-∞...`range_high`).
-    const fn lower(range_high: i32, prefix_length: u8, range_length: u8) -> Self {
+    const fn lower(range_high: i64, prefix_length: u8, range_length: u8) -> Self {
         Self {
             range_low: range_high,
             prefix_length,
@@ -332,7 +330,7 @@ impl TableLine {
     /// Create an upper range line (`range_low`...+∞).
     const fn upper(range_low: i32, prefix_length: u8, range_length: u8) -> Self {
         Self {
-            range_low,
+            range_low: range_low as i64,
             prefix_length,
             range_length,
             is_lower: false,
@@ -374,7 +372,7 @@ impl HuffmanNode {
         }
     }
 
-    fn new_leaf(range_low: i32, range_length: u8, is_lower: bool, is_out_of_band: bool) -> Self {
+    fn new_leaf(range_low: i64, range_length: u8, is_lower: bool, is_out_of_band: bool) -> Self {
         Self::Leaf(LeafData {
             range_low,
             range_length,
@@ -451,9 +449,9 @@ impl HuffmanNode {
                     // 5) "Otherwise, set: HTVAL = RANGELOW[I] + HTOFFSET"
                     // `HTVAL`
                     let value = if leaf.is_lower {
-                        i64::from(leaf.range_low) - range_offset
+                        leaf.range_low - range_offset
                     } else {
-                        i64::from(leaf.range_low) + range_offset
+                        leaf.range_low + range_offset
                     };
 
                     return Ok(Some(
@@ -472,7 +470,7 @@ impl HuffmanNode {
 #[derive(Debug, Clone, Copy)]
 struct LeafData {
     /// `RANGELOW` - The base value for computing the decoded value.
-    range_low: i32,
+    range_low: i64,
     /// `RANGELEN` - Number of additional bits to read.
     range_length: u8,
     /// True if this is a lower range line (uses subtraction).

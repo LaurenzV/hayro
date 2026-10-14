@@ -44,6 +44,11 @@ fn custom_tables() {
 }
 
 #[test]
+fn custom_table_htlow_min() {
+    check("huffman_custom_table_htlow_min", "honeycomb");
+}
+
+#[test]
 fn symbol_id_run_codes() {
     check("huffman_symbol_id_run_codes", "honeycomb");
 }
