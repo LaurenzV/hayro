@@ -43,16 +43,39 @@ mod tables;
 pub use context::DecoderContext;
 pub use error::{DecodeError, Result};
 
-/// The encoding mode for CCITT fax decoding.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum EncodingMode {
-    /// Group 4 (MMR).
-    Group4,
-    /// Group 3 1D (MH).
-    Group3_1D,
-    /// Group 3 2D (MR).
-    Group3_2D,
+/// Decode the given image using the provided decoder context and decoder.
+///
+/// If decoding was successful, the number of bytes that have been read in total
+/// is returned.
+///
+/// If an error is returned, it means that the file is somehow malformed.
+/// However, even if that's the case, it is possible that a number
+/// of rows were decoded successfully and written into the decoder, so those
+/// can still be used, but the image might be truncated.
+pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext) -> Result<usize> {
+    ctx.reset();
+    let mut reader = BitReader::new(data);
+
+    if ctx.settings.columns == 0 {
+        return Ok(0);
+    }
+
+    match ctx.settings.encoding {
+        EncodingMode::Group4 => group4::decode(ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_1D => group3::decode_1d(ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_2D => group3::decode_2d(ctx, &mut reader, decoder)?,
+    }
+
+    reader.align();
+    Ok(reader.byte_pos())
+}
+
+/// A decoder for CCITT images.
+pub trait Decoder {
+    /// Push a run of pixels of the same color.
+    fn push_pixels(&mut self, white: bool, count: u32);
+    /// Called when a row has been completed.
+    fn next_line(&mut self);
 }
 
 /// Settings to apply during decoding.
@@ -117,37 +140,14 @@ impl DecodeSettings {
     }
 }
 
-/// A decoder for CCITT images.
-pub trait Decoder {
-    /// Push a run of pixels of the same color.
-    fn push_pixels(&mut self, white: bool, count: u32);
-    /// Called when a row has been completed.
-    fn next_line(&mut self);
-}
-
-/// Decode the given image using the provided decoder context and decoder.
-///
-/// If decoding was successful, the number of bytes that have been read in total
-/// is returned.
-///
-/// If an error is returned, it means that the file is somehow malformed.
-/// However, even if that's the case, it is possible that a number
-/// of rows were decoded successfully and written into the decoder, so those
-/// can still be used, but the image might be truncated.
-pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext) -> Result<usize> {
-    ctx.reset();
-    let mut reader = BitReader::new(data);
-
-    if ctx.settings.columns == 0 {
-        return Ok(0);
-    }
-
-    match ctx.settings.encoding {
-        EncodingMode::Group4 => group4::decode(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_1D => group3::decode_1d(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_2D => group3::decode_2d(ctx, &mut reader, decoder)?,
-    }
-
-    reader.align();
-    Ok(reader.byte_pos())
+/// The encoding mode for CCITT fax decoding.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EncodingMode {
+    /// Group 4 (MMR).
+    Group4,
+    /// Group 3 1D (MH).
+    Group3_1D,
+    /// Group 3 2D (MR).
+    Group3_2D,
 }

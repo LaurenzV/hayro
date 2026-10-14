@@ -86,45 +86,6 @@ fn recover<'a>(
     ctx.push_pixels(decoder, ctx.line_width - ctx.pixels_decoded)
 }
 
-/// Read consecutive EOLs.
-///
-/// In 2D data, an RTC consists of six times EOL + 1 (T.4 Section 4.2.4), so
-/// tag bits between EOLs are skipped as well, including the one after the last
-/// EOL of an RTC.
-fn read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
-    let mut eol_count = reader.read_eol_if_available();
-
-    if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D) {
-        return eol_count;
-    }
-
-    while eol_count > 0 {
-        let mut next = reader.clone();
-
-        if next.read_bit() != Ok(1) {
-            break;
-        }
-
-        match next.read_eol_if_available() {
-            0 => {
-                // Unless this is the last tag bit of an RTC, it belongs to the
-                // next line.
-                if eol_count >= 6 {
-                    *reader = next;
-                }
-
-                break;
-            }
-            count => {
-                *reader = next;
-                eol_count += count;
-            }
-        }
-    }
-
-    eol_count
-}
-
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
 fn check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<bool> {
     // If the data contains EOLs, we treat the zeros used for byte alignment as
@@ -163,4 +124,43 @@ fn check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<boo
     }
 
     Ok(rows_done || reader.at_end())
+}
+
+/// Read consecutive EOLs.
+///
+/// In 2D data, an RTC consists of six times EOL + 1 (T.4 Section 4.2.4), so
+/// tag bits between EOLs are skipped as well, including the one after the last
+/// EOL of an RTC.
+fn read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
+    let mut eol_count = reader.read_eol_if_available();
+
+    if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D) {
+        return eol_count;
+    }
+
+    while eol_count > 0 {
+        let mut next = reader.clone();
+
+        if next.read_bit() != Ok(1) {
+            break;
+        }
+
+        match next.read_eol_if_available() {
+            0 => {
+                // Unless this is the last tag bit of an RTC, it belongs to the
+                // next line.
+                if eol_count >= 6 {
+                    *reader = next;
+                }
+
+                break;
+            }
+            count => {
+                *reader = next;
+                eol_count += count;
+            }
+        }
+    }
+
+    eol_count
 }

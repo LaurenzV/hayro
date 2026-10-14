@@ -1,6 +1,3 @@
-/// A specialized Result type for CCITT decoding operations.
-pub type Result<T> = core::result::Result<T, DecodeError>;
-
 /// An error that can occur during CCITT decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -24,3 +21,6 @@ impl core::fmt::Display for DecodeError {
 }
 
 impl core::error::Error for DecodeError {}
+
+/// A specialized Result type for CCITT decoding operations.
+pub type Result<T> = core::result::Result<T, DecodeError>;

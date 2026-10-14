@@ -60,19 +60,6 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline(always)]
-    fn consume_slow(&mut self, bit_offset: usize) -> Result<()> {
-        let end = self.data.len() * 8;
-        self.bit_offset = bit_offset.min(end);
-        self.refill();
-
-        if bit_offset > end {
-            Err(DecodeError::UnexpectedEof)
-        } else {
-            Ok(())
-        }
-    }
-
-    #[inline(always)]
     pub(crate) fn align(&mut self) {
         let bit_pos = self.bit_pos();
 
@@ -90,6 +77,19 @@ impl<'a> BitReader<'a> {
     #[inline(always)]
     pub(crate) fn byte_pos(&self) -> usize {
         self.bit_offset >> 3
+    }
+
+    #[inline(always)]
+    fn consume_slow(&mut self, bit_offset: usize) -> Result<()> {
+        let end = self.data.len() * 8;
+        self.bit_offset = bit_offset.min(end);
+        self.refill();
+
+        if bit_offset > end {
+            Err(DecodeError::UnexpectedEof)
+        } else {
+            Ok(())
+        }
     }
 
     #[inline(always)]

@@ -15,34 +15,6 @@ pub(crate) enum Mode {
 }
 
 impl BitReader<'_> {
-    /// Decode a run length using the given lookup table (T.4 Section 4.1.1, T.6 Section 2.2.4).
-    ///
-    /// Run lengths 0-63 use terminating codes.
-    /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
-    #[inline(always)]
-    fn decode_run_inner(&mut self, lookup: &[u16; 1 << LOOKUP_BITS]) -> Result<u32> {
-        let mut total: u32 = 0;
-
-        loop {
-            let entry = lookup[(self.peek_u32() >> (32 - LOOKUP_BITS)) as usize];
-            self.consume((entry >> 12) as usize)?;
-
-            let len = entry & 0xFFF;
-
-            if len == LOOKUP_INVALID {
-                return Err(DecodeError::InvalidCode);
-            }
-
-            total = total.checked_add(len as u32).ok_or(DecodeError::Overflow)?;
-
-            // For decoding black/white runs, less than 64 means we have
-            // a terminating code.
-            if len < 64 {
-                return Ok(total);
-            }
-        }
-    }
-
     /// Decode a run length for the specified color.
     #[inline(always)]
     pub(crate) fn decode_run(&mut self, color: Color) -> Result<u32> {
@@ -131,6 +103,34 @@ impl BitReader<'_> {
         }
 
         false
+    }
+
+    /// Decode a run length using the given lookup table (T.4 Section 4.1.1, T.6 Section 2.2.4).
+    ///
+    /// Run lengths 0-63 use terminating codes.
+    /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
+    #[inline(always)]
+    fn decode_run_inner(&mut self, lookup: &[u16; 1 << LOOKUP_BITS]) -> Result<u32> {
+        let mut total: u32 = 0;
+
+        loop {
+            let entry = lookup[(self.peek_u32() >> (32 - LOOKUP_BITS)) as usize];
+            self.consume((entry >> 12) as usize)?;
+
+            let len = entry & 0xFFF;
+
+            if len == LOOKUP_INVALID {
+                return Err(DecodeError::InvalidCode);
+            }
+
+            total = total.checked_add(len as u32).ok_or(DecodeError::Overflow)?;
+
+            // For decoding black/white runs, less than 64 means we have
+            // a terminating code.
+            if len < 64 {
+                return Ok(total);
+            }
+        }
     }
 
     /// Count the zeros at the current position and return a reader positioned
