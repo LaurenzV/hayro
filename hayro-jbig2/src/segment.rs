@@ -61,6 +61,20 @@ pub(crate) enum SegmentType {
 }
 
 impl SegmentType {
+    pub(crate) fn is_immediate_region(self) -> bool {
+        matches!(
+            self,
+            Self::ImmediateTextRegion
+                | Self::ImmediateLosslessTextRegion
+                | Self::ImmediateHalftoneRegion
+                | Self::ImmediateLosslessHalftoneRegion
+                | Self::ImmediateGenericRegion
+                | Self::ImmediateLosslessGenericRegion
+                | Self::ImmediateGenericRefinementRegion
+                | Self::ImmediateLosslessGenericRefinementRegion
+        )
+    }
+
     fn from_type_value(value: u8) -> Self {
         match value {
             0 => Self::SymbolDictionary,

@@ -18,6 +18,7 @@ This crate forbids unsafe code via a crate-level attribute.
 extern crate alloc;
 
 use alloc::vec::Vec;
+use core::ops::ControlFlow;
 
 use crate::arithmetic_decoder::ArithmeticDecoderContext;
 
@@ -300,108 +301,109 @@ fn decode_segments(
     let page_state = &mut decoder_ctx.page_state;
     let scratch_buffers = &mut decoder_ctx.scratch_buffers;
 
-    // Process all segments.
     for seg in segments {
-        let mut reader = Reader::new(seg.data);
-
-        match seg.header.segment_type {
-            SegmentType::PageInformation => {
-                // Already processed above, skip.
-            }
-            SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
-                let had_unknown_length = seg.header.data_length.is_none();
-                let header = generic::parse(&mut reader, had_unknown_length, strict)?;
-
-                if page_state.can_decode_directly(page_bitmap, &header.region_info, false) {
-                    generic::decode_into(&header, page_bitmap, scratch_buffers)?;
-                } else {
-                    let region = generic::decode(&header, scratch_buffers)?;
-                    page_bitmap.combine(
-                        &region.bitmap,
-                        region.bitmap.x_location as i32,
-                        region.bitmap.y_location as i32,
-                        region.combination_operator,
-                    );
-                }
+        match decode_segment(seg, page_bitmap, page_state, scratch_buffers, strict) {
+            Ok(ControlFlow::Continue(())) => {}
+            Ok(ControlFlow::Break(())) => break,
+            // No other segment can refer to an immediate region, so the rest of
+            // the page doesn't depend on it.
+            Err(_) if !strict && seg.header.segment_type.is_immediate_region() => {
+                // It might have been decoded directly into the page.
                 page_state.page_pristine = false;
             }
-            SegmentType::IntermediateGenericRegion => {
-                // Intermediate segments cannot have unknown length.
-                let header = generic::parse(&mut reader, false, strict)?;
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(())
+}
+
+fn decode_segment(
+    seg: &segment::Segment<'_>,
+    page_bitmap: &mut Bitmap,
+    page_state: &mut PageState,
+    scratch_buffers: &mut ScratchBuffers,
+    strict: bool,
+) -> Result<ControlFlow<()>> {
+    let mut reader = Reader::new(seg.data);
+
+    match seg.header.segment_type {
+        SegmentType::PageInformation => {
+            // Already processed above, skip.
+        }
+        SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
+            let had_unknown_length = seg.header.data_length.is_none();
+            let header = generic::parse(&mut reader, had_unknown_length, strict)?;
+
+            if page_state.can_decode_directly(page_bitmap, &header.region_info, false) {
+                generic::decode_into(&header, page_bitmap, scratch_buffers)?;
+            } else {
                 let region = generic::decode(&header, scratch_buffers)?;
-                page_state.store_region(seg.header.segment_number, region.bitmap);
+                page_bitmap.combine(
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
+                    region.combination_operator,
+                );
             }
-            SegmentType::PatternDictionary => {
-                let header = pattern::parse(&mut reader, strict)?;
-                let dictionary = pattern::decode(&header, scratch_buffers)?;
-                page_state.store_pattern_dictionary(seg.header.segment_number, dictionary);
-            }
-            SegmentType::SymbolDictionary => {
-                // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
-                // (6.5.5, step 1)
-                let (input_symbols, referred_tables) =
-                    page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
+            page_state.page_pristine = false;
+        }
+        SegmentType::IntermediateGenericRegion => {
+            // Intermediate segments cannot have unknown length.
+            let header = generic::parse(&mut reader, false, strict)?;
+            let region = generic::decode(&header, scratch_buffers)?;
+            page_state.store_region(seg.header.segment_number, region.bitmap);
+        }
+        SegmentType::PatternDictionary => {
+            let header = pattern::parse(&mut reader, strict)?;
+            let dictionary = pattern::decode(&header, scratch_buffers)?;
+            page_state.store_pattern_dictionary(seg.header.segment_number, dictionary);
+        }
+        SegmentType::SymbolDictionary => {
+            // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
+            // (6.5.5, step 1)
+            let (input_symbols, referred_tables) =
+                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
 
-                // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
-                let retained_contexts = seg
-                    .header
-                    .referred_to_segments
-                    .iter()
-                    .rev()
-                    .find_map(|&num| page_state.get_symbol_dictionary(num))
-                    .and_then(|dict| dict.retained_contexts.as_ref());
+            // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
+            let retained_contexts = seg
+                .header
+                .referred_to_segments
+                .iter()
+                .rev()
+                .find_map(|&num| page_state.get_symbol_dictionary(num))
+                .and_then(|dict| dict.retained_contexts.as_ref());
 
-                let header = symbol::parse(&mut reader, strict)?;
-                let dictionary = symbol::decode(
+            let header = symbol::parse(&mut reader, strict)?;
+            let dictionary = symbol::decode(
+                &header,
+                &input_symbols,
+                &referred_tables,
+                &page_state.standard_tables,
+                retained_contexts,
+            )?;
+            page_state.store_symbol_dictionary(seg.header.segment_number, dictionary);
+        }
+        SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
+            let (symbols, referred_tables) =
+                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
+
+            let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
+
+            if page_state.can_decode_directly(
+                page_bitmap,
+                &header.region_info,
+                header.flags.default_pixel,
+            ) {
+                text::decode_into(
                     &header,
-                    &input_symbols,
+                    &symbols,
                     &referred_tables,
                     &page_state.standard_tables,
-                    retained_contexts,
-                )?;
-                page_state.store_symbol_dictionary(seg.header.segment_number, dictionary);
-            }
-            SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
-                let (symbols, referred_tables) =
-                    page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
-
-                let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
-
-                if page_state.can_decode_directly(
                     page_bitmap,
-                    &header.region_info,
-                    header.flags.default_pixel,
-                ) {
-                    text::decode_into(
-                        &header,
-                        &symbols,
-                        &referred_tables,
-                        &page_state.standard_tables,
-                        page_bitmap,
-                        scratch_buffers,
-                    )?;
-                } else {
-                    let region = text::decode(
-                        &header,
-                        &symbols,
-                        &referred_tables,
-                        &page_state.standard_tables,
-                        scratch_buffers,
-                    )?;
-                    page_bitmap.combine(
-                        &region.bitmap,
-                        region.bitmap.x_location as i32,
-                        region.bitmap.y_location as i32,
-                        region.combination_operator,
-                    );
-                }
-                page_state.page_pristine = false;
-            }
-            SegmentType::IntermediateTextRegion => {
-                let (symbols, referred_tables) =
-                    page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
-
-                let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
+                    scratch_buffers,
+                )?;
+            } else {
                 let region = text::decode(
                     &header,
                     &symbols,
@@ -409,58 +411,116 @@ fn decode_segments(
                     &page_state.standard_tables,
                     scratch_buffers,
                 )?;
-                page_state.store_region(seg.header.segment_number, region.bitmap);
+                page_bitmap.combine(
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
+                    region.combination_operator,
+                );
             }
-            SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
-                let pattern_dict = seg
-                    .header
-                    .referred_to_segments
-                    .first()
-                    .and_then(|&num| page_state.get_pattern_dictionary(num))
-                    .ok_or(SegmentError::MissingPatternDictionary)?;
+            page_state.page_pristine = false;
+        }
+        SegmentType::IntermediateTextRegion => {
+            let (symbols, referred_tables) =
+                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
 
-                let header = halftone::parse(&mut reader, strict)?;
+            let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
+            let region = text::decode(
+                &header,
+                &symbols,
+                &referred_tables,
+                &page_state.standard_tables,
+                scratch_buffers,
+            )?;
+            page_state.store_region(seg.header.segment_number, region.bitmap);
+        }
+        SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
+            let pattern_dict = seg
+                .header
+                .referred_to_segments
+                .first()
+                .and_then(|&num| page_state.get_pattern_dictionary(num))
+                .ok_or(SegmentError::MissingPatternDictionary)?;
 
-                if page_state.can_decode_directly(
-                    page_bitmap,
-                    &header.region_info,
-                    header.flags.initial_pixel_color,
-                ) {
-                    halftone::decode_into(&header, pattern_dict, page_bitmap, scratch_buffers)?;
-                } else {
-                    let region = halftone::decode(&header, pattern_dict, scratch_buffers)?;
-                    page_bitmap.combine(
-                        &region.bitmap,
-                        region.bitmap.x_location as i32,
-                        region.bitmap.y_location as i32,
-                        region.combination_operator,
-                    );
-                }
-                page_state.page_pristine = false;
-            }
-            SegmentType::IntermediateHalftoneRegion => {
-                let pattern_dict = seg
-                    .header
-                    .referred_to_segments
-                    .first()
-                    .and_then(|&num| page_state.get_pattern_dictionary(num))
-                    .ok_or(SegmentError::MissingPatternDictionary)?;
+            let header = halftone::parse(&mut reader, strict)?;
 
-                let header = halftone::parse(&mut reader, strict)?;
+            if page_state.can_decode_directly(
+                page_bitmap,
+                &header.region_info,
+                header.flags.initial_pixel_color,
+            ) {
+                halftone::decode_into(&header, pattern_dict, page_bitmap, scratch_buffers)?;
+            } else {
                 let region = halftone::decode(&header, pattern_dict, scratch_buffers)?;
-                page_state.store_region(seg.header.segment_number, region.bitmap);
+                page_bitmap.combine(
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
+                    region.combination_operator,
+                );
             }
-            SegmentType::IntermediateGenericRefinementRegion => {
-                // Same logic as immediate refinement, but store result instead of combining.
-                let referred_segment =
-                    page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
+            page_state.page_pristine = false;
+        }
+        SegmentType::IntermediateHalftoneRegion => {
+            let pattern_dict = seg
+                .header
+                .referred_to_segments
+                .first()
+                .and_then(|&num| page_state.get_pattern_dictionary(num))
+                .ok_or(SegmentError::MissingPatternDictionary)?;
 
-                if strict && referred_segment.is_none() {
-                    bail!(SegmentError::InvalidReference);
+            let header = halftone::parse(&mut reader, strict)?;
+            let region = halftone::decode(&header, pattern_dict, scratch_buffers)?;
+            page_state.store_region(seg.header.segment_number, region.bitmap);
+        }
+        SegmentType::IntermediateGenericRefinementRegion => {
+            // Same logic as immediate refinement, but store result instead of combining.
+            let referred_segment =
+                page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
+
+            if strict && referred_segment.is_none() {
+                bail!(SegmentError::InvalidReference);
+            }
+
+            let header = generic_refinement::parse(&mut reader)?;
+
+            let page_area;
+            let reference = match referred_segment {
+                Some(referred_segment) => referred_segment,
+                None => {
+                    page_area = page_bitmap_area(page_bitmap, &header.region_info)?;
+                    &page_area
                 }
+            };
+            let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
 
-                let header = generic_refinement::parse(&mut reader)?;
+            page_state.store_region(seg.header.segment_number, region.bitmap);
+        }
+        SegmentType::ImmediateGenericRefinementRegion
+        | SegmentType::ImmediateLosslessGenericRefinementRegion => {
+            // "3) Determine the buffer associated with the region segment that
+            // this segment refers to." (7.4.7.5)
+            //
+            // "If this segment does not refer to another region segment, set
+            // GRREFERENCE to be a bitmap containing the current contents of the
+            // page buffer (see clause 8), restricted to the area of the page
+            // buffer specified by this segment's region segment information
+            // field." (7.4.7.4)
+            let referred_segment =
+                page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
 
+            let header = generic_refinement::parse(&mut reader)?;
+
+            if let Some(referred_segment) = referred_segment
+                && page_state.can_decode_directly(page_bitmap, &header.region_info, false)
+            {
+                generic_refinement::decode_into(
+                    &header,
+                    referred_segment,
+                    page_bitmap,
+                    scratch_buffers,
+                )?;
+            } else {
                 let page_area;
                 let reference = match referred_segment {
                     Some(referred_segment) => referred_segment,
@@ -470,75 +530,37 @@ fn decode_segments(
                     }
                 };
                 let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
+                page_bitmap.combine(
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
+                    region.combination_operator,
+                );
+            }
 
-                page_state.store_region(seg.header.segment_number, region.bitmap);
-            }
-            SegmentType::ImmediateGenericRefinementRegion
-            | SegmentType::ImmediateLosslessGenericRefinementRegion => {
-                // "3) Determine the buffer associated with the region segment that
-                // this segment refers to." (7.4.7.5)
-                //
-                // "If this segment does not refer to another region segment, set
-                // GRREFERENCE to be a bitmap containing the current contents of the
-                // page buffer (see clause 8), restricted to the area of the page
-                // buffer specified by this segment's region segment information
-                // field." (7.4.7.4)
-                let referred_segment =
-                    page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
-
-                let header = generic_refinement::parse(&mut reader)?;
-
-                if let Some(referred_segment) = referred_segment
-                    && page_state.can_decode_directly(page_bitmap, &header.region_info, false)
-                {
-                    generic_refinement::decode_into(
-                        &header,
-                        referred_segment,
-                        page_bitmap,
-                        scratch_buffers,
-                    )?;
-                } else {
-                    let page_area;
-                    let reference = match referred_segment {
-                        Some(referred_segment) => referred_segment,
-                        None => {
-                            page_area = page_bitmap_area(page_bitmap, &header.region_info)?;
-                            &page_area
-                        }
-                    };
-                    let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
-                    page_bitmap.combine(
-                        &region.bitmap,
-                        region.bitmap.x_location as i32,
-                        region.bitmap.y_location as i32,
-                        region.combination_operator,
-                    );
-                }
-
-                page_state.page_pristine = false;
-            }
-            SegmentType::Tables => {
-                // "Tables – see 7.4.13." (type 53)
-                // "This segment contains data which defines one or more user-supplied
-                // Huffman coding tables." (7.4.13)
-                let table = HuffmanTable::read_custom(&mut reader)?;
-                page_state.store_huffman_table(seg.header.segment_number, table);
-            }
-            SegmentType::EndOfPage | SegmentType::EndOfFile => {
-                break;
-            }
-            SegmentType::Extension if strict => {
-                let extension_type = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-                if extension_type & 0x8000_0000 != 0 {
-                    bail!(DecodeError::Unsupported);
-                }
-            }
-            // Other segment types not yet implemented.
-            _ => {}
+            page_state.page_pristine = false;
         }
+        SegmentType::Tables => {
+            // "Tables – see 7.4.13." (type 53)
+            // "This segment contains data which defines one or more user-supplied
+            // Huffman coding tables." (7.4.13)
+            let table = HuffmanTable::read_custom(&mut reader)?;
+            page_state.store_huffman_table(seg.header.segment_number, table);
+        }
+        SegmentType::EndOfPage | SegmentType::EndOfFile => {
+            return Ok(ControlFlow::Break(()));
+        }
+        SegmentType::Extension if strict => {
+            let extension_type = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+            if extension_type & 0x8000_0000 != 0 {
+                bail!(DecodeError::Unsupported);
+            }
+        }
+        // Other segment types not yet implemented.
+        _ => {}
     }
 
-    Ok(())
+    Ok(ControlFlow::Continue(()))
 }
 
 /// Page-level decoding state for a JBIG2 page.

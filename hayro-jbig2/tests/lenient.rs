@@ -71,3 +71,8 @@ fn gray_value_out_of_range() {
 fn mmr_rows_missing() {
     check("lenient_mmr_rows_missing", "truchet");
 }
+
+#[test]
+fn failing_region() {
+    check("lenient_failing_region", "honeycomb");
+}
