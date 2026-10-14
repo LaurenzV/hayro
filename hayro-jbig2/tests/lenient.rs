@@ -76,3 +76,8 @@ fn mmr_rows_missing() {
 fn failing_region() {
     check("lenient_failing_region", "honeycomb");
 }
+
+#[test]
+fn symbol_out_of_range() {
+    check("lenient_symbol_out_of_range", "honeycomb");
+}

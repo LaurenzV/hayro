@@ -157,7 +157,14 @@ pub(crate) fn decode_with(
                 decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
 
             let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
-                SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
+                SymbolBitmap::Reference(idx) => match symbols.get(*idx) {
+                    Some(bitmap) => bitmap,
+                    None if header.strict => bail!(SymbolError::OutOfRange),
+                    None => {
+                        instance_count += 1;
+                        continue;
+                    }
+                },
                 SymbolBitmap::Owned(bitmap) => bitmap,
             };
             let symbol_width = symbol_bitmap_ref.width as i32;
