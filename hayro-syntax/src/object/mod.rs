@@ -358,7 +358,11 @@ mod macros {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::{Array, Dict, FromBytes, Name, Null, Number, Object, Stream, String};
+    use crate::object::{
+        Array, Dict, FromBytes, MaybeRef, Name, Null, Number, Object, Stream, String,
+    };
+    use crate::reader::Reader;
+    use crate::reader::{ReaderContext, ReaderExt};
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         Object::from_bytes(data)
@@ -456,5 +460,44 @@ mod tests {
         assert_eq!(size_of::<Number>(), 16);
         assert_eq!(size_of::<Stream<'_>>(), 24);
         assert_eq!(size_of::<String<'_>>(), 32);
+    }
+
+    #[test]
+    fn skip_and_read_agree() {
+        let cases: &[&[u8]] = &[
+            b"12-.5",
+            b"1-2-3",
+            b"+",
+            b"- ",
+            b"--5",
+            b"+-5",
+            b".-",
+            b"-a",
+            b"/#zz",
+            b"/A#4",
+            b"/A#41",
+            b"<< /A 1 >> stream",
+            b"<< /A /#zz >>",
+            b"[/#zz]",
+            b"[(a) + (b)]",
+            b"nul",
+        ];
+
+        for case in cases {
+            let mut skip_reader = Reader::new(case);
+            let skipped = skip_reader.skip::<MaybeRef<Object<'_>>>(false).is_some();
+
+            let mut read_reader = Reader::new(case);
+            let read = read_reader
+                .read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
+                .is_some();
+
+            assert_eq!(
+                (skipped, skip_reader.offset()),
+                (read, read_reader.offset()),
+                "{}",
+                std::string::String::from_utf8_lossy(case)
+            );
+        }
     }
 }

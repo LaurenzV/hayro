@@ -451,6 +451,12 @@ mod tests {
     }
 
     #[test]
+    fn array_with_invalid_item() {
+        assert!(Array::from_bytes(b"[/#zz]").is_none());
+        assert!(Array::from_bytes(b"[12-.5]").is_none());
+    }
+
+    #[test]
     fn array_with_dict_followed_by_stream() {
         let res = array_impl(b"[<< /A 1 >> stream]").unwrap();
         assert_eq!(res.len(), 2);

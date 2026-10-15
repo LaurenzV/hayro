@@ -1194,4 +1194,10 @@ mod tests {
         assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
         assert_eq!(format!("{}", Dict::empty()), "<<>>");
     }
+
+    #[test]
+    fn dict_with_invalid_value() {
+        assert!(Dict::from_bytes(b"<< /A /#zz >>").is_none());
+        assert!(Dict::from_bytes(b"<< /A 12-.5 >>").is_none());
+    }
 }
