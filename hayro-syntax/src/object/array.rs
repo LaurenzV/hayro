@@ -146,12 +146,11 @@ impl<'a> Iterator for ArrayIter<'a> {
         self.reader.skip_white_spaces_and_comments();
 
         if !self.reader.at_end() {
-            // Objects are already guaranteed to be valid.
-            let item = self
+            // Skipping an array is more permissive than reading each object.
+            // Stop iteration when a value cannot be parsed instead of panicking.
+            return self
                 .reader
-                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
-                .unwrap();
-            return Some(item);
+                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx);
         }
 
         None
@@ -333,9 +332,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Object;
     use crate::object::r#ref::{MaybeRef, ObjRef};
-    use crate::object::{Array, FromBytes};
+    use crate::object::Object;
+    use crate::object::{Array, Dict, FromBytes};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
     use crate::xref::XRef;
@@ -448,5 +447,24 @@ mod tests {
         let array = Array::from_bytes(b"[  34 % comment\n /Test  [1   2] ]").unwrap();
 
         assert_eq!(format!("{array}"), "[34 /Test [1 2]]");
+    }
+
+    #[test]
+    fn malformed_values_do_not_panic_during_iteration_or_dictionary_debug() {
+        let minimal_array = Array::from_bytes(b"[/#zz]").unwrap();
+        assert_eq!(minimal_array.raw_iter().count(), 0);
+
+        let array = Array::from_bytes(b"[true /#zz false]").unwrap();
+        assert_eq!(array.raw_iter().count(), 1);
+
+        let minimal_dict = Dict::from_bytes(b"<< /A /#zz >>").unwrap();
+        assert_eq!(minimal_dict.entries().count(), 0);
+        assert!(format!("{minimal_dict:?}").contains("Dict"));
+
+        let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
+        let entries = dict.entries().collect::<Vec<_>>();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0.as_ref(), b"B");
+        assert!(format!("{dict:?}").contains("\"B\""));
     }
 }
