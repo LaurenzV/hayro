@@ -5,7 +5,10 @@ use crate::font::{Font, PositionedGlyph, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
-use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, StrokeProps};
+use crate::{
+    ClipPath, Device, DrawProps, FillRule, InterpreterSettings, InterpreterWarning, Paint,
+    StrokeProps,
+};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -364,6 +367,8 @@ impl<'a> Context<'a> {
         if let Some(resolved) = resolved {
             Some(TextStateFont::Font(resolved))
         } else {
+            (self.settings.warning_sink)(InterpreterWarning::UnsupportedFont);
+
             Font::new_standard(StandardFont::Helvetica, &self.settings.font_resolver)
                 .map(TextStateFont::Fallback)
         }
@@ -402,4 +407,70 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
     }
 
     Some(path.fast_bounding_box())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DummyDevice, interpret_page};
+    use hayro_syntax::Pdf;
+    use std::sync::{Arc, Mutex};
+
+    fn warnings(font: &str) -> Vec<String> {
+        let content = "BT /F1 1 Tf (a) Tj ET";
+        let data = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj
+4 0 obj {font} endobj
+5 0 obj << /Length {} >>
+stream
+{content}
+endstream
+endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len()
+        );
+        let pdf = Pdf::new(data.into_bytes()).unwrap();
+
+        let collected = Arc::new(Mutex::new(Vec::new()));
+        let sink = collected.clone();
+        let settings = InterpreterSettings {
+            warning_sink: Arc::new(move |w: InterpreterWarning| {
+                sink.lock().unwrap().push(format!("{w:?}"));
+            }),
+            ..InterpreterSettings::default()
+        };
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            &cache,
+            pdf.xref(),
+            settings,
+        );
+        interpret_page(&pdf.pages()[0], &mut context, &mut DummyDevice);
+
+        collected.lock().unwrap().clone()
+    }
+
+    #[test]
+    fn unsupported_font() {
+        assert_eq!(
+            warnings("<< /Type /Font /Subtype /Type2 /BaseFont /Helvetica >>"),
+            ["UnsupportedFont"]
+        );
+    }
+
+    #[test]
+    fn no_warning_for_loaded_font() {
+        assert!(
+            warnings(
+                "<< /Type /Font /Subtype /Type3 /FontMatrix [1 0 0 1 0 0] /CharProcs << >> /Encoding << /Differences [] >> >>"
+            )
+            .is_empty()
+        );
+    }
 }
