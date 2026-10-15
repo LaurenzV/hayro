@@ -13,3 +13,4 @@ Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 ```
 
 The LAB.icc profile was generated with LCMS2.
+It is available under the CC0-1.0 License.
