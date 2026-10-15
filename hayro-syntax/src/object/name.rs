@@ -4,7 +4,7 @@ use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, Skippable};
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_regular_character;
 use core::borrow::Borrow;
 use core::fmt::{self, Debug, Display, Formatter};
@@ -133,7 +133,7 @@ object!(Name<'a>, Name);
 
 impl Skippable for Name<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        skip_name_like(r, true).map(|_| ())
+        r.read_without_context::<Name<'_>>().map(|_| ())
     }
 }
 

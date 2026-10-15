@@ -78,7 +78,7 @@ impl Deref for Operator<'_> {
 
 impl Skippable for Operator<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        skip_name_like(r, false).map(|_| ())
+        r.read_without_context::<Operator<'_>>().map(|_| ())
     }
 }
 
