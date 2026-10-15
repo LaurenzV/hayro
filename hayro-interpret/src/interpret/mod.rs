@@ -744,6 +744,11 @@ pub fn interpret<'a>(
         }
     }
 
+    // A path object, including a pending `W` or `W*`, can't continue beyond the content
+    // stream it starts in.
+    context.path_mut().truncate(0);
+    *(context.clip_mut()) = None;
+
     while context.num_states() > num_states {
         context.restore_state(device);
     }
