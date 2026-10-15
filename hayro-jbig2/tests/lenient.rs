@@ -81,3 +81,8 @@ fn failing_region() {
 fn symbol_out_of_range() {
     check("lenient_symbol_out_of_range", "honeycomb");
 }
+
+#[test]
+fn colour_region() {
+    check("lenient_colour_region", "honeycomb");
+}

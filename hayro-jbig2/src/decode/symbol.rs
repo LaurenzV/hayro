@@ -359,7 +359,6 @@ fn decode_aggregation_bitmap(
             x_location: 0,
             y_location: 0,
             combination_operator: CombinationOperator::Or,
-            _colour_extension: false,
         },
         flags: TextRegionFlags {
             use_huffman,
