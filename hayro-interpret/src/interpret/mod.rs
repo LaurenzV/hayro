@@ -135,6 +135,8 @@ pub enum InterpreterWarning {
     /// An annotation has an `AP` dictionary, but its normal appearance could not
     /// be selected or loaded, so the annotation was not drawn.
     UnresolvedAnnotationAppearance,
+    /// A content stream of the page failed to decode, so its contents were not drawn.
+    ContentStreamDecodeFailure,
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -145,6 +147,10 @@ pub fn interpret_page<'a>(
 ) {
     let resources = page.resources();
     interpret(page.typed_operations(), resources, context, device);
+
+    if page.has_undecodable_content() {
+        (context.settings.warning_sink)(InterpreterWarning::ContentStreamDecodeFailure);
+    }
 
     if context.settings.render_annotations
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)

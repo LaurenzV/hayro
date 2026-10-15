@@ -1,11 +1,11 @@
-use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_interpret::{InterpreterSettings, InterpreterWarning};
 use hayro::render_pdf;
 use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
-use std::sync::Barrier;
+use std::sync::{Arc, Barrier, Mutex};
 
 fn load_pdf(file: &[u8]) {
     let pdf = Pdf::new(file.to_vec());
@@ -761,6 +761,27 @@ fn page_tree_cycle_with_siblings() {
 fn object_stream_cycle() {
     let file = include_bytes!("../pdfs/load/object_stream_cycle.pdf");
     load_pdf(file);
+}
+
+#[test]
+fn content_stream_decode_failure() {
+    let file = include_bytes!("../pdfs/load/content_stream_decode_failure.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+    let warnings = Arc::new(Mutex::new(vec![]));
+    let settings = InterpreterSettings {
+        warning_sink: {
+            let warnings = warnings.clone();
+            Arc::new(move |w| warnings.lock().unwrap().push(w))
+        },
+        ..Default::default()
+    };
+
+    render_pdf(&pdf, 1.0, settings, None).unwrap();
+
+    assert!(matches!(
+        warnings.lock().unwrap()[..],
+        [InterpreterWarning::ContentStreamDecodeFailure]
+    ));
 }
 
 #[test]

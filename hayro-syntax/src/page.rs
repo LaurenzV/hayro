@@ -191,7 +191,7 @@ pub struct Page<'a> {
     media_box: Rect,
     crop_box: Rect,
     rotation: Rotation,
-    page_streams: OnceLock<Option<Vec<u8>>>,
+    page_streams: OnceLock<(Option<Vec<u8>>, bool)>,
     resources: Resources<'a>,
     ctx: ReaderContext<'a>,
 }
@@ -254,35 +254,50 @@ impl<'a> Page<'a> {
 
     /// Return the decoded content stream of the page.
     pub fn page_stream(&self) -> Option<&[u8]> {
-        let convert_single = |s: Stream<'_>| {
-            let data = s.decoded().ok()?;
-            Some(data.to_vec())
-        };
+        self.page_streams().0.as_deref()
+    }
 
-        self.page_streams
-            .get_or_init(|| {
-                if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
-                    convert_single(stream)
-                } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
-                    let streams = array.iter::<Stream<'_>>().flat_map(convert_single);
+    /// Return whether a content stream of the page failed to decode.
+    ///
+    /// The contents of such a stream are missing from [`Page::page_stream`] and
+    /// [`Page::operations`].
+    pub fn has_undecodable_content(&self) -> bool {
+        self.page_streams().1
+    }
 
-                    let mut collected = vec![];
-
-                    for stream in streams {
-                        collected.extend(stream);
-                        // Streams must have at least one whitespace in-between.
-                        collected.push(b' ');
-                    }
-
-                    Some(collected)
-                } else {
-                    warn!("contents entry of page was neither stream nor array of streams");
-
+    fn page_streams(&self) -> &(Option<Vec<u8>>, bool) {
+        self.page_streams.get_or_init(|| {
+            let mut failed = false;
+            let mut convert_single = |s: Stream<'_>| match s.decoded() {
+                Ok(data) => Some(data.to_vec()),
+                Err(_) => {
+                    failed = true;
                     None
                 }
-            })
-            .as_ref()
-            .map(|d| d.as_slice())
+            };
+
+            let data = if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
+                convert_single(stream)
+            } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
+                let streams = array.iter::<Stream<'_>>().flat_map(convert_single);
+
+                let mut collected = vec![];
+
+                for stream in streams {
+                    collected.extend(stream);
+                    // Streams must have at least one whitespace in-between.
+                    collected.push(b' ');
+                }
+
+                Some(collected)
+            } else {
+                warn!("contents entry of page was neither stream nor array of streams");
+
+                None
+            };
+
+            (data, failed)
+        })
     }
 
     /// Get the resources of the page.
