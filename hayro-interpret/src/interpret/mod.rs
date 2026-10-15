@@ -5,7 +5,7 @@ use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
-    close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
+    close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
 use crate::interpret::state::{TextStateFont, handle_gs};
 use crate::interpret::text::TextRenderingMode;
@@ -393,18 +393,7 @@ pub fn interpret<'a>(
             TypedInstruction::StrokePath(_) => {
                 stroke_path(context, device);
             }
-            TypedInstruction::EndPath(_) => {
-                if let Some(clip) = *context.clip()
-                    && !context.path().elements().is_empty()
-                {
-                    let clip_path = context.get().ctm * context.path().clone();
-                    context.push_clip_path(clip_path, clip, device);
-
-                    *(context.clip_mut()) = None;
-                }
-
-                context.path_mut().truncate(0);
-            }
+            TypedInstruction::EndPath(_) => end_path(context, device),
             TypedInstruction::NonStrokeColor(c) => {
                 let gs = &mut context.get_mut().graphics_state;
                 gs.non_stroke_color = c.0.into_iter().map(|n| n.as_f32()).collect();
@@ -754,6 +743,11 @@ pub fn interpret<'a>(
             }
         }
     }
+
+    // A path object, including a pending `W` or `W*`, can't continue beyond the content
+    // stream it starts in.
+    context.path_mut().truncate(0);
+    *(context.clip_mut()) = None;
 
     while context.num_states() > num_states {
         context.restore_state(device);
