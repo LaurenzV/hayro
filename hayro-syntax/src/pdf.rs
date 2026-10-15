@@ -182,4 +182,10 @@ mod tests {
 
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
     }
+
+    #[test]
+    fn issue_1414() {
+        let data = b"\xd3\n1 0 obj\n<< /Kids [4 0%PDF-7\no<<e >>\nstream0\n]\n88%%EOF\n\nj/Type/Catalog /Pages 1 0 R  >>startxref\n";
+        let _ = Pdf::new(data.to_vec());
+    }
 }

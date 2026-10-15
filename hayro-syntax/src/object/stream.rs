@@ -218,7 +218,18 @@ impl Skippable for Stream<'_> {
 }
 
 impl<'a> Readable<'a> for Stream<'a> {
-    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(_: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
+        // A stream can only be an indirect object (ISO 32000-2, 7.3.8.1).
+        None
+    }
+
+    fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
+        Self::read_indirect(&mut Reader::new(b), &ReaderContext::dummy())
+    }
+}
+
+impl<'a> ObjectLike<'a> for Stream<'a> {
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 
         if dict.contains_key(F) {
@@ -358,7 +369,6 @@ impl<'a> TryFrom<Object<'a>> for Stream<'a> {
     }
 }
 
-impl<'a> ObjectLike<'a> for Stream<'a> {}
 impl<'a> ObjectRefLike<'a> for Stream<'a> {
     fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self> {
         match obj {
@@ -370,16 +380,11 @@ impl<'a> ObjectRefLike<'a> for Stream<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Stream;
-    use crate::reader::Reader;
-    use crate::reader::{ReaderContext, ReaderExt};
+    use crate::object::{FromBytes, Stream};
 
     #[test]
     fn display() {
-        let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
-        let stream = reader
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
-            .unwrap();
+        let stream = Stream::from_bytes(b"<< /Length 3 >> stream\nabc\nendstream").unwrap();
 
         assert_eq!(format!("{stream}"), "Stream (len: 3)");
     }
@@ -387,10 +392,7 @@ mod tests {
     #[test]
     fn stream() {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::new(data);
-        let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
-            .unwrap();
+        let stream = Stream::from_bytes(data).unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
     }
@@ -398,10 +400,7 @@ mod tests {
     #[test]
     fn stream_fallback() {
         let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
-        let mut r = Reader::new(data);
-        let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
-            .unwrap();
+        let stream = Stream::from_bytes(data).unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
     }

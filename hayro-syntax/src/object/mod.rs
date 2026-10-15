@@ -34,7 +34,14 @@ pub mod dict;
 pub mod stream;
 
 /// A trait for PDF objects.
-pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {}
+pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {
+    /// Read the object as the value of an indirect object.
+    ///
+    /// Unlike [`Readable::read`], which reads a direct object, this can yield a stream.
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Self::read(r, ctx)
+    }
+}
 
 /// A trait for PDF objects that can be borrowed directly from an [`Object`].
 pub(crate) trait ObjectRefLike<'a>: Sized {
@@ -169,7 +176,25 @@ impl<'a> Object<'a> {
     }
 }
 
-impl<'a> ObjectLike<'a> for Object<'a> {}
+impl<'a> ObjectLike<'a> for Object<'a> {
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        if r.peek_bytes(2) != Some(b"<<") {
+            return Self::read(r, ctx);
+        }
+
+        let mut cloned = r.clone();
+        let dict = Dict::read(&mut cloned, ctx)?;
+        cloned.skip_white_spaces_and_comments();
+
+        if cloned.forward_tag(b"stream").is_some() {
+            Some(Self::Stream(Stream::read_indirect(r, ctx)?))
+        } else {
+            r.jump(cloned.offset());
+
+            Some(Self::Dict(dict))
+        }
+    }
+}
 impl<'a> ObjectRefLike<'a> for Object<'a> {
     fn cast_ref(obj: &Self) -> Option<&Self> {
         Some(obj)
@@ -208,19 +233,7 @@ impl<'a> Readable<'a> for Object<'a> {
             b't' | b'f' => Self::Boolean(bool::read(r, ctx)?),
             b'/' => Self::Name(Name::read(r, ctx)?),
             b'<' => match r.peek_bytes(2)? {
-                b"<<" => {
-                    let mut cloned = r.clone();
-                    let dict = Dict::read(&mut cloned, ctx)?;
-                    cloned.skip_white_spaces_and_comments();
-
-                    if cloned.forward_tag(b"stream").is_some() {
-                        Object::Stream(Stream::read(r, ctx)?)
-                    } else {
-                        r.jump(cloned.offset());
-
-                        Object::Dict(dict)
-                    }
-                }
+                b"<<" => Self::Dict(Dict::read(r, ctx)?),
                 _ => Self::String(String::read(r, ctx)?),
             },
             b'(' => Self::String(String::read(r, ctx)?),
@@ -234,6 +247,10 @@ impl<'a> Readable<'a> for Object<'a> {
         };
 
         Some(object)
+    }
+
+    fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
+        Self::read_indirect(&mut Reader::new(b), &ReaderContext::dummy())
     }
 }
 
@@ -341,13 +358,10 @@ mod macros {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::{Array, Dict, Name, Null, Number, Object, Stream, String};
-    use crate::reader::Reader;
-    use crate::reader::{ReaderContext, ReaderExt};
+    use crate::object::{Array, Dict, FromBytes, Name, Null, Number, Object, Stream, String};
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
-        let mut r = Reader::new(data);
-        r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
+        Object::from_bytes(data)
     }
 
     #[test]

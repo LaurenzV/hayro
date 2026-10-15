@@ -131,7 +131,7 @@ fn fallback_xref_map_inner<'a>(
                             root_ref = last_obj_num;
                         }
 
-                        if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
+                        if let Some(stream) = Stream::read_indirect(&mut old_r, &dummy_ctx)
                             && dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
                             && let Some(data) = stream.decoded().ok()
                             && let Some(last_obj_num) = last_obj_num
@@ -1074,7 +1074,7 @@ impl<'a> ObjectStream<'a> {
         r.jump(offset);
         r.skip_white_spaces_and_comments();
 
-        r.read_with_context::<T>(&self.ctx)
+        T::read_indirect(&mut r, &self.ctx)
     }
 }
 
