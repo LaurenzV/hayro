@@ -493,28 +493,37 @@ fn store<'a>(
         let y_shrink_factor = header.size_data.y_shrink_factor;
 
         // Otherwise, copy sample by sample.
+        let first_x = (tile.rect.x0 == header.size_data.image_area_x_offset)
+            .then_some(resolution_tile.rect.x0);
+        let first_y = (tile.rect.y0 == header.size_data.image_area_y_offset)
+            .then_some(resolution_tile.rect.y0);
+
         for y in resolution_tile.rect.y0..resolution_tile.rect.y1 {
             let relative_y = (y - idwt_output.rect.y0) as usize;
-            let reference_grid_y = (scale_y as u32 * y) / y_shrink_factor;
+            let reference_grid_y = if first_y == Some(y) {
+                image_y_offset
+            } else {
+                (scale_y as u32 * y) / y_shrink_factor
+            };
+            let y_end = (scale_y as u32 * (y + 1)) / y_shrink_factor;
 
             for x in resolution_tile.rect.x0..resolution_tile.rect.x1 {
                 let relative_x = (x - idwt_output.rect.x0) as usize;
-                let reference_grid_x = (scale_x as u32 * x) / x_shrink_factor;
+                let reference_grid_x = if first_x == Some(x) {
+                    image_x_offset
+                } else {
+                    (scale_x as u32 * x) / x_shrink_factor
+                };
+                let x_end = (scale_x as u32 * (x + 1)) / x_shrink_factor;
 
                 let sample = idwt_output.coefficients
                     [relative_y * idwt_output.rect.width() as usize + relative_x];
 
                 for x_position in u32::max(reference_grid_x, image_x_offset)
-                    ..u32::min(
-                        reference_grid_x + scale_x as u32,
-                        image_width + image_x_offset,
-                    )
+                    ..u32::min(x_end, image_width + image_x_offset)
                 {
                     for y_position in u32::max(reference_grid_y, image_y_offset)
-                        ..u32::min(
-                            reference_grid_y + scale_y as u32,
-                            image_height + image_y_offset,
-                        )
+                        ..u32::min(y_end, image_height + image_y_offset)
                     {
                         let pos = (y_position - image_y_offset) as usize * image_width as usize
                             + (x_position - image_x_offset) as usize;
