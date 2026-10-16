@@ -282,3 +282,8 @@ fn issue_typst_7269() {
 fn issue_986() {
     run_svg_test("issue968", "pdfs/custom/issue968.pdf", None);
 }
+
+#[test]
+fn fill_degenerate() {
+    run_svg_test("fill_degenerate", "pdfs/custom/fill_degenerate.pdf", None);
+}

@@ -60,6 +60,10 @@
     "file": "pdfs/custom/color_space_separation_2.pdf"
   },
   {
+    "id": "fill_degenerate",
+    "file": "pdfs/custom/fill_degenerate.pdf"
+  },
+  {
     "id": "filter_flate_1bit",
     "file": "pdfs/custom/filter_flate_1bit.pdf"
   },
