@@ -126,9 +126,7 @@ impl Default for InterpreterSettings {
 /// Warnings that can occur while interpreting a PDF file.
 #[non_exhaustive]
 pub enum InterpreterWarning {
-    /// An unsupported font kind was encountered.
-    ///
-    /// Currently, only CID fonts with non-identity encoding are unsupported.
+    /// A font could not be loaded.
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,

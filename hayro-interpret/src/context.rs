@@ -5,7 +5,10 @@ use crate::font::{Font, PositionedGlyph, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
-use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, StrokeProps};
+use crate::{
+    ClipPath, Device, DrawProps, FillRule, InterpreterSettings, InterpreterWarning, Paint,
+    StrokeProps,
+};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -360,6 +363,8 @@ impl<'a> Context<'a> {
         if let Some(resolved) = resolved {
             Some(TextStateFont::Font(resolved))
         } else {
+            (self.settings.warning_sink)(InterpreterWarning::UnsupportedFont);
+
             Font::new_standard(StandardFont::Helvetica, &self.settings.font_resolver)
                 .map(TextStateFont::Fallback)
         }
