@@ -94,6 +94,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn image_rgba16() { run_render_test("image_rgba16", "pdfs/custom/image_rgba16.pdf", None); }
 #[test] fn image_rgba8() { run_render_test("image_rgba8", "pdfs/custom/image_rgba8.pdf", None); }
 #[test] fn image_rgba8_icc() { run_render_test("image_rgba8_icc", "pdfs/custom/image_rgba8_icc.pdf", None); }
+#[test] fn image_smask_downscale() { run_render_test("image_smask_downscale", "pdfs/custom/image_smask_downscale.pdf", None); }
 #[test] fn integration_coat_of_arms() { run_render_test("integration_coat_of_arms", "pdfs/custom/integration_coat_of_arms.pdf", None); }
 #[test] fn integration_diagram() { run_render_test("integration_diagram", "pdfs/custom/integration_diagram.pdf", None); }
 #[test] fn integration_matplotlib() { run_render_test("integration_matplotlib", "pdfs/custom/integration_matplotlib.pdf", None); }
