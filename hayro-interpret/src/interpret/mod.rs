@@ -126,7 +126,7 @@ impl Default for InterpreterSettings {
 /// Warnings that can occur while interpreting a PDF file.
 #[non_exhaustive]
 pub enum InterpreterWarning {
-    /// A font could not be loaded, so its text is drawn with Helvetica, or not at all.
+    /// A font could not be loaded.
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
