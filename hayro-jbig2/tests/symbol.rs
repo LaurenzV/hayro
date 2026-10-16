@@ -23,6 +23,16 @@ fn large_segment_numbers() {
 }
 
 #[test]
+fn template2() {
+    check("symbol_template2", "honeycomb");
+}
+
+#[test]
+fn custom_at() {
+    check("symbol_custom_at", "honeycomb");
+}
+
+#[test]
 fn refine_one() {
     check("symbol_refine_one", "honeycomb");
 }

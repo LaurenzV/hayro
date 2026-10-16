@@ -8,6 +8,11 @@ fn text_refine_large_offsets() {
 }
 
 #[test]
+fn custom_aggregate_count() {
+    check("huffman_custom_aggregate_count", "honeycomb");
+}
+
+#[test]
 #[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
 fn many_symbols() {
     check("huffman_many_symbols", "honeycomb");
