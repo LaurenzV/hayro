@@ -55,27 +55,33 @@ impl hayro_jbig2::Decoder for Collector {
     }
 }
 
-/// Decode `stream` and check that it matches `reference`.
+/// Decode `stream` in strict mode and check that it matches `reference`.
 fn check(stream: &str, reference: &str) {
-    compare(stream, load_reference(reference));
+    compare(stream, load_reference(reference), true);
 }
 
-/// Decode `stream` and check that it matches the given part (x, y, width,
-/// height) of `reference`.
+/// Decode `stream`, which is invalid, in lenient mode and check that it
+/// matches `reference`.
+fn check_lenient(stream: &str, reference: &str) {
+    compare(stream, load_reference(reference), false);
+}
+
+/// Decode `stream` in strict mode and check that it matches the given part
+/// (x, y, width, height) of `reference`.
 fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usize, usize, usize)) {
     let reference = load_reference(reference)[y..y + height]
         .iter()
         .map(|row| row[x..x + width].to_vec())
         .collect();
-    compare(stream, reference);
+    compare(stream, reference, true);
 }
 
-fn compare(stream: &str, reference: Bitmap) {
+fn compare(stream: &str, reference: Bitmap, strict: bool) {
     let path = tests_dir().join("streams").join(format!("{stream}.jbig2"));
     let data =
         std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
 
-    let image = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default())
+    let image = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings { strict })
         .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     let mut collector = Collector::default();
     image
