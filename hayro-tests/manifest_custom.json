@@ -742,6 +742,10 @@
     "file": "pdfs/custom/text_with_rise.pdf"
   },
   {
+    "id": "type3_shading_glyph",
+    "file": "pdfs/custom/type3_shading_glyph.pdf"
+  },
+  {
     "id": "xobject_1",
     "file": "pdfs/custom/xobject_1.pdf"
   },

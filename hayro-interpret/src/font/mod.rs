@@ -19,7 +19,7 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Dict, Stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Vec2};
+use kurbo::{Affine, BezPath, Rect, Vec2};
 use outline::OutlineFont;
 use skrifa::GlyphId;
 use std::borrow::Cow;
@@ -221,6 +221,7 @@ pub struct Type3Glyph<'a> {
     pub(crate) font: Rc<Type3<'a>>,
     pub(crate) glyph_id: GlyphId,
     pub(crate) state: State<'a>,
+    pub(crate) bbox: Rect,
     pub(crate) parent_resources: Resources<'a>,
     pub(crate) cache: InterpreterCache<'a>,
     pub(crate) xref: &'a XRef,
@@ -253,7 +254,7 @@ impl<'a> Type3Glyph<'a> {
 
 impl CacheKey for Type3Glyph<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(&(self.font.cache_key(), self.glyph_id))
+        hash128(&(self.font.cache_key(), self.glyph_id, self.bbox.cache_key()))
     }
 }
 
@@ -361,6 +362,7 @@ impl<'a> Font<'a> {
                     font: t.clone(),
                     glyph_id: glyph,
                     state: ctx.get().clone(),
+                    bbox: ctx.bbox(),
                     parent_resources: resources.clone(),
                     cache: ctx.interpreter_cache.clone(),
                     xref: ctx.xref,
