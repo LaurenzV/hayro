@@ -119,75 +119,6 @@ impl Renderer<'_> {
         self.ctx.set_transform(image_transform);
     }
 
-    fn resize_image_data(
-        &self,
-        data: Vec<u8>,
-        src_width: u32,
-        src_height: u32,
-        new_width: u32,
-        new_height: u32,
-        pixel_format: ImagePixelFormat,
-    ) -> Vec<u8> {
-        match pixel_format {
-            ImagePixelFormat::Luma => self.resize_image_data_impl::<1>(
-                data,
-                src_width,
-                src_height,
-                new_width,
-                new_height,
-                |scaler, source_size, target_size| {
-                    scaler.plan_planar_resampling(source_size, target_size)
-                },
-            ),
-            ImagePixelFormat::Rgb => self.resize_image_data_impl::<3>(
-                data,
-                src_width,
-                src_height,
-                new_width,
-                new_height,
-                |scaler, source_size, target_size| {
-                    scaler.plan_rgb_resampling(source_size, target_size)
-                },
-            ),
-            ImagePixelFormat::PremultipliedRgba => self.resize_image_data_impl::<4>(
-                data,
-                src_width,
-                src_height,
-                new_width,
-                new_height,
-                |scaler, source_size, target_size| {
-                    scaler.plan_rgba_resampling(source_size, target_size, false)
-                },
-            ),
-        }
-    }
-
-    fn resize_image_data_impl<const N: usize>(
-        &self,
-        data: Vec<u8>,
-        src_width: u32,
-        src_height: u32,
-        new_width: u32,
-        new_height: u32,
-        plan: impl FnOnce(
-            &Scaler,
-            ImageSize,
-            ImageSize,
-        ) -> Result<Arc<Resampling<u8, N>>, PicScaleError>,
-    ) -> Vec<u8> {
-        let source_size = ImageSize::new(src_width as usize, src_height as usize);
-        let target_size = ImageSize::new(new_width as usize, new_height as usize);
-        let src = ImageStore::<u8, N>::from_slice(&data, src_width as usize, src_height as usize)
-            .unwrap();
-        let mut out = vec![0; new_width as usize * new_height as usize * N];
-        let mut dst =
-            ImageStoreMut::<u8, N>::from_slice(&mut out, new_width as usize, new_height as usize)
-                .unwrap();
-        let plan = plan(&self.global.scaler, source_size, target_size).unwrap();
-        plan.resample(&src, &mut dst).unwrap();
-        out
-    }
-
     fn draw_image(&mut self, image_data: impl Into<RenderImageData>, alpha_data: Option<LumaData>) {
         let image_data = image_data.into();
         let cur_transform = *self.ctx.transform();
@@ -247,7 +178,8 @@ impl Renderer<'_> {
             let alpha_data = if !needs_resize {
                 alpha.data
             } else {
-                let resized_alpha = self.resize_image_data(
+                let resized_alpha = resize_image_data(
+                    &self.global.scaler,
                     alpha.data,
                     img_width,
                     img_height,
@@ -278,7 +210,8 @@ impl Renderer<'_> {
             let luma_data = if !needs_resize {
                 luma.data
             } else {
-                let resized = self.resize_image_data(
+                let resized = resize_image_data(
+                    &self.global.scaler,
                     luma.data,
                     img_width,
                     img_height,
@@ -305,24 +238,22 @@ impl Renderer<'_> {
             };
             let alpha = alpha_data.unwrap();
 
-            let (luma_data, alpha_data) = if !needs_resize {
-                (luma.data, alpha.data)
+            if !needs_resize {
+                let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
+                for (g, a) in luma.data.iter().zip(alpha.data) {
+                    out.extend_from_slice(&[*g, *g, *g, a]);
+                }
+                out
             } else {
-                let resized_luma = self.resize_image_data(
+                let resized = downscale_with_alpha::<1>(
+                    self.global.level,
+                    &self.global.scaler,
                     luma.data,
-                    img_width,
-                    img_height,
-                    new_width,
-                    new_height,
-                    ImagePixelFormat::Luma,
-                );
-                let resized_alpha = self.resize_image_data(
                     alpha.data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    ImagePixelFormat::Luma,
                 );
                 additional_transform = Affine::scale_non_uniform(
                     img_width as f64 / new_width as f64,
@@ -330,55 +261,49 @@ impl Renderer<'_> {
                 );
                 img_width = new_width;
                 img_height = new_height;
-                (resized_luma, resized_alpha)
-            };
-
-            let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
-            for (g, a) in luma_data.iter().zip(alpha_data) {
-                out.extend_from_slice(&[*g, *g, *g, a]);
+                needs_premultiplication = false;
+                resized
             }
-            out
         } else if matches!(&image_data, RenderImageData::Rgb(_)) && needs_resize {
             let RenderImageData::Rgb(rgb) = image_data else {
                 unreachable!()
             };
 
-            let resized = self.resize_image_data(
-                rgb.data,
-                img_width,
-                img_height,
-                new_width,
-                new_height,
-                ImagePixelFormat::Rgb,
-            );
-            let resized_alpha = alpha_data.map(|alpha| {
-                self.resize_image_data(
+            let resized = if let Some(alpha) = alpha_data {
+                needs_premultiplication = false;
+                downscale_with_alpha::<3>(
+                    self.global.level,
+                    &self.global.scaler,
+                    rgb.data,
                     alpha.data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    ImagePixelFormat::Luma,
                 )
-            });
+            } else {
+                let resized = resize_image_data(
+                    &self.global.scaler,
+                    rgb.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Rgb,
+                );
+                let mut out = Vec::with_capacity(new_width as usize * new_height as usize * 4);
+                for px in resized.as_chunks::<3>().0 {
+                    out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
+                out
+            };
             additional_transform = Affine::scale_non_uniform(
                 img_width as f64 / new_width as f64,
                 img_height as f64 / new_height as f64,
             );
             img_width = new_width;
             img_height = new_height;
-
-            let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
-            if let Some(alpha) = resized_alpha {
-                for (px, a) in resized.as_chunks::<3>().0.iter().zip(alpha) {
-                    out.extend_from_slice(&[px[0], px[1], px[2], a]);
-                }
-            } else {
-                for px in resized.as_chunks::<3>().0 {
-                    out.extend_from_slice(&[px[0], px[1], px[2], 255]);
-                }
-            }
-            out
+            resized
         } else {
             let (rgb_data, alpha_data) = match image_data {
                 RenderImageData::Rgb(rgb) => (rgb.data, alpha_data.map(|a| a.data)),
@@ -422,7 +347,8 @@ impl Renderer<'_> {
                 premultiply_rgba(self.global.level, &mut rgba_data);
 
                 needs_premultiplication = false;
-                let resized = self.resize_image_data(
+                let resized = resize_image_data(
+                    &self.global.scaler,
                     rgba_data,
                     img_width,
                     img_height,
@@ -654,6 +580,186 @@ impl<S: Simd> Splat4thExt for u8x32<S> {
     }
 }
 
+fn resize_image_data(
+    scaler: &Scaler,
+    data: Vec<u8>,
+    src_width: u32,
+    src_height: u32,
+    new_width: u32,
+    new_height: u32,
+    pixel_format: ImagePixelFormat,
+) -> Vec<u8> {
+    match pixel_format {
+        ImagePixelFormat::Luma => resize_image_data_impl::<1>(
+            scaler,
+            data,
+            src_width,
+            src_height,
+            new_width,
+            new_height,
+            |scaler, source_size, target_size| {
+                scaler.plan_planar_resampling(source_size, target_size)
+            },
+        ),
+        ImagePixelFormat::Rgb => resize_image_data_impl::<3>(
+            scaler,
+            data,
+            src_width,
+            src_height,
+            new_width,
+            new_height,
+            |scaler, source_size, target_size| scaler.plan_rgb_resampling(source_size, target_size),
+        ),
+        ImagePixelFormat::PremultipliedRgba => resize_image_data_impl::<4>(
+            scaler,
+            data,
+            src_width,
+            src_height,
+            new_width,
+            new_height,
+            |scaler, source_size, target_size| {
+                scaler.plan_rgba_resampling(source_size, target_size, false)
+            },
+        ),
+    }
+}
+
+fn resize_image_data_impl<const N: usize>(
+    scaler: &Scaler,
+    data: Vec<u8>,
+    src_width: u32,
+    src_height: u32,
+    new_width: u32,
+    new_height: u32,
+    plan: impl FnOnce(&Scaler, ImageSize, ImageSize) -> Result<Arc<Resampling<u8, N>>, PicScaleError>,
+) -> Vec<u8> {
+    let source_size = ImageSize::new(src_width as usize, src_height as usize);
+    let target_size = ImageSize::new(new_width as usize, new_height as usize);
+    let src =
+        ImageStore::<u8, N>::from_slice(&data, src_width as usize, src_height as usize).unwrap();
+    let mut out = vec![0; new_width as usize * new_height as usize * N];
+    let mut dst =
+        ImageStoreMut::<u8, N>::from_slice(&mut out, new_width as usize, new_height as usize)
+            .unwrap();
+    let plan = plan(scaler, source_size, target_size).unwrap();
+    plan.resample(&src, &mut dst).unwrap();
+    out
+}
+
+fn downscale_with_alpha<const N: usize>(
+    level: Level,
+    scaler: &Scaler,
+    mut color: Vec<u8>,
+    alpha: Vec<u8>,
+    src_width: u32,
+    src_height: u32,
+    new_width: u32,
+    new_height: u32,
+) -> Vec<u8> {
+    premultiply_with_alpha::<N>(level, &mut color, &alpha);
+
+    let color_format = if N == 1 {
+        ImagePixelFormat::Luma
+    } else {
+        ImagePixelFormat::Rgb
+    };
+    let color = resize_image_data(
+        scaler,
+        color,
+        src_width,
+        src_height,
+        new_width,
+        new_height,
+        color_format,
+    );
+    let alpha = resize_image_data(
+        scaler,
+        alpha,
+        src_width,
+        src_height,
+        new_width,
+        new_height,
+        ImagePixelFormat::Luma,
+    );
+
+    let mut out = Vec::with_capacity(new_width as usize * new_height as usize * 4);
+    for (pixel, a) in color.as_chunks::<N>().0.iter().zip(alpha) {
+        match pixel.as_slice() {
+            [g] => out.extend_from_slice(&[*g, *g, *g, a]),
+            [r, g, b] => out.extend_from_slice(&[*r, *g, *b, a]),
+            _ => unreachable!(),
+        }
+    }
+    out
+}
+
+fn premultiply_with_alpha<const N: usize>(level: Level, color: &mut [u8], alpha: &[u8]) {
+    let simd_pixels = alpha.len() / 32 * 32;
+    let (simd_color, tail_color) = color.split_at_mut(simd_pixels * N);
+    let (simd_alpha, tail_alpha) = alpha.split_at(simd_pixels);
+
+    #[inline(always)]
+    fn premultiply_luma_simd<S: Simd>(simd: S, luma: &mut [u8], alpha: &[u8]) {
+        for (luma, alpha) in luma
+            .as_chunks_mut::<32>()
+            .0
+            .iter_mut()
+            .zip(alpha.as_chunks::<32>().0)
+        {
+            let premultiplied = normalized_mul(
+                simd,
+                u8x32::from_slice(simd, luma),
+                u8x32::from_slice(simd, alpha),
+            );
+            premultiplied.store_slice(luma);
+        }
+    }
+
+    #[inline(always)]
+    fn premultiply_rgb_simd<S: Simd>(simd: S, rgb: &mut [u8], alpha: &[u8]) {
+        const ALPHA_INDICES: [[u8; 16]; 3] = [
+            [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5],
+            [5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10],
+            [
+                10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15,
+            ],
+        ];
+
+        for (rgb, alpha) in rgb
+            .as_chunks_mut::<96>()
+            .0
+            .iter_mut()
+            .zip(alpha.as_chunks::<32>().0)
+        {
+            let (alpha_low, alpha_high) = simd.split_u8x32(u8x32::from_slice(simd, alpha));
+            let [[a0, a1, a2], [a3, a4, a5]] = [alpha_low, alpha_high].map(|alpha| {
+                ALPHA_INDICES.map(|indices| simd.swizzle_dyn_u8x16(alpha, indices.simd_into(simd)))
+            });
+            let alphas = [
+                simd.combine_u8x16(a0, a1),
+                simd.combine_u8x16(a2, a3),
+                simd.combine_u8x16(a4, a5),
+            ];
+
+            for (rgb, alpha) in rgb.as_chunks_mut::<32>().0.iter_mut().zip(alphas) {
+                normalized_mul(simd, u8x32::from_slice(simd, rgb), alpha).store_slice(rgb);
+            }
+        }
+    }
+
+    if N == 1 {
+        fearless_simd::dispatch!(level, simd => premultiply_luma_simd(simd, simd_color, simd_alpha));
+    } else {
+        fearless_simd::dispatch!(level, simd => premultiply_rgb_simd(simd, simd_color, simd_alpha));
+    }
+
+    for (pixel, a) in tail_color.as_chunks_mut::<N>().0.iter_mut().zip(tail_alpha) {
+        for c in pixel {
+            *c = div_255(u16::from(*c) * u16::from(*a)) as u8;
+        }
+    }
+}
+
 fn premultiply_rgba(level: Level, data: &mut [u8]) {
     let simd_len = data.len() / 32 * 32;
     let (simd_data, tail) = data.split_at_mut(simd_len);
@@ -667,13 +773,7 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
         .simd_into(simd);
         for chunk in data.as_chunks_mut::<32>().0 {
             let rgba = u8x32::from_slice(simd, chunk);
-            let alphas = rgba.splat_4th();
-            let (rgba_low, rgba_high) = simd.widen_u8x32(rgba);
-            let (alpha_low, alpha_high) = simd.widen_u8x32(alphas);
-            let premultiplied = simd.narrow_u16x16(
-                (rgba_low * alpha_low).div_255(),
-                (rgba_high * alpha_high).div_255(),
-            );
+            let premultiplied = normalized_mul(simd, rgba, rgba.splat_4th());
             alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
         }
     }
@@ -686,6 +786,13 @@ fn premultiply_rgba(level: Level, data: &mut [u8]) {
         pixel[1] = div_255(u16::from(pixel[1]) * alpha) as u8;
         pixel[2] = div_255(u16::from(pixel[2]) * alpha) as u8;
     }
+}
+
+#[inline(always)]
+fn normalized_mul<S: Simd>(simd: S, a: u8x32<S>, b: u8x32<S>) -> u8x32<S> {
+    let (a_low, a_high) = simd.widen_u8x32(a);
+    let (b_low, b_high) = simd.widen_u8x32(b);
+    simd.narrow_u16x16((a_low * b_low).div_255(), (a_high * b_high).div_255())
 }
 
 trait Div255Ext {
