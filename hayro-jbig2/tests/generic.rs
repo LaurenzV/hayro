@@ -108,6 +108,11 @@ fn unknown_length() {
 }
 
 #[test]
+fn unknown_length_mmr() {
+    check("generic_unknown_length_mmr", "truchet");
+}
+
+#[test]
 fn unknown_length_custom_at() {
     check("generic_unknown_length_custom_at", "truchet");
 }

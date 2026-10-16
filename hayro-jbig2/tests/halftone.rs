@@ -8,6 +8,11 @@ fn basic() {
 }
 
 #[test]
+fn replace_word_aligned() {
+    check("halftone_replace_word_aligned", "maze");
+}
+
+#[test]
 fn global() {
     check("halftone_global", "maze");
 }

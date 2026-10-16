@@ -48,6 +48,11 @@ fn refine() {
 }
 
 #[test]
+fn refine_template1() {
+    check("text_refine_template1", "honeycomb");
+}
+
+#[test]
 fn refine_custom_at() {
     check("text_refine_custom_at", "honeycomb");
 }
