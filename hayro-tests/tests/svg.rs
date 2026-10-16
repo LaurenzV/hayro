@@ -284,19 +284,6 @@ fn issue_986() {
 }
 
 #[test]
-fn fill_degenerate_rotated() {
-    run_svg_test(
-        "fill_degenerate_rotated",
-        "pdfs/custom/fill_degenerate_rotated.pdf",
-        None,
-    );
-}
-
-#[test]
-fn fill_degenerate_large_ctm() {
-    run_svg_test(
-        "fill_degenerate_large_ctm",
-        "pdfs/custom/fill_degenerate_large_ctm.pdf",
-        None,
-    );
+fn fill_degenerate() {
+    run_svg_test("fill_degenerate", "pdfs/custom/fill_degenerate.pdf", None);
 }
