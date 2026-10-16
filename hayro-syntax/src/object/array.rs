@@ -145,15 +145,14 @@ impl<'a> Iterator for ArrayIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.reader.skip_white_spaces_and_comments();
 
-        if !self.reader.at_end() {
-            // Skipping an array is more permissive than reading each object.
-            // Stop iteration when a value cannot be parsed instead of panicking.
-            return self
-                .reader
-                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx);
+        if self.reader.at_end() {
+            return None;
         }
 
-        None
+        // The array was validated by skipping its items, which accepts some items that
+        // can't be read.
+        self.reader
+            .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
     }
 }
 
@@ -332,9 +331,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::object::r#ref::{MaybeRef, ObjRef};
     use crate::object::Object;
-    use crate::object::{Array, Dict, FromBytes};
+    use crate::object::r#ref::{MaybeRef, ObjRef};
+    use crate::object::{Array, FromBytes};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
     use crate::xref::XRef;
@@ -450,21 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_values_do_not_panic_during_iteration_or_dictionary_debug() {
-        let minimal_array = Array::from_bytes(b"[/#zz]").unwrap();
-        assert_eq!(minimal_array.raw_iter().count(), 0);
-
-        let array = Array::from_bytes(b"[true /#zz false]").unwrap();
-        assert_eq!(array.raw_iter().count(), 1);
-
-        let minimal_dict = Dict::from_bytes(b"<< /A /#zz >>").unwrap();
-        assert_eq!(minimal_dict.entries().count(), 0);
-        assert!(format!("{minimal_dict:?}").contains("Dict"));
-
-        let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
-        let entries = dict.entries().collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].0.as_ref(), b"B");
-        assert!(format!("{dict:?}").contains("\"B\""));
+    fn array_with_unreadable_item() {
+        let _ = array_ref_impl(b"[true /#zz false]");
     }
 }

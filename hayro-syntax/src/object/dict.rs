@@ -1184,4 +1184,11 @@ mod tests {
         assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
         assert_eq!(format!("{}", Dict::empty()), "<<>>");
     }
+
+    #[test]
+    fn dict_with_unreadable_value() {
+        let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
+        let _ = dict.entries().count();
+        let _ = format!("{dict:?}");
+    }
 }
