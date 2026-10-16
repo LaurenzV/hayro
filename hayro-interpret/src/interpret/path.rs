@@ -10,14 +10,12 @@ pub(crate) fn fill_path<'a>(
     fill_rule: FillRule,
 ) {
     fill_path_impl(context, device, fill_rule, None);
-
-    context.path_mut().truncate(0);
+    end_path(context, device);
 }
 
 pub(crate) fn stroke_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     stroke_path_impl(context, device, None);
-
-    context.path_mut().truncate(0);
+    end_path(context, device);
 }
 
 pub(crate) fn fill_stroke_path<'a>(
@@ -27,6 +25,16 @@ pub(crate) fn fill_stroke_path<'a>(
 ) {
     fill_path_impl(context, device, fill_rule, None);
     stroke_path_impl(context, device, None);
+    end_path(context, device);
+}
+
+pub(crate) fn end_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
+    if let Some(clip) = context.clip_mut().take()
+        && !context.path().elements().is_empty()
+    {
+        let clip_path = context.get().ctm * context.path().clone();
+        context.push_clip_path(clip_path, clip, device);
+    }
 
     context.path_mut().truncate(0);
 }

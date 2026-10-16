@@ -280,10 +280,6 @@ impl<'a> Context<'a> {
         &mut self.last_point
     }
 
-    pub(crate) fn clip(&self) -> &Option<FillRule> {
-        &self.clip
-    }
-
     pub(crate) fn clip_mut(&mut self) -> &mut Option<FillRule> {
         &mut self.clip
     }
