@@ -148,10 +148,14 @@ impl Renderer<'_> {
                         let x_step = xs * t.x_step;
                         let y_step = ys * t.y_step;
 
+                        let pix_width = x_step.abs().round().max(1.0) as u16;
+                        let pix_height = y_step.abs().round().max(1.0) as u16;
+
+                        let xs = pix_width as f32 / t.x_step.abs();
+                        let ys = pix_height as f32 / t.y_step.abs();
+
                         let scaled_width = bbox.width() as f32 * xs;
                         let scaled_height = bbox.height() as f32 * ys;
-                        let pix_width = x_step.abs().round() as u16;
-                        let pix_height = y_step.abs().round() as u16;
 
                         let mut ctx = self.child_context(pix_width, pix_height);
                         let mut renderer = Renderer::new(&mut ctx, self.global);

@@ -662,6 +662,10 @@
     "file": "pdfs/custom/pattern_shading_type6_2.pdf"
   },
   {
+    "id": "pattern_tiling_step",
+    "file": "pdfs/custom/pattern_tiling_step.pdf"
+  },
+  {
     "id": "rendering_conflation_artifacts",
     "file": "pdfs/custom/rendering_conflation_artifacts.pdf",
     "first_page": 2,

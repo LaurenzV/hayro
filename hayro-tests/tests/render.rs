@@ -162,6 +162,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pattern_shading_type5() { run_render_test("pattern_shading_type5", "downloads/custom/pattern_shading_type5.pdf", None); }
 #[test] fn pattern_shading_type6() { run_render_test("pattern_shading_type6", "downloads/custom/pattern_shading_type6.pdf", None); }
 #[test] fn pattern_shading_type6_2() { run_render_test("pattern_shading_type6_2", "pdfs/custom/pattern_shading_type6_2.pdf", None); }
+#[test] fn pattern_tiling_step() { run_render_test("pattern_tiling_step", "pdfs/custom/pattern_tiling_step.pdf", None); }
 #[test] fn rendering_conflation_artifacts() { run_render_test("rendering_conflation_artifacts", "pdfs/custom/rendering_conflation_artifacts.pdf", Some("2..=2")); }
 #[test] fn shading_operator_1() { run_render_test("shading_operator_1", "pdfs/custom/shading_operator_1.pdf", None); }
 #[test] fn shading_operator_2() { run_render_test("shading_operator_2", "pdfs/custom/shading_operator_2.pdf", None); }
