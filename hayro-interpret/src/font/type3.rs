@@ -5,7 +5,6 @@ use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, read_to_unicode};
 use crate::interpret::state::TextState;
-use crate::util::RectExt;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, interpret};
 use crate::{CacheKey, ClipPath, DrawMode, DrawProps, ImageDrawProps};
@@ -15,9 +14,9 @@ use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_BBOX, FONT_MATRIX, RESOURCES};
+use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_MATRIX, RESOURCES};
 use hayro_syntax::page::Resources;
-use kurbo::{Affine, BezPath, Rect};
+use kurbo::{Affine, BezPath};
 use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
 
@@ -30,7 +29,6 @@ pub(crate) struct Type3<'a> {
     dict: Dict<'a>,
     char_procs: FxHashMap<String, Stream<'a>>,
     glyph_simulator: GlyphSimulator,
-    font_bbox: Rect,
     matrix: Affine,
     to_unicode: Option<CMap>,
 }
@@ -39,10 +37,6 @@ impl<'a> Type3<'a> {
     pub(crate) fn new(dict: &Dict<'a>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, dict)?;
-        let font_bbox = dict
-            .get::<hayro_syntax::object::Rect>(FONT_BBOX)
-            .unwrap_or(hayro_syntax::object::Rect::ZERO)
-            .to_kurbo();
 
         let matrix = Affine::new(
             dict.get::<[f64; 6]>(FONT_MATRIX)
@@ -67,7 +61,6 @@ impl<'a> Type3<'a> {
         Some(Self {
             glyph_simulator: GlyphSimulator::new(),
             encoding,
-            font_bbox,
             char_procs,
             widths,
             missing_width,
@@ -146,7 +139,7 @@ impl<'a> Type3<'a> {
 
         let mut context = Context::new_with(
             state.ctm,
-            self.font_bbox,
+            glyph.bbox,
             &glyph.cache,
             glyph.xref,
             glyph.settings.clone(),

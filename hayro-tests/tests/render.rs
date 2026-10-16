@@ -180,6 +180,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn text_rendering_stroking_clipping() { run_render_test("text_rendering_stroking_clipping", "pdfs/custom/text_rendering_stroking_clipping.pdf", None); }
 #[test] fn text_stroked_complex_paint() { run_render_test("text_stroked_complex_paint", "pdfs/custom/text_stroked_complex_paint.pdf", None); }
 #[test] fn text_with_rise() { run_render_test("text_with_rise", "pdfs/custom/text_with_rise.pdf", None); }
+#[test] fn type3_shading_glyph() { run_render_test("type3_shading_glyph", "pdfs/custom/type3_shading_glyph.pdf", None); }
 #[test] fn xobject_1() { run_render_test("xobject_1", "pdfs/custom/xobject_1.pdf", None); }
 #[test] fn xobject_matrix() { run_render_test("xobject_matrix", "pdfs/custom/xobject_matrix.pdf", None); }
 #[test] fn xobject_with_fill_opacity() { run_render_test("xobject_with_fill_opacity", "pdfs/custom/xobject_with_fill_opacity.pdf", None); }
