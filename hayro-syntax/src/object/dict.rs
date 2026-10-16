@@ -99,10 +99,9 @@ impl<'a> Dict<'a> {
     pub fn entries(&self) -> impl Iterator<Item = (Name<'a>, MaybeRef<Object<'a>>)> + '_ {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
-        sorted_keys.into_iter().map(|k| {
-            let obj = self.get_raw(k.deref()).unwrap();
-            (k, obj)
-        })
+        sorted_keys
+            .into_iter()
+            .filter_map(|k| self.get_raw(k.deref()).map(|obj| (k, obj)))
     }
 
     /// Return the object identifier of the dict, if it's an indirect object.
@@ -140,17 +139,8 @@ impl Debug for Dict<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let mut debug_struct = f.debug_struct("Dict");
 
-        if let Some(offsets) = self.offsets() {
-            let mut r = Reader::new(self.data());
-
-            for (key, val) in offsets {
-                r.jump(*val);
-                debug_struct.field(
-                    &format!("{:?}", key.as_str()),
-                    &r.read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
-                        .unwrap(),
-                );
-            }
+        for (key, value) in self.entries() {
+            debug_struct.field(&format!("{:?}", key.as_str()), &value);
         }
 
         debug_struct.finish()
@@ -1193,5 +1183,12 @@ mod tests {
 
         assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
         assert_eq!(format!("{}", Dict::empty()), "<<>>");
+    }
+
+    #[test]
+    fn dict_with_unreadable_value() {
+        let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
+        let _ = dict.entries().count();
+        let _ = format!("{dict:?}");
     }
 }

@@ -145,16 +145,14 @@ impl<'a> Iterator for ArrayIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.reader.skip_white_spaces_and_comments();
 
-        if !self.reader.at_end() {
-            // Objects are already guaranteed to be valid.
-            let item = self
-                .reader
-                .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
-                .unwrap();
-            return Some(item);
+        if self.reader.at_end() {
+            return None;
         }
 
-        None
+        // The array was validated by skipping its items, which accepts some items that
+        // can't be read.
+        self.reader
+            .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
     }
 }
 
@@ -448,5 +446,10 @@ mod tests {
         let array = Array::from_bytes(b"[  34 % comment\n /Test  [1   2] ]").unwrap();
 
         assert_eq!(format!("{array}"), "[34 /Test [1 2]]");
+    }
+
+    #[test]
+    fn array_with_unreadable_item() {
+        let _ = array_ref_impl(b"[true /#zz false]");
     }
 }
