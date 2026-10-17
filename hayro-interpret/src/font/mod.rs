@@ -5,7 +5,8 @@ use crate::context::InterpreterCache;
 use crate::device::Device;
 use crate::font::cid::Type0Font;
 use crate::font::generated::{
-    glyph_names, mac_expert, mac_os_roman, mac_roman, standard, win_ansi, zapf_dings,
+    glyph_names, mac_expert, mac_os_roman, mac_roman, standard, tex_glyph_names, win_ansi,
+    zapf_dings,
 };
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
@@ -671,7 +672,8 @@ impl Default for FallbackFontQuery {
 }
 
 /// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
-/// Specification (<https://github.com/adobe-type-tools/agl-specification>).
+/// Specification (<https://github.com/adobe-type-tools/agl-specification>), with the AGL
+/// extended by glyph names used in the Computer Modern and AMS fonts.
 pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Option<BfString> {
     let base = name.split('.').next().unwrap_or_default();
     let mut out = String::new();
@@ -682,7 +684,9 @@ pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Optio
             .flatten()
         {
             out.push(c);
-        } else if let Some(unicode_str) = glyph_names::get(component) {
+        } else if let Some(unicode_str) =
+            glyph_names::get(component).or_else(|| tex_glyph_names::get(component))
+        {
             out.push_str(unicode_str);
         } else if let Some(unicode_str) = uni_component(component) {
             out.push_str(&unicode_str);

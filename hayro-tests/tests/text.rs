@@ -81,6 +81,13 @@ fn zapf_dingbats() {
 }
 
 #[test]
+fn tex_glyph_names() {
+    let file = include_bytes!("../pdfs/text/tex_glyph_names.pdf");
+
+    assert_eq!(page_text(file), "⌊ℓ⌋");
+}
+
+#[test]
 fn marked_content() {
     let file = include_bytes!("../pdfs/text/marked_content.pdf");
 
