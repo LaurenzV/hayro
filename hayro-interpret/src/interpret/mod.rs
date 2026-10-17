@@ -2,7 +2,7 @@ use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
-use crate::device::Device;
+use crate::device::{Device, MarkedContentProperties};
 use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
@@ -15,7 +15,7 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{FormXObject, ImageXObject, XObject};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, MCID, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -474,9 +474,14 @@ pub fn interpret<'a>(
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
                 // Properties can be either:
                 // 1. A Name that references an entry in the Resources/Properties dictionary
-                // 2. An inline dictionary with an OC key
+                // 2. An inline property-list dictionary
 
-                let mcid = dict_or_stream(bdc.1).and_then(|(props, _)| props.get::<i32>(MCID));
+                let properties = bdc
+                    .1
+                    .clone()
+                    .into_name()
+                    .and_then(|name| resources.properties.get::<Dict<'_>>(name))
+                    .or_else(|| dict_or_stream(bdc.1).map(|(props, _)| props.clone()));
 
                 let oc = bdc
                     .1
@@ -503,7 +508,7 @@ pub fn interpret<'a>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content(bdc.0, mcid);
+                device.begin_marked_content(bdc.0, &MarkedContentProperties::new(properties));
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -513,7 +518,7 @@ pub fn interpret<'a>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(bmc.0, None);
+                device.begin_marked_content(bmc.0, &MarkedContentProperties::default());
             }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;
