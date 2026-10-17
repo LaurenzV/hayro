@@ -1,5 +1,7 @@
 //! This example shows you how you can render a PDF file to PNG.
 
+#![allow(dead_code)]
+
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -81,6 +83,48 @@ fn main() {
         ..Default::default()
     };
 
+    // There are two different ways of using the render APIs for hayro, see the comments in the methods.
+    render_simple(&pdf, &interpreter_settings, &output_dir);
+    // render_advanced(&pdf, &interpreter_settings, &output_dir);
+}
+
+fn render_simple(pdf: &Pdf, interpreter_settings: &InterpreterSettings, output_dir: &str) {
+    // If all you need is the ability to convert a PDF page into an RGBA buffer
+    // and just setting a background + scale factor is enough, use `hayro::render`:
+
+    // This cache should be reused across multiple pages.
+    let cache = RenderCache::new();
+    let render_settings = RenderSettings::default();
+    let pixmap_settings = PixmapSettings {
+        x_scale: 2.0,
+        y_scale: 2.0,
+        bg_color: WHITE,
+    };
+
+    for (idx, page) in pdf.pages().iter().enumerate() {
+        let rendered = render(
+            page,
+            &cache,
+            interpreter_settings,
+            &render_settings,
+            &pixmap_settings,
+        );
+        let output_path = format!("{}/rendered_{idx}.png", output_dir);
+        std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
+    }
+}
+
+fn render_advanced(pdf: &Pdf, interpreter_settings: &InterpreterSettings, output_dir: &str) {
+    // If you need/want:
+    // - Support for rendering a page with arbitrary affine transforms or
+    // - more control over rendering and  the ability to more effectively reuse allocations
+    //   for render buffers
+    // You can instead use `hayro::render_into` to directly render into a `vello_cpu`
+    // `RenderContext`. However, this requires some more setup.
+    // The example below shows how you can render a page zoomed 50% into the center,
+    // and while reusing the `vello_cpu` `RenderContext` and `Pixmap`, which avoids
+    // unnecessary reallocations when rendering multiple pages.
+
     // This cache should be reused across multiple pages.
     let cache = RenderCache::new();
     let render_settings = RenderSettings::default();
@@ -89,35 +133,6 @@ fn main() {
     let mut resources = Resources::default();
 
     for (idx, page) in pdf.pages().iter().enumerate() {
-        // hayro provides two entry points for rendering PDFs.
-
-        // If all you need is the ability to convert a PDF page into an RGBA buffer
-        // and just setting a background + scale factor is enough, use `hayro::render`:
-        let pixmap_settings = PixmapSettings {
-            x_scale: 2.0,
-            y_scale: 2.0,
-            bg_color: WHITE,
-        };
-        let rendered = render(
-            page,
-            &cache,
-            &interpreter_settings,
-            &render_settings,
-            &pixmap_settings,
-        );
-        let output_path = format!("{}/rendered_{idx}.png", output_dir);
-        std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
-
-        // If you need/want:
-        // - Support for rendering a page with arbitrary affine transforms or
-        // - more control over rendering and  the ability to more effectively reuse allocations
-        //   for render buffers
-        // You can instead use `hayro::render_into` to directly render into a `vello_cpu`
-        // `RenderContext`. However, this requires some more setup.
-        // The example below shows how you can render a page zoomed 50% into the center,
-        // and while reusing the `vello_cpu` `RenderContext` and `Pixmap`, which avoids
-        // unnecessary reallocations when rendering multiple pages.
-
         // You can choose any size you desire, but in most cases you will likely want
         // to base it on the dimensions of the PDF page.
         let (width, height) = page.render_dimensions();
@@ -138,7 +153,7 @@ fn main() {
         render_into(
             page,
             &cache,
-            &interpreter_settings,
+            interpreter_settings,
             &render_settings,
             &mut ctx,
             transform,
