@@ -589,6 +589,17 @@ impl XRef {
                     return None;
                 }
 
+                // An object stream is a stream, so it can't itself be stored in an object
+                // stream (ISO 32000-2, 7.5.7).
+                if !matches!(
+                    repr.map.get().xref_map.get(&obj_stream_id),
+                    Some(EntryType::Normal(_))
+                ) {
+                    warn!("object stream {obj_stream_id:?} is not a top-level object");
+
+                    return None;
+                }
+
                 ctx.parent_chain_push(id);
 
                 let stream = self.get_with::<Stream<'_>>(obj_stream_id, &ctx)?;
