@@ -2,33 +2,9 @@ use crate::font::GlyphRun;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
+use hayro_syntax::object::dict::keys::{ACTUAL_TEXT, MCID};
+use hayro_syntax::object::{Dict, String};
 use kurbo::{BezPath, Rect, Shape};
-
-/// Properties attached to a marked-content sequence.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct MarkedContentProperties<'a> {
-    mcid: Option<i32>,
-    actual_text: Option<&'a [u8]>,
-}
-
-impl<'a> MarkedContentProperties<'a> {
-    pub(crate) fn new(mcid: Option<i32>, actual_text: Option<&'a [u8]>) -> Self {
-        Self { mcid, actual_text }
-    }
-
-    /// The marked-content identifier, if present.
-    pub fn mcid(self) -> Option<i32> {
-        self.mcid
-    }
-
-    /// The raw PDF text-string bytes from `/ActualText`, if present.
-    ///
-    /// Consumers must decode these according to the PDF text-string encoding
-    /// rules.
-    pub fn actual_text(self) -> Option<&'a [u8]> {
-        self.actual_text
-    }
-}
 
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device<'a> {
@@ -69,22 +45,8 @@ pub trait Device<'a> {
     }
     /// Called at the beginning of a marked content sequence (BMC/BDC).
     ///
-    /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
-    /// the marked content identifier from the properties dict, if present.
-    fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
-    /// Called at the beginning of a marked content sequence with a property
-    /// list (BDC).
-    ///
-    /// The default implementation forwards to [`Device::begin_marked_content`]
-    /// so devices that only need the marked-content identifier remain
-    /// compatible.
-    fn begin_marked_content_with_properties(
-        &mut self,
-        tag: &[u8],
-        properties: MarkedContentProperties<'_>,
-    ) {
-        self.begin_marked_content(tag, properties.mcid());
-    }
+    /// The tag is the marked content tag (e.g. b"P", b"Span"). For BMC, the properties are empty.
+    fn begin_marked_content(&mut self, _tag: &[u8], _properties: &MarkedContentProperties<'_>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }
@@ -100,4 +62,28 @@ impl Device<'_> for DummyDevice {
     fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
+}
+
+/// The property list of a marked-content sequence.
+#[derive(Clone, Debug, Default)]
+pub struct MarkedContentProperties<'a> {
+    dict: Option<Dict<'a>>,
+}
+
+impl<'a> MarkedContentProperties<'a> {
+    pub(crate) fn new(dict: Option<Dict<'a>>) -> Self {
+        Self { dict }
+    }
+
+    /// The marked-content identifier, if present.
+    pub fn mcid(&self) -> Option<i32> {
+        self.dict.as_ref()?.get::<i32>(MCID)
+    }
+
+    /// The replacement text from `/ActualText`, if present.
+    ///
+    /// It is a PDF text string and needs to be decoded.
+    pub fn actual_text(&self) -> Option<String<'a>> {
+        self.dict.as_ref()?.get::<String<'a>>(ACTUAL_TEXT)
+    }
 }

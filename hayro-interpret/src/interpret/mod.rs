@@ -15,10 +15,8 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{FormXObject, ImageXObject, XObject};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ACTUAL_TEXT, ANNOTS, AP, AS, F, MCID, N, OC, RECT};
-use hayro_syntax::object::{
-    Array, Dict, Name, Object, Rect, Stream, String as PdfString, dict_or_stream,
-};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
+use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
 use rustc_hash::FxHashMap;
@@ -484,10 +482,6 @@ pub fn interpret<'a>(
                     .into_name()
                     .and_then(|name| resources.properties.get::<Dict<'_>>(name))
                     .or_else(|| dict_or_stream(bdc.1).map(|(props, _)| props.clone()));
-                let mcid = properties.as_ref().and_then(|props| props.get::<i32>(MCID));
-                let actual_text = properties
-                    .as_ref()
-                    .and_then(|props| props.get::<PdfString<'_>>(ACTUAL_TEXT));
 
                 let oc = bdc
                     .1
@@ -514,13 +508,7 @@ pub fn interpret<'a>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content_with_properties(
-                    bdc.0,
-                    MarkedContentProperties::new(
-                        mcid,
-                        actual_text.as_ref().map(PdfString::as_bytes),
-                    ),
-                );
+                device.begin_marked_content(bdc.0, &MarkedContentProperties::new(properties));
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -530,7 +518,7 @@ pub fn interpret<'a>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(bmc.0, None);
+                device.begin_marked_content(bmc.0, &MarkedContentProperties::default());
             }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;

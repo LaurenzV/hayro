@@ -3,9 +3,10 @@ use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
-    InterpreterCache, SoftMask, interpret_page,
+    InterpreterCache, MarkedContentProperties, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
+use std::fmt::Write;
 
 #[derive(Default)]
 struct TextCollector(String);
@@ -26,6 +27,20 @@ impl<'a> Device<'a> for TextCollector {
     fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
+    fn begin_marked_content(&mut self, tag: &[u8], properties: &MarkedContentProperties<'_>) {
+        write!(self.0, "<{}", String::from_utf8_lossy(tag)).unwrap();
+        if let Some(mcid) = properties.mcid() {
+            write!(self.0, " mcid={mcid}").unwrap();
+        }
+        if let Some(actual_text) = properties.actual_text() {
+            let actual_text = String::from_utf8_lossy(actual_text.as_bytes());
+            write!(self.0, " actual={actual_text}").unwrap();
+        }
+        self.0.push('>');
+    }
+    fn end_marked_content(&mut self) {
+        self.0.push_str("</>");
+    }
 }
 
 fn page_text(file: &[u8]) -> String {
@@ -56,4 +71,14 @@ fn type3_glyph_names() {
     let file = include_bytes!("../pdfs/text/type3_glyph_names.pdf");
 
     assert_eq!(page_text(file), "Hello, Type 3!");
+}
+
+#[test]
+fn marked_content() {
+    let file = include_bytes!("../pdfs/text/marked_content.pdf");
+
+    assert_eq!(
+        page_text(file),
+        "<P mcid=0>Hi</><Span mcid=1 actual=fi>x</><Artifact>.</>"
+    );
 }
