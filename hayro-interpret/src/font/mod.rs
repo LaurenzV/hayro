@@ -648,19 +648,73 @@ impl Default for FallbackFontQuery {
     }
 }
 
-/// Convert a glyph name to a Unicode character, if possible.
-/// An incomplete implementation of the Adobe Glyph List Specification
-/// <https://github.com/adobe-type-tools/agl-specification>
-pub(crate) fn glyph_name_to_unicode(name: &str) -> Option<char> {
-    if let Some(unicode_str) = glyph_names::get(name) {
-        return unicode_str.chars().next();
+/// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
+/// Specification (<https://github.com/adobe-type-tools/agl-specification>).
+pub(crate) fn glyph_name_to_unicode(name: &str) -> Option<BfString> {
+    let base = name.split('.').next().unwrap_or_default();
+    let mut out = String::new();
+
+    for component in base.split('_') {
+        if let Some(unicode_str) = glyph_names::get(component) {
+            out.push_str(unicode_str);
+        } else if let Some(unicode_str) = uni_component(component) {
+            out.push_str(&unicode_str);
+        } else if let Some(c) = u_component(component) {
+            out.push(c);
+        }
     }
 
-    unicode_from_name(name).or_else(|| {
+    bf_string_from_str(&out).or_else(|| {
         warn!("failed to map glyph name {} to unicode", name);
 
         None
     })
+}
+
+fn uni_component(component: &str) -> Option<String> {
+    let digits = component.strip_prefix("uni")?.as_bytes();
+
+    if digits.is_empty() || digits.len() % 4 != 0 {
+        return None;
+    }
+
+    digits
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|group| char::from_u32(parse_uppercase_hex(group)?))
+        .collect()
+}
+
+fn u_component(component: &str) -> Option<char> {
+    let digits = component.strip_prefix('u')?.as_bytes();
+
+    if !(4..=6).contains(&digits.len()) {
+        return None;
+    }
+
+    char::from_u32(parse_uppercase_hex(digits)?)
+}
+
+fn parse_uppercase_hex(digits: &[u8]) -> Option<u32> {
+    digits.iter().try_fold(0_u32, |value, digit| {
+        let digit = match digit {
+            b'0'..=b'9' => digit - b'0',
+            b'A'..=b'F' => digit - b'A' + 10,
+            _ => return None,
+        };
+
+        Some(value * 16 + u32::from(digit))
+    })
+}
+
+fn bf_string_from_str(s: &str) -> Option<BfString> {
+    let mut chars = s.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => Some(BfString::Char(c)),
+        (Some(_), Some(_)) => Some(BfString::String(s.to_string())),
+        (None, _) => None,
+    }
 }
 
 pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
@@ -703,4 +757,43 @@ pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
     }
 
     name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::glyph_name_to_unicode;
+    use hayro_cmap::BfString;
+
+    fn map(name: &str) -> Option<String> {
+        glyph_name_to_unicode(name).map(|unicode| match unicode {
+            BfString::Char(c) => c.to_string(),
+            BfString::String(s) => s,
+        })
+    }
+
+    #[test]
+    fn agl_specification_examples() {
+        assert_eq!(map("Lcommaaccent").as_deref(), Some("\u{013B}"));
+        assert_eq!(map("uni20AC0308").as_deref(), Some("\u{20AC}\u{0308}"));
+        assert_eq!(map("u1040C").as_deref(), Some("\u{1040C}"));
+        assert_eq!(map("uniD801DC0C"), None);
+        assert_eq!(map("uni20ac"), None);
+        assert_eq!(
+            map("Lcommaaccent_uni20AC0308_u1040C.alternate").as_deref(),
+            Some("\u{013B}\u{20AC}\u{0308}\u{1040C}")
+        );
+        assert_eq!(map("foo"), None);
+        assert_eq!(map(".notdef"), None);
+    }
+
+    #[test]
+    fn components() {
+        assert_eq!(map("dalethatafpatah").as_deref(), Some("\u{05D3}\u{05B2}"));
+        assert_eq!(map("hyphen.case").as_deref(), Some("-"));
+        assert_eq!(map("f_f_l").as_deref(), Some("ffl"));
+        assert_eq!(map("f_g102").as_deref(), Some("f"));
+        assert_eq!(map("uni000A0020").as_deref(), Some("\n "));
+        assert_eq!(map("u41"), None);
+        assert_eq!(map("u110000"), None);
+    }
 }
