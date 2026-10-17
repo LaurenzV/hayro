@@ -752,6 +752,12 @@ fn deeply_nested_page_tree() {
 }
 
 #[test]
+fn nested_object_streams() {
+    let file = include_bytes!("../pdfs/load/nested_object_streams.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn page_tree_cycle_with_siblings() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
     load_pdf(file);
