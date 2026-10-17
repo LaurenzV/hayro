@@ -109,7 +109,7 @@ impl<'a> Type3<'a> {
         u8::try_from(char_code)
             .ok()
             .and_then(|code| self.code_to_ps_name(code))
-            .and_then(glyph_name_to_unicode)
+            .and_then(|name| glyph_name_to_unicode(name, false))
     }
 
     pub(crate) fn render_glyph(

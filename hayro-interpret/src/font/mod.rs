@@ -5,7 +5,7 @@ use crate::context::InterpreterCache;
 use crate::device::Device;
 use crate::font::cid::Type0Font;
 use crate::font::generated::{
-    glyph_names, mac_expert, mac_os_roman, mac_roman, standard, win_ansi,
+    glyph_names, mac_expert, mac_os_roman, mac_roman, standard, win_ansi, zapf_dings,
 };
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
@@ -672,12 +672,17 @@ impl Default for FallbackFontQuery {
 
 /// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
 /// Specification (<https://github.com/adobe-type-tools/agl-specification>).
-pub(crate) fn glyph_name_to_unicode(name: &str) -> Option<BfString> {
+pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Option<BfString> {
     let base = name.split('.').next().unwrap_or_default();
     let mut out = String::new();
 
     for component in base.split('_') {
-        if let Some(unicode_str) = glyph_names::get(component) {
+        if let Some(c) = is_zapf_dingbats
+            .then(|| zapf_dings::glyph_name_to_unicode(component))
+            .flatten()
+        {
+            out.push(c);
+        } else if let Some(unicode_str) = glyph_names::get(component) {
             out.push_str(unicode_str);
         } else if let Some(unicode_str) = uni_component(component) {
             out.push_str(&unicode_str);
@@ -787,7 +792,7 @@ mod tests {
     use hayro_cmap::BfString;
 
     fn map(name: &str) -> Option<String> {
-        glyph_name_to_unicode(name).map(|unicode| match unicode {
+        glyph_name_to_unicode(name, false).map(|unicode| match unicode {
             BfString::Char(c) => c.to_string(),
             BfString::String(s) => s,
         })
