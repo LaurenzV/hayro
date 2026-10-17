@@ -31,6 +31,7 @@ impl Renderer<'_> {
         opacity: f32,
         mask: Option<SoftMask<'_>>,
         blend_mode: BlendMode,
+        knockout: bool,
     ) {
         let settings = *self.ctx.render_settings();
         let global = self.global;
@@ -50,10 +51,12 @@ impl Renderer<'_> {
             }),
             None,
         );
+        self.knockout_groups.push(knockout);
     }
 
     pub(super) fn pop_transparency_group(&mut self) {
         self.ctx.pop_layer();
+        self.knockout_groups.pop();
     }
 }
 

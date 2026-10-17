@@ -24,6 +24,23 @@ pub trait Device<'a> {
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
     );
+    /// Push a new knockout transparency group (a group with `/K true`) to the
+    /// blend stack. It is popped with [`Device::pop_transparency_group`].
+    ///
+    /// Each object painted directly into a knockout group is composited with
+    /// the initial backdrop of the group instead of with the objects painted
+    /// before it, so it replaces them wherever it paints.
+    ///
+    /// The default implementation ignores the knockout attribute and calls
+    /// [`Device::push_transparency_group`].
+    fn push_knockout_group(
+        &mut self,
+        opacity: f32,
+        mask: Option<SoftMask<'a>>,
+        blend_mode: BlendMode,
+    ) {
+        self.push_transparency_group(opacity, mask, blend_mode);
+    }
     /// Draw a run of positioned glyphs.
     fn draw_glyph_run(
         &mut self,
