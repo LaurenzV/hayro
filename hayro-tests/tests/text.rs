@@ -50,3 +50,10 @@ fn glyph_names() {
 
     assert_eq!(page_text(file), "Menu: Waffles, Café & Coffee-Shop");
 }
+
+#[test]
+fn type3_glyph_names() {
+    let file = include_bytes!("../pdfs/text/type3_glyph_names.pdf");
+
+    assert_eq!(page_text(file), "Hello, Type 3!");
+}
