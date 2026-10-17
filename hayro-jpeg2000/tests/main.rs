@@ -15,10 +15,10 @@ mod tile_parts;
 mod wavelet;
 
 use hayro_jpeg2000::{DecodeSettings, DecoderContext, Image};
-use image::ImageDecoder;
+use image::{ImageDecoder, ImageReader};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Cursor};
 use std::path::PathBuf;
 
 fn tests_dir() -> PathBuf {
@@ -138,13 +138,19 @@ fn decode(stream: &str, settings: &DecodeSettings) -> Result<Decoded, String> {
 }
 
 fn decode_output(stream: &str) -> Result<Decoded, String> {
-    let data = read_stream(stream);
-    let mut image = Image::new(&data, &DecodeSettings::default()).map_err(|e| e.to_string())?;
-    let (width, height) = image.dimensions();
-    let channels = usize::from(image.color_type().channel_count());
-    let icc_profile = image.icc_profile().map_err(|e| e.to_string())?;
-    let mut samples = vec![0; image.total_bytes() as usize];
-    image.read_image(&mut samples).map_err(|e| e.to_string())?;
+    hayro_jpeg2000::integration::register_decoding_hook();
+    let mut decoder = ImageReader::new(Cursor::new(read_stream(stream)))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .into_decoder()
+        .map_err(|e| e.to_string())?;
+    let (width, height) = decoder.dimensions();
+    let channels = usize::from(decoder.color_type().channel_count());
+    let icc_profile = decoder.icc_profile().map_err(|e| e.to_string())?;
+    let mut samples = vec![0; decoder.total_bytes() as usize];
+    decoder
+        .read_image(&mut samples)
+        .map_err(|e| e.to_string())?;
     if let Some(profile) = icc_profile {
         samples = to_srgb(&profile, channels, &samples);
     }
