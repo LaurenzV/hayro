@@ -5,6 +5,7 @@ use std::{
     io::{BufRead, Seek},
 };
 
+use crate::jp2::icc::{ICCColorSpace, ICCMetadata};
 use crate::{ColorSpace, DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
@@ -71,6 +72,10 @@ impl ImageDecoder for Image<'_> {
         }
     }
 
+    fn icc_profile(&mut self) -> ImageResult<Option<Vec<u8>>> {
+        Ok(icc_profile(self))
+    }
+
     fn read_image(self, buf: &mut [u8]) -> ImageResult<()>
     where
         Self: Sized,
@@ -101,6 +106,7 @@ pub struct Jp2Decoder {
     height: u32,
     color_type: ColorType,
     orig_color_type: ExtendedColorType,
+    icc_profile: Option<Vec<u8>>,
 }
 
 impl Jp2Decoder {
@@ -109,12 +115,14 @@ impl Jp2Decoder {
         let mut input = Vec::new();
         let mut r = r;
         r.read_to_end(&mut input)?;
-        let headers = Image::new(&input, &DecodeSettings::default())?;
+        let image = Image::new(&input, &DecodeSettings::default())?;
+
         Ok(Self {
-            width: headers.width(),
-            height: headers.height(),
-            color_type: headers.color_type(),
-            orig_color_type: headers.original_color_type(),
+            width: image.width(),
+            height: image.height(),
+            color_type: image.color_type(),
+            orig_color_type: image.original_color_type(),
+            icc_profile: icc_profile(&image),
             input,
         })
     }
@@ -131,6 +139,10 @@ impl ImageDecoder for Jp2Decoder {
 
     fn original_color_type(&self) -> ExtendedColorType {
         self.orig_color_type
+    }
+
+    fn icc_profile(&mut self) -> ImageResult<Option<Vec<u8>>> {
+        Ok(self.icc_profile.clone())
     }
 
     fn read_image(self, buf: &mut [u8]) -> ImageResult<()>
@@ -158,136 +170,102 @@ fn orig_bits_per_pixel(img: &Image<'_>) -> u8 {
     channel_count * img.original_bit_depth()
 }
 
+fn icc_profile(image: &Image<'_>) -> Option<Vec<u8>> {
+    match output(image) {
+        Output::Unchanged { profile } => profile.map(<[u8]>::to_vec),
+        _ => None,
+    }
+}
+
+enum Output<'a> {
+    Unchanged { profile: Option<&'a [u8]> },
+    Converted { from: &'a [u8] },
+    Unsupported,
+}
+
+fn output<'a>(image: &'a Image<'_>) -> Output<'a> {
+    match image.color_space() {
+        ColorSpace::Gray | ColorSpace::RGB => Output::Unchanged { profile: None },
+        ColorSpace::CMYK => Output::Converted { from: CMYK_PROFILE },
+        ColorSpace::Icc { profile, .. } => match ICCMetadata::from_data(profile) {
+            Some(ICCMetadata {
+                color_space: ICCColorSpace::Gray | ICCColorSpace::Rgb,
+            }) => Output::Unchanged {
+                profile: Some(profile),
+            },
+            _ => Output::Converted { from: profile },
+        },
+        ColorSpace::Unknown { .. } => Output::Unsupported,
+    }
+}
+
 fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    let width = image.width();
-    let height = image.height();
-    let color_space = image.color_space().clone();
-    let has_alpha = image.has_alpha();
+    let mut decoder_context = crate::DecoderContext::default();
 
-    fn from_icc(
-        icc: &[u8],
-        num_channels: u8,
-        has_alpha: bool,
-        width: u32,
-        height: u32,
-        input_data: &[u8],
-    ) -> Result<Vec<u8>, CmsError> {
-        let src_profile = ColorProfile::new_from_slice(icc)?;
-        let dest_profile = ColorProfile::new_srgb();
-
-        let (src_layout, dest_layout, out_channels) = match (num_channels, has_alpha) {
-            (1, false) => (Layout::Gray, Layout::Gray, 1),
-            (1, true) => (Layout::GrayAlpha, Layout::GrayAlpha, 2),
-            (3, false) => (Layout::Rgb, Layout::Rgb, 3),
-            (3, true) => (Layout::Rgba, Layout::Rgba, 4),
-            // CMYK will be converted to RGB.
-            (4, false) => (Layout::Rgba, Layout::Rgb, 3),
-            _ => {
-                return Err(CmsError::UnsupportedChannelConfiguration);
-            }
-        };
-
-        let transform = src_profile.create_transform_8bit(
-            src_layout,
-            &dest_profile,
-            dest_layout,
-            TransformOptions::default(),
-        )?;
-
-        let mut transformed = vec![0; (width * height * out_channels) as usize];
-
-        transform.transform(input_data, &mut transformed)?;
-
-        Ok(transformed)
-    }
-
-    fn process(
-        image: &Image<'_>,
-        buf: &mut [u8],
-        width: u32,
-        height: u32,
-        has_alpha: bool,
-        cs: ColorSpace,
-    ) -> Result<(), ImageError> {
-        let mut decoder_context = crate::DecoderContext::default();
-
-        match (cs, has_alpha) {
-            (ColorSpace::Gray, false) => {
-                image.decode(&mut decoder_context)?.store_u8_into(buf);
-            }
-            (ColorSpace::Gray, true) => {
-                image.decode(&mut decoder_context)?.store_u8_into(buf);
-            }
-            (ColorSpace::RGB, false) => {
-                image.decode(&mut decoder_context)?.store_u8_into(buf);
-            }
-            (ColorSpace::RGB, true) => {
-                image.decode(&mut decoder_context)?.store_u8_into(buf);
-            }
-            (ColorSpace::CMYK, false) => {
-                let decoded = image.decode(&mut decoder_context)?.data_u8();
-                let transformed = from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &decoded)
-                    .map_err(icc_err_to_image)?;
-                buf.copy_from_slice(&transformed);
-            }
-            (ColorSpace::CMYK, true) => {
-                // moxcms doesn't support CMYK interleaved with alpha, so we
-                // need to split it.
-                let decoded = image.decode(&mut decoder_context)?.data_u8();
-                let mut cmyk = vec![];
-                let mut alpha = vec![];
-
-                for sample in decoded.as_chunks::<5>().0 {
-                    cmyk.extend_from_slice(&sample[..4]);
-                    alpha.push(sample[4]);
-                }
-
-                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)
-                    .map_err(icc_err_to_image)?;
-                for (out, pixel) in buf.as_chunks_mut::<4>().0.iter_mut().zip(
-                    rgb.as_chunks::<3>()
-                        .0
-                        .iter()
-                        .zip(alpha)
-                        .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha]),
-                ) {
-                    out.copy_from_slice(&pixel);
+    match output(image) {
+        Output::Unchanged { .. } => image.decode(&mut decoder_context)?.store_u8_into(buf),
+        Output::Converted { from } => {
+            let decoded = image.decode(&mut decoder_context)?.data_u8();
+            if to_srgb(image, from, &decoded, buf).is_err() {
+                match image.color_space().num_channels() {
+                    3 => buf.copy_from_slice(&decoded),
+                    4 => to_srgb(image, CMYK_PROFILE, &decoded, buf).map_err(icc_err_to_image)?,
+                    _ => return Err(unsupported_color_error(image.original_color_type())),
                 }
             }
-            (
-                ColorSpace::Icc {
-                    profile,
-                    num_channels: num_components,
-                },
-                has_alpha,
-            ) => {
-                let decoded = image.decode(&mut decoder_context)?.data_u8();
-
-                let transformed =
-                    from_icc(&profile, num_components, has_alpha, width, height, &decoded);
-
-                if let Ok(transformed) = transformed {
-                    buf.copy_from_slice(&transformed);
-                } else {
-                    match num_components {
-                        1 => process(image, buf, width, height, has_alpha, ColorSpace::Gray)?,
-                        3 => process(image, buf, width, height, has_alpha, ColorSpace::RGB)?,
-                        4 => process(image, buf, width, height, has_alpha, ColorSpace::CMYK)?,
-                        _ => {
-                            return Err(unsupported_color_error(image.original_color_type()));
-                        }
-                    }
-                };
-            }
-            (ColorSpace::Unknown { .. }, _) => {
-                return Err(unsupported_color_error(image.original_color_type()));
-            }
-        };
-
-        Ok(())
+        }
+        Output::Unsupported => return Err(unsupported_color_error(image.original_color_type())),
     }
 
-    process(image, buf, width, height, has_alpha, color_space)
+    Ok(())
+}
+
+fn to_srgb(
+    image: &Image<'_>,
+    profile: &[u8],
+    decoded: &[u8],
+    buf: &mut [u8],
+) -> Result<(), CmsError> {
+    let transform = |src_layout, dest_layout, input: &[u8], output: &mut [u8]| {
+        ColorProfile::new_from_slice(profile)?
+            .create_transform_8bit(
+                src_layout,
+                &ColorProfile::new_srgb(),
+                dest_layout,
+                TransformOptions::default(),
+            )?
+            .transform(input, output)
+    };
+
+    match (image.color_space().num_channels(), image.has_alpha()) {
+        (3, false) => transform(Layout::Rgb, Layout::Rgb, decoded, buf),
+        (3, true) => transform(Layout::Rgba, Layout::Rgba, decoded, buf),
+        // moxcms reads four-channel CMYK through the RGBA layout.
+        (4, false) => transform(Layout::Rgba, Layout::Rgb, decoded, buf),
+        (4, true) => {
+            // moxcms doesn't support CMYK interleaved with alpha, so we
+            // need to split it.
+            let (cmyk, alpha): (Vec<[u8; 4]>, Vec<u8>) = decoded
+                .as_chunks::<5>()
+                .0
+                .iter()
+                .map(|s| ([s[0], s[1], s[2], s[3]], s[4]))
+                .unzip();
+            let mut rgb = vec![0; cmyk.len() * 3];
+            transform(Layout::Rgba, Layout::Rgb, cmyk.as_flattened(), &mut rgb)?;
+            for ((out, rgb), alpha) in buf
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(rgb.as_chunks::<3>().0)
+                .zip(alpha)
+            {
+                *out = [rgb[0], rgb[1], rgb[2], alpha];
+            }
+            Ok(())
+        }
+        _ => Err(CmsError::UnsupportedChannelConfiguration),
+    }
 }
 
 impl From<crate::DecodeError> for DecodingError {

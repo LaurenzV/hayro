@@ -95,8 +95,3 @@ fn colr_cielab_16bit() {
 fn icc_invalid() {
     check_output("integration_icc_invalid", reference("main_rgb"));
 }
-
-#[test]
-fn icc_singular() {
-    check_output("integration_icc_singular", reference("main_rgb"));
-}

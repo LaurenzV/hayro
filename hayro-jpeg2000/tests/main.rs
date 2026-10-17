@@ -16,6 +16,7 @@ mod wavelet;
 
 use hayro_jpeg2000::{DecodeSettings, DecoderContext, Image};
 use image::ImageDecoder;
+use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -138,11 +139,15 @@ fn decode(stream: &str, settings: &DecodeSettings) -> Result<Decoded, String> {
 
 fn decode_output(stream: &str) -> Result<Decoded, String> {
     let data = read_stream(stream);
-    let image = Image::new(&data, &DecodeSettings::default()).map_err(|e| e.to_string())?;
+    let mut image = Image::new(&data, &DecodeSettings::default()).map_err(|e| e.to_string())?;
     let (width, height) = image.dimensions();
     let channels = usize::from(image.color_type().channel_count());
+    let icc_profile = image.icc_profile().map_err(|e| e.to_string())?;
     let mut samples = vec![0; image.total_bytes() as usize];
     image.read_image(&mut samples).map_err(|e| e.to_string())?;
+    if let Some(profile) = icc_profile {
+        samples = to_srgb(&profile, channels, &samples);
+    }
 
     Ok(Decoded {
         width,
@@ -150,6 +155,27 @@ fn decode_output(stream: &str) -> Result<Decoded, String> {
         channels,
         samples,
     })
+}
+
+fn to_srgb(profile: &[u8], channels: usize, samples: &[u8]) -> Vec<u8> {
+    let layout = match channels {
+        1 => Layout::Gray,
+        2 => Layout::GrayAlpha,
+        3 => Layout::Rgb,
+        _ => Layout::Rgba,
+    };
+    let transform = ColorProfile::new_from_slice(profile)
+        .unwrap()
+        .create_transform_8bit(
+            layout,
+            &ColorProfile::new_srgb(),
+            layout,
+            TransformOptions::default(),
+        )
+        .unwrap();
+    let mut out = vec![0; samples.len()];
+    transform.transform(samples, &mut out).unwrap();
+    out
 }
 
 fn check(stream: &str, expected: Reference) {
