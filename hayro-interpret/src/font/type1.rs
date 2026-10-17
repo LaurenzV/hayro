@@ -239,7 +239,9 @@ impl Type1Kind {
     }
 
     fn char_code_to_unicode(&self, code: u8) -> Option<BfString> {
-        self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
+        let is_zapf_dingbats = matches!(self.standard_font, Some(StandardFont::ZapfDingBats));
+        self.code_to_ps_name(code)
+            .and_then(|name| glyph_name_to_unicode(name, is_zapf_dingbats))
     }
 }
 
@@ -336,6 +338,8 @@ impl CffKind {
     }
 
     fn char_code_to_unicode(&self, code: u8) -> Option<BfString> {
-        self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
+        let is_zapf_dingbats = matches!(self.standard_font, Some(StandardFont::ZapfDingBats));
+        self.code_to_ps_name(code)
+            .and_then(|name| glyph_name_to_unicode(name, is_zapf_dingbats))
     }
 }

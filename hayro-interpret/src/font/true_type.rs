@@ -1,6 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman, standard};
-use crate::font::standard_font::StandardKind;
+use crate::font::standard_font::{StandardFont, StandardKind, select_standard_font};
 use crate::font::{
     Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
     strip_subset_prefix, unicode_from_name,
@@ -190,7 +190,9 @@ impl TrueTypeFont {
         }
 
         match &self.kind {
-            Kind::Embedded(e) => e.code_to_name(code as u8).and_then(glyph_name_to_unicode),
+            Kind::Embedded(e) => e
+                .code_to_name(code as u8)
+                .and_then(|name| glyph_name_to_unicode(name, e.is_zapf_dingbats)),
             Kind::Standard(s) => s.char_code_to_unicode(code as u8),
         }
 
@@ -216,6 +218,7 @@ struct EmbeddedKind {
     cached_mappings: RefCell<FxHashMap<u8, GlyphId>>,
     /// PostScript name from the PDF.
     postscript_name: Option<String>,
+    is_zapf_dingbats: bool,
 }
 
 impl EmbeddedKind {
@@ -242,6 +245,10 @@ impl EmbeddedKind {
         let postscript_name = dict
             .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
+        let is_zapf_dingbats = matches!(
+            select_standard_font(dict, &descriptor),
+            Some((StandardFont::ZapfDingBats, _))
+        );
 
         Some(Self {
             base_font,
@@ -254,6 +261,7 @@ impl EmbeddedKind {
             encoding,
             cached_mappings: RefCell::new(FxHashMap::default()),
             postscript_name,
+            is_zapf_dingbats,
         })
     }
 

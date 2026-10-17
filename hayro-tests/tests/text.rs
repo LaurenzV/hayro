@@ -74,6 +74,13 @@ fn type3_glyph_names() {
 }
 
 #[test]
+fn zapf_dingbats() {
+    let file = include_bytes!("../pdfs/text/zapf_dingbats.pdf");
+
+    assert_eq!(page_text(file), "✔ ★ ☎");
+}
+
+#[test]
 fn marked_content() {
     let file = include_bytes!("../pdfs/text/marked_content.pdf");
 
