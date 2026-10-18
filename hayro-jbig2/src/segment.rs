@@ -61,6 +61,21 @@ pub(crate) enum SegmentType {
 }
 
 impl SegmentType {
+    /// Whether segments of this type must be associated with a page (7.3.2).
+    pub(crate) fn requires_page(self) -> bool {
+        self.is_immediate_region()
+            || matches!(
+                self,
+                Self::IntermediateTextRegion
+                    | Self::IntermediateHalftoneRegion
+                    | Self::IntermediateGenericRegion
+                    | Self::IntermediateGenericRefinementRegion
+                    | Self::PageInformation
+                    | Self::EndOfPage
+                    | Self::EndOfStripe
+            )
+    }
+
     pub(crate) fn is_immediate_region(self) -> bool {
         matches!(
             self,

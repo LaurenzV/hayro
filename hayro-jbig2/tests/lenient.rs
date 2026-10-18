@@ -1,6 +1,6 @@
 //! Invalid streams that are decoded leniently, like most other decoders do.
 
-use crate::check_lenient;
+use crate::{check_lenient, check_pages_lenient};
 
 #[test]
 fn intermediate_page_refinement() {
@@ -85,4 +85,28 @@ fn symbol_out_of_range() {
 #[test]
 fn colour_region() {
     check_lenient("lenient_colour_region", "honeycomb");
+}
+
+#[test]
+fn page_without_end_of_page() {
+    check_pages_lenient(
+        "lenient_page_without_end_of_page",
+        &["truchet", "honeycomb", "maze"],
+    );
+}
+
+#[test]
+fn end_of_page_of_previous_page() {
+    check_pages_lenient(
+        "lenient_end_of_page_of_previous_page",
+        &["truchet", "honeycomb", "maze"],
+    );
+}
+
+#[test]
+fn page_count_mismatch() {
+    check_pages_lenient(
+        "lenient_page_count_mismatch",
+        &["truchet", "honeycomb", "maze"],
+    );
 }

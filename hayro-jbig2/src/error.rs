@@ -45,6 +45,10 @@ pub enum FormatError {
     UnknownPageHeight,
     /// Page has zero width or height.
     EmptyPage,
+    /// The file header's page count doesn't match the pages in the file.
+    PageCountMismatch,
+    /// A page doesn't have exactly one end of page segment.
+    InvalidEndOfPage,
 }
 
 /// Errors related to segment processing.
@@ -62,6 +66,8 @@ pub enum SegmentError {
     MissingEndMarker,
     /// Missing required pattern dictionary.
     MissingPatternDictionary,
+    /// A page segment has no page association.
+    MissingPageAssociation,
 }
 
 /// Errors related to Huffman decoding.
@@ -182,6 +188,8 @@ impl fmt::Display for FormatError {
             Self::MissingPageInfo => write!(f, "missing page information segment"),
             Self::UnknownPageHeight => write!(f, "page height unknown with no stripe segments"),
             Self::EmptyPage => write!(f, "page has zero width or height"),
+            Self::PageCountMismatch => write!(f, "page count in file header doesn't match"),
+            Self::InvalidEndOfPage => write!(f, "page without exactly one end of page segment"),
         }
     }
 }
@@ -195,6 +203,7 @@ impl fmt::Display for SegmentError {
             Self::InvalidUnknownLength => write!(f, "unknown segment length for this type"),
             Self::MissingEndMarker => write!(f, "missing end marker for unknown-length region"),
             Self::MissingPatternDictionary => write!(f, "missing required pattern dictionary"),
+            Self::MissingPageAssociation => write!(f, "segment not associated with a page"),
         }
     }
 }
