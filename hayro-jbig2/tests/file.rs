@@ -1,6 +1,6 @@
 //! File organisation and segment header details (Annex D, 7.2).
 
-use crate::check;
+use crate::{check, check_pages};
 
 #[test]
 fn random_access() {
@@ -10,4 +10,9 @@ fn random_access() {
 #[test]
 fn page_association_32bit() {
     check("file_page_association_32bit", "truchet");
+}
+
+#[test]
+fn pages() {
+    check_pages("file_pages", &["honeycomb", "truchet", "maze"]);
 }

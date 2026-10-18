@@ -120,7 +120,7 @@ pub(crate) struct SegmentHeader {
     /// The first page must be numbered '1'. This field may contain a value of
     /// zero; this value indicates that this segment is not associated with any
     /// page." (7.2.6)
-    pub(crate) _page_association: u32,
+    pub(crate) page_association: u32,
     /// "This field contains the segment numbers of the segments that this segment
     /// refers to, if any." (7.2.5)
     pub(crate) referred_to_segments: Vec<u32>,
@@ -272,7 +272,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>, strict: bool) -> Res
         segment_number,
         segment_type,
         _retain_flag: retain_flag,
-        _page_association: page_association,
+        page_association,
         referred_to_segments,
         data_length,
     })
@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(header.referred_to_segments, vec![2, 30, 5]);
 
         // "0x04: This segment is associated with page number 4."
-        assert_eq!(header._page_association, 4);
+        assert_eq!(header.page_association, 4);
 
         assert_eq!(header.data_length, Some(16));
     }
@@ -446,7 +446,7 @@ mod tests {
         );
 
         // "00 00 04 01: This segment is associated with page number 1025."
-        assert_eq!(header._page_association, 1025);
+        assert_eq!(header.page_association, 1025);
 
         assert_eq!(header.data_length, Some(32));
     }
