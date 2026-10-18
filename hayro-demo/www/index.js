@@ -25,6 +25,7 @@ const elements = {
     themeOptions: document.querySelectorAll('[data-theme-choice]'),
     dropOverlay: document.getElementById('drop-overlay'),
     loadingOverlay: document.getElementById('loading-overlay'),
+    loadingText: document.getElementById('loading-text'),
     toast: document.getElementById('toast'),
 };
 
@@ -109,7 +110,8 @@ function createWorker() {
     return worker;
 }
 
-function showLoading() {
+function showLoading(text) {
+    elements.loadingText.textContent = text;
     elements.loadingOverlay.hidden = false;
 }
 
@@ -254,7 +256,7 @@ async function handleFile(file) {
     }
 
     try {
-        showLoading();
+        showLoading('Uploading PDF');
         const buffer = await file.arrayBuffer();
         state.generation += 1;
         state.loaded = false;
@@ -267,6 +269,7 @@ async function handleFile(file) {
             generation: state.generation,
             buffer,
         }, [buffer]);
+        showLoading('Loading PDF');
     } catch (error) {
         hideLoading();
         showToast(`Could not read ${file.name}.`);
