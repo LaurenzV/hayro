@@ -118,9 +118,7 @@ mkdir -p "$DIST_DIR"
 
 # Copy static files
 echo "Copying static files..."
-cp www/index.html "$DIST_DIR/"
-cp www/styles.css "$DIST_DIR/"
-cp www/index.js "$DIST_DIR/"
+cp -R www/. "$DIST_DIR/"
 cp renderer.worker.js "$DIST_DIR/"
 
 # Copy generated WASM files

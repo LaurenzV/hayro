@@ -13,35 +13,21 @@ impl log::Log for ConsoleLogger {
     }
 
     fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            let message = format!(
-                "[{}:{}] {}",
-                record.target(),
-                record.line().unwrap_or(0),
-                record.args()
-            );
+        if !self.enabled(record.metadata()) {
+            return;
+        }
 
-            let level_str = match record.level() {
-                log::Level::Error => "error",
-                log::Level::Warn => "warn",
-                log::Level::Info => "info",
-                log::Level::Debug => "debug",
-                log::Level::Trace => "trace",
-            };
+        let message = format!(
+            "[{}:{}] {}",
+            record.target(),
+            record.line().unwrap_or(0),
+            record.args()
+        );
 
-            match record.level() {
-                log::Level::Error => web_sys::console::error_1(&message.clone().into()),
-                log::Level::Warn => web_sys::console::warn_1(&message.clone().into()),
-                _ => web_sys::console::log_1(&message.clone().into()),
-            }
-
-            if let Some(window) = web_sys::window()
-                && let Ok(add_log_entry) = js_sys::Reflect::get(&window, &"addLogEntry".into())
-                && add_log_entry.is_function()
-            {
-                let function = js_sys::Function::from(add_log_entry);
-                let _ = function.call2(&window, &level_str.into(), &message.into());
-            }
+        match record.level() {
+            log::Level::Error => web_sys::console::error_1(&message.into()),
+            log::Level::Warn => web_sys::console::warn_1(&message.into()),
+            _ => web_sys::console::log_1(&message.into()),
         }
     }
 
@@ -50,119 +36,68 @@ impl log::Log for ConsoleLogger {
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
 
+/// A loaded PDF document that renders its pages on request.
 #[wasm_bindgen]
 pub struct PdfViewer {
-    pdf: Option<Pdf>,
-    total_pages: usize,
-}
-
-impl Default for PdfViewer {
-    fn default() -> Self {
-        Self::new()
-    }
+    pdf: Pdf,
 }
 
 #[wasm_bindgen]
 impl PdfViewer {
+    /// Parses the PDF in `data`.
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
+    pub fn new(data: &[u8]) -> Result<Self, JsValue> {
         console_error_panic_hook::set_once();
 
         if log::set_logger(&LOGGER).is_ok() {
             log::set_max_level(log::LevelFilter::Warn);
         }
 
-        Self {
-            pdf: None,
-            total_pages: 0,
-        }
-    }
-
-    #[wasm_bindgen]
-    pub fn load_pdf(&mut self, data: &[u8]) -> Result<(), JsValue> {
         let pdf = Pdf::new(data.to_vec()).map_err(|_| JsValue::from_str("Failed to parse PDF"))?;
 
-        let pages = pdf.pages();
-
-        self.total_pages = pages.len();
-        self.pdf = Some(pdf);
-
-        Ok(())
+        Ok(Self { pdf })
     }
 
-    #[wasm_bindgen]
-    pub fn render_page(
-        &self,
-        page_number: usize,
-        viewport_width: f32,
-        viewport_height: f32,
-        device_pixel_ratio: f32,
-        zoom: f32,
-        fit_width: bool,
-    ) -> Result<js_sys::Array, JsValue> {
-        let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
-        let page = pdf
+    /// The number of pages.
+    pub fn page_count(&self) -> usize {
+        self.pdf.pages().len()
+    }
+
+    /// The width and height of every page in PDF points, interleaved.
+    pub fn page_sizes(&self) -> Vec<f32> {
+        self.pdf
             .pages()
-            .get(page_number.checked_sub(1).ok_or("Page out of bounds")?)
-            .ok_or("Page out of bounds")?;
+            .iter()
+            .flat_map(|page| {
+                let (width, height) = page.render_dimensions();
+                [width, height]
+            })
+            .collect()
+    }
 
-        let interpreter_settings = InterpreterSettings::default();
-        let (base_width, base_height) = page.render_dimensions();
+    /// Renders the page at `index` with `scale` pixels per PDF point.
+    ///
+    /// Returns an array of the pixmap's width, height and RGBA pixels.
+    pub fn render_page(&self, index: usize, scale: f32) -> Result<js_sys::Array, JsValue> {
+        let page = self.pdf.pages().get(index).ok_or("Page out of bounds")?;
 
-        // Calculate scale to fit in the viewport while accounting for the device pixel ratio.
-        let target_width = viewport_width.max(1.0) * device_pixel_ratio.max(1.0);
-        let target_height = viewport_height.max(1.0) * device_pixel_ratio.max(1.0);
-
-        let scale_x = target_width / base_width;
-        let scale_y = target_height / base_height;
-        let fit_scale = if fit_width {
-            scale_x
-        } else {
-            scale_x.min(scale_y)
-        };
-        let scale = fit_scale * zoom.clamp(0.1, 4.0);
-
-        let pixmap_settings = PixmapSettings {
-            x_scale: scale,
-            y_scale: scale,
-            bg_color: WHITE,
-        };
-        let cache = RenderCache::new();
         let pixmap = hayro::render(
             page,
-            &cache,
-            &interpreter_settings,
+            &RenderCache::new(),
+            &InterpreterSettings::default(),
             &RenderSettings::default(),
-            &pixmap_settings,
+            &PixmapSettings {
+                x_scale: scale,
+                y_scale: scale,
+                bg_color: WHITE,
+            },
         );
 
-        // Return array: [width, height, pixel_data]
         let result = js_sys::Array::new_with_length(3);
         result.set(0, JsValue::from(pixmap.width()));
         result.set(1, JsValue::from(pixmap.height()));
-
-        let byte_data = pixmap.take_rgba8(ImageAlphaType::Alpha);
-        result.set(2, JsValue::from(byte_data));
+        result.set(2, JsValue::from(pixmap.take_rgba8(ImageAlphaType::Alpha)));
 
         Ok(result)
-    }
-
-    #[wasm_bindgen]
-    pub fn get_page_dimensions(&self) -> Result<js_sys::Array, JsValue> {
-        let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
-        let dimensions = js_sys::Array::new();
-
-        for page in pdf.pages().iter() {
-            let (width, height) = page.render_dimensions();
-            dimensions.push(&JsValue::from(width));
-            dimensions.push(&JsValue::from(height));
-        }
-
-        Ok(dimensions)
-    }
-
-    #[wasm_bindgen]
-    pub fn get_total_pages(&self) -> usize {
-        self.total_pages
     }
 }

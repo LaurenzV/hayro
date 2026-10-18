@@ -61,17 +61,7 @@
 
         <main id="viewer" class="viewer" hidden>
             <div id="document-viewport" class="document-viewport">
-                <div id="document-stage" class="document-stage paged">
-                    <div id="paged-document" class="paged-document">
-                        <div class="page-shell paged-shell" data-page="1">
-                            <canvas id="pdf-canvas" aria-label="Rendered PDF page"></canvas>
-                            <div class="page-placeholder" role="status" aria-label="Rendering page">
-                                <span class="spinner page-spinner" aria-hidden="true"></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="continuous-document" class="continuous-document" hidden></div>
-                </div>
+                <div id="document-stage" class="document-stage"></div>
             </div>
 
             <div class="page-navigation" aria-label="Page navigation">
@@ -99,6 +89,6 @@
 
         <div id="toast" class="toast" role="alert" hidden></div>
     </div>
-    <script type="module" src="index.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
