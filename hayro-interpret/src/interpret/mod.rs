@@ -152,70 +152,82 @@ pub fn interpret_page<'a>(
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
         for annot in annot_arr.iter::<Dict<'_>>() {
-            let flags = annot.get::<u32>(F).unwrap_or(0);
-
-            if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
-                continue;
-            }
-
-            if let Some(apx) = appearance_stream(&annot).and_then(|o| FormXObject::new(&o)) {
-                let Some(rect) = annot.get::<Rect>(RECT) else {
-                    continue;
-                };
-
-                let annot_rect = rect.to_kurbo();
-                // 12.5.5. Appearance streams
-                // "The algorithm outlined in this subclause shall be used
-                // to map from the coordinate system of the appearance XObject."
-
-                // 1) The appearance’s bounding box (specified by its BBox entry)
-                // shall be transformed, using Matrix, to produce a
-                // quadrilateral with arbitrary orientation. The transformed
-                // appearance box is the smallest upright rectangle that
-                // encompasses this quadrilateral.
-                let transformed_rect = (apx.matrix
-                    * kurbo::Rect::new(
-                        apx.bbox[0] as f64,
-                        apx.bbox[1] as f64,
-                        apx.bbox[2] as f64,
-                        apx.bbox[3] as f64,
-                    )
-                    .to_path(0.1))
-                .bounding_box();
-
-                // 2) A matrix A shall be computed that scales and translates
-                // the transformed appearance box to align with the edges
-                // of the annotation’s rectangle (specified by the Rect entry).
-                // A maps the lower-left corner (the corner with the smallest
-                // x and y coordinates) and the upper-right corner (the
-                // corner with the greatest x and y coordinates) of the
-                // transformed appearance box to the corresponding corners
-                // of the annotation’s rectangle.
-                let sx = annot_rect.width() / transformed_rect.width();
-                let sy = annot_rect.height() / transformed_rect.height();
-                let affine = Affine::new([
-                    sx,
-                    0.0,
-                    0.0,
-                    sy,
-                    annot_rect.x0 - sx * transformed_rect.x0,
-                    annot_rect.y0 - sy * transformed_rect.y0,
-                ]);
-
-                // 3) Matrix shall be concatenated with A to form a matrix
-                // AA that maps from the appearance’s coordinate system to
-                // the annotation’s rectangle in default user space.
-                context.save_state();
-                context.pre_concat_affine(affine);
-                context.push_root_transform();
-
-                apx.draw(resources, context, device);
-                context.pop_root_transform();
-                context.restore_state(device);
-            } else if annot.get::<Dict<'_>>(AP).is_some() {
-                (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
-            }
+            interpret_annotation(&annot, resources, context, device);
         }
+    }
+}
+
+/// Interpret the normal appearance of one annotation of a page and render it into
+/// the device, as [`interpret_page`] does for each annotation after the page's
+/// contents. `resources` are the page's, used when the appearance stream has none.
+pub fn interpret_annotation<'a>(
+    annot: &Dict<'a>,
+    resources: &Resources<'a>,
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+) {
+    let flags = annot.get::<u32>(F).unwrap_or(0);
+
+    if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
+        return;
+    }
+
+    if let Some(apx) = appearance_stream(annot).and_then(|o| FormXObject::new(&o)) {
+        let Some(rect) = annot.get::<Rect>(RECT) else {
+            return;
+        };
+
+        let annot_rect = rect.to_kurbo();
+        // 12.5.5. Appearance streams
+        // "The algorithm outlined in this subclause shall be used
+        // to map from the coordinate system of the appearance XObject."
+
+        // 1) The appearance’s bounding box (specified by its BBox entry)
+        // shall be transformed, using Matrix, to produce a
+        // quadrilateral with arbitrary orientation. The transformed
+        // appearance box is the smallest upright rectangle that
+        // encompasses this quadrilateral.
+        let transformed_rect = (apx.matrix
+            * kurbo::Rect::new(
+                apx.bbox[0] as f64,
+                apx.bbox[1] as f64,
+                apx.bbox[2] as f64,
+                apx.bbox[3] as f64,
+            )
+            .to_path(0.1))
+        .bounding_box();
+
+        // 2) A matrix A shall be computed that scales and translates
+        // the transformed appearance box to align with the edges
+        // of the annotation’s rectangle (specified by the Rect entry).
+        // A maps the lower-left corner (the corner with the smallest
+        // x and y coordinates) and the upper-right corner (the
+        // corner with the greatest x and y coordinates) of the
+        // transformed appearance box to the corresponding corners
+        // of the annotation’s rectangle.
+        let sx = annot_rect.width() / transformed_rect.width();
+        let sy = annot_rect.height() / transformed_rect.height();
+        let affine = Affine::new([
+            sx,
+            0.0,
+            0.0,
+            sy,
+            annot_rect.x0 - sx * transformed_rect.x0,
+            annot_rect.y0 - sy * transformed_rect.y0,
+        ]);
+
+        // 3) Matrix shall be concatenated with A to form a matrix
+        // AA that maps from the appearance’s coordinate system to
+        // the annotation’s rectangle in default user space.
+        context.save_state();
+        context.pre_concat_affine(affine);
+        context.push_root_transform();
+
+        apx.draw(resources, context, device);
+        context.pop_root_transform();
+        context.restore_state(device);
+    } else if annot.get::<Dict<'_>>(AP).is_some() {
+        (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
     }
 }
 
