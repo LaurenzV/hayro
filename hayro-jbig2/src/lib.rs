@@ -69,6 +69,7 @@ mod reader;
 mod segment;
 mod simd;
 mod symbol_id_decoder;
+mod sync;
 
 use error::bail;
 pub use error::{
@@ -91,7 +92,7 @@ use file::parse_file;
 use huffman_table::{HuffmanTable, StandardHuffmanTables};
 use page_info::{PageInformation, parse_page_information};
 use reader::Reader;
-use segment::SegmentType;
+use segment::{Segment, SegmentType};
 
 /// Settings for decoding JBIG2 images.
 #[derive(Debug, Clone, Copy, Default)]
@@ -106,7 +107,9 @@ pub struct DecodeSettings {
 /// A JBIG2 image.
 pub struct Image<'a> {
     /// The parsed segments.
-    segments: Vec<segment::Segment<'a>>,
+    segments: Vec<Segment<'a>>,
+    /// The decoded global segments.
+    globals: Option<&'a Globals>,
     /// The width of the image in pixels.
     width: u32,
     /// The height of the image in pixels.
@@ -124,7 +127,7 @@ impl<'a> Image<'a> {
     /// as defined in Annex D.1 and D.2.
     pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
         let file = parse_file(data, settings.strict)?;
-        Self::from_segments(file.segments, settings.strict)
+        Self::from_segments(file.segments, None, settings.strict)
     }
 
     /// Parse an embedded JBIG2 image with optional global segments.
@@ -133,24 +136,23 @@ impl<'a> Image<'a> {
     /// Annex D.3.
     pub fn new_embedded(
         data: &'a [u8],
-        globals: Option<&'a [u8]>,
+        globals: Option<&'a Globals>,
         settings: &DecodeSettings,
     ) -> Result<Self> {
         let mut segments = Vec::new();
-        if let Some(globals_data) = globals {
-            let mut reader = Reader::new(globals_data);
-            parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
-        };
-
         let mut reader = Reader::new(data);
         parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
 
         segments.sort_by_key(|seg| seg.header.segment_number);
 
-        Self::from_segments(segments, settings.strict)
+        Self::from_segments(segments, globals, settings.strict)
     }
 
-    fn from_segments(segments: Vec<segment::Segment<'a>>, strict: bool) -> Result<Self> {
+    fn from_segments(
+        segments: Vec<Segment<'a>>,
+        globals: Option<&'a Globals>,
+        strict: bool,
+    ) -> Result<Self> {
         // Pre-scan for stripe height from EndOfStripe segments.
         let height_from_stripes = segments
             .iter()
@@ -182,6 +184,7 @@ impl<'a> Image<'a> {
 
         Ok(Self {
             segments,
+            globals,
             width: page_info.width,
             height,
             height_from_stripes,
@@ -211,10 +214,53 @@ impl<'a> Image<'a> {
     /// This is useful in case you want to convert multiple JBIG2 images,
     /// as it allows `hayro-jbig2` to reuse allocations during decoding.
     pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
-        decode_segments(&self.segments, self.height_from_stripes, self.strict, ctx)?;
+        decode_segments(
+            &self.segments,
+            self.globals,
+            self.height_from_stripes,
+            self.strict,
+            ctx,
+        )?;
         emit_bitmap(&ctx.page_bitmap, decoder);
 
         Ok(())
+    }
+}
+
+/// Decoded global segments that embedded images can share, such as a PDF
+/// `JBIG2Globals` stream.
+pub struct Globals {
+    dictionaries: Dictionaries,
+}
+
+impl Globals {
+    /// Parse and decode global segments in the embedded organization (Annex D.3).
+    pub fn new(data: &[u8], settings: &DecodeSettings) -> Result<Self> {
+        let mut segments = Vec::new();
+        let mut reader = Reader::new(data);
+        parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
+        segments.sort_by_key(|seg| seg.header.segment_number);
+
+        Self::from_segments(&segments, settings.strict)
+    }
+
+    fn from_segments(segments: &[Segment<'_>], strict: bool) -> Result<Self> {
+        let mut dictionaries = Dictionaries::default();
+        let standard_tables = StandardHuffmanTables::default();
+        let mut scratch_buffers = ScratchBuffers::default();
+
+        for seg in segments {
+            decode_dictionary_segment(
+                seg,
+                &mut dictionaries,
+                None,
+                &standard_tables,
+                &mut scratch_buffers,
+                strict,
+            )?;
+        }
+
+        Ok(Self { dictionaries })
     }
 }
 
@@ -276,7 +322,8 @@ fn emit_bitmap<D: Decoder>(bitmap: &Bitmap, decoder: &mut D) {
 }
 
 fn decode_segments(
-    segments: &[segment::Segment<'_>],
+    segments: &[Segment<'_>],
+    globals: Option<&Globals>,
     height_from_stripes: Option<u32>,
     strict: bool,
     decoder_ctx: &mut DecoderContext,
@@ -302,7 +349,14 @@ fn decode_segments(
     let scratch_buffers = &mut decoder_ctx.scratch_buffers;
 
     for seg in segments {
-        match decode_segment(seg, page_bitmap, page_state, scratch_buffers, strict) {
+        match decode_segment(
+            seg,
+            page_bitmap,
+            page_state,
+            globals,
+            scratch_buffers,
+            strict,
+        ) {
             Ok(ControlFlow::Continue(())) => {}
             Ok(ControlFlow::Break(())) => break,
             // No other segment can refer to an immediate region, so the rest of
@@ -319,9 +373,10 @@ fn decode_segments(
 }
 
 fn decode_segment(
-    seg: &segment::Segment<'_>,
+    seg: &Segment<'_>,
     page_bitmap: &mut Bitmap,
     page_state: &mut PageState,
+    globals: Option<&Globals>,
     scratch_buffers: &mut ScratchBuffers,
     strict: bool,
 ) -> Result<ControlFlow<()>> {
@@ -354,39 +409,23 @@ fn decode_segment(
             let region = generic::decode(&header, scratch_buffers)?;
             page_state.store_region(seg.header.segment_number, region.bitmap);
         }
-        SegmentType::PatternDictionary => {
-            let header = pattern::parse(&mut reader, strict)?;
-            let dictionary = pattern::decode(&header, scratch_buffers)?;
-            page_state.store_pattern_dictionary(seg.header.segment_number, dictionary);
-        }
-        SegmentType::SymbolDictionary => {
-            // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
-            // (6.5.5, step 1)
-            let (input_symbols, referred_tables) =
-                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
-
-            // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
-            let retained_contexts = seg
-                .header
-                .referred_to_segments
-                .iter()
-                .rev()
-                .find_map(|&num| page_state.get_symbol_dictionary(num))
-                .and_then(|dict| dict.retained_contexts.as_ref());
-
-            let header = symbol::parse(&mut reader, strict)?;
-            let dictionary = symbol::decode(
-                &header,
-                &input_symbols,
-                &referred_tables,
-                &page_state.standard_tables,
-                retained_contexts,
-            )?;
-            page_state.store_symbol_dictionary(seg.header.segment_number, dictionary);
-        }
+        SegmentType::PatternDictionary
+        | SegmentType::SymbolDictionary
+        | SegmentType::Tables
+        | SegmentType::Extension => decode_dictionary_segment(
+            seg,
+            &mut page_state.dictionaries,
+            globals,
+            &page_state.standard_tables,
+            scratch_buffers,
+            strict,
+        )?,
         SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
-            let (symbols, referred_tables) =
-                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
+            let (symbols, referred_tables) = page_state.dictionaries.get_symbols_and_tables(
+                &seg.header.referred_to_segments,
+                globals,
+                strict,
+            )?;
 
             let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
 
@@ -421,8 +460,11 @@ fn decode_segment(
             page_state.page_pristine = false;
         }
         SegmentType::IntermediateTextRegion => {
-            let (symbols, referred_tables) =
-                page_state.get_symbols_and_tables(&seg.header.referred_to_segments, strict)?;
+            let (symbols, referred_tables) = page_state.dictionaries.get_symbols_and_tables(
+                &seg.header.referred_to_segments,
+                globals,
+                strict,
+            )?;
 
             let header = text::parse(&mut reader, symbols.len() as u32, strict)?;
             let region = text::decode(
@@ -439,7 +481,7 @@ fn decode_segment(
                 .header
                 .referred_to_segments
                 .first()
-                .and_then(|&num| page_state.get_pattern_dictionary(num))
+                .and_then(|&num| page_state.dictionaries.get_pattern_dictionary(num, globals))
                 .ok_or(SegmentError::MissingPatternDictionary)?;
 
             let header = halftone::parse(&mut reader, strict)?;
@@ -466,7 +508,7 @@ fn decode_segment(
                 .header
                 .referred_to_segments
                 .first()
-                .and_then(|&num| page_state.get_pattern_dictionary(num))
+                .and_then(|&num| page_state.dictionaries.get_pattern_dictionary(num, globals))
                 .ok_or(SegmentError::MissingPatternDictionary)?;
 
             let header = halftone::parse(&mut reader, strict)?;
@@ -540,15 +582,66 @@ fn decode_segment(
 
             page_state.page_pristine = false;
         }
+        SegmentType::EndOfPage | SegmentType::EndOfFile => {
+            return Ok(ControlFlow::Break(()));
+        }
+        // Other segment types not yet implemented.
+        _ => {}
+    }
+
+    Ok(ControlFlow::Continue(()))
+}
+
+fn decode_dictionary_segment(
+    seg: &Segment<'_>,
+    dictionaries: &mut Dictionaries,
+    globals: Option<&Globals>,
+    standard_tables: &StandardHuffmanTables,
+    scratch_buffers: &mut ScratchBuffers,
+    strict: bool,
+) -> Result<()> {
+    let mut reader = Reader::new(seg.data);
+
+    match seg.header.segment_type {
+        SegmentType::PatternDictionary => {
+            let header = pattern::parse(&mut reader, strict)?;
+            let dictionary = pattern::decode(&header, scratch_buffers)?;
+            dictionaries.store_pattern_dictionary(seg.header.segment_number, dictionary);
+        }
+        SegmentType::SymbolDictionary => {
+            // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
+            // (6.5.5, step 1)
+            let (input_symbols, referred_tables) = dictionaries.get_symbols_and_tables(
+                &seg.header.referred_to_segments,
+                globals,
+                strict,
+            )?;
+
+            // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
+            let retained_contexts = seg
+                .header
+                .referred_to_segments
+                .iter()
+                .rev()
+                .find_map(|&num| dictionaries.get_symbol_dictionary(num, globals))
+                .and_then(|dict| dict.retained_contexts.as_ref());
+
+            let header = symbol::parse(&mut reader, strict)?;
+            let dictionary = symbol::decode(
+                &header,
+                &input_symbols,
+                &referred_tables,
+                standard_tables,
+                retained_contexts,
+            )?;
+            dictionaries.store_symbol_dictionary(seg.header.segment_number, dictionary);
+        }
         SegmentType::Tables => {
             // "Tables – see 7.4.13." (type 53)
             // "This segment contains data which defines one or more user-supplied
             // Huffman coding tables." (7.4.13)
             let table = HuffmanTable::read_custom(&mut reader)?;
-            page_state.store_huffman_table(seg.header.segment_number, table);
-        }
-        SegmentType::EndOfPage | SegmentType::EndOfFile => {
-            return Ok(ControlFlow::Break(()));
+            dictionaries.store_huffman_table(seg.header.segment_number, table);
         }
         SegmentType::Extension if strict => {
             let extension_type = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
@@ -556,11 +649,10 @@ fn decode_segment(
                 bail!(DecodeError::Unsupported);
             }
         }
-        // Other segment types not yet implemented.
         _ => {}
     }
 
-    Ok(ControlFlow::Continue(()))
+    Ok(())
 }
 
 /// Page-level decoding state for a JBIG2 page.
@@ -572,13 +664,8 @@ pub(crate) struct PageState {
     pub(crate) page_pristine: bool,
     /// Decoded intermediate regions, stored as (`segment_number`, region) pairs.
     pub(crate) referred_segments: Vec<(u32, Bitmap)>,
-    /// Decoded pattern dictionaries, stored as (`segment_number`, dictionary) pairs.
-    pub(crate) pattern_dictionaries: Vec<(u32, PatternDictionary)>,
-    /// Decoded symbol dictionaries, stored as (`segment_number`, dictionary) pairs.
-    pub(crate) symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
-    /// Decoded Huffman tables from table segments, stored as (`segment_number`, table) pairs.
-    /// "Tables – see 7.4.13." (type 53)
-    pub(crate) huffman_tables: Vec<(u32, HuffmanTable)>,
+    /// The dictionaries and tables of the page.
+    pub(crate) dictionaries: Dictionaries,
     /// Standard Huffman tables (`TABLE_A` through `TABLE_O`).
     pub(crate) standard_tables: StandardHuffmanTables,
 }
@@ -588,9 +675,7 @@ impl PageState {
         self.page_info = page_info;
         self.page_pristine = true;
         self.referred_segments.clear();
-        self.pattern_dictionaries.clear();
-        self.symbol_dictionaries.clear();
-        self.huffman_tables.clear();
+        self.dictionaries.clear();
         // Standard tables are lazily built and reused across images.
     }
 
@@ -655,45 +740,75 @@ impl PageState {
             region => Ok(region),
         }
     }
+}
 
-    /// Store a decoded pattern dictionary for later reference.
+/// Decoded dictionaries and tables, stored as (`segment_number`, value) pairs.
+#[derive(Default)]
+pub(crate) struct Dictionaries {
+    pattern_dictionaries: Vec<(u32, PatternDictionary)>,
+    symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
+    huffman_tables: Vec<(u32, HuffmanTable)>,
+}
+
+impl Dictionaries {
+    fn clear(&mut self) {
+        self.pattern_dictionaries.clear();
+        self.symbol_dictionaries.clear();
+        self.huffman_tables.clear();
+    }
+
     fn store_pattern_dictionary(&mut self, segment_number: u32, dictionary: PatternDictionary) {
         self.pattern_dictionaries.push((segment_number, dictionary));
     }
 
-    /// Look up a pattern dictionary by segment number.
-    fn get_pattern_dictionary(&self, segment_number: u32) -> Option<&PatternDictionary> {
-        self.pattern_dictionaries
-            .binary_search_by_key(&segment_number, |(num, _)| *num)
-            .ok()
-            .map(|idx| &self.pattern_dictionaries[idx].1)
-    }
-
-    /// Store a decoded symbol dictionary for later reference.
     fn store_symbol_dictionary(&mut self, segment_number: u32, dictionary: SymbolDictionary) {
         self.symbol_dictionaries.push((segment_number, dictionary));
     }
 
-    /// Look up a symbol dictionary by segment number.
-    fn get_symbol_dictionary(&self, segment_number: u32) -> Option<&SymbolDictionary> {
-        self.symbol_dictionaries
-            .binary_search_by_key(&segment_number, |(num, _)| *num)
-            .ok()
-            .map(|idx| &self.symbol_dictionaries[idx].1)
+    fn store_huffman_table(&mut self, segment_number: u32, table: HuffmanTable) {
+        self.huffman_tables.push((segment_number, table));
     }
 
-    fn get_symbols_and_tables(
-        &self,
+    fn get_pattern_dictionary<'a>(
+        &'a self,
+        segment_number: u32,
+        globals: Option<&'a Globals>,
+    ) -> Option<&'a PatternDictionary> {
+        find(&self.pattern_dictionaries, segment_number)
+            .or_else(|| find(&globals?.dictionaries.pattern_dictionaries, segment_number))
+    }
+
+    fn get_symbol_dictionary<'a>(
+        &'a self,
+        segment_number: u32,
+        globals: Option<&'a Globals>,
+    ) -> Option<&'a SymbolDictionary> {
+        find(&self.symbol_dictionaries, segment_number)
+            .or_else(|| find(&globals?.dictionaries.symbol_dictionaries, segment_number))
+    }
+
+    fn get_huffman_table<'a>(
+        &'a self,
+        segment_number: u32,
+        globals: Option<&'a Globals>,
+    ) -> Option<&'a HuffmanTable> {
+        find(&self.huffman_tables, segment_number)
+            .or_else(|| find(&globals?.dictionaries.huffman_tables, segment_number))
+    }
+
+    fn get_symbols_and_tables<'a>(
+        &'a self,
         referred_segments: &[u32],
+        globals: Option<&'a Globals>,
         strict: bool,
-    ) -> Result<(Vec<&Bitmap>, Vec<HuffmanTable>)> {
+    ) -> Result<(Vec<&'a Bitmap>, Vec<HuffmanTable>)> {
         let mut symbols = Vec::new();
         let mut tables = Vec::new();
 
         for &num in referred_segments {
-            if let Some(dictionary) = self.get_symbol_dictionary(num) {
+            if let Some(dictionary) = self.get_symbol_dictionary(num, globals) {
                 symbols.extend(dictionary.exported_symbols.iter());
-            } else if let Some(table) = self.get_huffman_table(num) {
+            } else if let Some(table) = self.get_huffman_table(num, globals) {
                 tables.push(table.clone());
             } else if strict {
                 bail!(SegmentError::InvalidReference);
@@ -702,19 +817,13 @@ impl PageState {
 
         Ok((symbols, tables))
     }
+}
 
-    /// Store a decoded Huffman table for later reference.
-    fn store_huffman_table(&mut self, segment_number: u32, table: HuffmanTable) {
-        self.huffman_tables.push((segment_number, table));
-    }
-
-    /// Look up a Huffman table by segment number.
-    fn get_huffman_table(&self, segment_number: u32) -> Option<&HuffmanTable> {
-        self.huffman_tables
-            .binary_search_by_key(&segment_number, |(num, _)| *num)
-            .ok()
-            .map(|idx| &self.huffman_tables[idx].1)
-    }
+fn find<T>(entries: &[(u32, T)], segment_number: u32) -> Option<&T> {
+    entries
+        .binary_search_by_key(&segment_number, |(num, _)| *num)
+        .ok()
+        .map(|idx| &entries[idx].1)
 }
 
 fn page_bitmap_area(page: &Bitmap, region_info: &decode::RegionSegmentInfo) -> Result<Bitmap> {

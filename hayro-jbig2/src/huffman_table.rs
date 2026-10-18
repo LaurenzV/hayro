@@ -1,6 +1,5 @@
 //! Huffman table decoding, described in Annex B.
 
-use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::num::NonZeroU32;
@@ -8,6 +7,7 @@ use core::num::NonZeroU32;
 use crate::error::{HuffmanError, ParseError, Result, bail};
 use crate::lazy::Lazy;
 use crate::reader::Reader;
+use crate::sync::Arc;
 
 include!("huffman_tables_generated.rs");
 
@@ -16,17 +16,17 @@ const INLINE_TABLE_SIZE: usize = 43;
 
 /// A queryable Huffman table.
 #[derive(Debug, Clone)]
-pub(crate) struct HuffmanTable(Rc<InnerHuffmanTable>);
+pub(crate) struct HuffmanTable(Arc<InnerHuffmanTable>);
 
 impl HuffmanTable {
     /// Create a new inline Huffman table from a fixed-size node array.
     fn from_inline(nodes: [HuffmanNode; INLINE_TABLE_SIZE]) -> Self {
-        Self(Rc::new(InnerHuffmanTable::Inline { nodes }))
+        Self(Arc::new(InnerHuffmanTable::Inline { nodes }))
     }
 
     /// Create a new dynamic Huffman table from a vector of nodes.
     fn from_dynamic(nodes: Vec<HuffmanNode>) -> Self {
-        Self(Rc::new(InnerHuffmanTable::Dynamic { nodes }))
+        Self(Arc::new(InnerHuffmanTable::Dynamic { nodes }))
     }
 
     /// Decode a value from the bit reader using this Huffman table
