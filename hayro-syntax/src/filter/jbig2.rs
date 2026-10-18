@@ -25,7 +25,7 @@ pub(crate) fn decode(
         .map(|globals| hayro_jbig2::Globals::new(&globals, &settings))
         .transpose()
         .ok()?;
-    let image = hayro_jbig2::Image::new_embedded(data, globals.as_ref(), &settings).ok()?;
+    let page = hayro_jbig2::Page::new_embedded(data, globals.as_ref(), &settings).ok()?;
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
@@ -34,8 +34,8 @@ pub(crate) fn decode(
     // We need to invert the color because JBIG2 uses black = 1 and
     // white = 0, but PDF uses the opposite.
     let (decoded, bpc) = if image_params.is_indexed {
-        let row_bytes = (image.width() as usize).div_ceil(8);
-        let mut packed = vec![0_u8; row_bytes * image.height() as usize];
+        let row_bytes = (page.width() as usize).div_ceil(8);
+        let mut packed = vec![0_u8; row_bytes * page.height() as usize];
 
         struct BitWriterDecoder<'a> {
             writer: BitWriter<'a>,
@@ -59,7 +59,7 @@ pub(crate) fn decode(
 
         let writer = BitWriter::new(&mut packed, 1)?;
         let mut decoder = BitWriterDecoder { writer };
-        image.decode(&mut decoder).ok()?;
+        page.decode(&mut decoder).ok()?;
 
         (packed, 1)
     } else {
@@ -91,10 +91,10 @@ pub(crate) fn decode(
         }
 
         let mut decoder = Luma8Decoder {
-            output: vec![0xFF; image.width() as usize * image.height() as usize],
+            output: vec![0xFF; page.width() as usize * page.height() as usize],
             pos: 0,
         };
-        image.decode(&mut decoder).ok()?;
+        page.decode(&mut decoder).ok()?;
 
         (decoder.output, 8)
     };
@@ -105,8 +105,8 @@ pub(crate) fn decode(
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
-            width: image.width(),
-            height: image.height(),
+            width: page.width(),
+            height: page.height(),
         }),
     })
 }
