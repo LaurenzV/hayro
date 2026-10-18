@@ -1,135 +1,81 @@
-let viewer = null;
-let PdfViewer = null;
-let generation = 0;
-let queue = [];
-let busy = false;
-let initialization = null;
-let rendererVariant = new URL(self.location.href).searchParams.get('variant') === 'simd'
-    ? 'simd'
-    : 'nosimd';
+// Renders pages of one document. The worker never queues work: the main thread sends a new
+// job only after the previous one was answered, so it can always pick the most useful page.
 
-async function loadRenderer(variant) {
-    const module = variant === 'simd'
+let PdfViewer = null;
+let initialization = null;
+let variant = new URL(self.location.href).searchParams.get('variant') === 'simd' ? 'simd' : 'nosimd';
+let viewer = null;
+let generation = 0;
+
+async function loadModule(name) {
+    const module = name === 'simd'
         ? await import('./hayro_demo_simd.js')
         : await import('./hayro_demo_nosimd.js');
     await module.default();
     PdfViewer = module.PdfViewer;
 }
 
-async function ensureInitialized() {
-    if (!initialization) {
-        initialization = loadRenderer(rendererVariant).catch(error => {
-            if (rendererVariant !== 'simd') throw error;
-            rendererVariant = 'nosimd';
-            return loadRenderer(rendererVariant);
-        });
-    }
-    await initialization;
+function ensureInitialized() {
+    initialization ??= loadModule(variant).catch(error => {
+        if (variant !== 'simd') throw error;
+        variant = 'nosimd';
+        return loadModule(variant);
+    });
+    return initialization;
 }
 
 function describeError(error) {
     return error instanceof Error ? error.message : String(error);
 }
 
-async function processNext() {
-    if (busy || queue.length === 0 || !viewer) return;
-
-    busy = true;
-    const job = queue.shift();
+async function load({ generation: nextGeneration, buffer }) {
+    generation = nextGeneration;
+    viewer?.free();
+    viewer = null;
 
     try {
-        const result = viewer.render_page(
-            job.page,
-            job.viewportWidth,
-            job.viewportHeight,
-            job.devicePixelRatio,
-            job.zoom,
-            job.fitWidth,
-        );
-        const width = result[0];
-        const height = result[1];
-        const pixels = result[2];
-        const buffer = pixels.byteOffset === 0 && pixels.byteLength === pixels.buffer.byteLength
-            ? pixels.buffer
-            : pixels.buffer.slice(pixels.byteOffset, pixels.byteOffset + pixels.byteLength);
-
-        if ('createImageBitmap' in self) {
-            const imageData = new ImageData(new Uint8ClampedArray(buffer), width, height);
-            const bitmap = await createImageBitmap(imageData);
-            self.postMessage({
-                type: 'rendered',
-                generation: job.generation,
-                requestId: job.requestId,
-                page: job.page,
-                zoom: job.zoom,
-                width,
-                height,
-                bitmap,
-            }, [bitmap]);
-        } else {
-            self.postMessage({
-                type: 'rendered',
-                generation: job.generation,
-                requestId: job.requestId,
-                page: job.page,
-                zoom: job.zoom,
-                width,
-                height,
-                buffer,
-            }, [buffer]);
-        }
-    } catch (error) {
+        await ensureInitialized();
+        if (generation !== nextGeneration) return;
+        viewer = new PdfViewer(new Uint8Array(buffer));
         self.postMessage({
-            type: 'render-error',
-            generation: job.generation,
-            requestId: job.requestId,
-            page: job.page,
-            message: describeError(error),
+            type: 'loaded',
+            generation,
+            variant,
+            pageCount: viewer.page_count(),
+            pageSizes: viewer.page_sizes(),
         });
-    } finally {
-        busy = false;
-        setTimeout(processNext, 0);
+    } catch (error) {
+        self.postMessage({ type: 'load-error', generation: nextGeneration, message: describeError(error) });
     }
 }
 
-self.addEventListener('message', async ({ data }) => {
+async function render(job) {
+    if (job.generation !== generation || !viewer) {
+        self.postMessage({ type: 'render-skipped', id: job.id });
+        return;
+    }
+
     try {
-        if (data.type === 'load') {
-            generation = data.generation;
-            queue = [];
-            await ensureInitialized();
-            viewer = new PdfViewer();
-            viewer.load_pdf(new Uint8Array(data.buffer));
+        const [width, height, pixels] = viewer.render_page(job.page - 1, job.scale);
+        const data = new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+        const reply = { type: 'rendered', id: job.id, width, height };
 
-            self.postMessage({
-                type: 'loaded',
-                generation,
-                variant: rendererVariant,
-                totalPages: viewer.get_total_pages(),
-                dimensions: Array.from(viewer.get_page_dimensions()),
-            });
-            return;
-        }
-
-        if (data.type === 'cancel') {
-            queue = [];
-            return;
-        }
-
-        if (data.type === 'render' && data.generation === generation) {
-            queue = queue.filter(job => job.page !== data.page);
-            if (data.priority) {
-                queue.unshift(data);
-            } else {
-                queue.push(data);
-            }
-            processNext();
+        if (typeof createImageBitmap === 'function') {
+            reply.bitmap = await createImageBitmap(new ImageData(data, width, height));
+            self.postMessage(reply, [reply.bitmap]);
+        } else {
+            reply.pixels = data.slice().buffer;
+            self.postMessage(reply, [reply.pixels]);
         }
     } catch (error) {
-        self.postMessage({
-            type: 'load-error',
-            generation: data.generation,
-            message: describeError(error),
-        });
+        self.postMessage({ type: 'render-error', id: job.id, message: describeError(error) });
+    }
+}
+
+self.addEventListener('message', ({ data }) => {
+    if (data.type === 'load') {
+        load(data);
+    } else if (data.type === 'render') {
+        render(data);
     }
 });

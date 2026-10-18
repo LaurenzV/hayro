@@ -22,10 +22,4 @@ vello_cpu = { workspace = true }
 
 [dependencies.web-sys]
 version = "0.3"
-features = [
-  "console",
-  "Blob",
-  "BlobPropertyBag",
-  "Url",
-  "Window",
-]
+features = ["console"]
