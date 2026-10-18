@@ -15,8 +15,8 @@ pub(crate) fn decode_1d(
     loop {
         let line_start = reader.clone();
 
-        if let Err(e) = decode_1d_line(ctx, reader, decoder) {
-            recover(ctx, reader, decoder, line_start, e)?;
+        if let Err(e) = decode_1d_line(ctx, reader) {
+            recover(ctx, reader, line_start, e)?;
         }
 
         ctx.next_line(decoder);
@@ -44,14 +44,14 @@ pub(crate) fn decode_2d(
 
         let result = reader.read_bit().and_then(|tag_bit| {
             if tag_bit == 1 {
-                decode_1d_line(ctx, reader, decoder)
+                decode_1d_line(ctx, reader)
             } else {
-                decode_2d_line(ctx, reader, decoder)
+                decode_2d_line(ctx, reader)
             }
         });
 
         if let Err(e) = result {
-            recover(ctx, reader, decoder, line_start, e)?;
+            recover(ctx, reader, line_start, e)?;
         }
 
         ctx.next_line(decoder);
@@ -69,7 +69,6 @@ pub(crate) fn decode_2d(
 fn recover<'a>(
     ctx: &mut DecoderContext,
     reader: &mut BitReader<'a>,
-    decoder: &mut impl Decoder,
     line_start: BitReader<'a>,
     error: DecodeError,
 ) -> Result<()> {
@@ -83,7 +82,7 @@ fn recover<'a>(
     *reader = line_start;
 
     ctx.color = Color::White;
-    ctx.push_pixels(decoder, ctx.line_width - ctx.pixels_decoded)
+    ctx.push_pixels(ctx.line_width - ctx.pixels_decoded)
 }
 
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).

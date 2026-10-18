@@ -28,8 +28,6 @@ pub struct DecoderContext {
     pub(crate) decoded_rows: u32,
     /// The settings to apply during decoding.
     pub(crate) settings: DecodeSettings,
-    /// Whether to invert black and white.
-    invert_black: bool,
     /// Whether the data contains EOLs.
     pub(crate) has_eols: bool,
 }
@@ -48,7 +46,6 @@ impl DecoderContext {
             color: Color::White,
             decoded_rows: 0,
             settings,
-            invert_black: settings.invert_black,
             has_eols: false,
         }
     }
@@ -62,12 +59,11 @@ impl DecoderContext {
         self.line_width = self.settings.columns;
         self.color = Color::White;
         self.decoded_rows = 0;
-        self.invert_black = self.settings.invert_black;
         self.has_eols = false;
     }
 
     #[inline(always)]
-    pub(crate) fn push_pixels(&mut self, decoder: &mut impl Decoder, count: u32) -> Result<()> {
+    pub(crate) fn push_pixels(&mut self, count: u32) -> Result<()> {
         let remaining = self.line_width - self.pixels_decoded;
 
         if count > remaining && self.settings.strict {
@@ -75,8 +71,6 @@ impl DecoderContext {
         }
 
         let count = count.min(remaining);
-        let white = self.color.is_white() ^ self.invert_black;
-        decoder.push_pixels(white, count);
 
         if count > 0 {
             // Since colors alternate, an odd number of changes means that the
@@ -95,6 +89,7 @@ impl DecoderContext {
 
     #[inline(always)]
     pub(crate) fn next_line(&mut self, decoder: &mut impl Decoder) {
+        decoder.push_row(&self.coding_changes);
         core::mem::swap(&mut self.ref_changes, &mut self.coding_changes);
         self.coding_changes.clear();
         self.pixels_decoded = 0;
@@ -102,7 +97,6 @@ impl DecoderContext {
         self.b1_idx = 0;
         self.color = Color::White;
         self.decoded_rows += 1;
-        decoder.next_line();
 
         self.update_b();
     }
@@ -170,14 +164,10 @@ impl DecoderContext {
 
 /// Decode a single 1D-coded line (T.4 Section 4.1.1, T.6 Section 2.2.4).
 #[inline(always)]
-pub(crate) fn decode_1d_line(
-    ctx: &mut DecoderContext,
-    reader: &mut BitReader<'_>,
-    decoder: &mut impl Decoder,
-) -> Result<()> {
+pub(crate) fn decode_1d_line(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.color)?;
-        ctx.push_pixels(decoder, run_length)?;
+        ctx.push_pixels(run_length)?;
         ctx.color = ctx.color.opposite();
     }
 
@@ -186,18 +176,14 @@ pub(crate) fn decode_1d_line(
 
 /// Decode a single 2D-coded line (T.4 Section 4.2, T.6 Section 2.2).
 #[inline(always)]
-pub(crate) fn decode_2d_line(
-    ctx: &mut DecoderContext,
-    reader: &mut BitReader<'_>,
-    decoder: &mut impl Decoder,
-) -> Result<()> {
+pub(crate) fn decode_2d_line(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
 
         match mode {
             // Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
             Mode::Pass => {
-                ctx.push_pixels(decoder, ctx.b2() - ctx.a0().unwrap_or(0))?;
+                ctx.push_pixels(ctx.b2() - ctx.a0().unwrap_or(0))?;
                 ctx.update_b();
                 // No color change happens in pass mode.
             }
@@ -212,7 +198,7 @@ pub(crate) fn decode_2d_line(
 
                 let a0 = ctx.a0().unwrap_or(0);
 
-                ctx.push_pixels(decoder, a1.checked_sub(a0).ok_or(DecodeError::Overflow)?)?;
+                ctx.push_pixels(a1.checked_sub(a0).ok_or(DecodeError::Overflow)?)?;
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
@@ -220,11 +206,11 @@ pub(crate) fn decode_2d_line(
             // Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
             Mode::Horizontal => {
                 let a0a1 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(decoder, a0a1)?;
+                ctx.push_pixels(a0a1)?;
                 ctx.color = ctx.color.opposite();
 
                 let a1a2 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(decoder, a1a2)?;
+                ctx.push_pixels(a1a2)?;
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
