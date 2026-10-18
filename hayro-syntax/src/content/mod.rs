@@ -51,6 +51,7 @@ use smallvec::SmallVec;
 // but anything above should be pretty rare (only for example for
 // DeviceN color spaces, or invalid PDF files). So we settle on 10.
 const OPERANDS_THRESHOLD: usize = 10;
+const INLINE_COLOR_COMPONENTS: usize = 4;
 
 impl Debug for Operator<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -473,7 +474,7 @@ impl<'a> Stack<'a> {
         self.as_slice().get(index).and_then(T::from_object)
     }
 
-    fn get_all<'b, T>(&'b self) -> Option<SmallVec<[T; OPERANDS_THRESHOLD]>>
+    fn get_all<'b, T>(&'b self) -> Option<SmallVec<[T; INLINE_COLOR_COMPONENTS]>>
     where
         T: Operand<'b, 'a>,
     {

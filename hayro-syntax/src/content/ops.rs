@@ -1,6 +1,6 @@
 //! Content stream operators.
 
-use crate::content::{Instruction, OPERANDS_THRESHOLD, OperatorTrait, Stack};
+use crate::content::{INLINE_COLOR_COMPONENTS, Instruction, OperatorTrait, Stack};
 use crate::object;
 use crate::object::Array;
 use crate::object::Name;
@@ -18,7 +18,10 @@ include!("ops_generated.rs");
 
 fn parse_named_color<'b, 'a>(
     objects: &'b [Object<'a>],
-) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<&'b Name<'a>>)> {
+) -> Option<(
+    SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
+    Option<&'b Name<'a>>,
+)> {
     let mut nums = smallvec![];
     let mut name = None;
 
@@ -65,7 +68,7 @@ fn fmt_named_color(
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrokeColorNamed<'b, 'a>(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
     pub Option<&'b Name<'a>>,
 );
 
@@ -87,7 +90,7 @@ op_impl!(
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct NonStrokeColorNamed<'b, 'a>(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
     pub Option<&'b Name<'a>>,
 );
 
