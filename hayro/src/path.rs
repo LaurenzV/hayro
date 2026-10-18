@@ -58,7 +58,12 @@ impl Renderer<'_> {
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
-        self.ctx.stroke_path(path);
+        if let Some(outline) = single_segment_outline(path, self.ctx.stroke()) {
+            self.ctx.set_fill_rule(convert_fill_rule(FillRule::NonZero));
+            self.ctx.fill_path(&outline);
+        } else {
+            self.ctx.stroke_path(path);
+        }
         if clip_path.is_some() {
             self.ctx.pop_clip();
         }
@@ -150,4 +155,40 @@ pub(crate) fn max_factor(transform: &Affine) -> f32 {
         .to_vec2()
         .length()
         .max(y_advance.to_vec2().length()) as f32
+}
+
+fn single_segment_outline(path: &BezPath, stroke: &kurbo::Stroke) -> Option<BezPath> {
+    use kurbo::{Cap, PathEl};
+
+    if !stroke.dash_pattern.is_empty() || stroke.start_cap != stroke.end_cap {
+        return None;
+    }
+
+    let (p0, p1) = match path.elements() {
+        [PathEl::MoveTo(p0), PathEl::LineTo(p1)] => (*p0, *p1),
+        _ => return None,
+    };
+
+    let d = p1 - p0;
+    let len = d.hypot();
+    if len <= 0.0 || !len.is_finite() {
+        return None;
+    }
+
+    let half = 0.5 * stroke.width;
+    let dir = d / len;
+    let n = kurbo::Vec2::new(-dir.y, dir.x) * half;
+    let (a, b) = match stroke.start_cap {
+        Cap::Butt => (p0, p1),
+        Cap::Square => (p0 - dir * half, p1 + dir * half),
+        Cap::Round => return None,
+    };
+
+    Some(BezPath::from_vec(vec![
+        PathEl::MoveTo(a + n),
+        PathEl::LineTo(b + n),
+        PathEl::LineTo(b - n),
+        PathEl::LineTo(a - n),
+        PathEl::ClosePath,
+    ]))
 }
