@@ -81,7 +81,7 @@ pub(crate) fn decode(
                         row[first] ^= first_mask & last_mask;
                     } else {
                         row[first] ^= first_mask;
-                        row[first + 1..last].fill(!self.white);
+                        fill_short(&mut row[first + 1..last], !self.white);
                         row[last] ^= last_mask;
                     }
                 }
@@ -138,7 +138,7 @@ pub(crate) fn decode(
                 let row = &mut self.output[start..end];
 
                 for (start, end) in black_spans(changes, self.columns) {
-                    row[start..end].fill(!self.white);
+                    fill_short(&mut row[start..end], !self.white);
                 }
 
                 self.decoded_rows += 1;
@@ -184,6 +184,36 @@ fn black_spans(changes: &[u32], columns: u32) -> impl Iterator<Item = (usize, us
         let end = span.get(1).copied().unwrap_or(columns);
         (span[0] as usize, end as usize)
     })
+}
+
+#[inline(always)]
+fn fill_short<T: Copy>(slice: &mut [T], value: T) {
+    let len = slice.len();
+
+    // Most spans are short, and for them a `memset` call costs more than the
+    // stores themselves. Overlapping fixed-size stores cover every length up
+    // to 32.
+    match len {
+        0 => {}
+        1..4 => {
+            slice[0] = value;
+            slice[len / 2] = value;
+            slice[len - 1] = value;
+        }
+        4..8 => {
+            slice[..4].copy_from_slice(&[value; 4]);
+            slice[len - 4..].copy_from_slice(&[value; 4]);
+        }
+        8..16 => {
+            slice[..8].copy_from_slice(&[value; 8]);
+            slice[len - 8..].copy_from_slice(&[value; 8]);
+        }
+        16..=32 => {
+            slice[..16].copy_from_slice(&[value; 16]);
+            slice[len - 16..].copy_from_slice(&[value; 16]);
+        }
+        _ => slice.fill(value),
+    }
 }
 
 #[cfg(test)]

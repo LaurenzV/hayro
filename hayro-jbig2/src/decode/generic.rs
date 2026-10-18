@@ -270,7 +270,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
                     row[first_word] |= first_mask & last_mask;
                 } else {
                     row[first_word] |= first_mask;
-                    row[first_word + 1..last_word].fill(Word::MAX);
+                    fill_short(&mut row[first_word + 1..last_word], Word::MAX);
                     row[last_word] |= last_mask;
                 }
             }
@@ -307,6 +307,36 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
     }
 
     Ok(result.unwrap_or(data.len()))
+}
+
+#[inline(always)]
+fn fill_short<T: Copy>(slice: &mut [T], value: T) {
+    let len = slice.len();
+
+    // Most spans are short, and for them a `memset` call costs more than the
+    // stores themselves. Overlapping fixed-size stores cover every length up
+    // to 32.
+    match len {
+        0 => {}
+        1..4 => {
+            slice[0] = value;
+            slice[len / 2] = value;
+            slice[len - 1] = value;
+        }
+        4..8 => {
+            slice[..4].copy_from_slice(&[value; 4]);
+            slice[len - 4..].copy_from_slice(&[value; 4]);
+        }
+        8..16 => {
+            slice[..8].copy_from_slice(&[value; 8]);
+            slice[len - 8..].copy_from_slice(&[value; 8]);
+        }
+        16..=32 => {
+            slice[..16].copy_from_slice(&[value; 16]);
+            slice[len - 16..].copy_from_slice(&[value; 16]);
+        }
+        _ => slice.fill(value),
+    }
 }
 
 // I'm not sure why, but I was getting very weird codegen (with bad performance)
