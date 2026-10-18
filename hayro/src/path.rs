@@ -19,12 +19,24 @@ impl Renderer<'_> {
             line_width *= threshold;
         }
 
+        // At a device width of at most one pixel, round caps and joins are indistinguishable
+        // from square caps and bevel joins, which are much cheaper to construct.
+        let is_thin = transformed_width <= 1.0;
+        let cap = match stroke_props.line_cap {
+            kurbo::Cap::Round if is_thin => kurbo::Cap::Square,
+            cap => cap,
+        };
+        let join = match stroke_props.line_join {
+            kurbo::Join::Round if is_thin => kurbo::Join::Bevel,
+            join => join,
+        };
+
         let stroke = kurbo::Stroke {
             width: line_width as f64,
-            join: stroke_props.line_join,
+            join,
             miter_limit: stroke_props.miter_limit as f64,
-            start_cap: stroke_props.line_cap,
-            end_cap: stroke_props.line_cap,
+            start_cap: cap,
+            end_cap: cap,
             dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
             dash_offset: stroke_props.dash_offset as f64,
         };
