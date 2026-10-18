@@ -421,7 +421,7 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                     components[0]
                         .container
                         .iter()
-                        .map(|v| math::round_f32(*v) as u8),
+                        .map(|v| math::round_to_u8(*v)),
                 ) {
                     *output = input;
                 }
@@ -435,8 +435,8 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c1 = &c1.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
                 }
             }
             // RGB
@@ -450,9 +450,9 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c2 = &c2.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
                 }
             }
             // RGBA or CMYK.
@@ -468,10 +468,10 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c3 = &c3.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c3[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
+                    *output_iter.next().unwrap() = math::round_to_u8(c3[i]);
                 }
             }
             _ => unreachable!(),
@@ -482,10 +482,10 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                *output_iter.next().unwrap() = math::round_f32(
+                *output_iter.next().unwrap() = math::round_to_u8(
                     (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
                         * mul_factor,
-                ) as u8;
+                );
             }
         }
     }
@@ -610,7 +610,7 @@ fn resolve_palette_indices(
 
                 for &sample in component.container.truncated() {
                     // Lossy decoding can reconstruct indices outside the palette.
-                    let index = (math::round_f32(sample) as i64).clamp(0, max_index);
+                    let index = ((sample + 0.5) as i64).clamp(0, max_index);
                     let value = palette
                         .map(index as usize, column_idx)
                         .ok_or(ColorError::PaletteResolutionFailed)?;

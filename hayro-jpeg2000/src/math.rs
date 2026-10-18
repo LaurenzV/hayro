@@ -441,19 +441,8 @@ pub(crate) fn floor_f32(x: f32) -> f32 {
 }
 
 #[inline(always)]
-pub(crate) fn round_f32(x: f32) -> f32 {
-    #[cfg(feature = "std")]
-    {
-        x.round()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        if x >= 0.0 {
-            floor_f32(x + 0.5)
-        } else {
-            -floor_f32(-x + 0.5)
-        }
-    }
+pub(crate) fn round_to_u8(x: f32) -> u8 {
+    (x + 0.5) as u8
 }
 
 #[inline(always)]
