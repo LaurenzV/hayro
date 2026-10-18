@@ -39,7 +39,7 @@ impl<'a> Pattern<'a> {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.interpreter_cache.object_cache,
-                ctx.get().graphics_state.non_stroke_alpha,
+                ctx.fill_paint().alpha,
             )?)),
             Object::Stream(stream) => {
                 Some(Self::Tiling(Box::new(TilingPattern::new(stream, ctx)?)))
@@ -168,30 +168,21 @@ impl<'a> TilingPattern<'a> {
             .map(Affine::new)
             .unwrap_or_default();
 
-        let state = ctx.get().clone();
         let ctx_bbox = ctx.bbox();
 
-        let fill_cs = state
-            .graphics_state
-            .none_stroke_cs
+        let fill = ctx.fill_paint();
+        let fill_cs = fill
+            .color_space
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
-        let stroke_cs = state
-            .graphics_state
-            .stroke_cs
-            .pattern_cs()
-            .unwrap_or(ColorSpace::device_gray());
+        let non_stroking_paint = Color::new(fill_cs, fill.color.clone(), fill.alpha);
 
-        let non_stroking_paint = Color::new(
-            fill_cs,
-            state.graphics_state.non_stroke_color.clone(),
-            state.graphics_state.non_stroke_alpha,
-        );
-        let stroke_paint = Color::new(
-            stroke_cs,
-            state.graphics_state.stroke_color.clone(),
-            state.graphics_state.stroke_alpha,
-        );
+        let stroke = ctx.stroke_paint();
+        let stroke_cs = stroke
+            .color_space
+            .pattern_cs()
+            .unwrap_or(ColorSpace::device_gray());
+        let stroke_paint = Color::new(stroke_cs, stroke.color.clone(), stroke.alpha);
         let nesting_depth = ctx.nesting_depth() + 1;
         let resources = Resources::new(dict.get(RESOURCES).unwrap_or_default());
 

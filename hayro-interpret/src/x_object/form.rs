@@ -75,17 +75,17 @@ impl<'a> FormXObject<'a> {
 
         if self.is_transparency_group {
             device.push_transparency_group(
-                context.get().graphics_state.non_stroke_alpha,
-                std::mem::take(&mut context.get_mut().graphics_state.soft_mask),
-                std::mem::take(&mut context.get_mut().graphics_state.blend_mode),
+                context.fill_paint().alpha,
+                std::mem::take(&mut context.compositing_mut().soft_mask),
+                std::mem::take(&mut context.compositing_mut().blend_mode),
             );
 
-            context.get_mut().graphics_state.non_stroke_alpha = 1.0;
-            context.get_mut().graphics_state.stroke_alpha = 1.0;
+            context.fill_paint_mut().alpha = 1.0;
+            context.stroke_paint_mut().alpha = 1.0;
         }
 
         device.push_clip_path(&ClipPath {
-            path: context.get().ctm
+            path: context.ctm()
                 * Rect::new(
                     self.bbox[0] as f64,
                     self.bbox[1] as f64,

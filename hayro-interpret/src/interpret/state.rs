@@ -67,25 +67,26 @@ pub(crate) enum ClipType {
     Real,
 }
 
+/// The graphics state.
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
-    // Note that the text state and ctm are theoretically part of the graphics state,
-    // but we keep them separate for simplicity.
-    pub(crate) graphics_state: GraphicsState<'a>,
-    pub(crate) text_state: TextState<'a>,
     pub(crate) ctm: Affine,
-    // Strictly speaking not part of the graphics state, but we keep it there for
-    // consistency.
-    pub(crate) clips: Vec<ClipType>,
+    pub(crate) stroke: PaintState<'a>,
+    pub(crate) fill: PaintState<'a>,
+    pub(crate) stroke_props: StrokeProps,
+    pub(crate) text_state: TextState<'a>,
+    pub(crate) compositing: CompositingState<'a>,
 }
 
 impl Default for State<'_> {
     fn default() -> Self {
         State {
             ctm: Affine::IDENTITY,
-            clips: vec![],
+            stroke: PaintState::default(),
+            fill: PaintState::default(),
+            stroke_props: StrokeProps::default(),
             text_state: TextState::default(),
-            graphics_state: GraphicsState::default(),
+            compositing: CompositingState::default(),
         }
     }
 }
@@ -95,26 +96,6 @@ impl<'a> State<'a> {
         Self {
             ctm: initial_transform,
             ..Self::default()
-        }
-    }
-
-    pub(crate) fn stroke_data(&self) -> PaintData<'a> {
-        PaintData {
-            alpha: self.graphics_state.stroke_alpha,
-            color: self.graphics_state.stroke_color.clone(),
-            color_space: self.graphics_state.stroke_cs.clone(),
-            pattern: self.graphics_state.stroke_pattern.clone(),
-            transfer_function: self.graphics_state.transfer_function.clone(),
-        }
-    }
-
-    pub(crate) fn non_stroke_data(&self) -> PaintData<'a> {
-        PaintData {
-            alpha: self.graphics_state.non_stroke_alpha,
-            color: self.graphics_state.non_stroke_color.clone(),
-            color_space: self.graphics_state.none_stroke_cs.clone(),
-            pattern: self.graphics_state.non_stroke_pattern.clone(),
-            transfer_function: self.graphics_state.transfer_function.clone(),
         }
     }
 }
@@ -257,45 +238,32 @@ impl Default for TextState<'_> {
     }
 }
 
+/// Paint parameters for strokes or fills.
 #[derive(Clone, Debug)]
-pub(crate) struct GraphicsState<'a> {
-    // Stroke parameters.
-    pub(crate) stroke_props: StrokeProps,
+pub(crate) struct PaintState<'a> {
+    pub(crate) color: ColorComponents,
+    pub(crate) pattern: Option<Pattern<'a>>,
+    pub(crate) color_space: ColorSpace,
+    pub(crate) alpha: f32,
+}
 
-    // Stroke paint parameters.
-    pub(crate) stroke_color: ColorComponents,
-    pub(crate) stroke_pattern: Option<Pattern<'a>>,
-    pub(crate) stroke_cs: ColorSpace,
-    pub(crate) stroke_alpha: f32,
+impl Default for PaintState<'_> {
+    fn default() -> Self {
+        Self {
+            color: smallvec![0.0],
+            pattern: None,
+            color_space: ColorSpace::device_gray(),
+            alpha: 1.0,
+        }
+    }
+}
 
-    // Non-stroke paint parameters.
-    pub(crate) non_stroke_color: ColorComponents,
-    pub(crate) non_stroke_pattern: Option<Pattern<'a>>,
-    pub(crate) none_stroke_cs: ColorSpace,
-    pub(crate) non_stroke_alpha: f32,
-
+/// Compositing parameters.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CompositingState<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     pub(crate) transfer_function: Option<ActiveTransferFunction>,
     pub(crate) blend_mode: BlendMode,
-}
-
-impl Default for GraphicsState<'_> {
-    fn default() -> Self {
-        GraphicsState {
-            stroke_props: StrokeProps::default(),
-            non_stroke_alpha: 1.0,
-            stroke_cs: ColorSpace::device_gray(),
-            stroke_color: smallvec![0.0,],
-            none_stroke_cs: ColorSpace::device_gray(),
-            non_stroke_color: smallvec![0.0],
-            stroke_alpha: 1.0,
-            stroke_pattern: None,
-            non_stroke_pattern: None,
-            soft_mask: None,
-            transfer_function: None,
-            blend_mode: BlendMode::default(),
-        }
-    }
 }
 
 pub(crate) struct PaintData<'a> {
@@ -327,18 +295,18 @@ pub(crate) fn handle_gs_single<'a>(
 ) -> Option<()> {
     // TODO Can we use constants here somehow?
     match key.as_str() {
-        "LW" => context.get_mut().graphics_state.stroke_props.line_width = dict.get::<f32>(key)?,
+        "LW" => context.stroke_props_mut().line_width = dict.get::<f32>(key)?,
         "LC" => {
-            context.get_mut().graphics_state.stroke_props.line_cap =
+            context.stroke_props_mut().line_cap =
                 convert_line_cap(LineCap(dict.get::<Number>(key)?));
         }
         "LJ" => {
-            context.get_mut().graphics_state.stroke_props.line_join =
+            context.stroke_props_mut().line_join =
                 convert_line_join(LineJoin(dict.get::<Number>(key)?));
         }
-        "ML" => context.get_mut().graphics_state.stroke_props.miter_limit = dict.get::<f32>(key)?,
-        "CA" => context.get_mut().graphics_state.stroke_alpha = dict.get::<f32>(key)?,
-        "ca" => context.get_mut().graphics_state.non_stroke_alpha = dict.get::<f32>(key)?,
+        "ML" => context.stroke_props_mut().miter_limit = dict.get::<f32>(key)?,
+        "CA" => context.stroke_paint_mut().alpha = dict.get::<f32>(key)?,
+        "ca" => context.fill_paint_mut().alpha = dict.get::<f32>(key)?,
         "TR" | "TR2" => {
             let function = match dict
                 .get::<Object<'_>>(TR2)
@@ -362,15 +330,15 @@ pub(crate) fn handle_gs_single<'a>(
                 ))),
             };
 
-            context.get_mut().graphics_state.transfer_function = function;
+            context.compositing_mut().transfer_function = function;
         }
         "SMask" => {
             if let Some(name) = dict.get::<Name<'_>>(SMASK) {
                 if name.deref() == b"None" {
-                    context.get_mut().graphics_state.soft_mask = None;
+                    context.compositing_mut().soft_mask = None;
                 }
             } else {
-                context.get_mut().graphics_state.soft_mask = dict
+                context.compositing_mut().soft_mask = dict
                     .get::<Dict<'_>>(SMASK)
                     .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
             }
@@ -378,14 +346,14 @@ pub(crate) fn handle_gs_single<'a>(
         "BM" => {
             if let Some(name) = dict.get::<Name<'_>>(key.as_ref()) {
                 if let Some(bm) = convert_blend_mode(name.as_str()) {
-                    context.get_mut().graphics_state.blend_mode = bm;
+                    context.compositing_mut().blend_mode = bm;
 
                     return Some(());
                 }
             } else if let Some(arr) = dict.get::<Array<'_>>(key) {
                 for name in arr.iter::<Name<'_>>() {
                     if let Some(bm) = convert_blend_mode(name.as_str()) {
-                        context.get_mut().graphics_state.blend_mode = bm;
+                        context.compositing_mut().blend_mode = bm;
 
                         return Some(());
                     }
@@ -393,7 +361,7 @@ pub(crate) fn handle_gs_single<'a>(
             }
 
             warn!("unknown blend mode, defaulting to Normal");
-            context.get_mut().graphics_state.blend_mode = BlendMode::Normal;
+            context.compositing_mut().blend_mode = BlendMode::Normal;
         }
         "Font" => {
             let arr = dict.get::<Array<'_>>(FONT)?;
@@ -402,8 +370,8 @@ pub(crate) fn handle_gs_single<'a>(
             let size = iter.next()?.into_number()?.as_f32();
 
             let font = context.resolve_font(&font_dict);
-            context.get_mut().text_state.font_size = size;
-            context.get_mut().text_state.font = font;
+            context.text_state_mut().font_size = size;
+            context.text_state_mut().font = font;
         }
         "D" => {
             let arr = dict.get::<Array<'_>>(key)?;
@@ -411,8 +379,8 @@ pub(crate) fn handle_gs_single<'a>(
             let dash_array = iter.next()?.into_array()?;
             let dash_phase = iter.next()?.into_number()?.as_f32();
 
-            context.get_mut().graphics_state.stroke_props.dash_offset = dash_phase;
-            context.get_mut().graphics_state.stroke_props.dash_array = dash_array
+            context.stroke_props_mut().dash_offset = dash_phase;
+            context.stroke_props_mut().dash_array = dash_array
                 .iter::<f32>()
                 // kurbo apparently cannot properly deal with offsets that are exactly 0.
                 .map(|n| if n == 0.0 { 0.01 } else { n })
