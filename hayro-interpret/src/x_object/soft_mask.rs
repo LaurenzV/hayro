@@ -116,7 +116,7 @@ impl<'a> SoftMask<'a> {
             obj_id,
             group,
             mask_type,
-            root_transform: context.get().ctm,
+            root_transform: context.ctm(),
             transfer_function,
             bbox: context.bbox(),
             interpreter_cache: context.interpreter_cache.clone(),

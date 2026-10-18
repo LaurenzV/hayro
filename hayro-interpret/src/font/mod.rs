@@ -384,7 +384,7 @@ impl<'a> Font<'a> {
                 let shape_glyph = Type3Glyph {
                     font: t.clone(),
                     glyph_id: glyph,
-                    state: ctx.get().clone(),
+                    state: ctx.snapshot(),
                     bbox: ctx.bbox(),
                     parent_resources: resources.clone(),
                     cache: ctx.interpreter_cache.clone(),

@@ -32,7 +32,7 @@ pub(crate) fn end_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'
     if let Some(clip) = context.clip_mut().take()
         && !context.path().elements().is_empty()
     {
-        let clip_path = context.get().ctm * context.path().clone();
+        let clip_path = context.ctm() * context.path().clone();
         context.push_clip_path(clip_path, clip, device);
     }
 
@@ -111,7 +111,7 @@ pub(crate) fn stroke_path_impl<'a>(
         return;
     }
 
-    let stroke_props = context.stroke_props();
+    let stroke_props = context.stroke_props().clone();
     let props = context.draw_props(true);
 
     let path = path.unwrap_or(context.path());

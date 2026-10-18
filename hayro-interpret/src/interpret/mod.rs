@@ -24,6 +24,7 @@ use smallvec::smallvec;
 use std::sync::Arc;
 
 pub(crate) mod path;
+pub(crate) mod stack;
 pub(crate) mod state;
 pub(crate) mod text;
 
@@ -241,33 +242,33 @@ pub fn interpret<'a>(
         match op {
             TypedInstruction::SaveState(_) => context.save_state(),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
-                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_rgb();
-                context.get_mut().graphics_state.stroke_color =
+                context.stroke_paint_mut().color_space = ColorSpace::device_rgb();
+                context.stroke_paint_mut().color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
-                context.get_mut().graphics_state.stroke_pattern = None;
+                context.stroke_paint_mut().pattern = None;
             }
             TypedInstruction::StrokeColorDeviceGray(s) => {
-                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_gray();
-                context.get_mut().graphics_state.stroke_color = smallvec![s.0.as_f32()];
-                context.get_mut().graphics_state.stroke_pattern = None;
+                context.stroke_paint_mut().color_space = ColorSpace::device_gray();
+                context.stroke_paint_mut().color = smallvec![s.0.as_f32()];
+                context.stroke_paint_mut().pattern = None;
             }
             TypedInstruction::StrokeColorCmyk(s) => {
-                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_cmyk();
-                context.get_mut().graphics_state.stroke_color =
+                context.stroke_paint_mut().color_space = ColorSpace::device_cmyk();
+                context.stroke_paint_mut().color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
-                context.get_mut().graphics_state.stroke_pattern = None;
+                context.stroke_paint_mut().pattern = None;
             }
             TypedInstruction::LineWidth(w) => {
-                context.get_mut().graphics_state.stroke_props.line_width = w.0.as_f32();
+                context.stroke_props_mut().line_width = w.0.as_f32();
             }
             TypedInstruction::LineCap(c) => {
-                context.get_mut().graphics_state.stroke_props.line_cap = convert_line_cap(c);
+                context.stroke_props_mut().line_cap = convert_line_cap(c);
             }
             TypedInstruction::LineJoin(j) => {
-                context.get_mut().graphics_state.stroke_props.line_join = convert_line_join(j);
+                context.stroke_props_mut().line_join = convert_line_join(j);
             }
             TypedInstruction::MiterLimit(l) => {
-                context.get_mut().graphics_state.stroke_props.miter_limit = l.0.as_f32();
+                context.stroke_props_mut().miter_limit = l.0.as_f32();
             }
             TypedInstruction::Transform(t) => {
                 context.pre_concat_transform(t);
@@ -316,21 +317,21 @@ pub fn interpret<'a>(
                 fill_stroke_path(context, device, FillRule::NonZero);
             }
             TypedInstruction::NonStrokeColorDeviceGray(s) => {
-                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_gray();
-                context.get_mut().graphics_state.non_stroke_color = smallvec![s.0.as_f32()];
-                context.get_mut().graphics_state.non_stroke_pattern = None;
+                context.fill_paint_mut().color_space = ColorSpace::device_gray();
+                context.fill_paint_mut().color = smallvec![s.0.as_f32()];
+                context.fill_paint_mut().pattern = None;
             }
             TypedInstruction::NonStrokeColorDeviceRgb(s) => {
-                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_rgb();
-                context.get_mut().graphics_state.non_stroke_color =
+                context.fill_paint_mut().color_space = ColorSpace::device_rgb();
+                context.fill_paint_mut().color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
-                context.get_mut().graphics_state.non_stroke_pattern = None;
+                context.fill_paint_mut().pattern = None;
             }
             TypedInstruction::NonStrokeColorCmyk(s) => {
-                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_cmyk();
-                context.get_mut().graphics_state.non_stroke_color =
+                context.fill_paint_mut().color_space = ColorSpace::device_cmyk();
+                context.fill_paint_mut().color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
-                context.get_mut().graphics_state.non_stroke_pattern = None;
+                context.fill_paint_mut().pattern = None;
             }
             TypedInstruction::LineTo(m) => {
                 if !context.path().elements().is_empty() {
@@ -393,14 +394,14 @@ pub fn interpret<'a>(
             }
             TypedInstruction::EndPath(_) => end_path(context, device),
             TypedInstruction::NonStrokeColor(c) => {
-                let gs = &mut context.get_mut().graphics_state;
-                gs.non_stroke_color = c.0.into_iter().map(|n| n.as_f32()).collect();
-                gs.non_stroke_pattern = None;
+                let paint = context.fill_paint_mut();
+                paint.color = c.0.into_iter().map(|n| n.as_f32()).collect();
+                paint.pattern = None;
             }
             TypedInstruction::StrokeColor(c) => {
-                let gs = &mut context.get_mut().graphics_state;
-                gs.stroke_color = c.0.into_iter().map(|n| n.as_f32()).collect();
-                gs.stroke_pattern = None;
+                let paint = context.stroke_paint_mut();
+                paint.color = c.0.into_iter().map(|n| n.as_f32()).collect();
+                paint.pattern = None;
             }
             TypedInstruction::ClipNonZero(_) => {
                 *(context.clip_mut()) = Some(FillRule::NonZero);
@@ -422,10 +423,10 @@ pub fn interpret<'a>(
                 };
 
                 if !cs.is_pattern() {
-                    context.get_mut().graphics_state.stroke_pattern = None;
+                    context.stroke_paint_mut().pattern = None;
                 }
-                context.get_mut().graphics_state.stroke_color = cs.initial_color();
-                context.get_mut().graphics_state.stroke_cs = cs;
+                context.stroke_paint_mut().color = cs.initial_color();
+                context.stroke_paint_mut().color_space = cs;
             }
             TypedInstruction::ColorSpaceNonStroke(c) => {
                 let cs = if let Some(named) = ColorSpace::new_from_name(c.0) {
@@ -437,15 +438,15 @@ pub fn interpret<'a>(
                 };
 
                 if !cs.is_pattern() {
-                    context.get_mut().graphics_state.non_stroke_pattern = None;
+                    context.fill_paint_mut().pattern = None;
                 }
-                context.get_mut().graphics_state.non_stroke_color = cs.initial_color();
-                context.get_mut().graphics_state.none_stroke_cs = cs;
+                context.fill_paint_mut().color = cs.initial_color();
+                context.fill_paint_mut().color_space = cs;
             }
             TypedInstruction::DashPattern(p) => {
-                context.get_mut().graphics_state.stroke_props.dash_offset = p.1.as_f32();
+                context.stroke_props_mut().dash_offset = p.1.as_f32();
                 // kurbo apparently cannot properly deal with offsets that are exactly 0.
-                context.get_mut().graphics_state.stroke_props.dash_array =
+                context.stroke_props_mut().dash_array =
                     p.0.iter::<f32>()
                         .map(|n| if n == 0.0 { 0.01 } else { n })
                         .collect();
@@ -454,18 +455,16 @@ pub fn interpret<'a>(
                 // Ignore for now.
             }
             TypedInstruction::NonStrokeColorNamed(n) => {
-                context.get_mut().graphics_state.non_stroke_color =
-                    n.0.into_iter().map(|n| n.as_f32()).collect();
-                context.get_mut().graphics_state.non_stroke_pattern = n.1.and_then(|name| {
+                context.fill_paint_mut().color = n.0.into_iter().map(|n| n.as_f32()).collect();
+                context.fill_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
                         .and_then(|d| Pattern::new(d, context))
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
-                context.get_mut().graphics_state.stroke_color =
-                    n.0.into_iter().map(|n| n.as_f32()).collect();
-                context.get_mut().graphics_state.stroke_pattern = n.1.and_then(|name| {
+                context.stroke_paint_mut().color = n.0.into_iter().map(|n| n.as_f32()).collect();
+                context.stroke_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
                         .and_then(|d| Pattern::new(d, context))
@@ -521,8 +520,8 @@ pub fn interpret<'a>(
                 device.begin_marked_content(bmc.0, &MarkedContentProperties::default());
             }
             TypedInstruction::BeginText(_) => {
-                context.get_mut().text_state.text_matrix = Affine::IDENTITY;
-                context.get_mut().text_state.text_line_matrix = Affine::IDENTITY;
+                context.text_state_mut().text_matrix = Affine::IDENTITY;
+                context.text_state_mut().text_line_matrix = Affine::IDENTITY;
             }
             TypedInstruction::SetTextMatrix(m) => {
                 let m = Affine::new([
@@ -533,25 +532,19 @@ pub fn interpret<'a>(
                     m.4.as_f64(),
                     m.5.as_f64(),
                 ]);
-                context.get_mut().text_state.text_line_matrix = m;
-                context.get_mut().text_state.text_matrix = m;
+                context.text_state_mut().text_line_matrix = m;
+                context.text_state_mut().text_matrix = m;
             }
             TypedInstruction::EndText(_) => {
-                let has_outline = context
-                    .get()
-                    .text_state
-                    .clip_paths
-                    .segments()
-                    .next()
-                    .is_some();
+                let has_outline = context.text_state().clip_paths.segments().next().is_some();
 
                 if has_outline {
-                    let clip_path = context.get().ctm * context.get().text_state.clip_paths.clone();
+                    let clip_path = context.ctm() * context.text_state().clip_paths.clone();
 
                     context.push_clip_path(clip_path, FillRule::NonZero, device);
                 }
 
-                context.get_mut().text_state.clip_paths.truncate(0);
+                context.text_state_mut().clip_paths.truncate(0);
             }
             TypedInstruction::TextFont(t) => {
                 let name = t.0;
@@ -572,14 +565,14 @@ pub fn interpret<'a>(
                         .map(TextStateFont::Fallback)
                 };
 
-                context.get_mut().text_state.font_size = t.1.as_f32();
-                context.get_mut().text_state.font = font;
+                context.text_state_mut().font_size = t.1.as_f32();
+                context.text_state_mut().font = font;
             }
             TypedInstruction::ShowText(s) => {
-                if context.get().text_state.font.is_none() {
+                if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.get_mut().text_state.font = Font::new_standard(
+                    context.text_state_mut().font = Font::new_standard(
                         StandardFont::Helvetica,
                         &context.settings.font_resolver,
                     )
@@ -589,10 +582,10 @@ pub fn interpret<'a>(
                 text::show_text_string(context, device, resources, s.0);
             }
             TypedInstruction::ShowTexts(s) => {
-                if context.get().text_state.font.is_none() {
+                if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.get_mut().text_state.font = Font::new_standard(
+                    context.text_state_mut().font = Font::new_standard(
                         StandardFont::Helvetica,
                         &context.settings.font_resolver,
                     )
@@ -614,26 +607,26 @@ pub fn interpret<'a>(
                 text::show_glyph_run(context, device);
             }
             TypedInstruction::HorizontalScaling(h) => {
-                context.get_mut().text_state.horizontal_scaling = h.0.as_f32();
+                context.text_state_mut().horizontal_scaling = h.0.as_f32();
             }
             TypedInstruction::TextLeading(tl) => {
-                context.get_mut().text_state.leading = tl.0.as_f32();
+                context.text_state_mut().leading = tl.0.as_f32();
             }
             TypedInstruction::CharacterSpacing(c) => {
-                context.get_mut().text_state.char_space = c.0.as_f32();
+                context.text_state_mut().char_space = c.0.as_f32();
             }
             TypedInstruction::WordSpacing(w) => {
-                context.get_mut().text_state.word_space = w.0.as_f32();
+                context.text_state_mut().word_space = w.0.as_f32();
             }
             TypedInstruction::NextLine(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
                 text::next_line(context, tx, ty);
             }
             TypedInstruction::NextLineUsingLeading(_) => {
-                text::next_line(context, 0.0, -context.get().text_state.leading as f64);
+                text::next_line(context, 0.0, -context.text_state().leading as f64);
             }
             TypedInstruction::NextLineAndShowText(n) => {
-                text::next_line(context, 0.0, -context.get().text_state.leading as f64);
+                text::next_line(context, 0.0, -context.text_state().leading as f64);
                 text::show_text_string(context, device, resources, n.0);
             }
             TypedInstruction::TextRenderingMode(r) => {
@@ -653,18 +646,18 @@ pub fn interpret<'a>(
                     }
                 };
 
-                context.get_mut().text_state.render_mode = mode;
+                context.text_state_mut().render_mode = mode;
             }
             TypedInstruction::NextLineAndSetLeading(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
-                context.get_mut().text_state.leading = -ty as f32;
+                context.text_state_mut().leading = -ty as f32;
                 text::next_line(context, tx, ty);
             }
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
                 let cache = context.interpreter_cache.object_cache.clone();
                 let warning_sink = context.settings.warning_sink.clone();
-                let transfer_function = context.get().graphics_state.transfer_function.clone();
+                let transfer_function = context.compositing().transfer_function.clone();
                 if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
                     XObject::new(
                         &s,
@@ -679,7 +672,7 @@ pub fn interpret<'a>(
             }
             TypedInstruction::InlineImage(i) => {
                 let warning_sink = context.settings.warning_sink.clone();
-                let transfer_function = context.get().graphics_state.transfer_function.clone();
+                let transfer_function = context.compositing().transfer_function.clone();
                 let cache = context.interpreter_cache.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     i.0,
@@ -692,14 +685,14 @@ pub fn interpret<'a>(
                 }
             }
             TypedInstruction::TextRise(t) => {
-                context.get_mut().text_state.rise = t.0.as_f32();
+                context.text_state_mut().rise = t.0.as_f32();
             }
             TypedInstruction::Shading(s) => {
                 if !context.ocg_state.is_visible() {
                     continue;
                 }
 
-                let transfer_function = context.get().graphics_state.transfer_function.clone();
+                let transfer_function = context.compositing().transfer_function.clone();
 
                 if let Some(sp) = resources
                     .get_shading(s.0)
@@ -711,19 +704,19 @@ pub fn interpret<'a>(
                         Pattern::Shading(ShadingPattern {
                             shading: Arc::new(s),
                             matrix: Affine::IDENTITY,
-                            opacity: context.get().graphics_state.non_stroke_alpha,
+                            opacity: context.fill_paint().alpha,
                             transfer_function: transfer_function.clone(),
                         })
                     })
                 {
                     context.save_state();
                     context.push_root_transform();
-                    let st = context.get_mut();
-                    st.graphics_state.non_stroke_pattern = Some(sp);
-                    st.graphics_state.none_stroke_cs = ColorSpace::pattern();
+                    let paint = context.fill_paint_mut();
+                    paint.pattern = Some(sp);
+                    paint.color_space = ColorSpace::pattern();
 
                     let bbox = context.bbox().to_path(0.1);
-                    let inverted_bbox = context.get().ctm.inverse() * bbox;
+                    let inverted_bbox = context.ctm().inverse() * bbox;
                     fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));
 
                     context.pop_root_transform();
@@ -736,9 +729,9 @@ pub fn interpret<'a>(
             TypedInstruction::EndCompatibility(_) => {}
             TypedInstruction::ColorGlyph(_) => {}
             TypedInstruction::ShowTextWithParameters(t) => {
-                context.get_mut().text_state.word_space = t.0.as_f32();
-                context.get_mut().text_state.char_space = t.1.as_f32();
-                text::next_line(context, 0.0, -context.get().text_state.leading as f64);
+                context.text_state_mut().word_space = t.0.as_f32();
+                context.text_state_mut().char_space = t.1.as_f32();
+                text::next_line(context, 0.0, -context.text_state().leading as f64);
                 text::show_text_string(context, device, resources, t.2);
             }
             _ => {

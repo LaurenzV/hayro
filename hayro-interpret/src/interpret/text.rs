@@ -27,7 +27,7 @@ pub(crate) fn append_text_string<'a>(
     resources: &Resources<'a>,
     text: &object::String<'_>,
 ) {
-    let Some(font) = ctx.get().text_state.font.clone() else {
+    let Some(font) = ctx.text_state().font.clone() else {
         warn!("tried to show text without active font");
 
         return;
@@ -48,7 +48,7 @@ pub(crate) fn append_text_string<'a>(
 
         if show_glyphs && ctx.ocg_state.is_visible() {
             let origin_displacement = font.origin_displacement(code);
-            let transform = ctx.get().text_state.full_transform()
+            let transform = ctx.text_state().full_transform()
                 * Affine::scale(1.0 / UNITS_PER_EM as f64)
                 * Affine::translate(origin_displacement);
             let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
@@ -56,18 +56,18 @@ pub(crate) fn append_text_string<'a>(
             ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
         }
 
-        ctx.get_mut().text_state.apply_code_advance(code, adv);
+        ctx.text_state_mut().apply_code_advance(code, adv);
     }
 }
 
 pub(crate) fn apply_glyph_run_adjustment(ctx: &mut Context<'_>, adjustment: f32) {
-    ctx.get_mut().text_state.apply_adjustment(adjustment);
+    ctx.text_state_mut().apply_adjustment(adjustment);
 }
 
 pub(crate) fn next_line(ctx: &mut Context<'_>, tx: f64, ty: f64) {
-    let new_matrix = ctx.get_mut().text_state.text_line_matrix * Affine::translate((tx, ty));
-    ctx.get_mut().text_state.text_line_matrix = new_matrix;
-    ctx.get_mut().text_state.text_matrix = new_matrix;
+    let new_matrix = ctx.text_state_mut().text_line_matrix * Affine::translate((tx, ty));
+    ctx.text_state_mut().text_line_matrix = new_matrix;
+    ctx.text_state_mut().text_matrix = new_matrix;
 }
 
 pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device<'a>) {
@@ -75,8 +75,8 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
         return;
     }
 
-    let render_mode = ctx.get().text_state.render_mode;
-    let stroke_props = ctx.stroke_props();
+    let render_mode = ctx.text_state().render_mode;
+    let stroke_props = ctx.stroke_props().clone();
     let fill_props = ctx.draw_props(false);
     let stroke_draw_props = ctx.draw_props(true);
 
@@ -134,7 +134,7 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
     };
 
     if let Some(clip_path) = clip_path {
-        ctx.get_mut().text_state.clip_paths.extend(clip_path);
+        ctx.text_state_mut().clip_paths.extend(clip_path);
     }
 
     ctx.glyph_scratch.clear();
