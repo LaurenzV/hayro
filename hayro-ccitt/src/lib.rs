@@ -5,8 +5,8 @@
 //! used for bi-level (black and white) images in PDF documents and fax transmissions.
 //!
 //! The main entry point is the [`decode`] function, which takes encoded data, a
-//! [`DecoderContext`], and outputs the decoded pixels through a [`Decoder`] trait
-//! that can be implemented according to your needs.
+//! [`DecoderContext`], and outputs each decoded row as a list of color changes
+//! through a [`Decoder`] trait that can be implemented according to your needs.
 //!
 //! The crate is `no_std` compatible but requires an allocator to be available.
 //!
@@ -70,12 +70,16 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext)
     Ok(reader.byte_pos())
 }
 
-/// A decoder for CCITT images.
+/// A sink for the rows of a CCITT image.
 pub trait Decoder {
-    /// Push a run of pixels of the same color.
-    fn push_pixels(&mut self, white: bool, count: u32);
-    /// Called when a row has been completed.
-    fn next_line(&mut self);
+    /// Push a decoded row.
+    ///
+    /// `changes` contains the positions at which the color changes, in strictly
+    /// ascending order and each smaller than the number of columns. Each row
+    /// starts white, so the pixels from `changes[0]` up to `changes[1]` are
+    /// black, those from `changes[2]` up to `changes[3]` again, and so on. If
+    /// the number of changes is odd, the row ends black.
+    fn push_row(&mut self, changes: &[u32]);
 }
 
 /// Settings to apply during decoding.
@@ -112,10 +116,6 @@ pub struct DecodeSettings {
     ///
     /// Defaults to [`EncodingMode::Group3_1D`].
     pub encoding: EncodingMode,
-    /// Whether black and white should be inverted.
-    ///
-    /// Defaults to `false`.
-    pub invert_black: bool,
     /// Whether to reject data that violates the specification, instead of
     /// decoding it as well as possible.
     ///
@@ -134,7 +134,6 @@ impl DecodeSettings {
             end_of_line: false,
             rows_are_byte_aligned: false,
             encoding: EncodingMode::Group3_1D,
-            invert_black: false,
             strict: false,
         }
     }

@@ -36,7 +36,12 @@ pub(crate) fn decode(
     } else {
         EncodingMode::Group3_2D
     };
-    settings.invert_black = params.get::<bool>(BLACK_IS_1).unwrap_or(false);
+    // The value that pixels which are white in the encoding are written as.
+    let white: u8 = if params.get::<bool>(BLACK_IS_1).unwrap_or(false) {
+        0x00
+    } else {
+        0xFF
+    };
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
@@ -45,73 +50,57 @@ pub(crate) fn decode(
     let (decoded, bpc, decoded_rows) = if image_params.is_indexed {
         struct BitPackDecoder {
             output: Vec<u8>,
+            columns: u32,
             stride: usize,
+            white: u8,
             /// The bits of the last byte in a row that belong to the image.
             last_byte_mask: u8,
-            row_start: usize,
-            x: usize,
             decoded_rows: u32,
         }
 
-        impl BitPackDecoder {
-            fn row(&mut self) -> &mut [u8] {
-                let end = self.row_start + self.stride;
+        impl Decoder for BitPackDecoder {
+            fn push_row(&mut self, changes: &[u32]) {
+                let start = self.decoded_rows as usize * self.stride;
+                let end = start + self.stride;
 
                 // If the number of rows is unknown, the output grows on demand.
                 if self.output.len() < end {
-                    self.output.resize(end, 0xFF);
+                    self.output.resize(end, self.white);
                 }
 
-                &mut self.output[self.row_start..end]
-            }
-        }
+                let row = &mut self.output[start..end];
 
-        // The output is prefilled with white, so only black runs need to be
-        // written.
-        impl Decoder for BitPackDecoder {
-            fn push_pixels(&mut self, white: bool, count: u32) {
-                let start = self.x;
-                self.x += count as usize;
+                // The row is prefilled with white, so flipping the bits of a
+                // span turns it black.
+                for (start, end) in black_spans(changes, self.columns) {
+                    let (first, last) = (start / 8, (end - 1) / 8);
+                    let first_mask = 0xFF_u8 >> (start % 8);
+                    let last_mask = 0xFF_u8 << (7 - (end - 1) % 8);
 
-                if white || count == 0 {
-                    return;
+                    if first == last {
+                        row[first] ^= first_mask & last_mask;
+                    } else {
+                        row[first] ^= first_mask;
+                        fill_short(&mut row[first + 1..last], !self.white);
+                        row[last] ^= last_mask;
+                    }
                 }
 
-                let end = self.x;
-                let row = self.row();
-                let (first, last) = (start / 8, (end - 1) / 8);
-                let first_mask = 0xFF_u8 >> (start % 8);
-                let last_mask = 0xFF_u8 << (7 - (end - 1) % 8);
-
-                if first == last {
-                    row[first] &= !(first_mask & last_mask);
-                } else {
-                    row[first] &= !first_mask;
-                    row[first + 1..last].fill(0x00);
-                    row[last] &= !last_mask;
-                }
-            }
-
-            fn next_line(&mut self) {
-                let mask = self.last_byte_mask;
-
-                if let Some(last) = self.row().last_mut() {
-                    *last &= mask;
+                if let Some(last) = row.last_mut() {
+                    *last &= self.last_byte_mask;
                 }
 
                 self.decoded_rows += 1;
-                self.row_start += self.stride;
-                self.x = 0;
             }
         }
 
         let stride = (columns as usize).div_ceil(8);
         let mut decoder = BitPackDecoder {
-            output: vec![0xFF; stride.checked_mul(rows as usize)?],
+            output: vec![white; stride.checked_mul(rows as usize)?],
+            columns,
             stride,
+            white,
             last_byte_mask: 0xFF_u8 << ((8 - columns % 8) % 8),
-            row_start: 0,
-            x: 0,
             decoded_rows: 0,
         };
         let mut context = DecoderContext::new(settings);
@@ -123,40 +112,43 @@ pub(crate) fn decode(
             return None;
         }
 
-        decoder.output.truncate(decoder.row_start);
+        decoder
+            .output
+            .truncate(decoder.decoded_rows as usize * stride);
 
         (decoder.output, 1, decoder.decoded_rows)
     } else {
         struct Luma8Decoder {
             output: Vec<u8>,
-            idx: usize,
+            columns: u32,
+            white: u8,
             decoded_rows: u32,
         }
 
         impl Decoder for Luma8Decoder {
-            fn push_pixels(&mut self, white: bool, count: u32) {
-                let len = count as usize;
+            fn push_row(&mut self, changes: &[u32]) {
+                let start = self.decoded_rows as usize * self.columns as usize;
+                let end = start + self.columns as usize;
 
-                if !white {
-                    // If the number of rows is unknown, the output grows on demand.
-                    if self.output.len() < self.idx + len {
-                        self.output.resize(self.idx + len, 0xFF);
-                    }
-
-                    self.output[self.idx..self.idx + len].fill(0x00);
+                // If the number of rows is unknown, the output grows on demand.
+                if self.output.len() < end {
+                    self.output.resize(end, self.white);
                 }
 
-                self.idx += len;
-            }
+                let row = &mut self.output[start..end];
 
-            fn next_line(&mut self) {
+                for (start, end) in black_spans(changes, self.columns) {
+                    fill_short(&mut row[start..end], !self.white);
+                }
+
                 self.decoded_rows += 1;
             }
         }
 
         let mut decoder = Luma8Decoder {
-            output: vec![0xFF; output_len],
-            idx: 0,
+            output: vec![white; output_len],
+            columns,
+            white,
             decoded_rows: 0,
         };
         let mut context = DecoderContext::new(settings);
@@ -167,7 +159,9 @@ pub(crate) fn decode(
         }
 
         if result.is_err() || rows == 0 {
-            decoder.output.resize(decoder.idx, 0xFF);
+            decoder
+                .output
+                .truncate(decoder.decoded_rows as usize * columns as usize);
         }
 
         (decoder.output, 8, decoder.decoded_rows)
@@ -183,6 +177,43 @@ pub(crate) fn decode(
             height: if rows == 0 { decoded_rows } else { rows },
         }),
     })
+}
+
+fn black_spans(changes: &[u32], columns: u32) -> impl Iterator<Item = (usize, usize)> + '_ {
+    changes.chunks(2).map(move |span| {
+        let end = span.get(1).copied().unwrap_or(columns);
+        (span[0] as usize, end as usize)
+    })
+}
+
+#[inline(always)]
+fn fill_short<T: Copy>(slice: &mut [T], value: T) {
+    let len = slice.len();
+
+    // Most spans are short, and for them a `memset` call costs more than the
+    // stores themselves. Overlapping fixed-size stores cover every length up
+    // to 32.
+    match len {
+        0 => {}
+        1..4 => {
+            slice[0] = value;
+            slice[len / 2] = value;
+            slice[len - 1] = value;
+        }
+        4..8 => {
+            slice[..4].copy_from_slice(&[value; 4]);
+            slice[len - 4..].copy_from_slice(&[value; 4]);
+        }
+        8..16 => {
+            slice[..8].copy_from_slice(&[value; 8]);
+            slice[len - 8..].copy_from_slice(&[value; 8]);
+        }
+        16..=32 => {
+            slice[..16].copy_from_slice(&[value; 16]);
+            slice[len - 16..].copy_from_slice(&[value; 16]);
+        }
+        _ => slice.fill(value),
+    }
 }
 
 #[cfg(test)]

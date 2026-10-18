@@ -1,11 +1,6 @@
 use crate::{G3_1D, G3_2D, check, check_consumed};
 
 #[test]
-fn black_is_1() {
-    check("black_is_1", "base", |s| s.invert_black = true);
-}
-
-#[test]
 fn rows_fewer_than_data() {
     check_consumed("g4", "base", Some(127), |s| s.rows = 48);
 }

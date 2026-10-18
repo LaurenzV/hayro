@@ -6,9 +6,7 @@ use libfuzzer_sys::fuzz_target;
 struct Decoder;
 
 impl hayro_ccitt::Decoder for Decoder {
-    fn push_pixels(&mut self, _white: bool, _count: u32) {}
-
-    fn next_line(&mut self) {}
+    fn push_row(&mut self, _changes: &[u32]) {}
 }
 
 // Header layout (10 bytes):
@@ -19,7 +17,7 @@ impl hayro_ccitt::Decoder for Decoder {
 // [6]     rows_are_byte_aligned (bool)
 // [7]     encoding_mode (0=Group4, 1=Group3_1D, 2+=Group3_2D)
 // [8]     unused
-// [9]     invert_black (bool)
+// [9]     unused
 // [10..]  CCITT encoded data
 
 const HEADER_SIZE: usize = 10;
@@ -41,7 +39,6 @@ fuzz_target!(|data: &[u8]| {
         1 => hayro_ccitt::EncodingMode::Group3_1D,
         _ => hayro_ccitt::EncodingMode::Group3_2D,
     };
-    settings.invert_black = data[9] != 0;
 
     let mut decoder = Decoder;
     let mut context = hayro_ccitt::DecoderContext::new(settings);

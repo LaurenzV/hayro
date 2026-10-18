@@ -240,37 +240,26 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
         return Ok(0);
     }
 
-    /// A decoder sink that writes decoded pixels into a `Bitmap`.
+    /// A decoder sink that writes decoded rows into a `Bitmap`.
     struct BitmapDecoder<'a> {
         bitmap: &'a mut Bitmap,
-        x: u32,
         y: u32,
-        /// Precomputed start index into `bitmap.data` for the current row.
-        row_start: usize,
-    }
-
-    impl<'a> BitmapDecoder<'a> {
-        fn new(bitmap: &'a mut Bitmap) -> Self {
-            Self {
-                bitmap,
-                x: 0,
-                y: 0,
-                row_start: 0,
-            }
-        }
     }
 
     impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
         #[inline]
-        fn push_pixels(&mut self, white: bool, count: u32) {
-            let row_start = self.row_start;
-            let end_x = (self.x + count).min(self.bitmap.width);
+        fn push_row(&mut self, changes: &[u32]) {
+            let stride = self.bitmap.stride as usize;
+            let row_start = self.y as usize * stride;
+            let row = &mut self.bitmap.data[row_start..row_start + stride];
 
-            if white && end_x > self.x {
-                let first_word = (self.x / WORD_BITS) as usize;
-                let last_word = ((end_x - 1) / WORD_BITS) as usize;
-                let first_mask = Word::MAX >> (self.x % WORD_BITS);
-                let end_bit = end_x % WORD_BITS;
+            for span in changes.chunks(2) {
+                let start = span[0];
+                let end = span.get(1).copied().unwrap_or(self.bitmap.width);
+                let first_word = (start / WORD_BITS) as usize;
+                let last_word = ((end - 1) / WORD_BITS) as usize;
+                let first_mask = Word::MAX >> (start % WORD_BITS);
+                let end_bit = end % WORD_BITS;
                 let last_mask = if end_bit == 0 {
                     Word::MAX
                 } else {
@@ -278,29 +267,21 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
                 };
 
                 if first_word == last_word {
-                    self.bitmap.data[row_start + first_word] |= first_mask & last_mask;
+                    row[first_word] |= first_mask & last_mask;
                 } else {
-                    self.bitmap.data[row_start + first_word] |= first_mask;
-                    self.bitmap.data[row_start + first_word + 1..row_start + last_word]
-                        .fill(Word::MAX);
-                    self.bitmap.data[row_start + last_word] |= last_mask;
+                    row[first_word] |= first_mask;
+                    fill_short(&mut row[first_word + 1..last_word], Word::MAX);
+                    row[last_word] |= last_mask;
                 }
             }
 
-            self.x = end_x;
-        }
-
-        #[inline]
-        fn next_line(&mut self) {
-            self.x = 0;
             self.y += 1;
-            self.row_start = (self.y * self.bitmap.stride) as usize;
         }
     }
 
     let width = bitmap.width;
     let height = bitmap.height;
-    let mut decoder = BitmapDecoder::new(bitmap);
+    let mut decoder = BitmapDecoder { bitmap, y: 0 };
 
     let mut settings = hayro_ccitt::DecodeSettings::new(width, height);
     // "If the number of bytes contained in the encoded bitmap is known in
@@ -309,14 +290,6 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
     // flag indicates.
     settings.end_of_block = true;
     settings.encoding = hayro_ccitt::EncodingMode::Group4;
-    // "Pixels decoded by the MMR decoder having the value 'black' shall be
-    // treated as having the value 1. Pixels decoded by the MMR decoder
-    // having the value 'white' shall be treated as having the value 0."
-    // (6.2.6)
-    //
-    // hayro-ccitt uses 1 for white, 0 for black by default, so we need to
-    // invert to match JBIG2 convention.
-    settings.invert_black = true;
     settings.strict = strict;
 
     // "An invocation of the generic region decoding procedure with MMR equal to
@@ -334,6 +307,36 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
     }
 
     Ok(result.unwrap_or(data.len()))
+}
+
+#[inline(always)]
+fn fill_short<T: Copy>(slice: &mut [T], value: T) {
+    let len = slice.len();
+
+    // Most spans are short, and for them a `memset` call costs more than the
+    // stores themselves. Overlapping fixed-size stores cover every length up
+    // to 32.
+    match len {
+        0 => {}
+        1..4 => {
+            slice[0] = value;
+            slice[len / 2] = value;
+            slice[len - 1] = value;
+        }
+        4..8 => {
+            slice[..4].copy_from_slice(&[value; 4]);
+            slice[len - 4..].copy_from_slice(&[value; 4]);
+        }
+        8..16 => {
+            slice[..8].copy_from_slice(&[value; 8]);
+            slice[len - 8..].copy_from_slice(&[value; 8]);
+        }
+        16..=32 => {
+            slice[..16].copy_from_slice(&[value; 16]);
+            slice[len - 16..].copy_from_slice(&[value; 16]);
+        }
+        _ => slice.fill(value),
+    }
 }
 
 // I'm not sure why, but I was getting very weird codegen (with bad performance)

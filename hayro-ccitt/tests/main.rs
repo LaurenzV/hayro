@@ -37,20 +37,29 @@ fn load_reference(name: &str) -> Bitmap {
         .collect()
 }
 
-#[derive(Default)]
 struct Collector {
+    columns: u32,
     rows: Bitmap,
-    current: Vec<bool>,
+}
+
+impl Collector {
+    fn new(columns: u32) -> Self {
+        Self {
+            columns,
+            rows: Vec::new(),
+        }
+    }
 }
 
 impl Decoder for Collector {
-    fn push_pixels(&mut self, white: bool, count: u32) {
-        self.current
-            .extend(std::iter::repeat_n(white, count as usize));
-    }
+    fn push_row(&mut self, changes: &[u32]) {
+        assert!(changes.windows(2).all(|w| w[0] < w[1]));
+        assert!(changes.iter().all(|&c| c < self.columns));
 
-    fn next_line(&mut self) {
-        self.rows.push(std::mem::take(&mut self.current));
+        let row = (0..self.columns)
+            .map(|x| changes.partition_point(|&c| c <= x) % 2 == 0)
+            .collect();
+        self.rows.push(row);
     }
 }
 
@@ -76,7 +85,7 @@ fn check_consumed(
     settings.encoding = G4;
     configure(&mut settings);
 
-    let mut collector = Collector::default();
+    let mut collector = Collector::new(settings.columns);
     let mut ctx = DecoderContext::new(settings);
     let read = decode(&data, &mut collector, &mut ctx)
         .unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
@@ -126,5 +135,5 @@ fn check_malformed(
     configure(&mut settings);
 
     let mut ctx = DecoderContext::new(settings);
-    let _ = decode(&data, &mut Collector::default(), &mut ctx);
+    let _ = decode(&data, &mut Collector::new(columns), &mut ctx);
 }

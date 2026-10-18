@@ -26,7 +26,7 @@ pub(crate) fn decode(
             break;
         }
 
-        decode_2d_line(ctx, reader, decoder)?;
+        decode_2d_line(ctx, reader)?;
         ctx.next_line(decoder);
 
         if ctx.settings.rows_are_byte_aligned {
