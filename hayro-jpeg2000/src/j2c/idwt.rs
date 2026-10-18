@@ -320,25 +320,24 @@ fn interleave_rows<S: Simd>(
 #[inline(always)]
 fn interleave_row<S: Simd>(simd: S, first: &[f32], second: &[f32], output: &mut [f32]) {
     let num_pairs = first.len().min(second.len());
-    let simd_chunks = num_pairs / SIMD_WIDTH;
+    let (first_chunks, first_rest) = first[..num_pairs].as_chunks::<SIMD_WIDTH>();
+    let (second_chunks, second_rest) = second[..num_pairs].as_chunks::<SIMD_WIDTH>();
+    let (output_chunks, output_rest) =
+        output[..num_pairs * 2].as_chunks_mut::<{ 2 * SIMD_WIDTH }>();
 
-    // Process as much as possible using SIMD.
-    for i in 0..simd_chunks {
-        let base = i * SIMD_WIDTH;
-        let f = f32x8::from_slice(simd, &first[base..base + SIMD_WIDTH]);
-        let s = f32x8::from_slice(simd, &second[base..base + SIMD_WIDTH]);
-
-        f.zip_low(s).store(&mut output[base * 2..]);
-        f.zip_high(s).store(&mut output[base * 2 + SIMD_WIDTH..]);
+    for ((f, s), out) in first_chunks.iter().zip(second_chunks).zip(output_chunks) {
+        let f = f32x8::from_slice(simd, f);
+        let s = f32x8::from_slice(simd, s);
+        let (low, high) = out.split_at_mut(SIMD_WIDTH);
+        f.zip_low(s).store(low);
+        f.zip_high(s).store(high);
     }
 
-    // Scalar remainder.
-    for i in (simd_chunks * SIMD_WIDTH)..num_pairs {
-        output[i * 2] = first[i];
-        output[i * 2 + 1] = second[i];
+    let (output_pairs, _) = output_rest.as_chunks_mut::<2>();
+    for ((f, s), out) in first_rest.iter().zip(second_rest).zip(output_pairs) {
+        *out = [*f, *s];
     }
 
-    // Handle extra element if first is longer.
     if first.len() > num_pairs {
         output[num_pairs * 2] = first[num_pairs];
     }
