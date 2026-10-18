@@ -476,6 +476,26 @@ macro_rules! decode_default_template_fast_loop {
                     0
                 };
 
+                // In an all-white or all-black area, all pixels of the byte have the
+                // same context, so they can be decoded at once.
+                let prev2_mask = ($params).prev2_next_mask * 0xff;
+                let prev1_mask = ($params).prev1_next_mask * 0xff;
+                let incoming_prev2 = val_prev2 & prev2_mask;
+                let incoming_prev1 = (val_prev1 >> ($params).prev1_shift) & prev1_mask;
+                let white = context == 0 && incoming_prev2 == 0 && incoming_prev1 == 0;
+                let black = context == ($params).full_context
+                    && incoming_prev2 == prev2_mask
+                    && incoming_prev1 == prev1_mask;
+
+                if white || black {
+                    let state = $contexts[context as usize];
+
+                    if state.mps() == black as u32 && $decoder.skip_mps(state, BYTE_BITS) {
+                        $bitmap.set_row_byte(y, byte_idx, if black { 0xff } else { 0 });
+                        continue;
+                    }
+                }
+
                 let mut byte = 0;
 
                 for bit in (0..BYTE_BITS).rev() {
@@ -983,6 +1003,7 @@ struct DefaultTemplateFastParams {
     shift_mask: u32,
     prev2_next_mask: u32,
     prev1_next_mask: u32,
+    full_context: u32,
 }
 
 const DEFAULT_TEMPLATE0_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
@@ -993,6 +1014,7 @@ const DEFAULT_TEMPLATE0_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplate
     shift_mask: 0x7bf7,
     prev2_next_mask: 0x0800,
     prev1_next_mask: 0x0010,
+    full_context: 0xffff,
 };
 
 const DEFAULT_TEMPLATE1_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
@@ -1003,6 +1025,7 @@ const DEFAULT_TEMPLATE1_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplate
     shift_mask: 0x0efb,
     prev2_next_mask: 0x0200,
     prev1_next_mask: 0x0008,
+    full_context: 0x1fff,
 };
 
 const DEFAULT_TEMPLATE2_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
@@ -1013,6 +1036,7 @@ const DEFAULT_TEMPLATE2_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplate
     shift_mask: 0x01bd,
     prev2_next_mask: 0x0080,
     prev1_next_mask: 0x0004,
+    full_context: 0x03ff,
 };
 
 const DEFAULT_TEMPLATE3_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
@@ -1023,4 +1047,5 @@ const DEFAULT_TEMPLATE3_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplate
     shift_mask: 0x01f7,
     prev2_next_mask: 0x0000,
     prev1_next_mask: 0x0010,
+    full_context: 0x03ff,
 };
