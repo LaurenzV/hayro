@@ -113,10 +113,83 @@ impl Readable<'_> for Number {
     #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let old_offset = r.offset();
-        read_inner(r).or_else(|| {
-            r.jump(old_offset);
-            None
-        })
+        Self::read_simple(r)
+            .or_else(|| {
+                r.jump(old_offset);
+                read_inner(r)
+            })
+            .or_else(|| {
+                r.jump(old_offset);
+                None
+            })
+    }
+}
+
+impl Number {
+    #[inline(always)]
+    pub(crate) fn read_simple(r: &mut Reader<'_>) -> Option<Self> {
+        let negative = match r.peek_byte() {
+            Some(b'-') => {
+                r.forward();
+                true
+            }
+            Some(b'+') => {
+                r.forward();
+                false
+            }
+            _ => false,
+        };
+
+        let mut mantissa: u64 = 0;
+        let mut read_digits = |r: &mut Reader<'_>| {
+            let start = r.offset();
+            while let Some(d) = r
+                .peek_byte()
+                .map(|b| b.wrapping_sub(b'0'))
+                .filter(|d| *d < 10)
+            {
+                mantissa = mantissa.wrapping_mul(10).wrapping_add(d as u64);
+                r.forward();
+            }
+            r.offset() - start
+        };
+
+        let mut digits = read_digits(r);
+        let mut decimal_shift = None;
+        if r.peek_byte() == Some(b'.') {
+            r.forward();
+            let fraction_digits = read_digits(r);
+            decimal_shift = Some(fraction_digits as u32);
+            digits += fraction_digits;
+        }
+
+        if digits == 0 || digits > 18 || r.peek_byte().is_some_and(is_regular_character) {
+            return None;
+        }
+
+        Some(Self::from_parts(negative, mantissa, decimal_shift))
+    }
+
+    #[inline(always)]
+    fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Self {
+        match decimal_shift {
+            None => {
+                let value = mantissa as i64;
+                Self(InternalNumber::Integer(if negative {
+                    value.wrapping_neg()
+                } else {
+                    value
+                }))
+            }
+            Some(shift) => {
+                let divisor = match POWERS_OF_10.get(shift as usize) {
+                    Some(power) => *power,
+                    None => powi_f64(10.0, shift),
+                };
+                let value = mantissa as f64 / divisor;
+                Self(InternalNumber::Real(if negative { -value } else { value }))
+            }
+        }
     }
 }
 
@@ -204,30 +277,11 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
         return Some(Number(InternalNumber::Real(value)));
     }
 
-    if !has_dot {
-        let value = if negative {
-            (mantissa as i64).wrapping_neg()
-        } else {
-            mantissa as i64
-        };
-        Some(Number(InternalNumber::Integer(value)))
-    } else {
-        let mut value = mantissa as f64;
-
-        if decimal_shift > 0 {
-            if decimal_shift < POWERS_OF_10.len() as u32 {
-                value /= POWERS_OF_10[decimal_shift as usize];
-            } else {
-                value /= powi_f64(10.0, decimal_shift);
-            }
-        }
-
-        if negative {
-            value = -value;
-        }
-
-        Some(Number(InternalNumber::Real(value)))
-    }
+    Some(Number::from_parts(
+        negative,
+        mantissa,
+        has_dot.then_some(decimal_shift),
+    ))
 }
 
 object!(Number, Number);
