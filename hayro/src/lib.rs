@@ -40,10 +40,11 @@ use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
 use hayro_interpret::font::GlyphRun;
 use hayro_interpret::hayro_syntax::Pdf;
+use hayro_interpret::hayro_syntax::object::Dict;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context, DrawMode, DrawProps, ImageDrawProps, SoftMask};
-use hayro_interpret::{ClipPath, interpret_page};
+use hayro_interpret::{ClipPath, interpret_annotation, interpret_page};
 use kurbo::{Affine, BezPath, Rect, Shape};
 use pic_scale::Scaler;
 use rustc_hash::FxHashMap;
@@ -299,6 +300,46 @@ pub fn render_into<'a>(
     });
 
     interpret_page(page, &mut state, &mut device);
+
+    device.pop_clip();
+}
+
+/// Render the normal appearance of one annotation of a page into the given
+/// [`RenderContext`] with the given transform, without the page's contents or
+/// its other annotations.
+///
+/// `transform` maps the page as in [`render_into`]; translate it so that the
+/// annotation's rectangle lands inside `ctx` to render into a small context.
+pub fn render_annotation_into<'a>(
+    page: &'a Page<'a>,
+    annotation: &Dict<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+    ctx: &mut RenderContext,
+    transform: Affine,
+) {
+    let mut state = Context::new(
+        transform,
+        Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64),
+        &cache.interpreter_cache,
+        page.xref(),
+        interpreter_settings.clone(),
+    );
+    ctx.take_current_state();
+    ctx.reset_mask();
+    ctx.reset_filter_effect();
+
+    let global = GlobalState::new(cache, render_settings);
+    let mut device = Renderer::new(ctx, &global);
+    let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
+    clip_path.apply_affine(transform);
+    device.push_clip_path(&ClipPath {
+        path: clip_path,
+        fill: FillRule::NonZero,
+    });
+
+    interpret_annotation(annotation, page.resources(), &mut state, &mut device);
 
     device.pop_clip();
 }
