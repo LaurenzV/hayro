@@ -117,7 +117,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     fn skip_white_spaces_and_comments(&mut self) {
         while let Some(b) = self.peek_byte() {
             if is_white_space_character(b) {
-                self.skip_white_spaces();
+                self.forward();
             } else if b == b'%' {
                 Comment::skip(self, true);
             } else {
