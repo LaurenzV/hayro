@@ -21,7 +21,11 @@ pub(crate) fn decode(
         .and_then(|g| g.decoded().ok());
 
     let settings = hayro_jbig2::DecodeSettings { strict: false };
-    let image = hayro_jbig2::Image::new_embedded(data, globals.as_deref(), &settings).ok()?;
+    let globals = globals
+        .map(|globals| hayro_jbig2::Globals::new(&globals, &settings))
+        .transpose()
+        .ok()?;
+    let image = hayro_jbig2::Image::new_embedded(data, globals.as_ref(), &settings).ok()?;
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
