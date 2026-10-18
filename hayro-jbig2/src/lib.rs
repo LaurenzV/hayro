@@ -17,7 +17,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
-use alloc::vec;
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
@@ -94,6 +94,7 @@ use huffman_table::{HuffmanTable, StandardHuffmanTables};
 use page_info::{PageInformation, parse_page_information};
 use reader::Reader;
 use segment::{Segment, SegmentType};
+use sync::OnceLock;
 
 /// Settings for decoding JBIG2 images.
 #[derive(Debug, Clone, Copy, Default)]
@@ -108,26 +109,70 @@ pub struct DecodeSettings {
 /// A JBIG2 file in the sequential or random-access organization (Annex D.1, D.2).
 pub struct File<'a> {
     pages: Vec<FilePage<'a>>,
+    globals: Option<LazyGlobals<'a>>,
     strict: bool,
 }
 
 struct FilePage<'a> {
+    number: u32,
     segments: Vec<Segment<'a>>,
     size: PageSize,
+}
+
+/// The global segments of a [`File`], decoded on first use.
+struct LazyGlobals<'a> {
+    segments: Vec<Segment<'a>>,
+    decoded: OnceLock<Result<Globals>>,
+}
+
+impl LazyGlobals<'_> {
+    fn get(&self, strict: bool) -> Result<&Globals> {
+        self.decoded
+            .get_or_init(|| Globals::from_segments(&self.segments, strict))
+            .as_ref()
+            .map_err(|e| *e)
+    }
 }
 
 impl<'a> File<'a> {
     /// Parse a JBIG2 file.
     pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
-        let file = parse_file(data, settings.strict)?;
-        let size = PageSize::new(&file.segments)?;
+        let strict = settings.strict;
+        let file = parse_file(data, strict)?;
+
+        let mut globals = Vec::new();
+        let mut pages: Vec<FilePage<'a>> = Vec::new();
+        let mut page_indices = BTreeMap::new();
+
+        for seg in file.segments {
+            let number = seg.header.page_association;
+            if number == 0 {
+                globals.push(seg);
+                continue;
+            }
+
+            let index = *page_indices.entry(number).or_insert_with(|| {
+                pages.push(FilePage {
+                    number,
+                    segments: Vec::new(),
+                    size: PageSize::default(),
+                });
+                pages.len() - 1
+            });
+            pages[index].segments.push(seg);
+        }
+
+        for page in &mut pages {
+            page.size = PageSize::new(&page.segments)?;
+        }
 
         Ok(Self {
-            pages: vec![FilePage {
-                segments: file.segments,
-                size,
-            }],
-            strict: settings.strict,
+            pages,
+            globals: (!globals.is_empty()).then(|| LazyGlobals {
+                segments: globals,
+                decoded: OnceLock::new(),
+            }),
+            strict,
         })
     }
 
@@ -141,8 +186,9 @@ impl<'a> File<'a> {
         let page = self.pages.get(index)?;
 
         Some(Page {
+            number: page.number,
             segments: PageSegments::Borrowed(&page.segments),
-            globals: None,
+            globals: self.globals.as_ref().map(GlobalsRef::Lazy),
             size: page.size,
             strict: self.strict,
         })
@@ -193,8 +239,9 @@ impl Globals {
 
 /// A JBIG2 page, from a [`File`] or embedded in another format.
 pub struct Page<'a> {
+    number: u32,
     segments: PageSegments<'a>,
-    globals: Option<&'a Globals>,
+    globals: Option<GlobalsRef<'a>>,
     size: PageSize,
     strict: bool,
 }
@@ -202,6 +249,11 @@ pub struct Page<'a> {
 enum PageSegments<'a> {
     Owned(Vec<Segment<'a>>),
     Borrowed(&'a [Segment<'a>]),
+}
+
+enum GlobalsRef<'a> {
+    Decoded(&'a Globals),
+    Lazy(&'a LazyGlobals<'a>),
 }
 
 impl<'a> Page<'a> {
@@ -218,13 +270,23 @@ impl<'a> Page<'a> {
         segments.sort_by_key(|seg| seg.header.segment_number);
 
         let size = PageSize::new(&segments)?;
+        let number = segments
+            .iter()
+            .find(|seg| seg.header.segment_type == SegmentType::PageInformation)
+            .map_or(1, |seg| seg.header.page_association);
 
         Ok(Self {
+            number,
             segments: PageSegments::Owned(segments),
-            globals,
+            globals: globals.map(GlobalsRef::Decoded),
             size,
             strict: settings.strict,
         })
+    }
+
+    /// The page number from the page's segment headers.
+    pub fn number(&self) -> u32 {
+        self.number
     }
 
     /// The width of the page in pixels.
@@ -250,10 +312,15 @@ impl<'a> Page<'a> {
             PageSegments::Owned(segments) => segments,
             PageSegments::Borrowed(segments) => *segments,
         };
+        let globals = match self.globals {
+            Some(GlobalsRef::Decoded(globals)) => Some(globals),
+            Some(GlobalsRef::Lazy(globals)) => Some(globals.get(self.strict)?),
+            None => None,
+        };
 
         decode_segments(
             segments,
-            self.globals,
+            globals,
             self.size.height_from_stripes,
             self.strict,
             ctx,

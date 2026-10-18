@@ -66,6 +66,34 @@ fn check_lenient(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), false);
 }
 
+/// Decode all pages of `stream` in strict mode and check that they match
+/// `references`.
+fn check_pages(stream: &str, references: &[&str]) {
+    compare_pages(stream, references, true);
+}
+
+fn compare_pages(stream: &str, references: &[&str], strict: bool) {
+    let data = read_stream(stream);
+    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
+        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    assert_eq!(
+        file.page_count(),
+        references.len(),
+        "{stream}: wrong number of pages"
+    );
+
+    let mut previous_number = 0;
+    for (page, reference) in file.pages().zip(references) {
+        assert!(
+            page.number() > previous_number,
+            "{stream}: page {} after page {previous_number}",
+            page.number()
+        );
+        previous_number = page.number();
+        compare_page(stream, &page, load_reference(reference));
+    }
+}
+
 /// Decode `stream` in strict mode and check that it matches the given part
 /// (x, y, width, height) of `reference`.
 fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usize, usize, usize)) {
