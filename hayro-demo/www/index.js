@@ -59,6 +59,7 @@ const state = {
     observer: null,
     visiblePages: new Set(),
     scrolling: false,
+    programmaticScroll: false,
     visiblePage: 1,
     drag: null,
     pinch: null,
@@ -781,11 +782,22 @@ function setPage(page, scroll = true) {
 
 function scrollToPage(page, smooth = true) {
     const shell = elements.continuousDocument.querySelector(`[data-page="${page}"]`);
-    shell?.scrollIntoView({
+    if (!shell) return;
+
+    const { scrollLeft, scrollTop } = elements.viewport;
+    shell.scrollIntoView({
         behavior: smooth ? 'smooth' : 'auto',
         block: 'start',
         inline: 'center',
     });
+
+    // An instant jump is not the user scrolling, so it must not cancel pending renders.
+    if (
+        !smooth
+        && (elements.viewport.scrollLeft !== scrollLeft || elements.viewport.scrollTop !== scrollTop)
+    ) {
+        state.programmaticScroll = true;
+    }
 }
 
 function updateVisiblePage() {
@@ -1173,7 +1185,9 @@ function configureViewerInteractions() {
     elements.viewport.addEventListener('scroll', () => {
         if (state.mode !== 'continuous') return;
 
-        if (!state.scrolling) {
+        if (state.programmaticScroll) {
+            state.programmaticScroll = false;
+        } else if (!state.scrolling) {
             state.scrolling = true;
             if (state.pending.size > 0) {
                 state.worker.postMessage({ type: 'cancel' });
