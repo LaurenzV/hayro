@@ -354,6 +354,7 @@ function handleWorkerMessage({ data }) {
         paintPage(data.page);
         enforceCacheLimit();
         refillContinuousRenderQueue();
+        if (data.page === state.page) prefetchPagedNeighbors();
         return;
     }
 
@@ -669,6 +670,7 @@ function requestPage(page) {
         touchCachedPage(existing);
         if (page === state.page) commitRenderedZoom(existing.zoom);
         paintPage(page);
+        if (page === state.page) prefetchPagedNeighbors();
         return;
     }
 
@@ -683,12 +685,20 @@ function requestPage(page) {
     state.renderFailures.delete(page);
 
     const pending = state.pending.get(page);
-    if (pending && Math.abs(pending.zoom - state.zoom) < 0.001 && pending.mode === state.mode) return;
+    if (pending && Math.abs(pending.zoom - state.zoom) < 0.001 && pending.mode === state.mode) {
+        if (page === state.page && !pending.priority) {
+            pending.priority = true;
+            state.worker.postMessage({
+                type: 'prioritize',
+                generation: state.generation,
+                page,
+            });
+        }
+        return;
+    }
     if (page !== state.page && state.pending.size >= getCachePageLimit()) return;
 
-    const shell = state.mode === 'paged'
-        ? elements.pagedShell
-        : elements.continuousDocument.querySelector(`[data-page="${page}"]`);
+    const shell = getPageShell(page);
     if (shell?.classList.contains('error')) {
         shell.classList.remove('error');
         resetPagePlaceholder(shell);
@@ -700,6 +710,7 @@ function requestPage(page) {
         requestId,
         zoom: state.zoom,
         mode: state.mode,
+        priority: page === state.page,
     });
     state.worker.postMessage({
         type: 'render',
@@ -715,13 +726,26 @@ function requestPage(page) {
     });
 }
 
+function getPageShell(page) {
+    if (state.mode === 'paged') {
+        return page === state.page ? elements.pagedShell : null;
+    }
+
+    return elements.continuousDocument.querySelector(`[data-page="${page}"]`);
+}
+
+function prefetchPagedNeighbors() {
+    if (state.mode !== 'paged' || getBufferPageCount() < 1) return;
+
+    requestPage(state.page + 1);
+    requestPage(state.page - 1);
+}
+
 function paintPage(page) {
     const rendered = state.rendered.get(page);
     if (!rendered) return;
 
-    const shell = state.mode === 'paged'
-        ? elements.pagedShell
-        : elements.continuousDocument.querySelector(`[data-page="${page}"]`);
+    const shell = getPageShell(page);
     if (!shell) return;
 
     const canvas = shell.querySelector('canvas');
@@ -755,9 +779,7 @@ function paintPage(page) {
 }
 
 function markPageError(page) {
-    const shell = state.mode === 'paged'
-        ? elements.pagedShell
-        : elements.continuousDocument.querySelector(`[data-page="${page}"]`);
+    const shell = getPageShell(page);
     if (!shell) return;
     if (shell.classList.contains('rendered')) return;
     shell.classList.add('error');

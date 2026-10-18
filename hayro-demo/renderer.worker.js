@@ -116,6 +116,12 @@ self.addEventListener('message', async ({ data }) => {
             return;
         }
 
+        if (data.type === 'prioritize' && data.generation === generation) {
+            const index = queue.findIndex(job => job.page === data.page);
+            if (index > 0) queue.unshift(...queue.splice(index, 1));
+            return;
+        }
+
         if (data.type === 'render' && data.generation === generation) {
             queue = queue.filter(job => job.page !== data.page);
             if (data.priority) {
