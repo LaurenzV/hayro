@@ -500,7 +500,6 @@ fn filter_step_vertical<S: Simd>(
     scanline: &mut [f32],
     height: usize,
     width: usize,
-    simd_width: usize,
     first: usize,
     f_simd: impl Fn(f32x8<S>, f32x8<S>, f32x8<S>) -> f32x8<S>,
     f_scalar: impl Fn(f32, f32, f32) -> f32,
@@ -509,29 +508,24 @@ fn filter_step_vertical<S: Simd>(
         let row_above = periodic_symmetric_extension_left(row, 1);
         let row_below = periodic_symmetric_extension_right(row, 1, height);
 
-        // Process SIMD chunks.
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let s1 = f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
+        let (rows_before, rest) = scanline.split_at_mut(row * width);
+        let (current, rows_after) = rest.split_at_mut(width);
+        let neighbor = |r: usize| {
+            if r < row {
+                &rows_before[r * width..][..width]
+            } else {
+                &rows_after[(r - row - 1) * width..][..width]
+            }
+        };
 
-            let result = f_simd(s1, s2, s3);
-            result.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
-        }
-
-        // Process scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = f_scalar(s1, s2, s3);
-        }
+        lift_samples(
+            simd,
+            current,
+            neighbor(row_above),
+            neighbor(row_below),
+            &f_simd,
+            &f_scalar,
+        );
     }
 }
 
@@ -575,18 +569,7 @@ fn filter_vertical_impl<S: Simd>(
 
     if height == 1 {
         if !y0.is_multiple_of(2) {
-            let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
-            for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-                let mut loaded = f32x8::from_slice(simd, &scanline[base_column..][..SIMD_WIDTH]);
-                loaded *= 0.5;
-                loaded.store(&mut scanline[base_column..][..SIMD_WIDTH]);
-            }
-
-            // Scalar remainder.
-            #[allow(clippy::needless_range_loop)]
-            for col in simd_width..width {
-                scanline[col] *= 0.5;
-            }
+            scale(simd, &mut scanline[..width], 0.5);
         }
         return;
     }
@@ -612,7 +595,6 @@ fn reversible_filter_53r_simd<S: Simd>(
 ) {
     let first_even = y0 % 2;
     let first_odd = 1 - first_even;
-    let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
@@ -621,7 +603,6 @@ fn reversible_filter_53r_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_even,
         #[inline(always)]
         |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
@@ -636,7 +617,6 @@ fn reversible_filter_53r_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_odd,
         #[inline(always)]
         |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
@@ -666,53 +646,20 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let neg_beta = f32x8::splat(simd, NEG_BETA);
     let neg_gamma = f32x8::splat(simd, NEG_GAMMA);
     let neg_delta = f32x8::splat(simd, NEG_DELTA);
-    let kappa = f32x8::splat(simd, KAPPA);
-    let inv_kappa = f32x8::splat(simd, INV_KAPPA);
 
     // Determine which local row indices correspond to even/odd global positions.
     let first_even = y0 % 2;
     let first_odd = 1 - first_even;
-    let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
 
-    let (k0, k1, k0_simd, k1_simd) = if first_even == 0 {
-        (KAPPA, INV_KAPPA, kappa, inv_kappa)
+    let (k0, k1) = if first_even == 0 {
+        (KAPPA, INV_KAPPA)
     } else {
-        (INV_KAPPA, KAPPA, inv_kappa, kappa)
+        (INV_KAPPA, KAPPA)
     };
 
     // Step 1 and 2.
-    // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    // Originally: for i in (start / 2 - 2)..(end / 2 + 2).
-    for row in (0..height.saturating_sub(1)).step_by(2) {
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let mut vals0 =
-                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
-            let mut vals1 = f32x8::from_slice(
-                simd,
-                &scanline[(row + 1) * width + base_column..][..SIMD_WIDTH],
-            );
-            vals0 = vals0 * k0_simd;
-            vals1 = vals1 * k1_simd;
-            vals0.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
-            vals1.store(&mut scanline[(row + 1) * width + base_column..][..SIMD_WIDTH]);
-        }
-        for col in simd_width..width {
-            scanline[row * width + col] *= k0;
-            scanline[(row + 1) * width + col] *= k1;
-        }
-    }
-
-    if height % 2 == 1 {
-        let row = height - 1;
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let mut vals =
-                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
-            vals = vals * k0_simd;
-            vals.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
-        }
-        for col in simd_width..width {
-            scanline[row * width + col] *= k0;
-        }
+    for (row, samples) in scanline.chunks_exact_mut(width).take(height).enumerate() {
+        scale(simd, samples, if row % 2 == 0 { k0 } else { k1 });
     }
 
     // Step 3.
@@ -722,7 +669,6 @@ fn irreversible_filter_97i_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_even,
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_delta, s1),
@@ -737,7 +683,6 @@ fn irreversible_filter_97i_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_odd,
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_gamma, s1),
@@ -752,7 +697,6 @@ fn irreversible_filter_97i_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_even,
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_beta, s1),
@@ -767,11 +711,49 @@ fn irreversible_filter_97i_simd<S: Simd>(
         scanline,
         height,
         width,
-        simd_width,
         first_odd,
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_alpha, s1),
         #[inline(always)]
         |s1, s2, s3| math::mul_add(s2 + s3, NEG_ALPHA, s1),
     );
+}
+
+#[inline(always)]
+fn lift_samples<S: Simd>(
+    simd: S,
+    target: &mut [f32],
+    left: &[f32],
+    right: &[f32],
+    f_simd: impl Fn(f32x8<S>, f32x8<S>, f32x8<S>) -> f32x8<S>,
+    f_scalar: impl Fn(f32, f32, f32) -> f32,
+) {
+    let (target_chunks, target_rest) = target.as_chunks_mut::<SIMD_WIDTH>();
+    let (left_chunks, left_rest) = left.as_chunks::<SIMD_WIDTH>();
+    let (right_chunks, right_rest) = right.as_chunks::<SIMD_WIDTH>();
+
+    for ((t, l), r) in target_chunks.iter_mut().zip(left_chunks).zip(right_chunks) {
+        let s = f32x8::from_slice(simd, t);
+        let l = f32x8::from_slice(simd, l);
+        let r = f32x8::from_slice(simd, r);
+        f_simd(s, l, r).store(t);
+    }
+
+    for ((t, l), r) in target_rest.iter_mut().zip(left_rest).zip(right_rest) {
+        *t = f_scalar(*t, *l, *r);
+    }
+}
+
+#[inline(always)]
+fn scale<S: Simd>(simd: S, samples: &mut [f32], factor: f32) {
+    let factor_simd = f32x8::splat(simd, factor);
+    let (chunks, rest) = samples.as_chunks_mut::<SIMD_WIDTH>();
+
+    for chunk in chunks {
+        (f32x8::from_slice(simd, chunk) * factor_simd).store(chunk);
+    }
+
+    for sample in rest {
+        *sample *= factor;
+    }
 }
