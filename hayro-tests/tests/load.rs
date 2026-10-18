@@ -740,6 +740,12 @@ fn issue1321() {
 }
 
 #[test]
+fn issue1392() {
+    let file = include_bytes!("../pdfs/load/issue1392.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn encrypted_oob_length() {
     let file = include_bytes!("../pdfs/load/encrypted_oob_length.pdf");
     load_pdf(file);
