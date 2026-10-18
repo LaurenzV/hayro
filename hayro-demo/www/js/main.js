@@ -122,6 +122,7 @@ function showViewer() {
 
 function showFileSelector() {
     viewer.close();
+    scheduler.reset();
     elements.viewer.hidden = true;
     elements.viewerControls.hidden = true;
     elements.fileSelector.hidden = false;

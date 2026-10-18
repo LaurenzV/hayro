@@ -13,6 +13,7 @@ export function sameScale(left, right) {
 export class Scheduler {
     #wanted = [];
     #protectedPages = new Set();
+    #currentPage = 1;
     #inFlight = new Map();
     #failures = new Map();
 
@@ -33,10 +34,11 @@ export class Scheduler {
 
     // `wanted` lists `{ page, scale, anyScale }`, most important first. With `anyScale`, any
     // existing render of the page is good enough. `protectedPages` are never evicted from the
-    // cache.
-    setWanted(wanted, protectedPages) {
+    // cache, and the renders farthest from `currentPage` are evicted first.
+    setWanted(wanted, protectedPages, currentPage) {
         this.#wanted = wanted;
         this.#protectedPages = protectedPages;
+        this.#currentPage = currentPage;
         this.pump();
     }
 
@@ -77,7 +79,7 @@ export class Scheduler {
         } else if (result) {
             this.#failures.delete(page);
             this.cache.put(page, { ...result, scale });
-            this.cache.trim(this.#protectedPages);
+            this.cache.trim(this.#protectedPages, this.#currentPage);
             this.onRendered(page);
         }
 

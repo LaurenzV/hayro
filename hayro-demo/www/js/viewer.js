@@ -110,7 +110,7 @@ export class Viewer {
     close() {
         this.#document = null;
         this.#unmountAll();
-        this.#scheduler.setWanted([], new Set());
+        this.#scheduler.setWanted([], new Set(), 1);
     }
 
     setMode(mode) {
@@ -254,8 +254,7 @@ export class Viewer {
             if (rect) {
                 this.#position(shell, rect);
             } else {
-                shell.remove();
-                this.#mounted.delete(page);
+                this.#unmount(page);
             }
         }
     }
@@ -300,11 +299,8 @@ export class Viewer {
 
     #mount(pages) {
         const keep = new Set(pages);
-        for (const [page, shell] of this.#mounted) {
-            if (!keep.has(page)) {
-                shell.remove();
-                this.#mounted.delete(page);
-            }
+        for (const page of this.#mounted.keys()) {
+            if (!keep.has(page)) this.#unmount(page);
         }
 
         for (const page of pages) {
@@ -316,9 +312,14 @@ export class Viewer {
         }
     }
 
+    #unmount(page) {
+        this.#mounted.get(page).remove();
+        this.#mounted.delete(page);
+        this.#cache.setShown(page, false);
+    }
+
     #unmountAll() {
-        this.#mounted.forEach(shell => shell.remove());
-        this.#mounted.clear();
+        [...this.#mounted.keys()].forEach(page => this.#unmount(page));
     }
 
     #position(shell, rect) {
@@ -380,7 +381,7 @@ export class Viewer {
             want(first - offset, false);
         }
 
-        this.#scheduler.setWanted(wanted, new Set(visible));
+        this.#scheduler.setWanted(wanted, new Set(visible), this.page);
     }
 
     #paint(page) {
@@ -405,6 +406,7 @@ export class Viewer {
                 context.putImageData(new ImageData(pixels, entry.width, entry.height), 0, 0);
             }
             shell.dataset.renderId = String(entry.id);
+            this.#cache.setShown(page, true);
         }
 
         canvas.classList.toggle('soft', !sameScale(entry.scale, this.#renderScale(page)));

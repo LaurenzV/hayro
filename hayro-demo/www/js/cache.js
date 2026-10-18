@@ -29,6 +29,7 @@ export class RenderCache {
             ...render,
             id: ++this.#nextId,
             bytes: render.width * render.height * 4,
+            shown: false,
             lastUsed: ++this.#clock,
         };
         this.#entries.set(page, entry);
@@ -36,11 +37,20 @@ export class RenderCache {
         return entry;
     }
 
+    // Records whether the render of `page` is drawn on a canvas, which holds a second copy of
+    // the pixels.
+    setShown(page, shown) {
+        const entry = this.#entries.get(page);
+        if (!entry || entry.shown === shown) return;
+        entry.shown = shown;
+        this.#bytes += shown ? entry.bytes : -entry.bytes;
+    }
+
     delete(page) {
         const entry = this.#entries.get(page);
         if (!entry) return;
         entry.bitmap?.close();
-        this.#bytes -= entry.bytes;
+        this.#bytes -= entry.shown ? 2 * entry.bytes : entry.bytes;
         this.#entries.delete(page);
     }
 
@@ -48,11 +58,15 @@ export class RenderCache {
         for (const page of [...this.#entries.keys()]) this.delete(page);
     }
 
-    // Evicts the least recently used renders until the budget is met, keeping `protectedPages`.
-    trim(protectedPages) {
+    // Evicts renders until the budget is met, those farthest from `currentPage` first and the
+    // least recently used among equally far ones. `protectedPages` are kept.
+    trim(protectedPages, currentPage) {
         const candidates = [...this.#entries.entries()]
             .filter(([page]) => !protectedPages.has(page))
-            .sort((left, right) => left[1].lastUsed - right[1].lastUsed);
+            .sort(([leftPage, left], [rightPage, right]) => (
+                Math.abs(rightPage - currentPage) - Math.abs(leftPage - currentPage)
+                || left.lastUsed - right.lastUsed
+            ));
 
         for (const [page] of candidates) {
             if (this.#bytes <= this.maxBytes && this.#entries.size <= this.maxPages) break;

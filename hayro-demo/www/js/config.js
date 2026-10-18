@@ -7,7 +7,7 @@ export const WORKER_COUNT = CONSTRAINED_DEVICE ? 1 : 2;
 
 // The memory available for rendered pages.
 export const CACHE_BYTES = (CONSTRAINED_DEVICE ? 96 : 192) * 1024 * 1024;
-export const MAX_CACHED_PAGES = CONSTRAINED_DEVICE ? 8 : 24;
+export const MAX_CACHED_PAGES = CONSTRAINED_DEVICE ? 6 : 12;
 
 // The largest render of a single page. Larger pages are rendered at a lower resolution and
 // scaled up.
