@@ -8,7 +8,7 @@ class Type(Enum):
     Dict = "Dict"
     Object = "Object"
     Stream = "Stream"
-    VecNum = "SmallVec<[Number; OPERANDS_THRESHOLD]>"
+    VecNum = "SmallVec<[Number; INLINE_COLOR_COMPONENTS]>"
     Name = "Name"
 
 
@@ -127,7 +127,7 @@ def rust_type(t: Type) -> str:
         Type.Stream: "&'b Stream<'a>",
         Type.Name: "&'b Name<'a>",
         Type.Dict: "&'b Dict<'a>",
-        Type.VecNum: "SmallVec<[Number; OPERANDS_THRESHOLD]>",
+        Type.VecNum: "SmallVec<[Number; INLINE_COLOR_COMPONENTS]>",
     }[t]
 
 
