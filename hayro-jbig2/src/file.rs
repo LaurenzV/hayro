@@ -37,7 +37,7 @@ pub(crate) struct FileHeader {
     /// The file organization type.
     pub(crate) organization: FileOrganization,
     /// The number of pages in the file, if known.
-    pub(crate) _number_of_pages: Option<u32>,
+    pub(crate) number_of_pages: Option<u32>,
     /// "If this bit is 0, no generic region segments uses the templates with
     /// 12 AT pixels. If the file contains one or more generic region segments
     /// using such templates, this bit must be 1." (D.4.2, Bit 2)
@@ -52,7 +52,7 @@ pub(crate) struct FileHeader {
 #[derive(Debug)]
 pub(crate) struct File<'a> {
     /// The file header.
-    pub(crate) _header: FileHeader,
+    pub(crate) header: FileHeader,
     /// The segments in the file.
     pub(crate) segments: Vec<Segment<'a>>,
 }
@@ -72,10 +72,7 @@ pub(crate) fn parse_file(data: &[u8], strict: bool) -> Result<File<'_>> {
     // are in sorted order, but just to be safe.
     segments.sort_by_key(|seg| seg.header.segment_number);
 
-    Ok(File {
-        _header: header,
-        segments,
-    })
+    Ok(File { header, segments })
 }
 
 fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
@@ -127,7 +124,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
 
     Ok(FileHeader {
         organization,
-        _number_of_pages: number_of_pages,
+        number_of_pages,
         _uses_extended_templates: uses_extended_templates,
         _contains_coloured_regions: contains_coloured_regions,
     })

@@ -147,6 +147,10 @@ impl<'a> File<'a> {
         for seg in file.segments {
             let number = seg.header.page_association;
             if number == 0 {
+                if strict && seg.header.segment_type.requires_page() {
+                    bail!(SegmentError::MissingPageAssociation);
+                }
+
                 globals.push(seg);
                 continue;
             }
@@ -162,7 +166,28 @@ impl<'a> File<'a> {
             pages[index].segments.push(seg);
         }
 
+        if strict
+            && file
+                .header
+                .number_of_pages
+                .is_some_and(|n| n as usize != pages.len())
+        {
+            bail!(FormatError::PageCountMismatch);
+        }
+
         for page in &mut pages {
+            if strict {
+                let end_of_page_count = page
+                    .segments
+                    .iter()
+                    .filter(|seg| seg.header.segment_type == SegmentType::EndOfPage)
+                    .count();
+
+                if end_of_page_count != 1 {
+                    bail!(FormatError::InvalidEndOfPage);
+                }
+            }
+
             page.size = PageSize::new(&page.segments)?;
         }
 

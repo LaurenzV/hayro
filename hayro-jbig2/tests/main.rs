@@ -72,6 +72,10 @@ fn check_pages(stream: &str, references: &[&str]) {
     compare_pages(stream, references, true);
 }
 
+fn check_pages_lenient(stream: &str, references: &[&str]) {
+    compare_pages(stream, references, false);
+}
+
 fn compare_pages(stream: &str, references: &[&str], strict: bool) {
     let data = read_stream(stream);
     let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
