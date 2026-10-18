@@ -1,6 +1,5 @@
 use crate::bit_reader::BitWriter;
 use crate::filter::FilterResult;
-use crate::math::round_f32;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
 use alloc::vec;
@@ -113,7 +112,7 @@ fn scale(
 
     for bytes in data.chunks_exact(components_per_row) {
         for byte in bytes {
-            let scaled = round_f32((*byte as f32 / div_factor) * mul_factor) as u32;
+            let scaled = ((*byte as f32 / div_factor) * mul_factor + 0.5) as u32;
             writer.write(scaled)?;
         }
 
