@@ -77,15 +77,27 @@ fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usiz
 }
 
 fn compare(stream: &str, reference: Bitmap, strict: bool) {
-    let path = tests_dir().join("streams").join(format!("{stream}.jbig2"));
-    let data =
-        std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
-
-    let image = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings { strict })
+    let data = read_stream(stream);
+    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
         .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
+    compare_page(stream, &page, reference);
+}
+
+fn read_stream(stream: &str) -> Vec<u8> {
+    let path = tests_dir().join("streams").join(format!("{stream}.jbig2"));
+    std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
+}
+
+fn compare_page(stream: &str, page: &hayro_jbig2::Page<'_>, reference: Bitmap) {
+    assert_eq!(
+        (page.width() as usize, page.height() as usize),
+        (reference[0].len(), reference.len()),
+        "{stream}: wrong page size"
+    );
+
     let mut collector = Collector::default();
-    image
-        .decode(&mut collector)
+    page.decode(&mut collector)
         .unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
 
     assert_eq!(
@@ -109,11 +121,11 @@ fn compare(stream: &str, reference: Bitmap, strict: bool) {
 
 /// Decode `stream`, which is malformed, and check that it doesn't panic.
 fn check_malformed(stream: &str) {
-    let path = tests_dir().join("streams").join(format!("{stream}.jbig2"));
-    let data =
-        std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+    let data = read_stream(stream);
 
-    if let Ok(image) = hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default()) {
-        let _ = image.decode(&mut Collector::default());
+    if let Ok(file) = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings::default()) {
+        for page in file.pages() {
+            let _ = page.decode(&mut Collector::default());
+        }
     }
 }

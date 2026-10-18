@@ -17,6 +17,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
+use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
@@ -104,126 +105,52 @@ pub struct DecodeSettings {
     pub strict: bool,
 }
 
-/// A JBIG2 image.
-pub struct Image<'a> {
-    /// The parsed segments.
-    segments: Vec<Segment<'a>>,
-    /// The decoded global segments.
-    globals: Option<&'a Globals>,
-    /// The width of the image in pixels.
-    width: u32,
-    /// The height of the image in pixels.
-    height: u32,
-    /// The height determined from `EndOfStripe` segments, if applicable.
-    height_from_stripes: Option<u32>,
-    /// Whether strict mode is enabled.
+/// A JBIG2 file in the sequential or random-access organization (Annex D.1, D.2).
+pub struct File<'a> {
+    pages: Vec<FilePage<'a>>,
     strict: bool,
 }
 
-impl<'a> Image<'a> {
-    /// Parse a JBIG2 file from the given data.
-    ///
-    /// The file is expected to use the sequential or random-access organization,
-    /// as defined in Annex D.1 and D.2.
+struct FilePage<'a> {
+    segments: Vec<Segment<'a>>,
+    size: PageSize,
+}
+
+impl<'a> File<'a> {
+    /// Parse a JBIG2 file.
     pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
         let file = parse_file(data, settings.strict)?;
-        Self::from_segments(file.segments, None, settings.strict)
-    }
-
-    /// Parse an embedded JBIG2 image with optional global segments.
-    ///
-    /// The file is expected to use the embedded organization defined in
-    /// Annex D.3.
-    pub fn new_embedded(
-        data: &'a [u8],
-        globals: Option<&'a Globals>,
-        settings: &DecodeSettings,
-    ) -> Result<Self> {
-        let mut segments = Vec::new();
-        let mut reader = Reader::new(data);
-        parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
-
-        segments.sort_by_key(|seg| seg.header.segment_number);
-
-        Self::from_segments(segments, globals, settings.strict)
-    }
-
-    fn from_segments(
-        segments: Vec<Segment<'a>>,
-        globals: Option<&'a Globals>,
-        strict: bool,
-    ) -> Result<Self> {
-        // Pre-scan for stripe height from EndOfStripe segments.
-        let height_from_stripes = segments
-            .iter()
-            .filter(|seg| seg.header.segment_type == SegmentType::EndOfStripe)
-            .filter_map(|seg| u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1))
-            .max();
-
-        // Find and parse page information to extract dimensions.
-        let page_info_seg = segments
-            .iter()
-            .find(|s| s.header.segment_type == SegmentType::PageInformation)
-            .ok_or(FormatError::MissingPageInfo)?;
-
-        let mut reader = Reader::new(page_info_seg.data);
-        let page_info = parse_page_information(&mut reader)?;
-
-        // "A page's bitmap height may be declared in its page information segment
-        // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
-        // page must be striped." (7.4.8.2)
-        let height = if page_info.height == 0xFFFF_FFFF {
-            height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
-        } else {
-            page_info.height
-        };
-
-        if page_info.width == 0 || height == 0 {
-            bail!(FormatError::EmptyPage);
-        }
+        let size = PageSize::new(&file.segments)?;
 
         Ok(Self {
-            segments,
-            globals,
-            width: page_info.width,
-            height,
-            height_from_stripes,
-            strict,
+            pages: vec![FilePage {
+                segments: file.segments,
+                size,
+            }],
+            strict: settings.strict,
         })
     }
 
-    /// The width of the image in pixels.
-    pub fn width(&self) -> u32 {
-        self.width
+    /// The number of pages in the file.
+    pub fn page_count(&self) -> usize {
+        self.pages.len()
     }
 
-    /// The height of the image in pixels.
-    pub fn height(&self) -> u32 {
-        self.height
+    /// The page at `index`, in file order.
+    pub fn page(&self, index: usize) -> Option<Page<'_>> {
+        let page = self.pages.get(index)?;
+
+        Some(Page {
+            segments: PageSegments::Borrowed(&page.segments),
+            globals: None,
+            size: page.size,
+            strict: self.strict,
+        })
     }
 
-    /// Decode the image data through the given [`Decoder`].
-    pub fn decode<D: Decoder>(&self, decoder: &mut D) -> Result<()> {
-        let mut ctx = DecoderContext::default();
-
-        self.decode_with(decoder, &mut ctx)
-    }
-
-    /// Decode the image data through the given [`Decoder`] and [`DecoderContext`].
-    ///
-    /// This is useful in case you want to convert multiple JBIG2 images,
-    /// as it allows `hayro-jbig2` to reuse allocations during decoding.
-    pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
-        decode_segments(
-            &self.segments,
-            self.globals,
-            self.height_from_stripes,
-            self.strict,
-            ctx,
-        )?;
-        emit_bitmap(&ctx.page_bitmap, decoder);
-
-        Ok(())
+    /// The pages of the file, in file order.
+    pub fn pages(&self) -> impl Iterator<Item = Page<'_>> {
+        (0..self.page_count()).filter_map(|index| self.page(index))
     }
 }
 
@@ -261,6 +188,124 @@ impl Globals {
         }
 
         Ok(Self { dictionaries })
+    }
+}
+
+/// A JBIG2 page, from a [`File`] or embedded in another format.
+pub struct Page<'a> {
+    segments: PageSegments<'a>,
+    globals: Option<&'a Globals>,
+    size: PageSize,
+    strict: bool,
+}
+
+enum PageSegments<'a> {
+    Owned(Vec<Segment<'a>>),
+    Borrowed(&'a [Segment<'a>]),
+}
+
+impl<'a> Page<'a> {
+    /// Parse a page in the embedded organization (Annex D.3), with optional globals.
+    pub fn new_embedded(
+        data: &'a [u8],
+        globals: Option<&'a Globals>,
+        settings: &DecodeSettings,
+    ) -> Result<Self> {
+        let mut segments = Vec::new();
+        let mut reader = Reader::new(data);
+        parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
+
+        segments.sort_by_key(|seg| seg.header.segment_number);
+
+        let size = PageSize::new(&segments)?;
+
+        Ok(Self {
+            segments: PageSegments::Owned(segments),
+            globals,
+            size,
+            strict: settings.strict,
+        })
+    }
+
+    /// The width of the page in pixels.
+    pub fn width(&self) -> u32 {
+        self.size.width
+    }
+
+    /// The height of the page in pixels.
+    pub fn height(&self) -> u32 {
+        self.size.height
+    }
+
+    /// Decode the page through the given [`Decoder`].
+    pub fn decode<D: Decoder>(&self, decoder: &mut D) -> Result<()> {
+        let mut ctx = DecoderContext::default();
+
+        self.decode_with(decoder, &mut ctx)
+    }
+
+    /// Like [`Page::decode`], but reuses the allocations in `ctx` across pages.
+    pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
+        let segments = match &self.segments {
+            PageSegments::Owned(segments) => segments,
+            PageSegments::Borrowed(segments) => *segments,
+        };
+
+        decode_segments(
+            segments,
+            self.globals,
+            self.size.height_from_stripes,
+            self.strict,
+            ctx,
+        )?;
+        emit_bitmap(&ctx.page_bitmap, decoder);
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct PageSize {
+    width: u32,
+    height: u32,
+    /// The height determined from `EndOfStripe` segments, if applicable.
+    height_from_stripes: Option<u32>,
+}
+
+impl PageSize {
+    fn new(segments: &[Segment<'_>]) -> Result<Self> {
+        let height_from_stripes = segments
+            .iter()
+            .filter(|seg| seg.header.segment_type == SegmentType::EndOfStripe)
+            .filter_map(|seg| u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1))
+            .max();
+
+        let page_info_seg = segments
+            .iter()
+            .find(|s| s.header.segment_type == SegmentType::PageInformation)
+            .ok_or(FormatError::MissingPageInfo)?;
+
+        let mut reader = Reader::new(page_info_seg.data);
+        let page_info = parse_page_information(&mut reader)?;
+
+        // "A page's bitmap height may be declared in its page information segment
+        // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
+        // page must be striped." (7.4.8.2)
+        let height = if page_info.height == 0xFFFF_FFFF {
+            height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
+        } else {
+            page_info.height
+        };
+
+        if page_info.width == 0 || height == 0 {
+            bail!(FormatError::EmptyPage);
+        }
+
+        Ok(Self {
+            width: page_info.width,
+            height,
+            height_from_stripes,
+        })
     }
 }
 

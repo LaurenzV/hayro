@@ -27,8 +27,8 @@ fn main() -> ExitCode {
         }
     };
 
-    let image = match hayro_jbig2::Image::new(&data, &hayro_jbig2::DecodeSettings::default()) {
-        Ok(image) => image,
+    let file = match hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings::default()) {
+        Ok(file) => file,
         Err(err) => {
             eprintln!("Failed to parse JBIG2: {err}");
 
@@ -36,11 +36,17 @@ fn main() -> ExitCode {
         }
     };
 
-    let (width, height) = image.dimensions();
+    let Some(page) = file.page(0) else {
+        eprintln!("The JBIG2 file has no pages");
+
+        return ExitCode::FAILURE;
+    };
+
+    let (width, height) = page.dimensions();
     println!("Decoded: {width}x{height} image");
 
-    let mut buf = vec![0_u8; image.total_bytes() as usize];
-    if let Err(err) = image.read_image(&mut buf) {
+    let mut buf = vec![0_u8; page.total_bytes() as usize];
+    if let Err(err) = page.read_image(&mut buf) {
         eprintln!("Failed to decode JBIG2: {err}");
 
         return ExitCode::FAILURE;
