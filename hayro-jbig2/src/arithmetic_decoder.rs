@@ -270,6 +270,25 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
+    /// Decodes `count` symbols with `context` if all of them are the more
+    /// probable symbol of the context and are decoded without
+    /// renormalization, and returns whether it did.
+    ///
+    /// Such decodes only subtract Qe from A, so whether all of them stay on
+    /// that path only depends on the current state.
+    #[inline(always)]
+    pub(crate) fn skip_mps(&mut self, context: ArithmeticDecoderContext, count: u32) -> bool {
+        let total_qe = QE_TABLE[context.index() as usize].qe * count;
+        let floor = ((self.c >> 16) + 1).max(0x8000);
+
+        if self.a >= floor + total_qe {
+            self.a -= total_qe;
+            true
+        } else {
+            false
+        }
+    }
+
     #[inline(always)]
     fn current_byte(&self) -> u8 {
         self.data
