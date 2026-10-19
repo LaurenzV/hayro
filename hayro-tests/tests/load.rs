@@ -682,6 +682,23 @@ fn metadata_in_object_stream() {
 }
 
 #[test]
+fn flate_page_streams() {
+    // The first page has a single content stream, the second one an array of two.
+    let file = include_bytes!("../pdfs/custom/flate_page_streams.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+    let pages = pdf.pages();
+
+    assert_eq!(
+        pages[0].page_stream(),
+        Some(b"0 0 1 rg 10 10 80 80 re f".as_slice())
+    );
+    assert_eq!(
+        pages[1].page_stream(),
+        Some(b"1 0 0 rg 10 10 40 40 re f 0 1 0 rg 50 50 40 40 re f ".as_slice())
+    );
+}
+
+#[test]
 fn generic_refinement_decoding_overflow() {
     let file = include_bytes!("../pdfs/load/generic_refinement_decoding_overflow.jb2");
     load_jbig2(file);

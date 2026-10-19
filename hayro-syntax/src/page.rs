@@ -256,7 +256,7 @@ impl<'a> Page<'a> {
     pub fn page_stream(&self) -> Option<&[u8]> {
         let convert_single = |s: Stream<'_>| {
             let data = s.decoded().ok()?;
-            Some(data.to_vec())
+            Some(data.into_owned())
         };
 
         self.page_streams
