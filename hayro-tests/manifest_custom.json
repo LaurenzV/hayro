@@ -977,6 +977,10 @@
     "file": "pdfs/custom/mask_luminosity_no_cs.pdf"
   },
   {
+    "id": "mask_reuse",
+    "file": "pdfs/custom/mask_reuse.pdf"
+  },
+  {
     "id": "resvg_masking_clipPath_mixed_clip_rule",
     "file": "pdfs/custom/resvg_masking_clipPath_mixed_clip_rule.pdf"
   },

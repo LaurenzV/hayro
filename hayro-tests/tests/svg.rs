@@ -260,6 +260,11 @@ fn mask_luminosity_no_cs() {
 }
 
 #[test]
+fn mask_reuse() {
+    run_svg_test("mask_reuse", "pdfs/custom/mask_reuse.pdf", None);
+}
+
+#[test]
 fn pdfjs_issue11279() {
     run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
 }

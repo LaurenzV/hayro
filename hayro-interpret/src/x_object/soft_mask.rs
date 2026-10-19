@@ -47,6 +47,7 @@ impl Hash for Repr<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.dict_key.hash(state);
         self.root_transform.cache_key().hash(state);
+        self.bbox.cache_key().hash(state);
     }
 }
 
