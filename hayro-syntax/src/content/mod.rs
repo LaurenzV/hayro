@@ -277,7 +277,7 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
 
                     // If there is any binary data in-between, we for sure
                     // have not reached the end.
-                    if analyze_data.iter().any(|c| !c.is_ascii()) {
+                    if has_binary_outside_strings(analyze_data) {
                         r.read_bytes(2)?;
                         continue 'outer;
                     }
@@ -353,6 +353,42 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
     }
 
     Some(())
+}
+
+/// Whether `data`, read as the content that follows a candidate end of inline
+/// image data, holds a non-ASCII byte outside literal strings.
+///
+/// Content holds such bytes only in strings, for example text in a single-byte
+/// encoding such as `WinAnsiEncoding` or the codes of a CID font, so one outside
+/// them means that the candidate lies within binary image data.
+fn has_binary_outside_strings(data: &[u8]) -> bool {
+    // Most content holds only ASCII bytes.
+    if data.is_ascii() {
+        return false;
+    }
+
+    let mut depth = 0_usize;
+    let mut escaped = false;
+
+    for &b in data {
+        if depth > 0 {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'(' {
+                depth += 1;
+            } else if b == b')' {
+                depth -= 1;
+            }
+        } else if !b.is_ascii() {
+            return true;
+        } else if b == b'(' {
+            depth = 1;
+        }
+    }
+
+    false
 }
 
 /// An iterator over PDF content streams that provide access to the instructions
