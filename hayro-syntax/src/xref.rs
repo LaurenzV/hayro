@@ -133,9 +133,8 @@ fn fallback_xref_map_inner<'a>(
 
                         if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
                             && dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
-                            && let Some(data) = stream.decoded().ok()
                             && let Some(last_obj_num) = last_obj_num
-                            && let Some(obj_stream) = ObjectStream::new(stream, &data, &dummy_ctx)
+                            && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
                             for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
                                 let id = ObjectIdentifier::new(*obj_num as i32, 0);
@@ -207,11 +206,9 @@ fn fallback_xref_map_inner<'a>(
                             if let Some(stream) =
                                 reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
                                 && {
-                                    let stream = stream.get();
-                                    if let Some(data) = stream.decoded().ok()
-                                        && let Some(object_stream) =
-                                            ObjectStream::new(stream, &data, &dummy_ctx)
-                                        && let Some(obj) = object_stream.get::<Dict<'_>>(*idx)
+                                    if let Some(object_stream) = ObjectStream::new(&stream.get())
+                                        && let Some(obj) =
+                                            object_stream.get::<Dict<'_>>(*idx, &dummy_ctx)
                                     {
                                         check(&obj)
                                     } else {
@@ -602,10 +599,9 @@ impl XRef {
 
                 ctx.parent_chain_push(id);
 
-                let stream = self.get_with::<Stream<'_>>(obj_stream_id, &ctx)?;
-                let data = repr.data.get_with(obj_stream_id, &ctx)?;
-                let object_stream = ObjectStream::new(stream, data, &ctx)?;
-                object_stream.get(index)
+                repr.data
+                    .object_stream(obj_stream_id, &ctx)?
+                    .get(index, &ctx)
             }
         }
     }
@@ -1046,16 +1042,22 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
     }
 }
 
-struct ObjectStream<'a> {
-    data: &'a [u8],
-    ctx: ReaderContext<'a>,
+pub(crate) struct ObjectStream {
+    data: Vec<u8>,
     offsets: Vec<(u32, usize)>,
 }
 
-impl<'a> ObjectStream<'a> {
-    fn new(inner: Stream<'_>, data: &'a [u8], ctx: &ReaderContext<'a>) -> Option<Self> {
-        let num_objects = inner.dict().get::<usize>(N)?;
-        let first_offset = inner.dict().get::<usize>(FIRST)?;
+impl ObjectStream {
+    pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
+        let data = stream.decoded().ok()?.into_owned();
+        let offsets = Self::read_offsets(stream, &data).unwrap_or_default();
+
+        Some(Self { data, offsets })
+    }
+
+    fn read_offsets(stream: &Stream<'_>, data: &[u8]) -> Option<Vec<(u32, usize)>> {
+        let num_objects = stream.dict().get::<usize>(N)?;
+        let first_offset = stream.dict().get::<usize>(FIRST)?;
 
         let mut r = Reader::new(data);
 
@@ -1070,22 +1072,22 @@ impl<'a> ObjectStream<'a> {
             offsets.push((obj_num, first_offset + relative_offset));
         }
 
-        let mut ctx = ctx.clone();
-        ctx.set_in_object_stream(true);
-
-        Some(Self { data, ctx, offsets })
+        Some(offsets)
     }
 
-    fn get<T>(&self, index: u32) -> Option<T>
+    fn get<'a, T>(&'a self, index: u32, ctx: &ReaderContext<'a>) -> Option<T>
     where
         T: ObjectLike<'a>,
     {
         let offset = self.offsets.get(index as usize)?.1;
-        let mut r = Reader::new(self.data);
+        let mut r = Reader::new(&self.data);
         r.jump(offset);
         r.skip_white_spaces_and_comments();
 
-        r.read_with_context::<T>(&self.ctx)
+        let mut ctx = ctx.clone();
+        ctx.set_in_object_stream(true);
+
+        r.read_with_context::<T>(&ctx)
     }
 }
 
