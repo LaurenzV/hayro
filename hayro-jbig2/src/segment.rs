@@ -235,15 +235,23 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>, strict: bool) -> Res
     // segment number is one byte long. Otherwise, when the current segment's
     // number is 65536 or less, each referred-to segment number is two bytes long.
     // Otherwise, each referred-to segment number is four bytes long."
+    let number_size = if segment_number <= 256 {
+        1
+    } else if segment_number <= 65536 {
+        2
+    } else {
+        4
+    };
+    let numbers = (referred_to_count as usize)
+        .checked_mul(number_size)
+        .and_then(|len| reader.read_bytes(len))
+        .ok_or(ParseError::UnexpectedEof)?;
+
     let mut referred_to_segments = Vec::with_capacity(referred_to_count as usize);
-    for _ in 0..referred_to_count {
-        let referred = if segment_number <= 256 {
-            reader.read_byte().ok_or(ParseError::UnexpectedEof)? as u32
-        } else if segment_number <= 65536 {
-            reader.read_u16().ok_or(ParseError::UnexpectedEof)? as u32
-        } else {
-            reader.read_u32().ok_or(ParseError::UnexpectedEof)?
-        };
+    for bytes in numbers.chunks_exact(number_size) {
+        let referred = bytes
+            .iter()
+            .fold(0, |acc, &byte| (acc << 8) | u32::from(byte));
 
         // If a segment refers to other segments, it must refer to only segments
         // with lower segment numbers.
