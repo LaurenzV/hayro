@@ -2,7 +2,7 @@ use crate::Renderer;
 use hayro_interpret::Paint;
 use hayro_interpret::encode::{EncodedShadingType, texture_dimensions};
 use hayro_interpret::gradient::SvgGradientKind;
-use hayro_interpret::pattern::Pattern;
+use hayro_interpret::pattern::{Pattern, TilingPattern};
 use hayro_interpret::util::x_y_advances;
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::sync::Arc;
@@ -35,21 +35,7 @@ impl Renderer<'_> {
 
                         clip_path = s.shading.clip_path.clone();
                         let encoded = s.encode();
-                        let mut bbox = (*path_transform * path_bbox().to_path(0.0)).bounding_box();
-
-                        if is_stroke {
-                            // Try to account for stroke in bbox.
-                            let (a1, a2) = x_y_advances(path_transform);
-                            let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
-                            bbox = bbox.inflate(factor, factor);
-                        }
-
-                        bbox = bbox.intersect(Rect::new(
-                            0.0,
-                            0.0,
-                            self.ctx.width() as f64,
-                            self.ctx.height() as f64,
-                        ));
+                        let bbox = self.device_bbox(path_transform, path_bbox(), is_stroke);
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
                             && let Some(native) =
@@ -145,48 +131,90 @@ impl Renderer<'_> {
                         xs = xs.max(min_x_scale).min(max_x_scale);
                         ys = ys.max(min_y_scale).min(max_y_scale);
 
-                        let x_step = xs * t.x_step;
-                        let y_step = ys * t.y_step;
+                        // The pixmap holds one whole step. If the step is too large for
+                        // that and the painted area touches only one tile, render just
+                        // the bbox and place it once.
+                        let single_tile = if (xs * t.x_step).abs() > MAX_PIXMAP_SIZE
+                            || (ys * t.y_step).abs() > MAX_PIXMAP_SIZE
+                        {
+                            let area = self.device_bbox(path_transform, path_bbox(), is_stroke);
+                            visible_tile(&t, area)
+                        } else {
+                            None
+                        };
 
-                        let pix_width = x_step.abs().round().max(1.0) as u16;
-                        let pix_height = y_step.abs().round().max(1.0) as u16;
+                        let (pix, extend) = if let Some((x_offset, y_offset)) = single_tile {
+                            // Keep a transparent border so that padding adds nothing.
+                            let pix_width = (bbox.width() as f32 * xs).ceil() as u16 + 2;
+                            let pix_height = (bbox.height() as f32 * ys).ceil() as u16 + 2;
+                            let initial_transform = Affine::translate((1.0, 1.0))
+                                * Affine::scale_non_uniform(xs as f64, ys as f64)
+                                * Affine::translate((-bbox.x0, -bbox.y0));
+                            let pix = self.render_tile(
+                                &t,
+                                pix_width,
+                                pix_height,
+                                initial_transform,
+                                is_stroke,
+                            );
 
-                        let xs = pix_width as f32 / t.x_step.abs();
-                        let ys = pix_height as f32 / t.y_step.abs();
+                            paint_transform = path_transform.inverse()
+                                * t.matrix
+                                * Affine::translate((x_offset, y_offset))
+                                * initial_transform.inverse();
 
-                        let scaled_width = bbox.width() as f32 * xs;
-                        let scaled_height = bbox.height() as f32 * ys;
+                            (pix, peniko::Extend::Pad)
+                        } else {
+                            // The pixmap is sized by the step, so limit the scale by
+                            // the step as well.
+                            xs = xs.min(MAX_PIXMAP_SIZE / t.x_step.abs());
+                            ys = ys.min(MAX_PIXMAP_SIZE / t.y_step.abs());
 
-                        let mut ctx = self.child_context(pix_width, pix_height);
-                        let mut renderer = Renderer::new(&mut ctx, self.global);
-                        renderer.inside_pattern = true;
-                        let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
-                            * Affine::translate((-bbox.x0, -bbox.y0));
-                        t.interpret(&mut renderer, initial_transform, is_stroke);
-                        let mut pix = Pixmap::new(pix_width, pix_height);
-                        renderer.ctx.flush();
-                        let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render(&mut pix, &mut resources);
+                            let x_step = xs * t.x_step;
+                            let y_step = ys * t.y_step;
 
-                        // TODO: Fix these
-                        if x_step < 0.0 {
-                            initial_transform *=
-                                Affine::new([-1.0, 0.0, 0.0, 1.0, scaled_width as f64, 0.0]);
-                        }
+                            let pix_width = x_step.abs().round().max(1.0) as u16;
+                            let pix_height = y_step.abs().round().max(1.0) as u16;
 
-                        if y_step < 0.0 {
-                            initial_transform *=
-                                Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, scaled_height as f64]);
-                        }
+                            let xs = pix_width as f32 / t.x_step.abs();
+                            let ys = pix_height as f32 / t.y_step.abs();
 
-                        paint_transform =
-                            path_transform.inverse() * t.matrix * initial_transform.inverse();
+                            let scaled_width = bbox.width() as f32 * xs;
+                            let scaled_height = bbox.height() as f32 * ys;
+
+                            let mut initial_transform =
+                                Affine::scale_non_uniform(xs as f64, ys as f64)
+                                    * Affine::translate((-bbox.x0, -bbox.y0));
+                            let pix = self.render_tile(
+                                &t,
+                                pix_width,
+                                pix_height,
+                                initial_transform,
+                                is_stroke,
+                            );
+
+                            // TODO: Fix these
+                            if x_step < 0.0 {
+                                initial_transform *=
+                                    Affine::new([-1.0, 0.0, 0.0, 1.0, scaled_width as f64, 0.0]);
+                            }
+
+                            if y_step < 0.0 {
+                                initial_transform *=
+                                    Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, scaled_height as f64]);
+                            }
+
+                            paint_transform =
+                                path_transform.inverse() * t.matrix * initial_transform.inverse();
+
+                            (pix, peniko::Extend::Repeat)
+                        };
 
                         let image = Image {
                             image: ImageSource::Pixmap(Arc::new(pix)),
                             sampler: ImageSampler {
-                                x_extend: peniko::Extend::Repeat,
-                                y_extend: peniko::Extend::Repeat,
+                                x_extend: extend,
+                                y_extend: extend,
                                 quality: ImageQuality::Medium,
                                 alpha: 1.0,
                             },
@@ -203,4 +231,60 @@ impl Renderer<'_> {
 
         clip_path
     }
+
+    fn device_bbox(&self, path_transform: &Affine, path_bbox: Rect, is_stroke: bool) -> Rect {
+        let mut bbox = (*path_transform * path_bbox.to_path(0.0)).bounding_box();
+
+        if is_stroke {
+            // Try to account for stroke in bbox.
+            let (a1, a2) = x_y_advances(path_transform);
+            let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
+            bbox = bbox.inflate(factor, factor);
+        }
+
+        bbox.intersect(Rect::new(
+            0.0,
+            0.0,
+            self.ctx.width() as f64,
+            self.ctx.height() as f64,
+        ))
+    }
+
+    fn render_tile(
+        &self,
+        t: &TilingPattern<'_>,
+        width: u16,
+        height: u16,
+        initial_transform: Affine,
+        is_stroke: bool,
+    ) -> Pixmap {
+        let mut ctx = self.child_context(width, height);
+        let mut renderer = Renderer::new(&mut ctx, self.global);
+        renderer.inside_pattern = true;
+        t.interpret(&mut renderer, initial_transform, is_stroke);
+        let mut pix = Pixmap::new(width, height);
+        renderer.ctx.flush();
+        let mut resources = vello_cpu::Resources::default();
+        renderer.ctx.render(&mut pix, &mut resources);
+
+        pix
+    }
+}
+
+/// Return the offset of the only tile that touches the device area, if there is at most one.
+fn visible_tile(t: &TilingPattern<'_>, area: Rect) -> Option<(f64, f64)> {
+    let area = (t.matrix.inverse() * area.to_path(0.1)).bounding_box();
+
+    let offset = |min: f64, max: f64, start: f64, end: f64, step: f32| {
+        let step = step.abs() as f64;
+        let first = ((min - end) / step).ceil();
+        let last = ((max - start) / step).floor();
+
+        (first >= last).then_some(first * step)
+    };
+
+    Some((
+        offset(area.x0, area.x1, t.bbox.x0, t.bbox.x1, t.x_step)?,
+        offset(area.y0, area.y1, t.bbox.y0, t.bbox.y1, t.y_step)?,
+    ))
 }

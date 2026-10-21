@@ -312,6 +312,12 @@ fn issue391() {
 }
 
 #[test]
+fn issue404() {
+    let file = include_bytes!("../pdfs/custom/pattern_tiling_large_step.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn issue409() {
     let file = include_bytes!("../pdfs/load/issue409.pdf");
     load_pdf(file);

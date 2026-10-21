@@ -201,6 +201,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn font_type3_shape_glyphs() { run_render_test("font_type3_shape_glyphs", "pdfs/custom/font_type3_shape_glyphs.pdf", None); }
 #[test] fn pattern_tiling_inner_transform() { run_render_test("pattern_tiling_inner_transform", "pdfs/custom/pattern_tiling_inner_transform.pdf", None); }
 #[test] fn pattern_tiling_large_x_step() { run_render_test("pattern_tiling_large_x_step", "pdfs/custom/pattern_tiling_large_x_step.pdf", None); }
+#[test] fn pattern_tiling_large_step() { run_render_test("pattern_tiling_large_step", "pdfs/custom/pattern_tiling_large_step.pdf", None); }
 #[test] fn pattern_tiling_lines() { run_render_test("pattern_tiling_lines", "pdfs/custom/pattern_tiling_lines.pdf", None); }
 #[test] fn pattern_tiling_nested() { run_render_test("pattern_tiling_nested", "pdfs/custom/pattern_tiling_nested.pdf", None); }
 #[test] fn pattern_tiling_rotated() { run_render_test("pattern_tiling_rotated", "pdfs/custom/pattern_tiling_rotated.pdf", None); }
