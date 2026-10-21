@@ -877,3 +877,34 @@ fn concurrent_xref_repair_retries_original_entries() {
         });
     }
 }
+
+#[test]
+fn xref_rebuild_with_many_typed_dicts() {
+    // None of the dictionaries is followed by a stream, so reading one as a stream
+    // searches the rest of the file for its data.
+    let mut file = b"%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>
+endobj
+"
+    .to_vec();
+
+    for i in 4..16004 {
+        file.extend_from_slice(
+            format!("{i} 0 obj\n<< /Type /Annot /Subtype /Text /Rect [0 0 1 1] >>\nendobj\n")
+                .as_bytes(),
+        );
+    }
+
+    // The `startxref` offset is invalid, so the xref table has to be rebuilt.
+    file.extend_from_slice(b"trailer\n<< /Root 1 0 R >>\nstartxref\n999999999\n%%EOF\n");
+
+    let pdf = Pdf::new(file).unwrap();
+    assert_eq!(pdf.pages().len(), 1);
+}
