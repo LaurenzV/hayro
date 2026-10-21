@@ -4,6 +4,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 /// A reference to an object.
@@ -43,20 +44,64 @@ impl From<ObjectIdentifier> for ObjRef {
     }
 }
 
-impl Skippable for ObjRef {
-    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<i32>(false)?;
+impl ObjRef {
+    // Validating an array or dictionary skips its items with this, and reading an item
+    // reads it with this, so both take the same tokens as a reference: `8 -R` or
+    // `8 0.5 R` are items that aren't references, not a reference with a damaged
+    // generation number.
+    fn read_strict(r: &mut Reader<'_>) -> Option<Self> {
+        let obj_number = read_ref_number(r)?;
         r.skip_white_spaces();
-        r.skip::<i32>(false)?;
+        let gen_number = read_ref_number(r)?;
         r.skip_white_spaces();
         r.forward_tag(b"R")?;
 
-        Some(())
+        Some(Self::new(obj_number, gen_number))
+    }
+}
+
+fn read_ref_number(r: &mut Reader<'_>) -> Option<i32> {
+    let negative = match r.peek_byte()? {
+        b'-' => {
+            r.forward();
+            true
+        }
+        b'+' => {
+            r.forward();
+            false
+        }
+        _ => false,
+    };
+
+    let start = r.offset();
+    let mut value = 0_i64;
+    while let Some(digit) = r.peek_byte().filter(u8::is_ascii_digit) {
+        // Stop growing once the value can't fit, so that it can't overflow either.
+        value = (value * 10 + i64::from(digit - b'0')).min(1 << 32);
+        r.forward();
+    }
+
+    if r.offset() == start || r.peek_byte().is_some_and(is_regular_character) {
+        return None;
+    }
+
+    i32::try_from(if negative { -value } else { value }).ok()
+}
+
+impl Skippable for ObjRef {
+    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
+        Self::read_strict(r).map(|_| ())
     }
 }
 
 impl Readable<'_> for ObjRef {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
+        if !ctx.in_content_stream() {
+            return Self::read_strict(r);
+        }
+
+        // Validation in content streams never skips an item as a reference. Keep their
+        // more lenient reading.
         let obj_ref = r.read_without_context::<i32>()?;
         r.skip_white_spaces();
         let gen_num = r.read_without_context::<i32>()?;

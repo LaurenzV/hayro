@@ -431,6 +431,28 @@ mod tests {
     }
 
     #[test]
+    fn damaged_generation_number_is_not_a_reference() {
+        for (input, len) in [
+            ("[8 -R 5]", 3),
+            ("[8 .R 5]", 3),
+            ("[8 -.R 5]", 3),
+            ("[8 0.5 R 5]", 4),
+            ("[99999999999 0 R 5]", 4),
+        ] {
+            let res = array_ref_impl(input.as_bytes()).unwrap();
+            assert_eq!(res.len(), len, "{input}");
+            assert!(
+                matches!(res[0], MaybeRef::NotRef(Object::Number(_))),
+                "{input}"
+            );
+            assert!(
+                matches!(res[len - 1], MaybeRef::NotRef(Object::Number(_))),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
     fn reference_after_invalid_number() {
         let res = array_ref_impl(b"[3 0 R .foo 4 0 R]").unwrap();
         assert_eq!(res.len(), 3);

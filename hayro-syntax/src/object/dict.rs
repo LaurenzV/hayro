@@ -1198,6 +1198,17 @@ mod tests {
     }
 
     #[test]
+    fn damaged_generation_number_is_not_a_reference() {
+        for value in ["-R", ".R", "-.R", "0.5 R"] {
+            let input = format!("<< /A 8 {value} /B 5 >>");
+            let dict = Dict::from_bytes(input.as_bytes()).unwrap();
+            assert_eq!(dict.get_ref(b"A"), None, "{input}");
+            assert_eq!(dict.get::<i32>(b"A"), Some(8), "{input}");
+            assert_eq!(dict.get::<i32>(b"B"), Some(5), "{input}");
+        }
+    }
+
+    #[test]
     fn dict_with_unreadable_value() {
         let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
         let _ = dict.entries().count();
