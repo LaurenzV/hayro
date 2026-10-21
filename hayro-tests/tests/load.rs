@@ -784,6 +784,30 @@ fn object_stream_lookups() {
 }
 
 #[test]
+fn separation_tint_one_output() {
+    let file = include_bytes!("../pdfs/load/separation_tint_one_output.pdf");
+    load_pdf(file);
+}
+
+#[test]
+fn separation_tint_varying_outputs() {
+    let file = include_bytes!("../pdfs/load/separation_tint_varying_outputs.pdf");
+    load_pdf(file);
+}
+
+#[test]
+fn device_n_tint_one_output() {
+    let file = include_bytes!("../pdfs/load/device_n_tint_one_output.pdf");
+    load_pdf(file);
+}
+
+#[test]
+fn shading_pattern_color_space() {
+    let file = include_bytes!("../pdfs/load/shading_pattern_color_space.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn concurrent_object_stream_resolution() {
     let data = include_bytes!("../pdfs/load/concurrent_object_streams.pdf");
 

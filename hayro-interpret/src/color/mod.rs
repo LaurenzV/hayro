@@ -374,6 +374,15 @@ impl ColorSpace {
     }
 
     pub(crate) fn encode_values(&self, input: &[f32]) -> SmallVec<[u8; 4]> {
+        let num_components = self.num_components() as usize;
+
+        // Make sure output always has the expected size, even for invalid
+        // conversions.
+        let mut input = ColorComponents::from_slice(&input[..input.len().min(num_components)]);
+        if input.len() < num_components {
+            input.extend_from_slice(&self.initial_color()[input.len()..]);
+        }
+
         if let Some(hival) = self.indexed_hival() {
             return input
                 .iter()
@@ -387,7 +396,7 @@ impl ColorSpace {
             }
             _ => self.component_ranges(),
         };
-        encode_components(input, &ranges)
+        encode_components(&input, &ranges)
     }
 
     /// Get the initial color of the color space.
