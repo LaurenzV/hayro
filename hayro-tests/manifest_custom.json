@@ -1264,5 +1264,9 @@
   {
     "id": "deeply_nested_object",
     "file": "pdfs/custom/deeply_nested_object.pdf"
+  },
+  {
+    "id": "pattern_tiling_uncolored_named_base",
+    "file": "pdfs/custom/pattern_tiling_uncolored_named_base.pdf"
   }
 ]
