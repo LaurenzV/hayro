@@ -767,7 +767,8 @@ fn nested_object_streams() {
 
 #[test]
 fn media_box_with_invalid_number() {
-    // The media box of the first page is `[0 0 1e3 500]`.
+    // The media box of the first page is `[0 0 1e3 500]`, and `/Kids` is
+    // `[3 0 R .foo 4 0 R]`.
     let file = include_bytes!("../pdfs/load/media_box_with_invalid_number.pdf");
     let pdf = Pdf::new(file.to_vec()).unwrap();
 

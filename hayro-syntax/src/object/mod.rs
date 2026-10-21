@@ -13,6 +13,7 @@ pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 const MAX_OBJECT_NESTING_DEPTH: usize = 64;
@@ -229,17 +230,28 @@ impl<'a> Readable<'a> for Object<'a> {
                 _ => Self::String(String::read(r, ctx)?),
             },
             b'(' => Self::String(String::read(r, ctx)?),
-            b'.' | b'+' | b'-' | b'0'..=b'9' => match Number::read(r, ctx) {
-                Some(number) => Self::Number(number),
-                // Like MuPDF, read a token that starts like a number but isn't one, such as
-                // `1e3`, as null, so that it doesn't make the object around it unreadable.
-                // Content streams keep their own handling (see issue 994).
-                None if !ctx.in_content_stream() => {
-                    skip_name_like(r, false)?;
-                    Self::Null(Null)
+            b'.' | b'+' | b'-' | b'0'..=b'9' if ctx.in_content_stream() => {
+                Self::Number(Number::read(r, ctx)?)
+            }
+            b'.' | b'+' | b'-' | b'0'..=b'9' => {
+                let start = r.offset();
+
+                match Number::read(r, ctx) {
+                    // `Number::read` takes a lone `.`, `+` or `-` as zero without looking at
+                    // what follows, so check it here, as `skip` does.
+                    Some(number) if !r.peek_byte().is_some_and(is_regular_character) => {
+                        Self::Number(number)
+                    }
+                    // Like MuPDF, read a token that starts like a number but isn't one, such
+                    // as `1e3` or `.foo`, as null, so that it doesn't make the object around
+                    // it unreadable. Content streams keep their own handling (see issue 994).
+                    _ => {
+                        r.jump(start);
+                        skip_name_like(r, false)?;
+                        Self::Null(Null)
+                    }
                 }
-                None => return None,
-            },
+            }
             b'[' => Self::Array(Array::read(r, ctx)?),
             // See the comment in `skip`.
             _ => {
@@ -443,6 +455,43 @@ mod tests {
 
         for (input, expected) in cases {
             assert_eq!(format!("{}", object_impl(input).unwrap()), *expected);
+        }
+    }
+
+    #[test]
+    fn token_that_starts_like_a_number_ends_where_skip_ends_it() {
+        // Every token of up to five of these characters that starts like a number,
+        // read as an array item and as a dictionary value. Skipping and reading it must
+        // end at the same place, so the next item is still read.
+        let mut tokens = vec![];
+        let mut longer: Vec<Vec<u8>> = vec![vec![]];
+        for _ in 0..5 {
+            longer = longer
+                .iter()
+                .flat_map(|token| b".+-05ef".map(|c| [token.as_slice(), &[c]].concat()))
+                .collect();
+            tokens.extend(longer.iter().filter(|t| b".+-05".contains(&t[0])).cloned());
+        }
+
+        for token in tokens {
+            let token = core::str::from_utf8(&token).unwrap();
+            let array = format!("[{token} 7]");
+            let Some(Object::Array(array)) = object_impl(array.as_bytes()) else {
+                panic!("{array} isn't an array");
+            };
+            let items = array.iter::<Object<'_>>().collect::<Vec<_>>();
+            assert_eq!(items.len(), 2, "[{token} 7]");
+            assert!(
+                matches!(items[1], Object::Number(n) if n.as_i64() == 7),
+                "[{token} 7]"
+            );
+
+            let dict = format!("<< /A {token} /B 7 >>");
+            let Some(Object::Dict(dict)) = object_impl(dict.as_bytes()) else {
+                panic!("{dict} isn't a dictionary");
+            };
+            assert_eq!(dict.len(), 2, "<< /A {token} /B 7 >>");
+            assert_eq!(dict.get::<i32>(b"B"), Some(7), "<< /A {token} /B 7 >>");
         }
     }
 

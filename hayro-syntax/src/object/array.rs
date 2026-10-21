@@ -412,13 +412,22 @@ mod tests {
 
     #[test]
     fn number_followed_by_regular_character_is_null() {
-        let res = array_ref_impl(b"[8 0R 1e3 1.2.3 5]").unwrap();
-        assert_eq!(res.len(), 5);
+        let res = array_ref_impl(b"[8 0R 1e3 1.2.3 .foo -foo .e3 5]").unwrap();
+        assert_eq!(res.len(), 8);
         assert!(matches!(res[0], MaybeRef::NotRef(Object::Number(_))));
-        for item in &res[1..4] {
+        for item in &res[1..7] {
             assert!(matches!(item, MaybeRef::NotRef(Object::Null(_))));
         }
-        assert!(matches!(res[4], MaybeRef::NotRef(Object::Number(_))));
+        assert!(matches!(res[7], MaybeRef::NotRef(Object::Number(_))));
+    }
+
+    #[test]
+    fn reference_after_invalid_number() {
+        let res = array_ref_impl(b"[3 0 R .foo 4 0 R]").unwrap();
+        assert_eq!(res.len(), 3);
+        assert!(matches!(res[0], MaybeRef::Ref(_)));
+        assert!(matches!(res[1], MaybeRef::NotRef(Object::Null(_))));
+        assert!(matches!(res[2], MaybeRef::Ref(_)));
     }
 
     #[test]

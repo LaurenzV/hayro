@@ -3,7 +3,7 @@
 << /Type /Catalog /Pages 2 0 R >>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+<< /Type /Pages /Kids [3 0 R .foo 4 0 R] /Count 2 >>
 endobj
 3 0 obj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 1e3 500] /Contents 5 0 R >>
@@ -28,12 +28,12 @@ xref
 0000000000 65535 f 
 0000000009 00000 n 
 0000000058 00000 n 
-0000000121 00000 n 
-0000000208 00000 n 
-0000000295 00000 n 
-0000000372 00000 n 
+0000000126 00000 n 
+0000000213 00000 n 
+0000000300 00000 n 
+0000000377 00000 n 
 trailer
 << /Size 7 /Root 1 0 R >>
 startxref
-449
+454
 %%EOF
