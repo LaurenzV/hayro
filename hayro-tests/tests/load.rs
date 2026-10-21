@@ -4,7 +4,7 @@ use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
-use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
+use hayro_syntax::object::{Array, DateTime, Dict, ObjectIdentifier};
 use std::sync::Barrier;
 
 fn load_pdf(file: &[u8]) {
@@ -775,6 +775,25 @@ fn page_tree_cycle_with_siblings() {
 fn object_stream_cycle() {
     let file = include_bytes!("../pdfs/load/object_stream_cycle.pdf");
     load_pdf(file);
+}
+
+#[test]
+fn object_stream_wrong_index() {
+    // The xref stream places objects 3 and 5 at index 1 of the object stream, but
+    // object 3 is at index 0.
+    let file = include_bytes!("../pdfs/load/object_stream_wrong_index.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+
+    assert_eq!(pdf.pages()[0].base_dimensions(), (300.0, 300.0));
+
+    let width = |number| {
+        pdf.xref()
+            .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
+            .and_then(|dict| dict.get::<Array<'_>>(b"MediaBox"))
+            .and_then(|media_box| media_box.iter::<f32>().nth(2))
+    };
+    assert_eq!(width(3), Some(300.0));
+    assert_eq!(width(5), Some(111.0));
 }
 
 #[test]

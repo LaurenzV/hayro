@@ -602,11 +602,30 @@ impl XRef {
                     return None;
                 }
 
-                ctx.parent_chain_push(id);
+                let mut stream_ctx = ctx.clone();
+                stream_ctx.parent_chain_push(id);
 
-                repr.data
-                    .object_stream(obj_stream_id, &ctx)?
-                    .get(index, &ctx)
+                let object_stream = repr.data.object_stream(obj_stream_id, &stream_ctx)?;
+
+                if object_stream.obj_number(index) == Some(id.obj_number as u32) {
+                    return object_stream.get(index, &stream_ctx);
+                }
+
+                // The xref table is broken, try to repair if not already repaired.
+                if was_repaired {
+                    error!(
+                        "attempt was made at repairing xref, but object {id:?} still couldn't be found in object stream {obj_stream_id:?}"
+                    );
+
+                    None
+                } else {
+                    warn!("broken xref, attempting to repair");
+
+                    self.repair();
+
+                    // Now try reading again.
+                    self.get_with::<T>(id, &ctx)
+                }
             }
         }
     }
@@ -1078,6 +1097,10 @@ impl ObjectStream {
         }
 
         Some(offsets)
+    }
+
+    fn obj_number(&self, index: u32) -> Option<u32> {
+        Some(self.offsets.get(index as usize)?.0)
     }
 
     fn get<'a, T>(&'a self, index: u32, ctx: &ReaderContext<'a>) -> Option<T>
