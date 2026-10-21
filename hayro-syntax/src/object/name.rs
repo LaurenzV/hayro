@@ -95,9 +95,16 @@ impl<'a> Name<'a> {
         let mut r = Reader::new(data);
 
         while let Some(b) = r.read_byte() {
-            if b == b'#' {
-                let hex = r.read_bytes(2)?;
-                result.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
+            // Before PDF 1.2, `#` was a regular character in names, so keep it as is
+            // when it isn't followed by two hex digits.
+            let escaped = (b == b'#')
+                .then(|| r.peek_bytes(2))
+                .flatten()
+                .and_then(|hex| Some(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?));
+
+            if let Some(byte) = escaped {
+                r.skip_bytes(2)?;
+                result.push(byte);
             } else {
                 result.push(b);
             }
@@ -204,10 +211,12 @@ mod tests {
 
     #[test]
     fn name_3() {
-        assert!(
+        assert_eq!(
             Reader::new("/AB#FG".as_bytes())
                 .read_without_context::<Name<'_>>()
-                .is_none()
+                .unwrap()
+                .deref(),
+            b"AB#FG"
         );
     }
 
@@ -362,6 +371,39 @@ mod tests {
                 .unwrap()
                 .deref(),
             b"k1"
+        );
+    }
+
+    #[test]
+    fn name_18() {
+        assert_eq!(
+            Reader::new("/#".as_bytes())
+                .read_without_context::<Name<'_>>()
+                .unwrap()
+                .deref(),
+            b"#"
+        );
+    }
+
+    #[test]
+    fn name_19() {
+        assert_eq!(
+            Reader::new("/A#4".as_bytes())
+                .read_without_context::<Name<'_>>()
+                .unwrap()
+                .deref(),
+            b"A#4"
+        );
+    }
+
+    #[test]
+    fn name_20() {
+        assert_eq!(
+            Reader::new("/#2#23".as_bytes())
+                .read_without_context::<Name<'_>>()
+                .unwrap()
+                .deref(),
+            b"#2#"
         );
     }
 }
