@@ -256,11 +256,18 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
             // new we don't bother trying to read it.
             let tail = &r.tail()?[2..];
             let mut find_reader = Reader::new(tail);
+            let mut binary = BinaryTracker::default();
+            let mut is_content = None;
+            let mut next_bi = find_needle(tail, b"BI");
 
             while !find_reader.at_end() {
-                let remaining = find_reader.tail()?;
-                let next_ei = find_needle(remaining, b"EI");
-                let next_bi = find_needle(remaining, b"BI");
+                let offset = find_reader.offset();
+
+                if next_bi.is_some_and(|bi| bi < offset) {
+                    next_bi = find_needle(&tail[offset..], b"BI").map(|bi| offset + bi);
+                }
+
+                let next_ei = find_needle(&tail[offset..], b"EI").map(|ei| offset + ei);
 
                 let (next_pos, is_ei) = match (next_ei, next_bi) {
                     (Some(ei), Some(bi)) if ei <= bi => (ei, true),
@@ -270,14 +277,12 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
                     (None, None) => break,
                 };
 
-                find_reader.read_bytes(next_pos)?;
+                find_reader.read_bytes(next_pos - offset)?;
 
                 if is_ei {
-                    let analyze_data = &tail[..find_reader.offset()];
-
                     // If there is any binary data in-between, we for sure
                     // have not reached the end.
-                    if analyze_data.iter().any(|c| !c.is_ascii()) {
+                    if binary.found_before(tail, next_pos) {
                         r.read_bytes(2)?;
                         continue 'outer;
                     }
@@ -287,41 +292,8 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
                     // that it's part of a string in the content
                     // stream that follows the inline image. Therefore,
                     // it should be valid to interpret `tail` as a content
-                    // stream and there should be at least one text-related
-                    // operator that can be parsed correctly.
-
-                    let mut iter = TypedIter::new(tail);
-                    let mut found = false;
-                    let mut counter = 0;
-
-                    while let Some(op) = iter.next() {
-                        // If we have read more than 20 valid operators, it should be
-                        // safe to assume that we are in a content stream, so abort
-                        // early. The only situation where this could reasonably
-                        // be violated is if we have 20 subsequent instances of
-                        // q/Q in the image data, which seems very unlikely.
-                        if counter >= 20 {
-                            found = true;
-                            break;
-                        }
-
-                        if matches!(
-                            op,
-                            TypedInstruction::NextLineAndShowText(_)
-                                | TypedInstruction::ShowText(_)
-                                | TypedInstruction::ShowTexts(_)
-                                | TypedInstruction::ShowTextWithParameters(_)
-                        ) {
-                            // Now it should be safe to assume that the
-                            // previous `EI` was the correct one.
-                            found = true;
-                            break;
-                        }
-
-                        counter += 1;
-                    }
-
-                    if !found {
+                    // stream.
+                    if !*is_content.get_or_insert_with(|| starts_with_content(tail)) {
                         // Seems like the data in-between is not a valid content
                         // stream, so we are likely still within the image data.
                         r.read_bytes(2)?;
@@ -353,6 +325,77 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
     }
 
     Some(())
+}
+
+fn starts_with_content(data: &[u8]) -> bool {
+    let mut iter = TypedIter::new(data);
+    let mut counter = 0;
+
+    while let Some(op) = iter.next() {
+        // If we have read more than 20 valid operators, it should be
+        // safe to assume that we are in a content stream, so abort
+        // early. The only situation where this could reasonably
+        // be violated is if we have 20 subsequent instances of
+        // q/Q in the image data, which seems very unlikely.
+        if counter >= 20 {
+            return true;
+        }
+
+        if matches!(
+            op,
+            TypedInstruction::NextLineAndShowText(_)
+                | TypedInstruction::ShowText(_)
+                | TypedInstruction::ShowTexts(_)
+                | TypedInstruction::ShowTextWithParameters(_)
+        ) {
+            return true;
+        }
+
+        counter += 1;
+    }
+
+    false
+}
+
+// Content streams only hold non-ASCII bytes within strings, so one outside
+// of them means that we are still within binary image data.
+#[derive(Default)]
+struct BinaryTracker {
+    pos: usize,
+    string_depth: usize,
+    escaped: bool,
+    found: bool,
+}
+
+impl BinaryTracker {
+    fn found_before(&mut self, data: &[u8], end: usize) -> bool {
+        if self.found || end <= self.pos {
+            return self.found;
+        }
+
+        for (i, &b) in data[self.pos..end].iter().enumerate() {
+            if self.string_depth > 0 {
+                if self.escaped {
+                    self.escaped = false;
+                } else if b == b'\\' {
+                    self.escaped = true;
+                } else if b == b'(' {
+                    self.string_depth += 1;
+                } else if b == b')' {
+                    self.string_depth -= 1;
+                }
+            } else if !b.is_ascii() {
+                self.found = true;
+                self.pos += i;
+                return true;
+            } else if b == b'(' {
+                self.string_depth = 1;
+            }
+        }
+
+        self.pos = end;
+        false
+    }
 }
 
 /// An iterator over PDF content streams that provide access to the instructions

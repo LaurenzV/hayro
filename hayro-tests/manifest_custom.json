@@ -1268,5 +1268,13 @@
   {
     "id": "pattern_tiling_uncolored_named_base",
     "file": "pdfs/custom/pattern_tiling_uncolored_named_base.pdf"
+  },
+  {
+    "id": "image_inline_9",
+    "file": "pdfs/custom/image_inline_9.pdf"
+  },
+  {
+    "id": "image_inline_10",
+    "file": "pdfs/custom/image_inline_10.pdf"
   }
 ]
