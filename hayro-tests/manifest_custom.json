@@ -550,6 +550,10 @@
     "file": "pdfs/custom/path_rendering_dash_array_0_phase.pdf"
   },
   {
+    "id": "path_re_current_point",
+    "file": "pdfs/custom/path_re_current_point.pdf"
+  },
+  {
     "id": "pattern_shading_background",
     "file": "pdfs/custom/pattern_shading_background.pdf"
   },

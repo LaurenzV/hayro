@@ -134,6 +134,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn path_rendering_8() { run_render_test("path_rendering_8", "pdfs/custom/path_rendering_8.pdf", None); }
 #[test] fn path_rendering_9() { run_render_test("path_rendering_9", "pdfs/custom/path_rendering_9.pdf", None); }
 #[test] fn path_rendering_dash_array_0_phase() { run_render_test("path_rendering_dash_array_0_phase", "pdfs/custom/path_rendering_dash_array_0_phase.pdf", None); }
+#[test] fn path_re_current_point() { run_render_test("path_re_current_point", "pdfs/custom/path_re_current_point.pdf", None); }
 #[test] fn pattern_shading_background() { run_render_test("pattern_shading_background", "pdfs/custom/pattern_shading_background.pdf", None); }
 #[test] fn pattern_shading_bbox() { run_render_test("pattern_shading_bbox", "pdfs/custom/pattern_shading_bbox.pdf", None); }
 #[test] fn pattern_shading_on_text() { run_render_test("pattern_shading_on_text", "pdfs/custom/pattern_shading_on_text.pdf", None); }
