@@ -141,7 +141,11 @@ fn fallback_xref_map_inner<'a>(
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
-                            for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
+                            for (idx, (obj_num, offset)) in obj_stream.offsets.iter().enumerate() {
+                                if offset.is_none() {
+                                    continue;
+                                }
+
                                 let id = ObjectIdentifier::new(*obj_num as i32, 0);
                                 // If we already found an entry for that object number that was not
                                 // inside an object stream. Somewhat arbitrary and maybe
@@ -1064,7 +1068,8 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
 
 pub(crate) struct ObjectStream {
     data: Vec<u8>,
-    offsets: Vec<(u32, usize)>,
+    // The offset is `None` for members that can't be read.
+    offsets: Vec<(u32, Option<usize>)>,
 }
 
 impl ObjectStream {
@@ -1075,13 +1080,14 @@ impl ObjectStream {
         Some(Self { data, offsets })
     }
 
-    fn read_offsets(stream: &Stream<'_>, data: &[u8]) -> Option<Vec<(u32, usize)>> {
+    fn read_offsets(stream: &Stream<'_>, data: &[u8]) -> Option<Vec<(u32, Option<usize>)>> {
         let num_objects = stream.dict().get::<usize>(N)?;
         let first_offset = stream.dict().get::<usize>(FIRST)?;
 
         let mut r = Reader::new(data);
 
         let mut offsets = vec![];
+        let mut last_offset = None;
 
         for _ in 0..num_objects {
             r.skip_white_spaces_and_comments();
@@ -1089,7 +1095,18 @@ impl ObjectStream {
             let obj_num = r.read_without_context::<u32>()?;
             r.skip_white_spaces_and_comments();
             let relative_offset = r.read_without_context::<usize>()?;
-            offsets.push((obj_num, first_offset + relative_offset));
+            let offset = first_offset + relative_offset;
+
+            // Members are stored in increasing order of their offsets. Like qpdf, ignore
+            // entries that don't follow that order, since otherwise any number of objects
+            // could share the same member.
+            if last_offset.is_some_and(|last| offset <= last) {
+                warn!("object {obj_num} has an invalid offset in object stream");
+                offsets.push((obj_num, None));
+            } else {
+                last_offset = Some(offset);
+                offsets.push((obj_num, Some(offset)));
+            }
         }
 
         Some(offsets)
@@ -1103,7 +1120,7 @@ impl ObjectStream {
     where
         T: ObjectLike<'a>,
     {
-        let offset = self.offsets.get(index as usize)?.1;
+        let offset = self.offsets.get(index as usize)?.1?;
         let mut r = Reader::new(&self.data);
         r.jump(offset);
         r.skip_white_spaces_and_comments();
