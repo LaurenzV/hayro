@@ -11,22 +11,82 @@ use core::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
+///
+/// `needed` contains, for each component, the rectangle of samples at the
+/// highest decoded resolution that must be reconstructed exactly. Only the
+/// coefficients that influence these samples are allocated and decoded.
 pub(crate) fn build(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
+    needed: &[IntRect],
 ) -> Result<()> {
-    build_decompositions(tile, storage, skipped_resolution_levels)
+    build_decompositions(tile, storage, skipped_resolution_levels, needed)
+}
+
+/// The number of samples on each side of a reconstructed sample that
+/// influence its value in one dimension of a single IDWT level. Each lifting
+/// step widens the support by one sample; the 5-3 reversible filter has two
+/// and the 9-7 irreversible filter four lifting steps (F.3.8). We always use
+/// the larger value since tile-part headers can override the transform.
+const WAVELET_SUPPORT: u32 = 4;
+
+/// Horizontal decode windows are aligned to this many samples relative to
+/// the left edge of the decomposition, so that every sample takes the same
+/// SIMD or scalar path in the IDWT as in a full decode and the result is
+/// bit-identical. 16 interleaved samples are 8 low-pass and 8 high-pass
+/// samples, i.e. one SIMD vector each.
+const WINDOW_ALIGNMENT: u32 = 16;
+
+/// Return the part of `rect` for which the IDWT needs to be computed so
+/// that the samples in `needed` are exact.
+fn idwt_window(needed: IntRect, rect: IntRect) -> IntRect {
+    if needed.width() == 0 || needed.height() == 0 {
+        return IntRect::from_ltrb(rect.x0, rect.y0, rect.x0, rect.y0);
+    }
+
+    let align_down = |x: u32| rect.x0 + (x - rect.x0) / WINDOW_ALIGNMENT * WINDOW_ALIGNMENT;
+    let align_up = |x: u32| {
+        u32::min(
+            rect.x1,
+            rect.x0 + (x - rect.x0).div_ceil(WINDOW_ALIGNMENT) * WINDOW_ALIGNMENT,
+        )
+    };
+
+    IntRect::from_ltrb(
+        align_down(u32::max(rect.x0, needed.x0.saturating_sub(WAVELET_SUPPORT))),
+        u32::max(rect.y0, needed.y0.saturating_sub(WAVELET_SUPPORT)),
+        align_up(u32::min(rect.x1, needed.x1.saturating_add(WAVELET_SUPPORT))),
+        u32::min(rect.y1, needed.y1.saturating_add(WAVELET_SUPPORT)),
+    )
+}
+
+/// Return the samples of a sub-band of type `sub_band_type` that are
+/// interleaved into `window` of its decomposition (see Equation B-15 and
+/// F.3.3).
+fn sub_band_window(window: IntRect, sub_band_type: SubBandType) -> IntRect {
+    let low = |a: u32, b: u32| (a.div_ceil(2), b.div_ceil(2));
+    let high = |a: u32, b: u32| (a / 2, b / 2);
+
+    let ((x0, x1), (y0, y1)) = match sub_band_type {
+        SubBandType::LowLow => (low(window.x0, window.x1), low(window.y0, window.y1)),
+        SubBandType::HighLow => (high(window.x0, window.x1), low(window.y0, window.y1)),
+        SubBandType::LowHigh => (low(window.x0, window.x1), high(window.y0, window.y1)),
+        SubBandType::HighHigh => (high(window.x0, window.x1), high(window.y0, window.y1)),
+    };
+
+    IntRect::from_ltrb(x0, y0, x1, y1)
 }
 
 fn build_decompositions(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
+    needed: &[IntRect],
 ) -> Result<()> {
-    let mut component_samples = vec![];
+    let mut max_coefficients = 0;
 
-    for component_tile in tile.component_tiles() {
+    for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         // The number of skipped resolution levels is determined from the main
         // header, but tile-part headers can reduce the number of resolution
         // levels further.
@@ -36,31 +96,12 @@ fn build_decompositions(
             .checked_sub(skipped_resolution_levels)
             .filter(|r| *r > 0)
             .ok_or(ValidationError::InvalidComponentMetadata)?;
-        let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
-        component_samples.push(
-            usize::try_from(top_resolution.rect.area())
-                .map_err(|_| ValidationError::ImageTooLarge)?,
-        );
-    }
-    let max_coefficients = component_samples.iter().copied().max().unwrap_or(0);
-
-    if storage.coefficients.is_empty() {
-        // Fast path that requests pre-zeroed memory from the OS where available.
-        storage.coefficients = vec![0.0; max_coefficients];
-    } else {
-        storage.coefficients.resize(max_coefficients, 0.0);
-    }
-
-    for (component_idx, component_tile) in tile.component_tiles().enumerate() {
-        let mut coefficient_counter = 0_usize;
-        let decoded_resolutions =
-            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
         let d_start = storage.decompositions.len();
         let mut resolution_tiles = component_tile.resolution_tiles();
 
-        let mut build_sub_band = |sub_band_type: SubBandType,
-                                  resolution_tile: &ResolutionTile<'_>,
-                                  storage: &mut DecompositionStorage<'_>|
+        let build_sub_band = |sub_band_type: SubBandType,
+                              resolution_tile: &ResolutionTile<'_>,
+                              storage: &mut DecompositionStorage<'_>|
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
@@ -82,24 +123,16 @@ fn build_decompositions(
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
-            // No need to allocate coefficients for skipped resolution levels.
-            let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
-                usize::try_from(sub_band_rect.area()).map_err(|_| ValidationError::ImageTooLarge)?
-            } else {
-                0
-            };
-            let next_coefficient_counter = coefficient_counter
-                .checked_add(added_coefficients)
-                .ok_or(ValidationError::ImageTooLarge)?;
-            let coefficients = coefficient_counter..next_coefficient_counter;
-            coefficient_counter = next_coefficient_counter;
-
             let idx = storage.sub_bands.len();
             storage.sub_bands.push(SubBand {
                 sub_band_type,
                 rect: sub_band_rect,
                 precincts: precincts.clone(),
-                coefficients,
+                // The window and coefficients are assigned below, once the
+                // decode windows are known. Skipped resolution levels keep
+                // an empty window.
+                window: empty_rect(sub_band_rect),
+                coefficients: 0..0,
             });
 
             Ok(idx)
@@ -117,6 +150,7 @@ fn build_decompositions(
                     build_sub_band(SubBandType::HighHigh, &resolution_tile, storage)?,
                 ],
                 rect: resolution_tile.rect,
+                window: empty_rect(resolution_tile.rect),
             };
 
             storage.decompositions.push(decomposition);
@@ -124,16 +158,65 @@ fn build_decompositions(
 
         let d_end = storage.decompositions.len();
 
+        // Determine the decode windows from the highest decoded resolution
+        // downward: the LL sub-band window of each decomposition is the
+        // area that the next lower decomposition must reconstruct exactly.
+        let decoded = &mut storage.decompositions[d_start..][..decoded_resolutions as usize - 1];
+        let mut needed_samples = needed[component_idx];
+        for decomposition in decoded.iter_mut().rev() {
+            let window = idwt_window(
+                needed_samples.intersect(decomposition.rect),
+                decomposition.rect,
+            );
+            decomposition.window = window;
+
+            for idx in decomposition.sub_bands {
+                let sub_band = &mut storage.sub_bands[idx];
+                sub_band.window = sub_band_window(window, sub_band.sub_band_type);
+            }
+
+            needed_samples = sub_band_window(window, SubBandType::LowLow);
+        }
+
+        let ll_sub_band = &mut storage.sub_bands[first_ll_sub_band];
+        ll_sub_band.window = if decoded.is_empty() {
+            idwt_window(needed_samples.intersect(ll_sub_band.rect), ll_sub_band.rect)
+        } else {
+            needed_samples
+        };
+
+        let mut coefficient_counter = 0_usize;
+        for sub_band in &mut storage.sub_bands[first_ll_sub_band..] {
+            let added_coefficients = usize::try_from(sub_band.window.area())
+                .map_err(|_| ValidationError::ImageTooLarge)?;
+            let next_coefficient_counter = coefficient_counter
+                .checked_add(added_coefficients)
+                .ok_or(ValidationError::ImageTooLarge)?;
+            sub_band.coefficients = coefficient_counter..next_coefficient_counter;
+            coefficient_counter = next_coefficient_counter;
+        }
+        max_coefficients = usize::max(max_coefficients, coefficient_counter);
+
         storage.tile_decompositions.push(TileDecompositions {
             decompositions: d_start..d_end,
             first_ll_sub_band,
             coefficient_count: coefficient_counter,
         });
+    }
 
-        assert_eq!(coefficient_counter, component_samples[component_idx]);
+    if storage.coefficients.is_empty() {
+        // Fast path that requests pre-zeroed memory from the OS where available.
+        storage.coefficients = vec![0.0; max_coefficients];
+    } else {
+        storage.coefficients.resize(max_coefficients, 0.0);
     }
 
     Ok(())
+}
+
+/// An empty rectangle at the top-left corner of `rect`.
+fn empty_rect(rect: IntRect) -> IntRect {
+    IntRect::from_ltrb(rect.x0, rect.y0, rect.x0, rect.y0)
 }
 
 fn build_precincts(
@@ -288,6 +371,8 @@ pub(crate) struct Decomposition {
     pub(crate) sub_bands: [usize; 3],
     /// The rectangle of the decomposition.
     pub(crate) rect: IntRect,
+    /// The part of `rect` for which the IDWT is computed.
+    pub(crate) window: IntRect,
 }
 
 #[derive(Clone)]
@@ -295,6 +380,9 @@ pub(crate) struct SubBand {
     pub(crate) sub_band_type: SubBandType,
     pub(crate) rect: IntRect,
     pub(crate) precincts: Range<usize>,
+    /// The part of `rect` whose coefficients are decoded. Only the
+    /// coefficients inside of it are stored in `coefficients`, row by row.
+    pub(crate) window: IntRect,
     pub(crate) coefficients: Range<usize>,
 }
 

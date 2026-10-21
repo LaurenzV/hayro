@@ -66,16 +66,26 @@ pub(crate) fn apply(
     // are continuously swapped.
     let (scratch_buf, output) = (&mut tile_ctx.idwt_scratch_buffer, &mut tile_ctx.idwt_output);
 
-    let estimate_buffer_size = |decomposition: &Decomposition| {
-        let total_width = decomposition.rect.width() as usize;
-        let total_height = decomposition.rect.height() as usize;
+    // The buffers alternate between the decomposition levels, the output
+    // buffer always holding the highest one. When decoding a region, the
+    // windows of lower levels can be larger than the ones of higher levels,
+    // so consider all levels a buffer is used for.
+    let estimate_buffer_size = |decompositions: &mut dyn Iterator<Item = &Decomposition>| {
+        decompositions
+            .map(|decomposition| {
+                let total_width = decomposition.window.width() as usize;
+                let total_height = decomposition.window.height() as usize;
 
-        let min = total_width * total_height;
-        // Different sub-bands can have shifts by one, so add padding
-        // for the maximum case.
-        let max = (total_width + 1) * (total_height + 1);
+                let min = total_width * total_height;
+                // Different sub-bands can have shifts by one, so add padding
+                // for the maximum case.
+                let max = (total_width + 1) * (total_height + 1);
 
-        (min, max)
+                (min, max)
+            })
+            .fold((0, 0), |(a, b), (c, d)| {
+                (usize::max(a, c), usize::max(b, d))
+            })
     };
 
     if decompositions.is_empty() {
@@ -85,28 +95,21 @@ pub(crate) fn apply(
             .coefficients
             .extend_from_slice(&storage.coefficients[ll_sub_band.coefficients.clone()]);
 
-        output.rect = ll_sub_band.rect;
+        output.rect = ll_sub_band.window;
 
         return;
     }
 
-    // The coefficient array will always be the one that holds the coefficients
-    // from the highest decomposition. Therefore, reserve as much.
-    let (s_min, s_max) = estimate_buffer_size(decompositions.last().unwrap());
+    let (s_min, s_max) = estimate_buffer_size(&mut decompositions.iter().rev().step_by(2));
     if output.coefficients.len() < s_min {
         output
             .coefficients
             .reserve_exact(s_max - output.coefficients.len());
     }
 
-    if decompositions.len() > 1 {
-        // Due to the above, the intermediate buffer will never need more than
-        // the second-highest decomposition.
-        let (s_min, s_max) = estimate_buffer_size(&decompositions[decompositions.len() - 2]);
-
-        if scratch_buf.len() < s_min {
-            scratch_buf.reserve_exact(s_max - scratch_buf.len());
-        }
+    let (s_min, s_max) = estimate_buffer_size(&mut decompositions.iter().rev().skip(1).step_by(2));
+    if scratch_buf.len() < s_min {
+        scratch_buf.reserve_exact(s_max - scratch_buf.len());
     }
 
     // Determine which buffer we should use first, such that the `coefficients`
@@ -125,12 +128,12 @@ pub(crate) fn apply(
         storage,
     );
 
-    for decomposition in decompositions.iter().skip(1) {
+    for (previous, decomposition) in decompositions.iter().zip(decompositions.iter().skip(1)) {
         use_scratch = !use_scratch;
 
         temp_output = if use_scratch {
             filter_2d(
-                IDWTInput::from_output(&output.coefficients),
+                IDWTInput::from_output(&output.coefficients, previous, decomposition),
                 scratch_buf,
                 decomposition,
                 transform,
@@ -138,7 +141,7 @@ pub(crate) fn apply(
             )
         } else {
             filter_2d(
-                IDWTInput::from_output(scratch_buf),
+                IDWTInput::from_output(scratch_buf, previous, decomposition),
                 &mut output.coefficients,
                 decomposition,
                 transform,
@@ -150,19 +153,46 @@ pub(crate) fn apply(
     output.rect = temp_output.rect;
 }
 
+/// The LL sub-band samples that are the input of one decomposition level.
 struct IDWTInput<'a> {
+    /// The samples, starting at the first sample of the LL window of the
+    /// decomposition.
     coefficients: &'a [f32],
+    /// The distance between two rows in `coefficients`.
+    stride: usize,
 }
 
 impl<'a> IDWTInput<'a> {
     fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage<'_>) -> Self {
         IDWTInput {
             coefficients: &storage.coefficients[sub_band.coefficients.clone()],
+            stride: sub_band.window.width() as usize,
         }
     }
 
-    fn from_output(coefficients: &'a [f32]) -> Self {
-        IDWTInput { coefficients }
+    /// Use the output of the `previous` decomposition level, which covers its
+    /// window, as the input of `decomposition`. The window of the previous
+    /// level includes the LL window of `decomposition`, but can be larger.
+    fn from_output(
+        coefficients: &'a [f32],
+        previous: &Decomposition,
+        decomposition: &Decomposition,
+    ) -> Self {
+        let available = previous.window;
+        let stride = available.width() as usize;
+        let window = decomposition.window;
+        let (x0, y0) = (window.x0.div_ceil(2), window.y0.div_ceil(2));
+
+        let coefficients = if window.x1.div_ceil(2) > x0 && window.y1.div_ceil(2) > y0 {
+            &coefficients[(y0 - available.y0) as usize * stride + (x0 - available.x0) as usize..]
+        } else {
+            &[]
+        };
+
+        IDWTInput {
+            coefficients,
+            stride,
+        }
     }
 }
 
@@ -180,7 +210,7 @@ fn filter_2d(
     });
 
     IDWTTempOutput {
-        rect: decomposition.rect,
+        rect: decomposition.window,
     }
 }
 
@@ -193,8 +223,8 @@ fn filter_2d_inner<S: Simd>(
     transform: WaveletTransform,
     storage: &DecompositionStorage<'_>,
 ) {
-    let width = decomposition.rect.width() as usize;
-    let height = decomposition.rect.height() as usize;
+    let width = decomposition.window.width() as usize;
+    let height = decomposition.window.height() as usize;
 
     // Just a sanity check. We should have allocated enough upfront before
     // starting the IDWT.
@@ -212,7 +242,7 @@ fn filter_2d_inner<S: Simd>(
     }
 
     interleave_and_filter_horizontal(simd, input, coefficients, decomposition, transform, storage);
-    filter_vertical(simd, coefficients, decomposition.rect, transform);
+    filter_vertical(simd, coefficients, decomposition.window, transform);
 }
 
 /// The `2D_INTERLEAVE` procedure described in F.3.3, combined with the `HOR_SR` procedure from
@@ -231,13 +261,20 @@ fn interleave_and_filter_horizontal<S: Simd>(
         x1: u1,
         y0: v0,
         ..
-    } = decomposition.rect;
-    let width = decomposition.rect.width() as usize;
+    } = decomposition.window;
+    let width = decomposition.window.width() as usize;
 
-    let ll = input.coefficients;
-    let [hl, lh, hh] = decomposition
-        .sub_bands
-        .map(|idx| &storage.coefficients[storage.sub_bands[idx].coefficients.clone()]);
+    let [hl, lh, hh] = decomposition.sub_bands.map(|idx| {
+        let sub_band = &storage.sub_bands[idx];
+        BandRows {
+            coefficients: &storage.coefficients[sub_band.coefficients.clone()],
+            stride: sub_band.window.width() as usize,
+        }
+    });
+    let ll = BandRows {
+        coefficients: input.coefficients,
+        stride: input.stride,
+    };
 
     // See Figure F.8.
     let num_low = (u1.div_ceil(2) - u0.div_ceil(2)) as usize;
@@ -263,6 +300,13 @@ fn interleave_and_filter_horizontal<S: Simd>(
             .skip(first_high_row)
             .step_by(2),
     );
+}
+
+/// The rows of a sub-band window.
+#[derive(Clone, Copy)]
+struct BandRows<'a> {
+    coefficients: &'a [f32],
+    stride: usize,
 }
 
 /// Filters rows with the `1D_SR` procedure from F.3.6 while their low-pass and high-pass samples
@@ -292,15 +336,20 @@ impl HorizontalFilter {
     fn filter_rows<'a, S: Simd>(
         &mut self,
         simd: S,
-        low_band: &[f32],
-        high_band: &[f32],
+        low_band: BandRows<'_>,
+        high_band: BandRows<'_>,
         rows: impl Iterator<Item = &'a mut [f32]>,
     ) {
         for (v, row) in rows.enumerate() {
-            self.low[1..=self.num_low]
-                .copy_from_slice(&low_band[v * self.num_low..][..self.num_low]);
-            self.high[1..=self.num_high]
-                .copy_from_slice(&high_band[v * self.num_high..][..self.num_high]);
+            if self.num_low > 0 {
+                self.low[1..=self.num_low]
+                    .copy_from_slice(&low_band.coefficients[v * low_band.stride..][..self.num_low]);
+            }
+            if self.num_high > 0 {
+                self.high[1..=self.num_high].copy_from_slice(
+                    &high_band.coefficients[v * high_band.stride..][..self.num_high],
+                );
+            }
 
             filter_1d(simd, self.transform, self);
 

@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use super::DecodeSettings;
 use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
+use super::rect::IntRect;
 use crate::error::{MarkerError, Result, ValidationError, bail, err};
 use crate::reader::BitReader;
 
@@ -21,6 +22,9 @@ pub(crate) struct Header {
     pub(crate) ppm_packets: Vec<PpmPacket>,
     pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) skipped_resolution_levels: u8,
+    /// The rectangle of the output image that should be decoded, relative to
+    /// the top-left corner of the image area at the decoded resolution.
+    pub(crate) region: IntRect,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
 }
@@ -179,6 +183,26 @@ pub(crate) fn read_header<'a>(
     size_data.x_resolution_shrink_factor *= 1 << skipped_resolution_levels;
     size_data.y_resolution_shrink_factor *= 1 << skipped_resolution_levels;
 
+    let region = match settings.region {
+        Some(region) => {
+            let x1 = region.x.checked_add(region.width);
+            let y1 = region.y.checked_add(region.height);
+
+            match (x1, y1) {
+                (Some(x1), Some(y1))
+                    if region.width > 0
+                        && region.height > 0
+                        && x1 <= size_data.image_width()
+                        && y1 <= size_data.image_height() =>
+                {
+                    IntRect::from_ltrb(region.x, region.y, x1, y1)
+                }
+                _ => bail!(ValidationError::InvalidRegion),
+            }
+        }
+        None => IntRect::from_xywh(0, 0, size_data.image_width(), size_data.image_height()),
+    };
+
     let ppm_packets = ppm_packets(ppm_markers).ok_or(MarkerError::ParseFailure("PPM"))?;
 
     let header = Header {
@@ -188,6 +212,7 @@ pub(crate) fn read_header<'a>(
         ppm_packets,
         progression_changes,
         skipped_resolution_levels,
+        region,
         strict: settings.strict,
     };
 

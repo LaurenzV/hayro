@@ -298,3 +298,7 @@ The tests replace a suite of files from SerenityOS, OpenJPEG and hayro itself. E
 | `colr_cielab_alpha` | SerenityOS (`kakadu-lossless-lab-alpha-u8-prog1-layers1-res6.jp2`) |
 | `colr_cielab_16bit` | OpenJPEG (`issue559-eci-090-CIELab.jp2`) |
 | `icc_invalid` | OpenJPEG (`orb-blue10-lin-jp2.jp2`), OpenJPEG (`orb-blue10-win-jp2.jp2`) |
+
+### `region`
+
+The `region` tests don't use references. They decode many regions (corners, edges, single samples, odd sizes and regions straddling tile boundaries) of every stream in `streams/` at every available reduced resolution and check that they are bit-identical to the same crop of a full decode.
