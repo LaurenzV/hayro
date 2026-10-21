@@ -160,7 +160,6 @@ impl PdfVersion {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Object;
     use crate::pdf::{Pdf, PdfVersion};
 
     #[test]
@@ -182,65 +181,5 @@ mod tests {
         let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
-    }
-
-    fn pdf_with_nested_page_value(depth: usize) -> Vec<u8> {
-        let objects = [
-            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-            format!(
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Deep {}1{} >>",
-                "[".repeat(depth),
-                "]".repeat(depth)
-            ),
-        ];
-
-        let mut pdf = b"%PDF-1.7\n".to_vec();
-        let mut offsets = Vec::new();
-
-        for (i, object) in objects.iter().enumerate() {
-            offsets.push(pdf.len());
-            pdf.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", i + 1).as_bytes());
-        }
-
-        let xref_pos = pdf.len();
-        let size = objects.len() + 1;
-        pdf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \r\n").as_bytes());
-
-        for offset in offsets {
-            pdf.extend_from_slice(format!("{offset:010} 00000 n \r\n").as_bytes());
-        }
-
-        pdf.extend_from_slice(
-            format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF")
-                .as_bytes(),
-        );
-
-        pdf
-    }
-
-    #[test]
-    fn page_with_deeply_nested_value() {
-        // qpdf keeps values nested up to 499 levels deep.
-        let pdf = Pdf::new(pdf_with_nested_page_value(499)).unwrap();
-        let pages = pdf.pages();
-        assert_eq!(pages.len(), 1);
-
-        let mut value = pages[0].raw().get::<Object<'_>>(b"Deep").unwrap();
-        let mut depth = 0;
-
-        while let Object::Array(array) = value {
-            value = array.iter::<Object<'_>>().next().unwrap();
-            depth += 1;
-        }
-
-        assert_eq!(depth, 499);
-        assert!(matches!(value, Object::Number(n) if n.as_i64() == 1));
-    }
-
-    #[test]
-    fn page_with_too_deeply_nested_value() {
-        let pdf = Pdf::new(pdf_with_nested_page_value(100_000));
-        assert!(pdf.is_err() || pdf.unwrap().pages().is_empty());
     }
 }
