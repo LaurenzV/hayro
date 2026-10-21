@@ -15,7 +15,7 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use core::fmt::{Debug, Display, Formatter};
 
-const MAX_OBJECT_NESTING_DEPTH: usize = 64;
+const MAX_OBJECT_NESTING_DEPTH: usize = 512;
 
 mod bool;
 mod date;
