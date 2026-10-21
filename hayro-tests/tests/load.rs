@@ -766,6 +766,15 @@ fn nested_object_streams() {
 }
 
 #[test]
+fn media_box_with_invalid_number() {
+    // The media box of the first page is `[0 0 1e3 500]`.
+    let file = include_bytes!("../pdfs/load/media_box_with_invalid_number.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+
+    assert_eq!(pdf.pages().len(), 2);
+}
+
+#[test]
 fn page_tree_cycle_with_siblings() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
     load_pdf(file);

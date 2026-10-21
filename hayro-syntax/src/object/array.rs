@@ -411,8 +411,14 @@ mod tests {
     }
 
     #[test]
-    fn malformed_ref_is_not_valid_array() {
-        assert!(array_ref_impl(b"[8 0R]").is_none());
+    fn number_followed_by_regular_character_is_null() {
+        let res = array_ref_impl(b"[8 0R 1e3 1.2.3 5]").unwrap();
+        assert_eq!(res.len(), 5);
+        assert!(matches!(res[0], MaybeRef::NotRef(Object::Number(_))));
+        for item in &res[1..4] {
+            assert!(matches!(item, MaybeRef::NotRef(Object::Null(_))));
+        }
+        assert!(matches!(res[4], MaybeRef::NotRef(Object::Number(_))));
     }
 
     #[test]

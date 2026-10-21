@@ -192,7 +192,12 @@ impl Skippable for Object<'_> {
                 _ => String::skip(r, is_content_stream),
             },
             b'(' => String::skip(r, is_content_stream),
-            b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
+            b'.' | b'+' | b'-' | b'0'..=b'9' => match r.skip::<Number>(is_content_stream) {
+                Some(_) => Some(()),
+                // See the comment in `read`.
+                None if !is_content_stream => skip_name_like(r, false),
+                None => None,
+            },
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
             // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
             // array
@@ -224,7 +229,17 @@ impl<'a> Readable<'a> for Object<'a> {
                 _ => Self::String(String::read(r, ctx)?),
             },
             b'(' => Self::String(String::read(r, ctx)?),
-            b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
+            b'.' | b'+' | b'-' | b'0'..=b'9' => match Number::read(r, ctx) {
+                Some(number) => Self::Number(number),
+                // Like MuPDF, read a token that starts like a number but isn't one, such as
+                // `1e3`, as null, so that it doesn't make the object around it unreadable.
+                // Content streams keep their own handling (see issue 994).
+                None if !ctx.in_content_stream() => {
+                    skip_name_like(r, false)?;
+                    Self::Null(Null)
+                }
+                None => return None,
+            },
             b'[' => Self::Array(Array::read(r, ctx)?),
             // See the comment in `skip`.
             _ => {

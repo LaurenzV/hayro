@@ -1186,6 +1186,13 @@ mod tests {
     }
 
     #[test]
+    fn number_followed_by_regular_character_is_null() {
+        let dict = Dict::from_bytes(b"<< /A 1e3 /B 2 >>").unwrap();
+        assert_eq!(dict.len(), 2);
+        assert_eq!(dict.get::<i32>(b"B"), Some(2));
+    }
+
+    #[test]
     fn dict_with_unreadable_value() {
         let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
         let _ = dict.entries().count();
