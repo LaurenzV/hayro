@@ -112,20 +112,25 @@ impl Skippable for Number {
 impl Readable<'_> for Number {
     #[inline]
     fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
+        Self::read_in(r, ctx.in_content_stream())
+    }
+}
+
+impl Number {
+    #[inline]
+    pub(crate) fn read_in(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Self> {
         let old_offset = r.offset();
         Self::read_simple(r)
             .or_else(|| {
                 r.jump(old_offset);
-                read_inner(r, ctx.in_content_stream())
+                read_inner(r, in_content_stream)
             })
             .or_else(|| {
                 r.jump(old_offset);
                 None
             })
     }
-}
 
-impl Number {
     #[inline(always)]
     pub(crate) fn read_simple(r: &mut Reader<'_>) -> Option<Self> {
         let negative = match r.peek_byte() {

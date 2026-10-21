@@ -783,6 +783,20 @@ fn page_tree_with_invalid_numbers() {
 }
 
 #[test]
+fn page_tree_with_real_generation_number() {
+    // `/Kids` is `[3 0.0 R 4 0 R]`, and the first page is 300 by 300, the second 200 by 200.
+    let file = include_bytes!("../pdfs/load/page_tree_with_real_generation_number.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+
+    let sizes = pdf
+        .pages()
+        .iter()
+        .map(|page| page.base_dimensions())
+        .collect::<Vec<_>>();
+    assert_eq!(sizes, [(300.0, 300.0), (200.0, 200.0)]);
+}
+
+#[test]
 fn page_tree_cycle_with_siblings() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
     load_pdf(file);

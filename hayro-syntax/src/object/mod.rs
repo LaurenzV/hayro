@@ -361,6 +361,7 @@ mod tests {
     };
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
+    use crate::trivia::is_regular_character;
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);
@@ -512,7 +513,9 @@ mod tests {
     // later read one at a time from where validation found them. For many generated
     // containers that validation accepts, this checks that reading each item ends where
     // skipping it ended, that it reads a reference only where validation skipped one,
-    // and that reading it as `i32` or `f32` agrees with reading it as an object.
+    // and that reading it as `i32` or `f32` agrees with reading it as an object. It also
+    // checks that each item reads as the same reference or number as content streams read
+    // there, unless one of the numbers they read runs into a regular character.
     #[test]
     fn reading_container_items_agrees_with_skipping_them() {
         let mut rng = Rng(0x2545_f491_4f6c_dd1d);
@@ -577,7 +580,18 @@ mod tests {
                         out.push(b"0158.+-e"[rng.below(8)]);
                     }
                 }
-                3 | 4 => out.extend_from_slice(rng.pick(&[b"0", b"8", b"12", b"-3", b"4.5"])),
+                3 | 4 => out.extend_from_slice(rng.pick(&[
+                    b"0",
+                    b"8",
+                    b"12",
+                    b"-3",
+                    b"4.5",
+                    b"0.0",
+                    b"2147483647",
+                    b"2147483648",
+                    b"-2147483649",
+                    b"12345678901234567890123",
+                ])),
                 5 => out.push(b'R'),
                 // No `stream` keyword: `Object::read` reads a dictionary followed by it as
                 // a stream, which skipping doesn't.
@@ -670,6 +684,20 @@ mod tests {
         if matches!(object, MaybeRef::Ref(_)) != is_ref {
             errors.push(format!("`{skipped}` reads as {object:?}, is_ref: {is_ref}"));
         }
+        let read = match &object {
+            MaybeRef::Ref(obj_ref) => Lenient::Ref(*obj_ref),
+            MaybeRef::NotRef(Object::Number(number)) => Lenient::Number(*number),
+            MaybeRef::NotRef(_) => Lenient::Other,
+        };
+        let (lenient, lenient_end, ended) = read_leniently(&data[start..]);
+        let same = read == lenient && (read == Lenient::Other || lenient_end == r.offset());
+        // Where a number read leniently runs into a regular character, the item may read
+        // differently, but not as a reference.
+        if !same && (ended || matches!(read, Lenient::Ref(_))) {
+            errors.push(format!(
+                "`{skipped}` reads as {object:?}, in a content stream as {lenient:?}"
+            ));
+        }
 
         let value = match &object {
             MaybeRef::Ref(_) => None,
@@ -711,6 +739,51 @@ mod tests {
             }
             _ => {}
         }
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum Lenient {
+        Ref(ObjRef),
+        Number(Number),
+        Other,
+    }
+
+    // Reads the item at the start of `data` as a reference or a number the way content
+    // streams read them, which doesn't require a number to end at white space or a
+    // delimiter. Returns what it read, where it ended, and whether each number did end so.
+    fn read_leniently(data: &[u8]) -> (Lenient, usize, bool) {
+        let mut ended = true;
+        let mut r = Reader::new(data);
+        if let Some(obj_ref) = lenient_ref(&mut r, &mut ended) {
+            return (Lenient::Ref(obj_ref), r.offset(), ended);
+        }
+
+        let mut ended = true;
+        let mut r = Reader::new(data);
+        if matches!(data.first(), Some(b'.' | b'+' | b'-' | b'0'..=b'9'))
+            && let Some(number) = lenient_number(&mut r, &mut ended)
+        {
+            return (Lenient::Number(number), r.offset(), ended);
+        }
+
+        (Lenient::Other, 0, true)
+    }
+
+    fn lenient_ref(r: &mut Reader<'_>, ended: &mut bool) -> Option<ObjRef> {
+        let obj_number = lenient_number(r, ended)?.as_i64().try_into().ok()?;
+        r.skip_white_spaces();
+        let gen_number = lenient_number(r, ended)?.as_i64().try_into().ok()?;
+        r.skip_white_spaces();
+        r.forward_tag(b"R")?;
+
+        Some(ObjRef::new(obj_number, gen_number))
+    }
+
+    fn lenient_number(r: &mut Reader<'_>, ended: &mut bool) -> Option<Number> {
+        let number = r.read_with_context::<Number>(ReaderContext::dummy_ref())?;
+        *ended &= !r.peek_byte().is_some_and(is_regular_character);
+
+        Some(number)
     }
 
     fn check_array(array: &Array<'_>, errors: &mut Vec<std::string::String>) {
