@@ -192,8 +192,54 @@ pub(crate) fn read_header<'a>(
     };
 
     validate(&header)?;
+    validate_memory_budget(&header, settings.max_decoded_samples)?;
 
     Ok(header)
+}
+
+/// Ensure that the samples allocated during decoding stay within `budget`.
+///
+/// This accounts for the decoded samples of all components (each stored at
+/// the decoded image size) and the coefficient storage of the largest
+/// tile-component at the decoded resolution.
+fn validate_memory_budget(header: &Header, budget: u64) -> Result<()> {
+    let size = &header.size_data;
+    let too_large = || ValidationError::ImageTooLarge;
+
+    let num_components = header.component_infos.len() as u64;
+    let image_samples = u64::from(size.image_width())
+        .checked_mul(u64::from(size.image_height()))
+        .and_then(|s| s.checked_mul(num_components))
+        .ok_or_else(too_large)?;
+
+    // A tile-component never extends beyond the tile or the image area, and
+    // rounding to the component/resolution grid adds at most one sample per
+    // axis.
+    let area_width = size.reference_grid_width - size.image_area_x_offset;
+    let area_height = size.reference_grid_height - size.image_area_y_offset;
+    let max_tile_width = u64::from(size.tile_width.min(area_width));
+    let max_tile_height = u64::from(size.tile_height.min(area_height));
+    let scale = 1_u64 << header.skipped_resolution_levels;
+    let mut coefficient_samples = 0_u64;
+
+    for info in &header.component_infos {
+        let x_div = u64::from(info.size_info.horizontal_resolution) * scale;
+        let y_div = u64::from(info.size_info.vertical_resolution) * scale;
+        let samples = (max_tile_width.div_ceil(x_div) + 1)
+            .checked_mul(max_tile_height.div_ceil(y_div) + 1)
+            .ok_or_else(too_large)?;
+        coefficient_samples = coefficient_samples.max(samples);
+    }
+
+    let total = image_samples
+        .checked_add(coefficient_samples)
+        .ok_or_else(too_large)?;
+
+    if total > budget {
+        bail!(ValidationError::ImageTooLarge);
+    }
+
+    Ok(())
 }
 
 fn validate(header: &Header) -> Result<()> {

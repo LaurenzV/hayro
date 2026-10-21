@@ -119,6 +119,7 @@ fn check_jpx_images(folder: &str) {
                             resolve_palette_indices: false,
                             strict: false,
                             target_resolution: Some((2000, 2000)),
+                            ..Default::default()
                         };
 
                         let decoded = catch_unwind(|| {

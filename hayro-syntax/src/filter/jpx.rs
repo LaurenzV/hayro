@@ -24,6 +24,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         resolve_palette_indices: false,
         strict: false,
         target_resolution: params.target_dimension,
+        ..Default::default()
     };
 
     let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
