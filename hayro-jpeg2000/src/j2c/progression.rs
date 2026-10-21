@@ -149,19 +149,22 @@ pub(crate) fn progression_iterator<'a>(
 
     let clamp = |value: u16| u8::try_from(value).unwrap_or(u8::MAX);
 
-    let iterators = progression_changes
-        .iter()
-        .map(|change| {
-            let input = IteratorInput::new_with_custom_bounds(
-                tile,
-                (change.resolution_start, change.resolution_end),
-                (0, clamp(change.layer_end)),
-                (clamp(change.component_start), clamp(change.component_end)),
-            );
+    // A change's iterator is built once the previous one is used up: one in a
+    // position order holds every precinct it covers, and changes may overlap.
+    // Precincts that can't be laid out end the packets, but they already fail
+    // the tile when its precincts are built.
+    let mut changes = progression_changes.clone().into_iter();
+    let iterators = iter::from_fn(move || {
+        let change = changes.next()?;
+        let input = IteratorInput::new_with_custom_bounds(
+            tile,
+            (change.resolution_start, change.resolution_end),
+            (0, clamp(change.layer_end)),
+            (clamp(change.component_start), clamp(change.component_end)),
+        );
 
-            progression_order_iterator(input, change.progression_order)
-        })
-        .collect::<Result<Vec<_>>>()?;
+        progression_order_iterator(input, change.progression_order).ok()
+    });
 
     // Each progression starts at layer 0, but packets that were already
     // included by a previous progression must not be included again.
@@ -169,7 +172,6 @@ pub(crate) fn progression_iterator<'a>(
 
     Ok(Box::new(
         iterators
-            .into_iter()
             .flatten()
             .filter(move |data| included.insert(*data)),
     ))

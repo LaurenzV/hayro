@@ -38,3 +38,7 @@ png = "0.18.1"
 [[test]]
 name = "tests"
 path = "tests/main.rs"
+
+[[test]]
+name = "poc_memory"
+path = "tests/poc_memory.rs"
