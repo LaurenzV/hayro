@@ -457,6 +457,6 @@ mod tests {
 
     #[test]
     fn array_with_unreadable_item() {
-        let _ = array_ref_impl(b"[true /#zz false]");
+        let _ = array_ref_impl(b"[true +-1 false]");
     }
 }
