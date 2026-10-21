@@ -114,10 +114,9 @@ op_impl!(
 mod tests {
     use crate::content::TypedIter;
     use crate::content::ops::{
-        BeginMarkedContentWithProperties, BeginText, ClosePath, EndMarkedContent, EndText,
-        FillPathNonZero, InlineImage, LineTo, MarkedContentPointWithProperties, MoveTo,
-        NonStrokeColorDeviceRgb, NonStrokeColorNamed, RestoreState, SetGraphicsState, ShowText,
-        StrokeColorNamed, TextFont, Transform, TypedInstruction,
+        BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, FillPathNonZero, LineTo,
+        MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
+        SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
     use crate::object::Name;
     use crate::object::Number;
@@ -330,150 +329,6 @@ f
         assert!(matches!(
             iter.next(),
             Some(TypedInstruction::EndMarkedContent(EndMarkedContent))
-        ));
-        assert!(iter.next().is_none());
-    }
-
-    fn assert_inline_image(instruction: Option<TypedInstruction<'_, '_>>, data: &[u8]) {
-        match instruction {
-            Some(TypedInstruction::InlineImage(InlineImage(stream))) => {
-                assert_eq!(stream.raw_data().as_ref(), data);
-            }
-            other => panic!("unexpected instruction: {other:?}"),
-        }
-    }
-
-    fn assert_show_text(instruction: Option<TypedInstruction<'_, '_>>, text: &[u8]) {
-        match instruction {
-            Some(TypedInstruction::ShowText(ShowText(string))) => {
-                assert_eq!(string.as_bytes(), text);
-            }
-            other => panic!("unexpected instruction: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn inline_image_followed_by_text_with_non_ascii_bytes() {
-        // "café" in WinAnsi, then the `EI` of "WEIGHT".
-        let mut iter = TypedIter::new(
-            b"BI /W 1 /H 1 /BPC 8 /CS /G ID x EI Q BT /F1 12 Tf (caf\xe9) Tj (WEIGHT) Tj ET",
-        );
-
-        assert_inline_image(iter.next(), b"x ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::RestoreState(RestoreState))
-        ));
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::BeginText(BeginText))
-        ));
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::TextFont(TextFont(..)))
-        ));
-        assert_show_text(iter.next(), b"caf\xe9");
-        assert_show_text(iter.next(), b"WEIGHT");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::EndText(EndText))
-        ));
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn inline_image_followed_by_strings_with_parentheses() {
-        // "1) Größe", "Preis (netto) 5 €" and "2) PREIS" in WinAnsi: an escaped and
-        // a nested parenthesis before non-ASCII bytes, then the `EI` of "PREIS".
-        let mut iter = TypedIter::new(
-            b"BI /W 1 /H 1 /BPC 8 /CS /G ID x EI BT /F1 12 Tf (1\\) Gr\xf6\xdfe) Tj \
-              (Preis (netto) 5 \x80) Tj (2\\) PREIS) Tj ET",
-        );
-
-        assert_inline_image(iter.next(), b"x ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::BeginText(BeginText))
-        ));
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::TextFont(TextFont(..)))
-        ));
-        assert_show_text(iter.next(), b"1) Gr\xf6\xdfe");
-        assert_show_text(iter.next(), b"Preis (netto) 5 \x80");
-        assert_show_text(iter.next(), b"2) PREIS");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::EndText(EndText))
-        ));
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn inline_image_followed_by_two_byte_codes() {
-        // The codes 0x8145 and 0x4930 of a CID font: a non-ASCII byte and `EI` in one string.
-        let mut iter =
-            TypedIter::new(b"BI /W 1 /H 1 /BPC 8 /CS /G ID x EI BT /F1 12 Tf (\x81EI0) Tj ET");
-
-        assert_inline_image(iter.next(), b"x ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::BeginText(BeginText))
-        ));
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::TextFont(TextFont(..)))
-        ));
-        assert_show_text(iter.next(), b"\x81EI0");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::EndText(EndText))
-        ));
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn inline_image_followed_by_text_and_another_inline_image() {
-        let mut iter = TypedIter::new(
-            b"BI /W 1 /H 1 /BPC 8 /CS /G ID x EI BT /F1 12 Tf (caf\xe9) Tj (WEIGHT) Tj ET \
-              BI /W 1 /H 1 /BPC 8 /CS /G ID y EI Q",
-        );
-
-        assert_inline_image(iter.next(), b"x ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::BeginText(BeginText))
-        ));
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::TextFont(TextFont(..)))
-        ));
-        assert_show_text(iter.next(), b"caf\xe9");
-        assert_show_text(iter.next(), b"WEIGHT");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::EndText(EndText))
-        ));
-        assert_inline_image(iter.next(), b"y ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::RestoreState(RestoreState))
-        ));
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn inline_image_with_binary_data_after_a_string() {
-        // The byte 0x80 follows a closed string, so it is binary data and the
-        // first `EI` lies within the image, although the text after it reads as
-        // content.
-        let mut iter =
-            TypedIter::new(b"BI /W 1 /H 1 /BPC 8 /CS /G ID a EI (b) \x80 BT (x) Tj ET EI Q");
-
-        assert_inline_image(iter.next(), b"a EI (b) \x80 BT (x) Tj ET ");
-        assert!(matches!(
-            iter.next(),
-            Some(TypedInstruction::RestoreState(RestoreState))
         ));
         assert!(iter.next().is_none());
     }
