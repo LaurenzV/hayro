@@ -6,7 +6,7 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::ActiveTransferFunction;
-use crate::{BlendMode, CacheKey, Image, ImageDrawProps, RasterImage, StencilImage};
+use crate::{BlendMode, CacheKey, Image, ImageDrawProps, Paint, RasterImage, StencilImage};
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Name, Object, Stream};
 use kurbo::Affine;
@@ -176,8 +176,15 @@ impl<'a> ImageXObject<'a> {
         context.fill_paint_mut().alpha = 1.0;
 
         let image = if self.kind.is_mask() {
+            let mut paint = context.get_paint(false);
+
+            // The transparency group above already applies the fill alpha.
+            if let Paint::Pattern(p) = &mut paint {
+                p.set_opacity(1.0);
+            }
+
             Image::Stencil(StencilImage {
-                paint: context.get_paint(false),
+                paint,
                 image_xobject: self.clone(),
             })
         } else {

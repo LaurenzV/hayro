@@ -279,7 +279,12 @@ impl CacheKey for TilingPattern<'_> {
             )
         });
 
-        hash128(&(self.cache_key, self.matrix.cache_key(), colors))
+        hash128(&(
+            self.cache_key,
+            self.matrix.cache_key(),
+            self.opacity.to_bits(),
+            colors,
+        ))
     }
 }
 
