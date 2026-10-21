@@ -1099,13 +1099,18 @@ impl ObjectStream {
 
             // Members are stored in increasing order of their offsets. Like qpdf, ignore
             // entries that don't follow that order, since otherwise any number of objects
-            // could share the same member.
+            // could share the same member. Compare with where the previous member starts
+            // after white space and comments, so that offsets in the white space before a
+            // member can't share it either.
             if last_offset.is_some_and(|last| offset <= last) {
                 warn!("object {obj_num} has an invalid offset in object stream");
                 offsets.push((obj_num, None));
             } else {
-                last_offset = Some(offset);
-                offsets.push((obj_num, Some(offset)));
+                let mut member = Reader::new(data);
+                member.jump(offset);
+                member.skip_white_spaces_and_comments();
+                last_offset = Some(member.offset());
+                offsets.push((obj_num, Some(member.offset())));
             }
         }
 
@@ -1123,7 +1128,6 @@ impl ObjectStream {
         let offset = self.offsets.get(index as usize)?.1?;
         let mut r = Reader::new(&self.data);
         r.jump(offset);
-        r.skip_white_spaces_and_comments();
 
         let mut ctx = ctx.clone();
         ctx.set_in_object_stream(true);
