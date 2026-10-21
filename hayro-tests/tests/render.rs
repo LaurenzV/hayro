@@ -308,6 +308,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn issue1276() { run_render_test("issue1276", "downloads/custom/issue1276.pdf", None); }
 #[test] fn issue1334() { run_render_test("issue1334", "downloads/custom/issue1334.pdf", Some("12..=12")); }
 #[test] fn deeply_nested_object() { run_render_test("deeply_nested_object", "pdfs/custom/deeply_nested_object.pdf", None); }
+#[test] fn pattern_tiling_uncolored_named_base() { run_render_test("pattern_tiling_uncolored_named_base", "pdfs/custom/pattern_tiling_uncolored_named_base.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }

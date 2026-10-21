@@ -229,7 +229,6 @@ impl ColorSpaceType {
                     return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
                 }
                 PATTERN => {
-                    let _ = iter.next::<Name<'_>>();
                     let cs = iter
                         .next::<Object<'_>>()
                         .and_then(|o| ColorSpace::new(o, cache))
