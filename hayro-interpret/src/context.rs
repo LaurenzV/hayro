@@ -236,6 +236,8 @@ impl<'a> Context<'a> {
 
         if data.color_space.is_pattern() || data.pattern.is_some() {
             if let Some(mut pattern) = data.pattern {
+                pattern.set_opacity(data.alpha);
+
                 if let Some(tf) = &data.transfer_function {
                     pattern.set_transfer_function(tf.clone());
                 }

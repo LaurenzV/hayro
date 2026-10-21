@@ -39,7 +39,6 @@ impl<'a> Pattern<'a> {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.interpreter_cache.object_cache,
-                ctx.fill_paint().alpha,
             )?)),
             Object::Stream(stream) => {
                 Some(Self::Tiling(Box::new(TilingPattern::new(stream, ctx)?)))
@@ -56,6 +55,15 @@ impl<'a> Pattern<'a> {
                 Arc::make_mut(&mut p.shading).clip_path = transformed_clip_path;
             }
             Self::Tiling(p) => p.matrix = transform * p.matrix,
+        }
+    }
+
+    /// Set the opacity the pattern is painted with. This is the alpha of the
+    /// graphics state at the time the pattern is painted, not when it was selected.
+    pub(crate) fn set_opacity(&mut self, opacity: f32) {
+        match self {
+            Self::Shading(p) => p.opacity = opacity,
+            Self::Tiling(p) => p.opacity = opacity,
         }
     }
 
@@ -89,7 +97,7 @@ pub struct ShadingPattern {
 }
 
 impl ShadingPattern {
-    pub(crate) fn new(dict: &Dict<'_>, cache: &Cache, opacity: f32) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, cache: &Cache) -> Option<Self> {
         let shading = dict.get::<Object<'_>>(SHADING).and_then(|o| {
             let (dict, stream) = dict_or_stream(&o)?;
 
@@ -106,7 +114,7 @@ impl ShadingPattern {
 
         Some(Self {
             shading: Arc::new(shading),
-            opacity,
+            opacity: 1.0,
             matrix,
             transfer_function: None,
         })
@@ -115,7 +123,11 @@ impl ShadingPattern {
 
 impl CacheKey for ShadingPattern {
     fn cache_key(&self) -> u128 {
-        hash128(&(self.shading.cache_key(), self.matrix.cache_key()))
+        hash128(&(
+            self.shading.cache_key(),
+            self.matrix.cache_key(),
+            self.opacity.to_bits(),
+        ))
     }
 }
 
@@ -132,6 +144,8 @@ pub struct TilingPattern<'a> {
     pub y_step: f32,
     /// A transformation to apply prior to rendering.
     pub matrix: Affine,
+    /// An additional opacity to apply to the pattern cell as a whole.
+    pub opacity: f32,
     stream: Stream<'a>,
     is_color: bool,
     pub(crate) stroke_paint: Color,
@@ -175,14 +189,15 @@ impl<'a> TilingPattern<'a> {
             .color_space
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
-        let non_stroking_paint = Color::new(fill_cs, fill.color.clone(), fill.alpha);
+        // The colors are opaque, the opacity is applied to the whole pattern cell.
+        let non_stroking_paint = Color::new(fill_cs, fill.color.clone(), 1.0);
 
         let stroke = ctx.stroke_paint();
         let stroke_cs = stroke
             .color_space
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
-        let stroke_paint = Color::new(stroke_cs, stroke.color.clone(), stroke.alpha);
+        let stroke_paint = Color::new(stroke_cs, stroke.color.clone(), 1.0);
         let nesting_depth = ctx.nesting_depth() + 1;
         let resources = Resources::new(dict.get(RESOURCES).unwrap_or_default());
 
@@ -192,6 +207,7 @@ impl<'a> TilingPattern<'a> {
             x_step,
             y_step,
             matrix,
+            opacity: 1.0,
             ctx_bbox,
             is_color,
             stream,
