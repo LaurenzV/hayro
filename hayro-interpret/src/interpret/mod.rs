@@ -151,8 +151,8 @@ pub fn interpret_page<'a>(
         for annot in annot_arr.iter::<Dict<'_>>() {
             let flags = annot.get::<u32>(F).unwrap_or(0);
 
-            // Annotation should be hidden.
-            if flags & 2 != 0 {
+            // Annotation should be hidden (Hidden or NoView flag).
+            if flags & (2 | 32) != 0 {
                 continue;
             }
 

@@ -16,6 +16,10 @@
     "file": "pdfs/custom/annotation_checkbox.pdf"
   },
   {
+    "id": "annotation_no_view",
+    "file": "pdfs/custom/annotation_no_view.pdf"
+  },
+  {
     "id": "clip_path_evenodd",
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },
