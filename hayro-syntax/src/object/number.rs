@@ -111,12 +111,12 @@ impl Skippable for Number {
 
 impl Readable<'_> for Number {
     #[inline]
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
         let old_offset = r.offset();
         Self::read_simple(r)
             .or_else(|| {
                 r.jump(old_offset);
-                read_inner(r)
+                read_inner(r, ctx.in_content_stream())
             })
             .or_else(|| {
                 r.jump(old_offset);
@@ -194,7 +194,7 @@ impl Number {
 }
 
 #[inline(always)]
-fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
+fn read_inner(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Number> {
     let start_offset = r.offset();
     let negative = match r.peek_byte()? {
         b'-' => {
@@ -250,8 +250,12 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     }
 
     if !has_digits {
-        if negative || has_dot {
-            // Treat numbers like just `-`, `+` or `-.` as zero.
+        // Treat numbers like just `-`, `+` or `-.` as zero. Outside of content streams,
+        // not if a regular character follows, for the same reason as below: `.foo` is
+        // one token, and reading it as zero would leave `foo` as the next object.
+        if (negative || has_dot)
+            && (in_content_stream || !r.peek_byte().is_some_and(is_regular_character))
+        {
             return Some(Number(InternalNumber::Integer(0)));
         }
         return None;
@@ -350,10 +354,9 @@ impl Skippable for f32 {
     }
 }
 
-impl Readable<'_> for f32 {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        r.read_without_context::<Number>()
-            .map(|n| n.as_f64() as Self)
+impl<'a> Readable<'a> for f32 {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Number::read(r, ctx).map(|n| n.as_f64() as Self)
     }
 }
 
@@ -376,9 +379,9 @@ impl Skippable for f64 {
     }
 }
 
-impl Readable<'_> for f64 {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        r.read_without_context::<Number>().map(|n| n.as_f64())
+impl<'a> Readable<'a> for f64 {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Number::read(r, ctx).map(|n| n.as_f64())
     }
 }
 

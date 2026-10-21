@@ -422,6 +422,15 @@ mod tests {
     }
 
     #[test]
+    fn number_followed_by_regular_character_is_not_a_number() {
+        for input in ["[.foo]", "[-foo]", "[.e3]"] {
+            let array = Array::from_bytes(input.as_bytes()).unwrap();
+            assert_eq!(array.iter::<i32>().next(), None);
+            assert_eq!(array.iter::<f32>().next(), None);
+        }
+    }
+
+    #[test]
     fn reference_after_invalid_number() {
         let res = array_ref_impl(b"[3 0 R .foo 4 0 R]").unwrap();
         assert_eq!(res.len(), 3);

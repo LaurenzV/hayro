@@ -766,13 +766,20 @@ fn nested_object_streams() {
 }
 
 #[test]
-fn media_box_with_invalid_number() {
-    // The media box of the first page is `[0 0 1e3 500]`, and `/Kids` is
-    // `[3 0 R .foo 4 0 R]`.
-    let file = include_bytes!("../pdfs/load/media_box_with_invalid_number.pdf");
+fn page_tree_with_invalid_numbers() {
+    // `/Kids` is `[3 0 R .foo 4 0 R]`, the media box of the first page is
+    // `[0 0 1e3 500]`, and the pages override the inherited `/Rotate 90` with
+    // `/Rotate -foo` and `/Rotate .e3`.
+    let file = include_bytes!("../pdfs/load/page_tree_with_invalid_numbers.pdf");
     let pdf = Pdf::new(file.to_vec()).unwrap();
 
     assert_eq!(pdf.pages().len(), 2);
+    for page in pdf.pages().iter() {
+        assert!(matches!(
+            page.rotation(),
+            hayro_syntax::page::Rotation::Horizontal
+        ));
+    }
 }
 
 #[test]

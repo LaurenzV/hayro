@@ -1191,6 +1191,8 @@ mod tests {
         assert_eq!(dict.len(), 5);
         for key in [b"A", b"B", b"C", b"D"] {
             assert!(matches!(dict.get::<Object<'_>>(key), Some(Object::Null(_))));
+            assert_eq!(dict.get::<i32>(key), None);
+            assert_eq!(dict.get::<f32>(key), None);
         }
         assert_eq!(dict.get::<i32>(b"E"), Some(2));
     }
