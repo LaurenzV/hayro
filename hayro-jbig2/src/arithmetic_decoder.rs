@@ -18,7 +18,25 @@ pub(crate) struct ArithmeticDecoder<'a> {
     base_pointer: u32,
     /// The bit shift counter.
     shift_count: u32,
+    /// How many times `BYTEIN` has run into a marker, i.e. into the end of
+    /// the coded data (see `is_exhausted`).
+    markers_seen: u32,
 }
+
+/// How many times the decoder may run into the end of its data before the
+/// data counts as exhausted.
+///
+/// "BYTEIN" treats a 0xFF followed by a byte larger than 0x8F as a marker:
+/// the coded data has ended, and from then on the decoder shifts in 1-bits
+/// forever (E.3.4). An encoder may drop trailing bytes and rely on this, so a
+/// conforming stream can run into the marker a lot: the region in
+/// `bitmap-trailing-7fff-stripped-harder.jbig2` has two bytes of data and
+/// runs into it 12 336 times. Garbage data never ends, though: the decoder
+/// keeps producing decisions, and a symbol dictionary whose symbol sizes come
+/// from that garbage turns a few kilobytes into seconds of work and hundreds
+/// of megabytes of bitmaps. The limit leaves a wide margin above the test
+/// suite and stops such a dictionary within milliseconds.
+const MAX_MARKERS: u32 = 65_536;
 
 impl<'a> ArithmeticDecoder<'a> {
     pub(crate) fn new(data: &'a [u8]) -> Self {
@@ -28,11 +46,20 @@ impl<'a> ArithmeticDecoder<'a> {
             a: 0,
             base_pointer: 0,
             shift_count: 0,
+            markers_seen: 0,
         };
 
         decoder.initialize();
 
         decoder
+    }
+
+    /// Whether the coded data has run out: the decoder has run into its end
+    /// more often than any conforming stream needs to. Decoding loops check
+    /// this once per row and give up instead of decoding garbage.
+    #[inline(always)]
+    pub(crate) fn is_exhausted(&self) -> bool {
+        self.markers_seen > MAX_MARKERS
     }
 
     /// Read the next bit using the given context label.
@@ -63,6 +90,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
             if b1 > 0x8f {
                 self.shift_count = 8;
+                self.markers_seen = self.markers_seen.saturating_add(1);
             } else {
                 self.base_pointer += 1;
                 self.c = self
