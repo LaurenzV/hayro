@@ -1248,6 +1248,10 @@
     "file": "pdfs/custom/font_standard_widths_array.pdf"
   },
   {
+    "id": "font_standard_non_latin",
+    "file": "pdfs/custom/font_standard_non_latin.pdf"
+  },
+  {
     "id": "issue1023",
     "file": "pdfs/custom/issue1023.pdf"
   },

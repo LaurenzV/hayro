@@ -304,6 +304,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn font_mmtype_1() { run_render_test("font_mmtype_1", "downloads/custom/font_mmtype_1.pdf", None); }
 #[test] fn issue994() { run_render_test("issue994", "pdfs/custom/issue994.pdf", None); }
 #[test] fn font_standard_widths_array() { run_render_test("font_standard_widths_array", "pdfs/custom/font_standard_widths_array.pdf", None); }
+#[test] fn font_standard_non_latin() { run_render_test("font_standard_non_latin", "pdfs/custom/font_standard_non_latin.pdf", None); }
 #[test] fn issue1023() { run_render_test("issue1023", "pdfs/custom/issue1023.pdf", None); }
 #[test] fn issue1276() { run_render_test("issue1276", "downloads/custom/issue1276.pdf", None); }
 #[test] fn issue1334() { run_render_test("issue1334", "downloads/custom/issue1334.pdf", Some("12..=12")); }

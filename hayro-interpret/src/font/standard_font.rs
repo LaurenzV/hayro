@@ -481,7 +481,15 @@ impl StandardKind {
             Some(Width::Missing) => Some(self.missing_width),
             None => self
                 .code_to_ps_name(code)
-                .and_then(|c| self.base_font.get_width(c)),
+                .and_then(|c| self.base_font.get_width(c))
+                // The standard metrics only cover Latin glyphs. For others, like
+                // Cyrillic ones, use the advance of the font we substitute with.
+                .or_else(|| {
+                    let glyph = self.map_code(code);
+                    (glyph != GlyphId::NOTDEF)
+                        .then(|| self.base_font_blob.advance_width(glyph))
+                        .flatten()
+                }),
         }
     }
 
