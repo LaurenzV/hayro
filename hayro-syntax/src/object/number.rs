@@ -189,7 +189,9 @@ impl Number {
             Some(shift) => {
                 let divisor = match POWERS_OF_10.get(shift as usize) {
                     Some(power) => *power,
-                    None => powi_f64(10.0, shift),
+                    // From 10^400 on the power is infinite in an f64 anyway, and
+                    // `powi` takes an `i32`.
+                    None => powi_f64(10.0, shift.min(400)),
                 };
                 let value = mantissa as f64 / divisor;
                 Self(InternalNumber::Real(if negative { -value } else { value }))
@@ -236,7 +238,7 @@ fn read_inner(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Number> {
                 }
                 has_digits = true;
                 if has_dot {
-                    decimal_shift += 1;
+                    decimal_shift = decimal_shift.saturating_add(1);
                 }
             }
             Some(b'.') if !has_dot => {
@@ -416,6 +418,13 @@ mod tests {
     use crate::object::Number;
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn a_fraction_too_long_for_an_f64_is_zero() {
+        for shift in [400, i32::MAX as u32 + 1, u32::MAX] {
+            assert_eq!(Number::from_parts(false, 5, Some(shift)).as_f64(), 0.0);
+        }
+    }
 
     #[test]
     fn display() {
