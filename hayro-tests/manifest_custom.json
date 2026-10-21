@@ -1260,5 +1260,9 @@
     "link": true,
     "first_page": 12,
     "last_page": 12
+  },
+  {
+    "id": "deeply_nested_object",
+    "file": "pdfs/custom/deeply_nested_object.pdf"
   }
 ]
