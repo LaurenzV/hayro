@@ -12,6 +12,14 @@ use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
+/// The maximum number of cells in a halftone grid.
+///
+/// The gray-scale image of a halftone region stores one `u32` per grid cell,
+/// so limiting the grid to 1/32 of the pixels of the largest bitmap keeps it
+/// no larger than that bitmap. Limiting each axis to `MAX_DIMENSION` alone
+/// would allow a grid that needs ~17 GB.
+const MAX_GRID_CELLS: u64 = MAX_DIMENSION as u64 * MAX_DIMENSION as u64 / WORD_BITS as u64;
+
 /// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
@@ -97,6 +105,10 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<Halfton
     let grid_height = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     if grid_width > MAX_DIMENSION || grid_height > MAX_DIMENSION {
+        bail!(OverflowError::GridDimension);
+    }
+
+    if grid_width as u64 * grid_height as u64 > MAX_GRID_CELLS {
         bail!(OverflowError::GridDimension);
     }
 
