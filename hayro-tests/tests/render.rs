@@ -4,6 +4,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn OverlappingGlyphClipping() { run_render_test("OverlappingGlyphClipping", "pdfs/custom/OverlappingGlyphClipping.pdf", None); }
 #[test] fn TextClippingModeChanges() { run_render_test("TextClippingModeChanges", "pdfs/custom/TextClippingModeChanges.pdf", None); }
 #[test] fn annotation_checkbox() { run_render_test("annotation_checkbox", "pdfs/custom/annotation_checkbox.pdf", None); }
+#[test] fn annotation_no_view() { run_render_test("annotation_no_view", "pdfs/custom/annotation_no_view.pdf", None); }
 #[test] fn clip_path_evenodd() { run_render_test("clip_path_evenodd", "pdfs/custom/clip_path_evenodd.pdf", None); }
 #[test] fn clip_path_nested() { run_render_test("clip_path_nested", "pdfs/custom/clip_path_nested.pdf", None); }
 #[test] fn clip_path_painted() { run_render_test("clip_path_painted", "pdfs/custom/clip_path_painted.pdf", None); }

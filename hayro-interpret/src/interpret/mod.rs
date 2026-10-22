@@ -28,6 +28,9 @@ pub(crate) mod stack;
 pub(crate) mod state;
 pub(crate) mod text;
 
+const ANNOTATION_HIDDEN: u32 = 1 << 1;
+const ANNOTATION_NO_VIEW: u32 = 1 << 5;
+
 pub use state::ActiveTransferFunction;
 
 /// A callback function for resolving font queries.
@@ -151,8 +154,7 @@ pub fn interpret_page<'a>(
         for annot in annot_arr.iter::<Dict<'_>>() {
             let flags = annot.get::<u32>(F).unwrap_or(0);
 
-            // Annotation should be hidden.
-            if flags & 2 != 0 {
+            if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
                 continue;
             }
 
