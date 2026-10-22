@@ -410,6 +410,17 @@ pub struct TriangleVertex {
     pub colors: ColorComponents,
 }
 
+#[cfg(test)]
+impl TriangleVertex {
+    pub(crate) fn at(point: Point, colors: ColorComponents) -> Self {
+        Self {
+            flag: 0,
+            point,
+            colors,
+        }
+    }
+}
+
 /// A coons patch.
 #[derive(Clone, Debug)]
 pub struct CoonsPatch {

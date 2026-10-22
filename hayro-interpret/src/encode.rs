@@ -1,13 +1,13 @@
 //! Encoding shading patterns for easy sampling.
 
-use crate::color::{AlphaColor, ColorComponents, ColorSpace};
+use crate::color::{AlphaColor, ColorSpace};
 use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
 use crate::util::x_y_advances;
 use kurbo::{Affine, Point, Rect};
-use rustc_hash::FxHashMap;
 use smallvec::{ToSmallVec, smallvec};
+use std::ops::Range;
 use std::sync::Arc;
 
 /// A shading pattern that was encoded so it can be sampled.
@@ -55,8 +55,61 @@ pub struct EncodedRadialAxialShading {
 /// Encoded sampled mesh shading.
 #[derive(Clone, Debug)]
 pub struct EncodedSampledShading {
-    pub(crate) samples: Arc<FxHashMap<(u16, u16), ColorComponents>>,
+    pub(crate) triangles: Arc<[PlacedTriangle]>,
+    /// The pixels of the boxes of all triangles.
+    pub(crate) bounds: PixelRect,
     pub(crate) function: Option<ShadingFunction>,
+}
+
+/// A triangle of a mesh in device space, with the pixels of its box.
+///
+/// The color of a pixel `(x, y)` is that of the last triangle whose box holds it
+/// and that contains the point `(x, y)`, interpolated there.
+#[derive(Clone, Debug)]
+pub(crate) struct PlacedTriangle {
+    triangle: Triangle,
+    pixels: PixelRect,
+}
+
+/// A rectangle of device pixels.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PixelRect {
+    xs: Range<u16>,
+    ys: Range<u16>,
+}
+
+impl PixelRect {
+    fn contains(&self, x: u16, y: u16) -> bool {
+        self.xs.contains(&x) && self.ys.contains(&y)
+    }
+
+    fn intersect(&self, other: &Self) -> Self {
+        Self {
+            xs: self.xs.start.max(other.xs.start)..self.xs.end.min(other.xs.end),
+            ys: self.ys.start.max(other.ys.start)..self.ys.end.min(other.ys.end),
+        }
+    }
+}
+
+/// For each pixel of a rectangle, the triangle that colors it.
+pub(crate) struct Coverage {
+    rect: PixelRect,
+    /// The index of the triangle plus one, or 0 where none covers the pixel.
+    owners: Vec<u32>,
+}
+
+impl Coverage {
+    /// The index of the triangle that colors the pixel `(x, y)`, if the pixel lies
+    /// in the rectangle.
+    fn owner(&self, x: u16, y: u16) -> Option<Option<usize>> {
+        if !self.rect.contains(x, y) {
+            return None;
+        }
+
+        let index = usize::from(y - self.rect.ys.start) * self.rect.xs.len()
+            + usize::from(x - self.rect.xs.start);
+        Some(self.owners[index].checked_sub(1).map(|i| i as usize))
+    }
 }
 
 /// Encoded dummy shading.
@@ -92,10 +145,18 @@ pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
 
 impl EncodedShadingPattern {
     /// Sample the shading at the given position.
+    ///
+    /// For a mesh shading, this searches the triangles of the mesh; use
+    /// [`sample_texture`](Self::sample_texture) to sample many positions.
     #[inline]
     pub fn sample(&self, pos: Point) -> [f32; 4] {
+        self.sample_with(pos, None)
+    }
+
+    #[inline]
+    fn sample_with(&self, pos: Point, coverage: Option<&Coverage>) -> [f32; 4] {
         self.shading_type
-            .eval(pos, self.background_color, &self.color_space)
+            .eval(pos, self.background_color, &self.color_space, coverage)
             .map(|v| {
                 let mut components = v.components();
                 components[3] *= self.opacity;
@@ -134,11 +195,25 @@ impl EncodedShadingPattern {
             * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
             * Point::new(bbox.x0, bbox.y0);
 
+        // A mesh is sampled only at the pixels the points below fall in.
+        let coverage = match &self.shading_type {
+            EncodedShadingType::Sampled(s) => {
+                let read = self.base_transform.transform_rect_bbox(Rect::new(
+                    bbox.x0 + 0.5 * inv_scale,
+                    bbox.y0 + 0.5 * inv_scale,
+                    bbox.x0 + (width as f64 - 0.5) * inv_scale,
+                    bbox.y0 + (height as f64 - 0.5) * inv_scale,
+                ));
+                Some(s.coverage(&read))
+            }
+            _ => None,
+        };
+
         for _ in 0..height {
             let mut point = start_point;
 
             for _ in 0..width {
-                f(self.sample(point));
+                f(self.sample_with(point, coverage.as_ref()));
 
                 point += x_advance;
             }
@@ -216,15 +291,9 @@ impl ShadingPattern {
                 triangles,
                 function,
             } => {
-                let full_transform = self.matrix;
-                let samples = sample_triangles(triangles, full_transform);
-
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
-                })
+                encode_mesh(triangles, self.matrix, function)
             }
             ShadingType::CoonsPatchMesh { patches, function } => {
                 let mut triangles = vec![];
@@ -232,15 +301,9 @@ impl ShadingPattern {
                     patch.to_triangles(&mut triangles);
                 }
 
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
-
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
-                })
+                encode_mesh(&triangles, self.matrix, function)
             }
             ShadingType::TensorProductPatchMesh { patches, function } => {
                 let mut triangles = vec![];
@@ -248,15 +311,9 @@ impl ShadingPattern {
                     patch.to_triangles(&mut triangles);
                 }
 
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
-
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
-                })
+                encode_mesh(&triangles, self.matrix, function)
             }
             ShadingType::Dummy => {
                 base_transform = Affine::IDENTITY;
@@ -329,41 +386,100 @@ fn encode_axial_shading(
     )
 }
 
-fn sample_triangles(
+fn encode_mesh(
     triangles: &[Triangle],
     transform: Affine,
-) -> FxHashMap<(u16, u16), ColorComponents> {
-    let mut map = FxHashMap::default();
+    function: &Option<ShadingFunction>,
+) -> EncodedShadingType {
+    let mut bounds: Option<PixelRect> = None;
 
-    for t in triangles {
-        let t = {
-            let p0 = transform * t.p0.point;
-            let p1 = transform * t.p1.point;
-            let p2 = transform * t.p2.point;
-
+    let triangles: Arc<[PlacedTriangle]> = triangles
+        .iter()
+        .map(|t| {
             let mut v0 = t.p0.clone();
-            v0.point = p0;
+            v0.point = transform * t.p0.point;
             let mut v1 = t.p1.clone();
-            v1.point = p1;
+            v1.point = transform * t.p1.point;
             let mut v2 = t.p2.clone();
-            v2.point = p2;
+            v2.point = transform * t.p2.point;
+            let triangle = Triangle::new(v0, v1, v2);
 
-            Triangle::new(v0, v1, v2)
+            let bbox = triangle.bounding_box();
+            let pixels = PixelRect {
+                xs: (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16),
+                ys: (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16),
+            };
+
+            if !pixels.xs.is_empty() && !pixels.ys.is_empty() {
+                bounds = Some(match bounds.take() {
+                    None => pixels.clone(),
+                    Some(b) => PixelRect {
+                        xs: b.xs.start.min(pixels.xs.start)..b.xs.end.max(pixels.xs.end),
+                        ys: b.ys.start.min(pixels.ys.start)..b.ys.end.max(pixels.ys.end),
+                    },
+                });
+            }
+
+            PlacedTriangle { triangle, pixels }
+        })
+        .collect();
+
+    EncodedShadingType::Sampled(EncodedSampledShading {
+        triangles,
+        bounds: bounds.unwrap_or_default(),
+        function: function.clone(),
+    })
+}
+
+impl EncodedSampledShading {
+    /// The triangle that colors the pixel `(x, y)`, looked up in `coverage` where
+    /// it holds the pixel, else searched for among all.
+    fn triangle_at(&self, x: u16, y: u16, coverage: Option<&Coverage>) -> Option<&Triangle> {
+        if let Some(owner) = coverage.and_then(|c| c.owner(x, y)) {
+            return owner.map(|i| &self.triangles[i].triangle);
+        }
+
+        if !self.bounds.contains(x, y) {
+            return None;
+        }
+
+        let point = Point::new(x as f64, y as f64);
+        self.triangles
+            .iter()
+            .rev()
+            .find(|t| t.pixels.contains(x, y) && t.triangle.contains_point(point))
+            .map(|t| &t.triangle)
+    }
+
+    /// Find the triangle that colors each pixel of `read`, a rectangle in device
+    /// space that holds the positions a texture samples.
+    fn coverage(&self, read: &Rect) -> Coverage {
+        // Where rounding moves a position read into a pixel outside the
+        // rectangle, `triangle_at` still finds its triangle, only slower.
+        let read = PixelRect {
+            xs: (read.x0 as u16)..(read.x1 as u16).saturating_add(1),
+            ys: (read.y0 as u16)..(read.y1 as u16).saturating_add(1),
         };
+        let rect = self.bounds.intersect(&read);
+        let width = rect.xs.len();
+        let mut owners = vec![0; width * rect.ys.len()];
 
-        let bbox = t.bounding_box();
+        for (t, owner) in self.triangles.iter().zip(1_u32..) {
+            let pixels = t.pixels.intersect(&rect);
 
-        for y in (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16) {
-            for x in (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16) {
-                let point = Point::new(x as f64, y as f64);
-                if t.contains_point(point) {
-                    map.insert((x, y), t.interpolate(point));
+            for y in pixels.ys {
+                for x in pixels.xs.clone() {
+                    if t.triangle.contains_point(Point::new(x as f64, y as f64)) {
+                        let index =
+                            usize::from(y - rect.ys.start) * width + usize::from(x - rect.xs.start);
+                        owners[index] = owner;
+                    }
                 }
             }
         }
-    }
 
-    map
+        Coverage { rect, owners }
+    }
 }
 
 fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> EncodedShadingType {
@@ -392,6 +508,7 @@ impl EncodedShadingType {
         pos: Point,
         bg_color: AlphaColor,
         color_space: &ColorSpace,
+        coverage: Option<&Coverage>,
     ) -> Option<AlphaColor> {
         match self {
             Self::FunctionBased(EncodedFunctionBasedShading { domain, function }) => {
@@ -442,15 +559,17 @@ impl EncodedShadingType {
 
                 Some(color_space.to_rgba(&val, 1.0))
             }
-            Self::Sampled(EncodedSampledShading { samples, function }) => {
-                let sample_point = (pos.x as u16, pos.y as u16);
+            Self::Sampled(shading) => {
+                let (x, y) = (pos.x as u16, pos.y as u16);
 
-                if let Some(color) = samples.get(&sample_point) {
-                    if let Some(function) = function {
+                if let Some(triangle) = shading.triangle_at(x, y, coverage) {
+                    let color = triangle.interpolate(Point::new(x as f64, y as f64));
+
+                    if let Some(function) = &shading.function {
                         let val = function.eval(&color.to_smallvec())?;
                         Some(color_space.to_rgba(&val, 1.0))
                     } else {
-                        Some(color_space.to_rgba(color, 1.0))
+                        Some(color_space.to_rgba(&color, 1.0))
                     }
                 } else {
                     Some(bg_color)
@@ -547,5 +666,148 @@ fn radial_pos(
         (Some(min), None) => Some(min),
         (None, Some(max)) => Some(max),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EncodedShadingType, encode_mesh};
+    use crate::color::ColorComponents;
+    use crate::shading::{Triangle, TriangleVertex};
+    use kurbo::{Affine, Point, Rect};
+    use rustc_hash::FxHashMap;
+    use smallvec::smallvec;
+
+    struct Random(u64);
+
+    impl Random {
+        fn below(&mut self, n: f64) -> f64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % 1_000_000) as f64 / 1_000_000.0 * n
+        }
+    }
+
+    fn triangle(points: [(f64, f64); 3], color: f32) -> Triangle {
+        let [a, b, c] = points.map(|(x, y)| {
+            TriangleVertex::at(Point::new(x, y), smallvec![color, color / 2.0, 1.0 - color])
+        });
+        Triangle::new(a, b, c)
+    }
+
+    /// Check that the colors of a mesh, looked up in its coverage of `read` and
+    /// searched for without it, are those of putting each covered pixel of each
+    /// triangle into a map, the later over the earlier, at every pixel of the
+    /// window `0..400` by `0..400`, and return how many pixels the coverage holds.
+    fn check(triangles: &[Triangle], transform: Affine, read: Rect) -> usize {
+        let mut expected = FxHashMap::<(u16, u16), ColorComponents>::default();
+        for t in triangles {
+            let [p0, p1, p2] = [&t.p0, &t.p1, &t.p2].map(|v| {
+                let mut v = (*v).clone();
+                v.point = transform * v.point;
+                v
+            });
+            let t = Triangle::new(p0, p1, p2);
+            let bbox = t.bounding_box();
+            for y in (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16).min(400) {
+                for x in (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16).min(400) {
+                    let point = Point::new(x as f64, y as f64);
+                    if t.contains_point(point) {
+                        expected.insert((x, y), t.interpolate(point));
+                    }
+                }
+            }
+        }
+
+        let EncodedShadingType::Sampled(mesh) = encode_mesh(triangles, transform, &None) else {
+            unreachable!()
+        };
+        let coverage = mesh.coverage(&read);
+        for y in 0..400 {
+            for x in 0..400 {
+                let point = Point::new(x as f64, y as f64);
+                for found in [
+                    mesh.triangle_at(x, y, Some(&coverage)),
+                    mesh.triangle_at(x, y, None),
+                ] {
+                    assert_eq!(
+                        found.map(|t| t.interpolate(point)).as_ref(),
+                        expected.get(&(x, y)),
+                        "({x}, {y})"
+                    );
+                }
+            }
+        }
+
+        coverage.owners.len()
+    }
+
+    #[test]
+    fn a_mesh_is_sampled_only_in_the_pixels_read() {
+        // A diagonal sliver whose box grows with it, read in 400 by 300 pixels.
+        let read = Rect::new(50.5, 20.5, 449.5, 319.5);
+        for size in [100.0, 1000.0, 10000.0, 65534.0] {
+            let sliver = [triangle(
+                [(0.0, 0.0), (size, size), (size, size - 0.01)],
+                0.5,
+            )];
+            let cells = check(&sliver, Affine::IDENTITY, read);
+            assert!(cells <= 400 * 300, "{size}: {cells}");
+        }
+    }
+
+    #[test]
+    fn a_mesh_is_sampled_as_a_map_of_its_covered_pixels_would_hold_it() {
+        let mut random = Random(0x2545_f491_4f6c_dd1d);
+        // A tiling of a box, with triangles over it that cover others.
+        let mut tiles = vec![];
+        for row in 0..6 {
+            for column in 0..6 {
+                let (x, y) = (20.0 + column as f64 * 30.0, 40.0 + row as f64 * 25.0);
+                let color = random.below(1.0) as f32;
+                tiles.push(triangle([(x, y), (x + 30.0, y), (x, y + 25.0)], color));
+                tiles.push(triangle(
+                    [(x + 30.0, y), (x + 30.0, y + 25.0), (x, y + 25.0)],
+                    color / 3.0,
+                ));
+            }
+        }
+        for _ in 0..10 {
+            let corner =
+                |random: &mut Random| (20.0 + random.below(180.0), 40.0 + random.below(150.0));
+            let points = [
+                corner(&mut random),
+                corner(&mut random),
+                corner(&mut random),
+            ];
+            tiles.push(triangle(points, random.below(1.0) as f32));
+        }
+
+        for transform in [
+            Affine::IDENTITY,
+            Affine::new([1.5, 0.3, -0.2, 1.1, 10.0, -12.5]),
+            // Off the device.
+            Affine::translate((-500.0, -500.0)),
+        ] {
+            for read in [
+                Rect::new(0.5, 0.5, 399.5, 399.5),
+                Rect::new(60.5, 90.5, 129.5, 139.5),
+                Rect::new(-10.0, -10.0, -5.0, -5.0),
+            ] {
+                check(&tiles, transform, read);
+            }
+        }
+        // Slivers far apart.
+        let slivers = [
+            triangle([(1.0, 1.0), (3.0, 1.0), (1.0, 390.0)], 0.25),
+            triangle([(380.0, 1.0), (383.0, 1.0), (380.0, 390.0)], 0.75),
+        ];
+        check(
+            &slivers,
+            Affine::IDENTITY,
+            Rect::new(0.5, 0.5, 399.5, 399.5),
+        );
+        check(&[], Affine::IDENTITY, Rect::new(0.5, 0.5, 399.5, 399.5));
     }
 }
