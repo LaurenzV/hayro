@@ -20,6 +20,10 @@
     "file": "pdfs/custom/annotation_no_view.pdf"
   },
   {
+    "id": "annotation_bbox_offset",
+    "file": "pdfs/custom/annotation_bbox_offset.pdf"
+  },
+  {
     "id": "clip_path_evenodd",
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },

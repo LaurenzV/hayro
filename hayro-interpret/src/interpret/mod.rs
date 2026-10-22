@@ -191,13 +191,15 @@ pub fn interpret_page<'a>(
                 // corner with the greatest x and y coordinates) of the
                 // transformed appearance box to the corresponding corners
                 // of the annotation’s rectangle.
+                let sx = annot_rect.width() / transformed_rect.width();
+                let sy = annot_rect.height() / transformed_rect.height();
                 let affine = Affine::new([
-                    annot_rect.width() / transformed_rect.width(),
+                    sx,
                     0.0,
                     0.0,
-                    annot_rect.height() / transformed_rect.height(),
-                    annot_rect.x0 - transformed_rect.x0,
-                    annot_rect.y0 - transformed_rect.y0,
+                    sy,
+                    annot_rect.x0 - sx * transformed_rect.x0,
+                    annot_rect.y0 - sy * transformed_rect.y0,
                 ]);
 
                 // 3) Matrix shall be concatenated with A to form a matrix
