@@ -170,7 +170,7 @@ def collect_entries() -> tuple[list[tuple[dict, str, bool]], int, int]:
 
 def write_tests(rust_functions: list[str]) -> None:
     header = "use crate::{run_render_test, run_render_test_with_password};\n\n"
-    content = header + "\n".join(rust_functions)
+    content = header + "\n".join(rust_functions) + "\n"
     OUTPUT_FILE.write_text(content)
 
 
