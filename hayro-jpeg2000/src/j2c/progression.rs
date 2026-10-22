@@ -8,7 +8,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::codestream::{Header, ProgressionOrder};
+use super::codestream::{Header, MAX_RESOLUTION_COUNT, ProgressionOrder};
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use crate::error::{DecodingError, Result};
 use core::cmp::Ordering;
@@ -22,6 +22,7 @@ pub(crate) struct ProgressionData {
     pub(crate) precinct: u64,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct IteratorInput<'a> {
     layers: (u8, u8),
     tile: &'a Tile<'a>,
@@ -30,41 +31,30 @@ pub(crate) struct IteratorInput<'a> {
 }
 
 impl<'a> IteratorInput<'a> {
+    /// All packets of the tile.
     pub(crate) fn new(tile: &'a Tile<'a>) -> Self {
-        Self::new_with_custom_bounds(
-            tile,
-            // Will be clamped automatically.
-            (0, u8::MAX),
-            (0, u8::MAX),
-            (0, u8::MAX),
-        )
-    }
-
-    pub(crate) fn new_with_custom_bounds(
-        tile: &'a Tile<'a>,
-        mut resolutions: (u8, u8),
-        mut layers: (u8, u8),
-        mut components: (u8, u8),
-    ) -> Self {
         let max_resolution = tile
             .component_infos
             .iter()
             .map(|c| c.coding_style.parameters.num_resolution_levels)
             .max()
             .unwrap_or(0);
-        let max_layer = tile.num_layers;
-        let max_component = tile.component_infos.len() as u8;
-
-        // Make sure we don't exceed what's actually possible
-        resolutions.1 = resolutions.1.min(max_resolution);
-        layers.1 = layers.1.min(max_layer);
-        components.1 = components.1.min(max_component);
 
         Self {
-            layers,
+            layers: (0, tile.num_layers),
             tile,
-            resolutions,
-            components,
+            resolutions: (0, max_resolution),
+            components: (0, tile.component_infos.len() as u8),
+        }
+    }
+
+    /// The packets of this input within the given bounds.
+    fn restrict(&self, resolutions: (u8, u8), layers: (u8, u8), components: (u8, u8)) -> Self {
+        Self {
+            layers: (layers.0, layers.1.min(self.layers.1)),
+            tile: self.tile,
+            resolutions: (resolutions.0, resolutions.1.min(self.resolutions.1)),
+            components: (components.0, components.1.min(self.components.1)),
         }
     }
 
@@ -90,6 +80,17 @@ impl<'a> IteratorInput<'a> {
             // (self.resolutions.1 stores the maximum across all component tiles), so
             // take the minimum of both.
             .min(self.tile.component_infos[component_idx as usize].num_resolution_levels())
+    }
+
+    /// The resolutions of the given component as a bit set.
+    fn resolution_bits(&self, component_idx: u8) -> u64 {
+        let (min, max) = (self.min_resolution(), self.max_resolution(component_idx));
+
+        if min >= max {
+            0
+        } else {
+            (u64::MAX >> (64 - (max - min))) << min
+        }
     }
 
     fn min_comp(&self) -> u8 {
@@ -147,95 +148,109 @@ pub(crate) fn progression_iterator<'a>(
     }
 
     let clamp = |value: u16| u8::try_from(value).unwrap_or(u8::MAX);
+    let tile_input = IteratorInput::new(tile);
 
     // A change's iterator is built once the previous one is used up: one in a
     // position order holds every precinct it covers, and changes may overlap.
     // Precincts that can't be laid out end the packets, but they already fail
     // the tile when its precincts are built.
     let mut changes = progression_changes.clone().into_iter();
-    let mut current: Option<(Box<dyn Iterator<Item = ProgressionData> + 'a>, ChangeBounds)> = None;
-
-    // Each change starts at layer 0 and covers every precinct of its
-    // resolutions and components, so the packets that the used-up changes
-    // included are those below a number of layers for each component and
-    // resolution. Packets that were already included must not be included
-    // again, and a change that has none left is skipped without building its
-    // iterator.
-    let mut included_layers = tile
-        .component_infos
-        .iter()
-        .map(|c| vec![0_u8; usize::from(c.num_resolution_levels())])
-        .collect::<Vec<_>>();
+    let mut current: Option<(
+        Box<dyn Iterator<Item = ProgressionData> + 'a>,
+        IteratorInput<'a>,
+    )> = None;
+    let mut included = Included::new(&tile_input);
 
     Ok(Box::new(iter::from_fn(move || {
         loop {
-            if let Some((iterator, bounds)) = &mut current {
-                if let Some(data) = iterator.find(|data| {
-                    data.layer_num
-                        >= included_layers[usize::from(data.component)]
-                            [usize::from(data.resolution)]
-                }) {
+            if let Some((iterator, input)) = &mut current {
+                if let Some(data) = iterator.find(|data| !included.contains(data)) {
                     return Some(data);
                 }
 
-                for (component, resolution) in bounds.iter(tile) {
-                    let layers = &mut included_layers[component][resolution];
-                    *layers = (*layers).max(bounds.layers);
-                }
-
+                included.add(input);
                 current = None;
             }
 
             let change = changes.next()?;
-            let input = IteratorInput::new_with_custom_bounds(
-                tile,
+            let input = tile_input.restrict(
                 (change.resolution_start, change.resolution_end),
                 (0, clamp(change.layer_end)),
                 (clamp(change.component_start), clamp(change.component_end)),
             );
-            let bounds = ChangeBounds::new(&input);
 
-            if bounds.iter(tile).all(|(component, resolution)| {
-                included_layers[component][resolution] >= bounds.layers
-            }) {
+            if included.covers(&input) {
                 continue;
             }
 
             current = Some((
                 progression_order_iterator(input, change.progression_order).ok()?,
-                bounds,
+                input,
             ));
         }
     })))
 }
 
-/// The components and resolutions of a progression order change, and its
-/// number of layers.
-struct ChangeBounds {
-    resolutions: (u8, u8),
-    components: (u8, u8),
-    layers: u8,
+// Resolutions are bits of a `u64`.
+const _: () = assert!(MAX_RESOLUTION_COUNT < 64);
+
+/// The packets that the used-up progression order changes included, which
+/// must not be included again (B.12.3).
+///
+/// Each change starts at layer 0 and covers every precinct of its resolutions
+/// and components, so for each component and layer the included packets are
+/// those of a set of resolutions. Where a layer is included, so are the layers
+/// below it.
+struct Included {
+    num_layers: usize,
+    /// Bit `r` of entry `c * num_layers + l` is set once layer `l` of
+    /// resolution `r` of component `c` is included.
+    resolutions: Vec<u64>,
 }
 
-impl ChangeBounds {
-    fn new(input: &IteratorInput<'_>) -> Self {
+impl Included {
+    fn new(tile: &IteratorInput<'_>) -> Self {
+        let num_layers = usize::from(tile.max_layer());
+
         Self {
-            resolutions: (input.min_resolution(), input.total_max_resolution()),
-            components: (input.min_comp(), input.max_comp()),
-            layers: input.max_layer(),
+            num_layers,
+            resolutions: vec![0; usize::from(tile.max_comp()) * num_layers],
         }
     }
 
-    fn iter<'a>(&self, tile: &'a Tile<'a>) -> impl Iterator<Item = (usize, usize)> + 'a {
-        let (min_resolution, max_resolution) = self.resolutions;
+    fn index(&self, component_idx: u8, layer: u8) -> usize {
+        usize::from(component_idx) * self.num_layers + usize::from(layer)
+    }
 
-        (self.components.0..self.components.1).flat_map(move |component| {
-            let max_resolution = max_resolution
-                .min(tile.component_infos[usize::from(component)].num_resolution_levels());
+    fn contains(&self, data: &ProgressionData) -> bool {
+        self.resolutions[self.index(data.component, data.layer_num)] >> data.resolution & 1 == 1
+    }
 
-            (min_resolution..max_resolution)
-                .map(move |resolution| (usize::from(component), usize::from(resolution)))
+    /// Whether every packet of the input is included, checked at its top
+    /// layer: one test per component.
+    fn covers(&self, input: &IteratorInput<'_>) -> bool {
+        let Some(top_layer) = input.max_layer().checked_sub(1) else {
+            return true;
+        };
+
+        (input.min_comp()..input.max_comp()).all(|component_idx| {
+            #[cfg(test)]
+            tests::COVER_READS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            let resolutions = input.resolution_bits(component_idx);
+
+            self.resolutions[self.index(component_idx, top_layer)] & resolutions == resolutions
         })
+    }
+
+    fn add(&mut self, input: &IteratorInput<'_>) {
+        for component_idx in input.min_comp()..input.max_comp() {
+            let resolutions = input.resolution_bits(component_idx);
+
+            for layer in input.min_layer()..input.max_layer() {
+                let index = self.index(component_idx, layer);
+                self.resolutions[index] |= resolutions;
+            }
+        }
     }
 }
 
@@ -457,4 +472,72 @@ pub(crate) fn component_position_resolution_layer_progression<'a>(
             .then_with(|| p.resolution.cmp(&s.resolution))
             .then_with(|| p.precinct_idx.cmp(&s.precinct_idx))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{DecodeSettings, DecoderContext, Image};
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    /// How many entries of the included packets the checks for skipping a
+    /// progression order change read.
+    pub(super) static COVER_READS: AtomicUsize = AtomicUsize::new(0);
+
+    fn marker(code: u16, body: &[u8]) -> Vec<u8> {
+        let mut marker = code.to_be_bytes().to_vec();
+        marker.extend(u16::try_from(body.len() + 2).unwrap().to_be_bytes());
+        marker.extend(body);
+        marker
+    }
+
+    /// A 1 × 1 image with `components` components, `levels` decomposition
+    /// levels (one precinct per resolution), one layer and `changes`
+    /// identical RPCL changes over all of it. Every packet is empty, and one
+    /// more byte follows them, so the decoder reaches every change.
+    fn repeated_changes(components: u8, levels: u8, changes: usize) -> Vec<u8> {
+        let mut siz = vec![0, 0];
+        for value in [1_u32, 1, 0, 0, 1, 1, 0, 0] {
+            siz.extend(value.to_be_bytes());
+        }
+        siz.extend(u16::from(components).to_be_bytes());
+        siz.extend([7, 1, 1].repeat(usize::from(components)));
+        let mut cod = vec![1, 2, 0, 1, 0, levels, 4, 4, 0, 1];
+        cod.extend(vec![0x11; usize::from(levels) + 1]);
+        let mut qcd = vec![0x40];
+        qcd.extend(vec![0x48; 3 * usize::from(levels) + 1]);
+        let change = [0, 0, 0, 1, levels + 1, components, 2];
+        let packets = usize::from(components) * (usize::from(levels) + 1);
+        let data = vec![0; packets + 1];
+        let mut sot = vec![0, 0];
+        sot.extend(u32::try_from(12 + 2 + data.len()).unwrap().to_be_bytes());
+        sot.extend([0, 1]);
+
+        let mut stream = vec![0xFF, 0x4F];
+        stream.extend(marker(0xFF51, &siz));
+        stream.extend(marker(0xFF52, &cod));
+        stream.extend(marker(0xFF5C, &qcd));
+        stream.extend(marker(0xFF5F, &change.repeat(changes)));
+        stream.extend(marker(0xFF90, &sot));
+        stream.extend([0xFF, 0x93]);
+        stream.extend(data);
+        stream.extend([0xFF, 0xD9]);
+        stream
+    }
+
+    #[test]
+    fn skipping_a_change_reads_each_component_once() {
+        let (components, changes) = (255, 1000);
+        let data = repeated_changes(components, 30, changes);
+        let image = Image::new(&data, &DecodeSettings::default()).unwrap();
+        let reads = COVER_READS.load(Ordering::Relaxed);
+        image.decode(&mut DecoderContext::default()).unwrap();
+        let reads = COVER_READS.load(Ordering::Relaxed) - reads;
+
+        assert!(
+            reads <= changes * usize::from(components),
+            "skipping {changes} changes over {components} components and 31 resolutions read {reads} entries"
+        );
+    }
 }
