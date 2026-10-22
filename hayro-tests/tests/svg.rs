@@ -22,6 +22,11 @@ fn image_rgba8() {
 }
 
 #[test]
+fn image_mask_alpha() {
+    run_svg_test("image_mask_alpha", "pdfs/custom/image_mask_alpha.pdf", None);
+}
+
+#[test]
 fn clip_path_evenodd() {
     run_svg_test(
         "clip_path_evenodd",

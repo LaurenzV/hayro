@@ -172,6 +172,9 @@ impl<'a> ImageXObject<'a> {
             blend_mode,
         );
 
+        // The transparency group already applies the fill alpha.
+        context.fill_paint_mut().alpha = 1.0;
+
         let image = if self.kind.is_mask() {
             Image::Stencil(StencilImage {
                 paint: context.get_paint(false),

@@ -352,6 +352,10 @@
     "file": "pdfs/custom/image_mask_4.pdf"
   },
   {
+    "id": "image_mask_alpha",
+    "file": "pdfs/custom/image_mask_alpha.pdf"
+  },
+  {
     "id": "image_mask_hairline",
     "file": "pdfs/custom/image_mask_hairline.pdf"
   },
