@@ -139,7 +139,7 @@ pub struct Shading {
 
 impl Shading {
     pub(crate) fn new(dict: &Dict<'_>, stream: Option<&Stream<'_>>, cache: &Cache) -> Option<Self> {
-        let cache_key = dict.cache_key();
+        let cache_key = stream.map_or_else(|| dict.cache_key(), |s| s.cache_key());
 
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
 
