@@ -131,8 +131,13 @@ fn fallback_xref_map_inner<'a>(
                             root_ref = last_obj_num;
                         }
 
-                        if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
-                            && dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                        if dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                            && {
+                                let mut after_dict = r.clone();
+                                after_dict.skip_white_spaces_and_comments();
+                                after_dict.forward_tag(b"stream").is_some()
+                            }
+                            && let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
