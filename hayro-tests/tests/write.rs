@@ -1,7 +1,7 @@
 use crate::{load_pdf, run_write_test};
-use hayro_syntax::Pdf;
 use hayro_syntax::object::dict::keys::GROUP;
 use hayro_syntax::object::{Dict, Stream};
+use hayro_syntax::{Filter, Pdf};
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 
@@ -168,6 +168,25 @@ fn write_page_with_encryption_1() {
 
 // This PDF uses named property lists in `BDC` operators, so its `Properties` resources must be
 // preserved. Omitting them causes rendering issues in Quartz and a warning in Ghostscript.
+#[test]
+fn write_page_with_crypt_filter() {
+    let hayro_pdf = load_pdf("pdfs/custom/encrypted_crypt_filter.pdf");
+    let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
+    let reread = Pdf::new(extracted).unwrap();
+    let x_object = reread.pages()[0]
+        .resources()
+        .x_objects
+        .get::<Stream<'_>>("X0")
+        .unwrap();
+
+    // The written file isn't encrypted, so the `Crypt` filter is gone.
+    assert_eq!(x_object.filters().as_slice(), [Filter::AsciiHexDecode]);
+    assert_eq!(
+        x_object.decoded().unwrap().as_ref(),
+        b"0 0 1 rg 140 20 40 40 re f"
+    );
+}
+
 #[test]
 fn write_page_with_properties() {
     run_write_test(

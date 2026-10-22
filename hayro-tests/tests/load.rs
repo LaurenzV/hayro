@@ -4,7 +4,7 @@ use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
-use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
+use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier, Stream};
 use std::sync::Barrier;
 
 fn load_pdf(file: &[u8]) {
@@ -679,6 +679,31 @@ fn metadata_in_object_stream() {
     };
 
     assert_eq!(pdf.metadata(), &expected);
+}
+
+#[test]
+fn encrypted_crypt_filter() {
+    // The document decrypts streams with AES by default. Instead, the content streams
+    // name the `Identity` crypt filter and use it by leaving out the name, and the
+    // XObject names an RC4 crypt filter.
+    let file = include_bytes!("../pdfs/custom/encrypted_crypt_filter.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+    let page = &pdf.pages()[0];
+
+    assert_eq!(
+        page.page_stream(),
+        Some(b"1 0 0 rg 20 20 40 40 re f 0 1 0 rg 80 20 40 40 re f /X0 Do ".as_slice())
+    );
+    assert_eq!(
+        page.resources()
+            .x_objects
+            .get::<Stream<'_>>("X0")
+            .unwrap()
+            .decoded()
+            .unwrap()
+            .as_ref(),
+        b"0 0 1 rg 140 20 40 40 re f"
+    );
 }
 
 #[test]

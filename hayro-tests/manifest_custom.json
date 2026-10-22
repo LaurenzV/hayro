@@ -1102,6 +1102,10 @@
     "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
   },
   {
+    "id": "encrypted_crypt_filter",
+    "file": "pdfs/custom/encrypted_crypt_filter.pdf"
+  },
+  {
     "id": "issue10_1",
     "link": true
   },

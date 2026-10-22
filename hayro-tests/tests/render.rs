@@ -269,6 +269,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn encrypted_aes_128() { run_render_test("encrypted_aes_128", "pdfs/custom/encrypted_aes_128.pdf", None); }
 #[test] fn encrypted_aes_256() { run_render_test("encrypted_aes_256", "pdfs/custom/encrypted_aes_256.pdf", None); }
 #[test] fn encrypted_aes_256_hardened() { run_render_test("encrypted_aes_256_hardened", "pdfs/custom/encrypted_aes_256_hardened.pdf", None); }
+#[test] fn encrypted_crypt_filter() { run_render_test("encrypted_crypt_filter", "pdfs/custom/encrypted_crypt_filter.pdf", None); }
 #[test] fn issue10_1() { run_render_test("issue10_1", "downloads/custom/issue10_1.pdf", None); }
 #[test] fn issue10_2() { run_render_test("issue10_2", "downloads/custom/issue10_2.pdf", None); }
 #[test] fn type0_function_too_many_entries() { run_render_test("type0_function_too_many_entries", "pdfs/custom/type0_function_too_many_entries.pdf", None); }
