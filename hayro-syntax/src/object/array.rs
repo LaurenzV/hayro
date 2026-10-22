@@ -449,7 +449,14 @@ mod tests {
     }
 
     #[test]
+    fn array_with_bare_number_sign_name() {
+        let res = array_impl(b"[34 /quotedbl /# 37 /percent]").unwrap();
+        assert_eq!(res.len(), 5);
+        assert!(matches!(&res[2], Object::Name(name) if name.as_ref() == b"#"));
+    }
+
+    #[test]
     fn array_with_unreadable_item() {
-        let _ = array_ref_impl(b"[true /#zz false]");
+        let _ = array_ref_impl(b"[true <<>>stream false]");
     }
 }

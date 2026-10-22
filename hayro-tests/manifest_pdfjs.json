@@ -1220,8 +1220,7 @@
   {
     "id": "issue6692",
     "first_page": 10,
-    "last_page": 10,
-    "ignore": true
+    "last_page": 10
   },
   {
     "id": "issue6782"

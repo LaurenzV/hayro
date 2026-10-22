@@ -1187,7 +1187,7 @@ mod tests {
 
     #[test]
     fn dict_with_unreadable_value() {
-        let dict = Dict::from_bytes(b"<< /A /#zz /B true >>").unwrap();
+        let dict = Dict::from_bytes(b"<< /A <<>>stream /B true >>").unwrap();
         let _ = dict.entries().count();
         let _ = format!("{dict:?}");
     }
