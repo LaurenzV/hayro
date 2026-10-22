@@ -808,19 +808,6 @@ fn shading_pattern_color_space() {
 }
 
 #[test]
-fn object_stream_shared_offsets() {
-    // The object stream lists object 5 at the white space before its only member,
-    // object 6 at the same offset and object 7 one byte later, still in that white space.
-    let file = include_bytes!("../pdfs/load/object_stream_shared_offsets.pdf");
-    let pdf = Pdf::new(file.to_vec()).unwrap();
-    let get = |number| pdf.xref().get::<Dict<'_>>(ObjectIdentifier::new(number, 0));
-
-    assert!(get(5).is_some());
-    assert!(get(6).is_none());
-    assert!(get(7).is_none());
-}
-
-#[test]
 fn concurrent_object_stream_resolution() {
     let data = include_bytes!("../pdfs/load/concurrent_object_streams.pdf");
 

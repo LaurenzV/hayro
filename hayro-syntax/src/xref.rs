@@ -1068,7 +1068,6 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
 
 pub(crate) struct ObjectStream {
     data: Vec<u8>,
-    // The offset is `None` for members that can't be read.
     offsets: Vec<(u32, Option<usize>)>,
 }
 
@@ -1097,12 +1096,10 @@ impl ObjectStream {
             let relative_offset = r.read_without_context::<usize>()?;
             let offset = first_offset + relative_offset;
 
-            // Members are stored in increasing order of their offsets. Like qpdf, ignore
-            // entries that don't follow that order, since otherwise any number of objects
-            // could share the same member. Compare with where the previous member starts
-            // after white space and comments, so that offsets in the white space before a
-            // member can't share it either.
-            if last_offset.is_some_and(|last| offset <= last) {
+            // Offsets must increase, otherwise any number of objects could share one member.
+            // The start of the previous member excludes the white space before it, so that
+            // offsets into that white space can't share it either.
+            if offset >= data.len() || last_offset.is_some_and(|last| offset <= last) {
                 warn!("object {obj_num} has an invalid offset in object stream");
                 offsets.push((obj_num, None));
             } else {
