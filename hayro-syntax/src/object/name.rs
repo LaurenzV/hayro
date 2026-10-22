@@ -171,8 +171,6 @@ pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
     Some(())
 }
 
-/// Reads a word that isn't a name, such as `true`, `null` or a content stream operator. It
-/// ends only where a regular character does, so `true1` is one word, and not `true` and `1`.
 pub(crate) fn read_word<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     skip_name_like(r, false)?;

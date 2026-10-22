@@ -354,9 +354,6 @@ f
 
     #[test]
     fn words_that_only_start_like_keywords() {
-        // Operators such as `f*` and `n` are read as before. In an array or a dictionary, a
-        // word that only starts like `true`, `false` or `null`, such as an operator, reads as
-        // null like other words there, and the instructions after it are still read.
         let input = b"[(a) f (b) true1 false] TJ 0 0 m f* n \
             BI /IM truefoo /W 8 /H 1 /BPC 1 ID \xAA EI 0 0 1 rg";
 

@@ -192,7 +192,7 @@ impl Skippable for Object<'_> {
             b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
-            // `true`, `false`, `null` and any other word, see the comment in `read`.
+            // See the comment in `read`.
             _ => skip_name_like(r, false),
         }
     }
@@ -221,10 +221,8 @@ impl<'a> Readable<'a> for Object<'a> {
             b'(' => Self::String(String::read(r, ctx)?),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
             b'[' => Self::Array(Array::read(r, ctx)?),
-            // A keyword is the whole word, so `true1` or `trust` isn't `true`. Like MuPDF, read
-            // any other word as null, so that it doesn't make the object around it unreadable.
-            // This includes content operators in an array (see test case
-            // operator-in-TJ-array-0).
+            // Read unknown words as null so that they don't make the object around them
+            // unreadable (see test case operator-in-TJ-array-0).
             _ => match read_word(r)? {
                 b"true" => Self::Boolean(true),
                 b"false" => Self::Boolean(false),
@@ -373,8 +371,6 @@ mod tests {
 
     #[test]
     fn keywords_are_whole_words() {
-        // A word that only starts like `true`, `false` or `null` is another word, which reads
-        // as null like other unknown words, so the items after it are still read.
         for (word, keyword) in [
             ("true", Some(true)),
             ("false", Some(false)),
@@ -418,7 +414,6 @@ mod tests {
             assert_eq!(dict.get::<bool>(b"Cap"), keyword, "{input}");
             assert_eq!(dict.get::<i32>(b"A"), Some(1), "{input}");
 
-            // Skipping the word ends where reading it does.
             let mut r = Reader::new(word.as_bytes());
             r.skip::<Object<'_>>(false).unwrap();
             assert!(r.at_end(), "{word}");

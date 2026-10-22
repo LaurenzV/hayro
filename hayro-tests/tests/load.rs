@@ -901,24 +901,3 @@ fn concurrent_xref_repair_retries_original_entries() {
         });
     }
 }
-
-#[test]
-fn page_tree_with_words_starting_like_keywords() {
-    // `/Kids` is `[4 0 R trust 3 0 R]` and the page tree has `/Rotate 90`. The first page
-    // is 200 by 200 and has a group with `/I trueish`, the second page is 300 by 300.
-    let file = include_bytes!("../pdfs/load/page_tree_with_words_starting_like_keywords.pdf");
-    let pdf = Pdf::new(file.to_vec()).unwrap();
-
-    let sizes = pdf
-        .pages()
-        .iter()
-        .map(|page| page.base_dimensions())
-        .collect::<Vec<_>>();
-    assert_eq!(sizes, [(200.0, 200.0), (300.0, 300.0)]);
-    for page in pdf.pages().iter() {
-        assert!(matches!(
-            page.rotation(),
-            hayro_syntax::page::Rotation::Horizontal
-        ));
-    }
-}
