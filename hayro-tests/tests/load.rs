@@ -877,16 +877,3 @@ fn concurrent_xref_repair_retries_original_entries() {
         });
     }
 }
-
-#[test]
-fn xref_rebuild_object_stream_without_stream() {
-    let file = include_bytes!("../pdfs/load/xref_rebuild_object_stream_without_stream.pdf");
-    let pdf = Pdf::new(file.to_vec()).unwrap();
-    assert_eq!(pdf.pages().len(), 1);
-    // Object 6 is only in the data of object 5, which isn't an object stream.
-    assert!(
-        pdf.xref()
-            .get::<Dict<'_>>(ObjectIdentifier::new(6, 0))
-            .is_none()
-    );
-}

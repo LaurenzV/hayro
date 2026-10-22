@@ -131,8 +131,6 @@ fn fallback_xref_map_inner<'a>(
                             root_ref = last_obj_num;
                         }
 
-                        // Without the `stream` keyword right after the dictionary, reading
-                        // it as a stream would search the rest of the file for its data.
                         if dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
                             && {
                                 let mut after_dict = r.clone();
