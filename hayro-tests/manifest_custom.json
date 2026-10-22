@@ -834,6 +834,10 @@
     "file": "pdfs/custom/pattern_tiling_large_x_step.pdf"
   },
   {
+    "id": "pattern_tiling_large_step",
+    "file": "pdfs/custom/pattern_tiling_large_step.pdf"
+  },
+  {
     "id": "pattern_tiling_lines",
     "file": "pdfs/custom/pattern_tiling_lines.pdf"
   },
