@@ -98,12 +98,119 @@ fn pixel(pos: Point) -> (u16, u16) {
     (pos.x as u16, pos.y as u16)
 }
 
-/// For each position a texture samples, in the order it samples them, the pixel
-/// the position falls in and the triangle that colors that pixel.
+/// Each of a set of pixels, with the triangle that colors it.
 pub(crate) struct Coverage {
-    pixels: Vec<(u16, u16)>,
-    /// The index of the triangle plus one, or 0 where none covers the pixel.
+    pixels: Pixels,
+    /// For each pixel, the index of the triangle plus one, or 0 where none
+    /// covers it.
     owners: Vec<u32>,
+}
+
+/// A set of pixels, each with an index.
+enum Pixels {
+    /// The pixels of a rectangle, row by row.
+    Rect(PixelRect),
+    /// The pixels listed, as `(y, x)` in ascending order.
+    Sorted(Vec<(u16, u16)>),
+}
+
+impl Pixels {
+    /// The index of a pixel, if it is in the set.
+    fn index(&self, (x, y): (u16, u16)) -> Option<usize> {
+        match self {
+            Self::Rect(rect) => rect.contains((x, y)).then(|| {
+                usize::from(y - rect.ys.start) * rect.xs.len() + usize::from(x - rect.xs.start)
+            }),
+            Self::Sorted(pixels) => pixels.binary_search(&(y, x)).ok(),
+        }
+    }
+
+    /// Call `f` with the index and the pixel of each pixel of the set that lies
+    /// in `rect`.
+    fn for_each_in(&self, rect: &PixelRect, mut f: impl FnMut(usize, (u16, u16))) {
+        match self {
+            Self::Rect(own) => {
+                let rect = rect.intersect(own);
+                for y in rect.ys {
+                    let row = usize::from(y - own.ys.start) * own.xs.len();
+                    for x in rect.xs.clone() {
+                        step();
+                        f(row + usize::from(x - own.xs.start), (x, y));
+                    }
+                }
+            }
+            Self::Sorted(pixels) => {
+                if rect.is_empty() {
+                    return;
+                }
+                // Visit the rows of the set within `rect`, skipping to the
+                // pixels of each that lie in it.
+                let seek = |from: usize, to: (u16, u16)| {
+                    from + pixels[from..].partition_point(|&p| p < to)
+                };
+                let mut i = seek(0, (rect.ys.start, rect.xs.start));
+                while let Some(&(y, x)) = pixels.get(i) {
+                    step();
+                    if y >= rect.ys.end {
+                        break;
+                    }
+                    if x < rect.xs.start {
+                        i = seek(i, (y, rect.xs.start));
+                    } else if x >= rect.xs.end {
+                        // `y` is below `rect.ys.end`, so `y + 1` fits.
+                        i = seek(i, (y + 1, rect.xs.start));
+                    } else {
+                        f(i, (x, y));
+                        i += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Rect(rect) => rect.xs.len() * rect.ys.len(),
+            Self::Sorted(pixels) => pixels.len(),
+        }
+    }
+}
+
+/// `height` rows of `width` positions, `(start, x_advance, y_advance, width,
+/// height)`: the first at `start`, each next one in a row `x_advance` further
+/// and each next row `y_advance` further.
+type Positions = (Point, Vec2, Vec2, u32, u32);
+
+/// Call `f` with each of `positions`, row by row.
+fn for_each_position(
+    (mut start, x_advance, y_advance, width, height): Positions,
+    mut f: impl FnMut(Point),
+) {
+    for _ in 0..height {
+        let mut point = start;
+
+        for _ in 0..width {
+            f(point);
+
+            point += x_advance;
+        }
+
+        start += y_advance;
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Makes `coverage` list the pixels if `Some(true)`, or take their
+    /// rectangle if `Some(false)`.
+    static SORTED: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    /// The pixels visited and the searches made by `Pixels::for_each_in`.
+    static STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn step() {
+    #[cfg(test)]
+    STEPS.set(STEPS.get() + 1);
 }
 
 /// Encoded dummy shading.
@@ -176,63 +283,59 @@ impl EncodedShadingPattern {
     /// [`texture_dimensions`]) and the transform from grid space to the space
     /// of `bbox`. No size cap is applied — callers that need to bound the
     /// texture size should check [`texture_dimensions`] first. For a mesh
-    /// shading, this keeps 8 bytes per pixel of the grid while sampling.
+    /// shading, this keeps at most 8 bytes per pixel of the grid while
+    /// sampling.
     pub fn sample_texture(
         &self,
         bbox: Rect,
         scale: f32,
         mut f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
+        let positions = self.positions(bbox, scale);
+        let (_, _, _, width, height) = positions;
+
+        if let EncodedShadingType::Sampled(mesh) = &self.shading_type {
+            // A mesh is colored only at the pixels the positions fall in.
+            let coverage = mesh.coverage(positions);
+
+            for_each_position(positions, |point| {
+                let pixel = pixel(point);
+                let triangle = coverage
+                    .pixels
+                    .index(pixel)
+                    .and_then(|i| coverage.owners[i].checked_sub(1))
+                    .map(|i| &mesh.triangles[i as usize].triangle);
+                f(self.finish(mesh.color(
+                    triangle,
+                    pixel,
+                    self.background_color,
+                    &self.color_space,
+                )));
+            });
+        } else {
+            for_each_position(positions, |point| f(self.sample(point)));
+        }
+
+        (
+            width,
+            height,
+            Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(1.0 / scale as f64),
+        )
+    }
+
+    /// The positions [`sample_texture`](Self::sample_texture) samples.
+    fn positions(&self, bbox: Rect, scale: f32) -> Positions {
         let (width, height) = texture_dimensions(bbox, scale);
         let inv_scale = 1.0 / scale as f64;
 
         let (x_advance, y_advance) =
             x_y_advances(&(Affine::scale(inv_scale) * self.base_transform));
 
-        let mut start_point = self.base_transform
+        let start_point = self.base_transform
             * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
             * Point::new(bbox.x0, bbox.y0);
 
-        if let EncodedShadingType::Sampled(mesh) = &self.shading_type {
-            // A mesh is colored only at the pixels the positions fall in.
-            let coverage = mesh.coverage(
-                start_point,
-                x_advance,
-                y_advance,
-                width as usize,
-                height as usize,
-            );
-
-            for (&(x, y), &owner) in coverage.pixels.iter().zip(&coverage.owners) {
-                let triangle = owner
-                    .checked_sub(1)
-                    .map(|i| &mesh.triangles[i as usize].triangle);
-                f(self.finish(mesh.color(
-                    triangle,
-                    (x, y),
-                    self.background_color,
-                    &self.color_space,
-                )));
-            }
-        } else {
-            for _ in 0..height {
-                let mut point = start_point;
-
-                for _ in 0..width {
-                    f(self.sample(point));
-
-                    point += x_advance;
-                }
-
-                start_point += y_advance;
-            }
-        }
-
-        (
-            width,
-            height,
-            Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(inv_scale),
-        )
+        (start_point, x_advance, y_advance, width, height)
     }
 
     /// Rasterize the shading into a straight (non-premultiplied) RGBA8
@@ -458,130 +561,77 @@ impl EncodedSampledShading {
         }
     }
 
-    /// Find the pixels of `height` rows of `width` positions, the first at
-    /// `start`, each next one in a row `x_advance` further and each next row
-    /// `y_advance` further, and the triangle that colors each pixel.
-    fn coverage(
-        &self,
-        start: Point,
-        x_advance: Vec2,
-        y_advance: Vec2,
-        width: usize,
-        height: usize,
-    ) -> Coverage {
-        if width == 0 || height == 0 {
-            return Coverage {
-                pixels: vec![],
-                owners: vec![],
-            };
-        }
-
-        let mut pixels = Vec::with_capacity(width * height);
+    /// Find the pixels the positions fall in that a triangle may color, and the
+    /// triangle that colors each.
+    fn coverage(&self, positions: Positions) -> Coverage {
+        // The pixels from the least x and y of the pixels the positions fall
+        // in to the greatest.
         let (mut low, mut high) = ((u16::MAX, u16::MAX), (0, 0));
-        let mut row_start = start;
-        for _ in 0..height {
-            let mut point = row_start;
-            for _ in 0..width {
-                let (x, y) = pixel(point);
-                pixels.push((x, y));
-                low = (low.0.min(x), low.1.min(y));
-                high = (high.0.max(x), high.1.max(y));
-                point += x_advance;
-            }
-            row_start += y_advance;
-        }
-        // The pixels from the least x and y of these pixels to the greatest.
-        let reached = PixelRect {
+        for_each_position(positions, |point| {
+            let (x, y) = pixel(point);
+            low = (low.0.min(x), low.1.min(y));
+            high = (high.0.max(x), high.1.max(y));
+        });
+        let mut rect = PixelRect {
             xs: low.0..high.0.saturating_add(1),
             ys: low.1..high.1.saturating_add(1),
         };
 
-        let mut owners = vec![0; pixels.len()];
+        // Only the pixels in the box of some triangle can be colored.
+        let mut bounds: Option<PixelRect> = None;
+        for t in self.triangles.iter().filter(|t| !t.pixels.is_empty()) {
+            bounds = Some(match bounds {
+                None => t.pixels.clone(),
+                Some(b) => PixelRect {
+                    xs: b.xs.start.min(t.pixels.xs.start)..b.xs.end.max(t.pixels.xs.end),
+                    ys: b.ys.start.min(t.pixels.ys.start)..b.ys.end.max(t.pixels.ys.end),
+                },
+            });
+        }
+        rect = match bounds {
+            Some(bounds) => rect.intersect(&bounds),
+            None => PixelRect { xs: 0..0, ys: 0..0 },
+        };
 
-        // Each position adds the same advance to the one before it in its row
-        // or column, and rounding keeps order, so along a row each coordinate
-        // of the pixels only grows or only shrinks, as the sign of the advance
-        // says, and likewise down a column. The positions of a row that fall in
-        // a rectangle of pixels are thus a run, and so are the rows whose pixels
-        // span it.
-        let along_row = (x_advance.x >= 0.0, x_advance.y >= 0.0);
-        let down_column = (y_advance.x >= 0.0, y_advance.y >= 0.0);
-        // With upright advances, as a mesh has unless its base transform is
-        // changed, every row has the x of the first row and a single y.
-        let upright = x_advance.y == 0.0 && y_advance.x == 0.0;
-        let row = |j: usize| &pixels[j * width..][..width];
-        // The least and the greatest x and y of the pixels of each row.
-        let spans: Vec<_> = (0..height)
-            .map(|j| {
-                let (first, last) = (row(j)[0], row(j)[width - 1]);
-                (
-                    (first.0.min(last.0), first.0.max(last.0)),
-                    (first.1.min(last.1), first.1.max(last.1)),
-                )
-            })
-            .collect();
+        // Keep either every pixel of the rectangle or only those the positions
+        // fall in, whichever are fewer, so that neither memory nor the pixels
+        // visited for a triangle exceed the positions, and a pixel that many
+        // positions fall in is tested once.
+        let area = rect.xs.len() as u64 * rect.ys.len() as u64;
+        let count = u64::from(positions.3) * u64::from(positions.4);
+        let sorted = area > count;
+        #[cfg(test)]
+        let sorted = SORTED.get().unwrap_or(sorted);
 
-        for (t, owner) in self.triangles.iter().zip(1_u32..) {
-            let rect = t.pixels.intersect(&reached);
-            if rect.is_empty() {
-                continue;
-            }
-
-            let rows = runs([
-                spanning(&spans, |s| s.0, down_column.0, &rect.xs),
-                spanning(&spans, |s| s.1, down_column.1, &rect.ys),
-            ]);
-
-            // Then the rows that meet the rectangle have their y in it, and
-            // the same columns in it.
-            let upright_columns =
-                upright.then(|| spanning(row(0), |p| (p.0, p.0), along_row.0, &rect.xs));
-
-            for j in rows {
-                let row = row(j);
-                let columns = upright_columns.clone().unwrap_or_else(|| {
-                    runs([
-                        spanning(row, |p| (p.0, p.0), along_row.0, &rect.xs),
-                        spanning(row, |p| (p.1, p.1), along_row.1, &rect.ys),
-                    ])
-                });
-
-                for i in columns {
-                    let (x, y) = row[i];
-                    if t.triangle.contains_point(Point::new(x as f64, y as f64)) {
-                        owners[j * width + i] = owner;
+        let pixels = if sorted {
+            let mut pixels = Vec::new();
+            if !rect.is_empty() {
+                pixels.reserve_exact(count as usize);
+                for_each_position(positions, |point| {
+                    let (x, y) = pixel(point);
+                    if rect.contains((x, y)) {
+                        pixels.push((y, x));
                     }
-                }
+                });
             }
+            pixels.sort_unstable();
+            pixels.dedup();
+            Pixels::Sorted(pixels)
+        } else {
+            Pixels::Rect(rect)
+        };
+
+        let mut owners = vec![0; pixels.len()];
+        for (t, owner) in self.triangles.iter().zip(1_u32..) {
+            pixels.for_each_in(&t.pixels, |i, (x, y)| {
+                if t.triangle.contains_point(Point::new(x as f64, y as f64)) {
+                    owners[i] = owner;
+                }
+            });
         }
 
         Coverage { pixels, owners }
     }
-}
-
-/// The indices of the items whose span, from the least to the greatest value
-/// `span` gives for the item, meets `values`, given that both ends of the
-/// spans grow along the items if `growing`, and else shrink.
-fn spanning<T>(
-    items: &[T],
-    span: impl Fn(&T) -> (u16, u16),
-    growing: bool,
-    values: &Range<u16>,
-) -> Range<usize> {
-    if growing {
-        items.partition_point(|i| span(i).1 < values.start)
-            ..items.partition_point(|i| span(i).0 < values.end)
-    } else {
-        items.partition_point(|i| span(i).0 >= values.end)
-            ..items.partition_point(|i| span(i).1 >= values.start)
-    }
-}
-
-/// The indices in all of `runs`.
-fn runs<const N: usize>(runs: [Range<usize>; N]) -> Range<usize> {
-    runs.into_iter()
-        .reduce(|a, b| a.start.max(b.start)..a.end.min(b.end))
-        .unwrap_or_default()
 }
 
 fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> EncodedShadingType {
@@ -760,7 +810,10 @@ fn radial_pos(
 
 #[cfg(test)]
 mod tests {
-    use super::{EncodedShadingPattern, EncodedShadingType, encode_mesh, texture_dimensions};
+    use super::{
+        Coverage, EncodedShadingPattern, EncodedShadingType, Pixels, SORTED, STEPS, encode_mesh,
+        texture_dimensions,
+    };
     use crate::color::{AlphaColor, ColorComponents, ColorSpace};
     use crate::shading::{Triangle, TriangleVertex};
     use crate::util::x_y_advances;
@@ -813,8 +866,9 @@ mod tests {
     /// Sample `triangles`, placed in device space by `transform`, as a texture
     /// of `bbox` would be sampled by putting each covered pixel of each triangle
     /// into a map, the later triangle over the earlier, and looking up the pixel
-    /// of each position, and check that `sample_texture` and `sample` give the
-    /// same colors. Return the number of positions.
+    /// of each position, and check that `sample_texture`, with the pixels kept
+    /// either way, and `sample` give the same colors, and that no more pixels
+    /// are kept than positions. Return the number of positions.
     fn check(
         triangles: &[Triangle],
         transform: Affine,
@@ -855,10 +909,13 @@ mod tests {
             }
         }
         let color_space = ColorSpace::device_rgb();
-        let expected = pixels.iter().map(|p| match map.get(p) {
-            Some(color) => color_space.to_rgba(color, 1.0).components(),
-            None => BACKGROUND,
-        });
+        let expected: Vec<_> = pixels
+            .iter()
+            .map(|p| match map.get(p) {
+                Some(color) => color_space.to_rgba(color, 1.0).components(),
+                None => BACKGROUND,
+            })
+            .collect();
 
         let pattern = EncodedShadingPattern {
             base_transform,
@@ -868,21 +925,86 @@ mod tests {
             opacity: 1.0,
             transfer_function: None,
         };
-        let mut found = vec![];
-        pattern.sample_texture(bbox, scale, |sample| found.push(sample));
-        assert_eq!(found.len(), pixels.len());
 
-        for (k, ((expected, found), &(x, y))) in expected.zip(&found).zip(&pixels).enumerate() {
-            let at = || format!("{scale} {bbox:?} {base_transform:?}: {k} at ({x}, {y})");
-            assert_eq!(*found, expected, "{}", at());
-            // `sample` searches all triangles, so check it at some positions.
-            if k % 7 == 0 {
-                let searched = pattern.sample(Point::new(x as f64, y as f64));
-                assert_eq!(searched, expected, "{}", at());
+        let coverage = coverage(&pattern, bbox, scale, None);
+        assert!(coverage.owners.len() <= pixels.len());
+
+        // A rectangle of the pixels reached is kept only where it is small.
+        let small = (xs.len() * ys.len()) <= 4_000_000;
+        for sorted in [None, Some(true), small.then_some(false)] {
+            SORTED.set(sorted);
+            let mut found = vec![];
+            pattern.sample_texture(bbox, scale, |sample| found.push(sample));
+            SORTED.set(None);
+            assert_eq!(found.len(), pixels.len());
+
+            for (k, ((expected, found), &(x, y))) in
+                expected.iter().zip(&found).zip(&pixels).enumerate()
+            {
+                let at =
+                    || format!("{scale} {bbox:?} {base_transform:?} {sorted:?}: {k} at ({x}, {y})");
+                assert_eq!(found, expected, "{}", at());
+                // `sample` searches all triangles, so check it at some positions.
+                if sorted.is_none() && k % 7 == 0 {
+                    let searched = pattern.sample(Point::new(x as f64, y as f64));
+                    assert_eq!(searched, *expected, "{}", at());
+                }
             }
         }
 
         pixels.len()
+    }
+
+    /// The pixels `sample_texture` keeps for `pattern`, the rectangle or the
+    /// sorted list as `sorted` says, or as it chooses if `None`.
+    fn coverage(
+        pattern: &EncodedShadingPattern,
+        bbox: Rect,
+        scale: f32,
+        sorted: Option<bool>,
+    ) -> Coverage {
+        let EncodedShadingType::Sampled(mesh) = &pattern.shading_type else {
+            unreachable!()
+        };
+        SORTED.set(sorted);
+        let coverage = mesh.coverage(pattern.positions(bbox, scale));
+        SORTED.set(None);
+        coverage
+    }
+
+    /// The pixels visited and searches made to find the triangles that color
+    /// the texture of `bbox`, and the pixels main visited: every pixel of the
+    /// box of each triangle.
+    fn work(
+        triangles: &[Triangle],
+        base_transform: Affine,
+        bbox: Rect,
+        scale: f32,
+        sorted: Option<bool>,
+    ) -> (u64, u64) {
+        let pattern = EncodedShadingPattern {
+            base_transform,
+            color_space: ColorSpace::device_rgb(),
+            background_color: AlphaColor::new(BACKGROUND),
+            shading_type: encode_mesh(triangles, Affine::IDENTITY, &None),
+            opacity: 1.0,
+            transfer_function: None,
+        };
+        STEPS.set(0);
+        coverage(&pattern, bbox, scale, sorted);
+        let steps = STEPS.get();
+
+        let main = triangles
+            .iter()
+            .map(|t| {
+                let bbox = t.bounding_box();
+                let xs = (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16);
+                let ys = (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16);
+                (xs.len() * ys.len()) as u64
+            })
+            .sum();
+
+        (steps, main)
     }
 
     #[test]
@@ -952,6 +1074,21 @@ mod tests {
         let bbox = Rect::new(0.0, 0.0, 400.0, 400.0);
         check(&slivers, Affine::IDENTITY, Affine::IDENTITY, bbox, 1.0);
         check(&[], Affine::IDENTITY, Affine::IDENTITY, bbox, 1.0);
+
+        // Only the pixels in the boxes of the triangles are kept.
+        let pattern = EncodedShadingPattern {
+            base_transform: Affine::IDENTITY,
+            color_space: ColorSpace::device_rgb(),
+            background_color: AlphaColor::new(BACKGROUND),
+            shading_type: encode_mesh(&slivers, Affine::IDENTITY, &None),
+            opacity: 1.0,
+            transfer_function: None,
+        };
+        let bbox = Rect::new(0.0, 0.0, 1000.0, 1000.0);
+        for sorted in [None, Some(true), Some(false)] {
+            let coverage = coverage(&pattern, bbox, 1.0, sorted);
+            assert_eq!(coverage.owners.len(), 382 * 389, "{sorted:?}");
+        }
     }
 
     #[test]
@@ -967,7 +1104,7 @@ mod tests {
         }
 
         // Two small triangles in opposite corners of a large box, read at a
-        // hundredth of its pixels.
+        // hundredth of its pixels: only the pixels read are kept.
         let corners = [
             triangle([(0.0, 0.0), (300.0, 0.0), (0.0, 300.0)], 0.25),
             triangle(
@@ -980,23 +1117,78 @@ mod tests {
             check(&corners, Affine::IDENTITY, Affine::IDENTITY, bbox, 0.01),
             600 * 600
         );
-
-        let EncodedShadingType::Sampled(mesh) = encode_mesh(&corners, Affine::IDENTITY, &None)
-        else {
-            unreachable!()
+        let pattern = EncodedShadingPattern {
+            base_transform: Affine::IDENTITY,
+            color_space: ColorSpace::device_rgb(),
+            background_color: AlphaColor::new(BACKGROUND),
+            shading_type: encode_mesh(&corners, Affine::IDENTITY, &None),
+            opacity: 1.0,
+            transfer_function: None,
         };
-        let inv_scale = 1.0 / 0.01_f32 as f64;
-        let coverage = mesh.coverage(
-            Point::new(0.5 * inv_scale, 0.5 * inv_scale),
-            kurbo::Vec2::new(inv_scale, 0.0),
-            kurbo::Vec2::new(0.0, inv_scale),
-            600,
-            600,
-        );
-        assert_eq!(coverage.pixels.len(), 600 * 600);
-        assert_eq!(coverage.owners.len(), 600 * 600);
+        let coverage = coverage(&pattern, bbox, 0.01, None);
+        assert!(matches!(coverage.pixels, Pixels::Sorted(_)));
+        assert!(coverage.owners.len() <= 600 * 600);
         for owner in [1, 2] {
             assert!(coverage.owners.contains(&owner), "{owner}");
         }
+    }
+
+    #[test]
+    fn a_pixel_is_tested_once_per_triangle_however_many_positions_fall_in_it() {
+        // A million positions in one pixel, under overlapping triangles.
+        let overlapping: Vec<_> = (0..10_000)
+            .map(|k| triangle([(0.0, 0.0), (3.0, 0.0), (0.0, 3.0)], k as f32 / 10_000.0))
+            .collect();
+        let bbox = Rect::new(1.0, 1.0, 2.0, 2.0);
+        for sorted in [None, Some(true), Some(false)] {
+            let (steps, main) = work(&overlapping, Affine::IDENTITY, bbox, 1000.0, sorted);
+            assert_eq!((steps, main), (10_000, 90_000), "{sorted:?}");
+        }
+        check(
+            &overlapping[..100],
+            Affine::IDENTITY,
+            Affine::IDENTITY,
+            bbox,
+            1000.0,
+        );
+
+        // Columns far apart, 20000 positions in each pixel of them, so that
+        // the rectangle of the pixels reached holds more than the positions.
+        let base_transform = Affine::scale_non_uniform(43000.0, 1.0 / 20000.0);
+        let bbox = Rect::new(0.0, 0.0, 2.0, 200_000.0);
+        let small: Vec<_> = (0..1000)
+            .map(|k| {
+                triangle(
+                    [(21499.5, 4.5), (21502.5, 4.5), (21499.5, 7.5)],
+                    k as f32 / 1000.0,
+                )
+            })
+            .collect();
+        let (steps, main) = work(&small, base_transform, bbox, 1.0, None);
+        // A pixel visited, or a search for the next row or the first pixel of
+        // a row in the box, for each row: at most three steps for each of the
+        // 16 pixels main visits for a triangle.
+        assert!(steps <= 3 * main, "{steps} {main}");
+        check(&small[..20], Affine::IDENTITY, base_transform, bbox, 1.0);
+
+        // A rotated texture, whose rows of positions cross many rows of
+        // pixels, under small triangles.
+        let mut random = Random(0x9e37_79b9_7f4a_7c15);
+        let base_transform = Affine::rotate_about(std::f64::consts::FRAC_PI_4, (150.0, 150.0));
+        let bbox = Rect::new(0.0, 0.0, 300.0, 300.0);
+        let specks: Vec<_> = (0..2000)
+            .map(|_| {
+                let (x, y) = (random.below(300.0), random.below(300.0));
+                triangle(
+                    [(x, y), (x + 0.8, y), (x, y + 0.8)],
+                    random.below(1.0) as f32,
+                )
+            })
+            .collect();
+        for sorted in [None, Some(true), Some(false)] {
+            let (steps, main) = work(&specks, base_transform, bbox, 1.0, sorted);
+            assert!(steps <= 3 * main, "{sorted:?}: {steps} {main}");
+        }
+        check(&specks[..200], Affine::IDENTITY, base_transform, bbox, 1.0);
     }
 }
