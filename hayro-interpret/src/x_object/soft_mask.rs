@@ -30,6 +30,7 @@ pub enum MaskType {
 
 struct Repr<'a> {
     dict_key: u128,
+    parent_resources_key: Option<u128>,
     group: FormXObject<'a>,
     mask_type: MaskType,
     parent_resources: Resources<'a>,
@@ -46,6 +47,7 @@ struct Repr<'a> {
 impl Hash for Repr<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.dict_key.hash(state);
+        self.parent_resources_key.hash(state);
         self.root_transform.cache_key().hash(state);
         self.bbox.cache_key().hash(state);
     }
@@ -108,9 +110,26 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
         let nesting_depth = context.nesting_depth() + 1;
+        // The group falls back to the resources of the place that sets the mask only
+        // where it has none of its own, so only there are they part of the key.
+        let parent_resources_key = (!group.has_resources()).then(|| {
+            hash128(
+                &[
+                    &parent_resources.ext_g_states,
+                    &parent_resources.fonts,
+                    &parent_resources.properties,
+                    &parent_resources.color_spaces,
+                    &parent_resources.x_objects,
+                    &parent_resources.patterns,
+                    &parent_resources.shadings,
+                ]
+                .map(Dict::cache_key),
+            )
+        });
 
         Some(Self(Rc::new(Repr {
             dict_key: dict.cache_key(),
+            parent_resources_key,
             group,
             mask_type,
             root_transform: context.ctm(),

@@ -43,6 +43,12 @@ impl<'a> FormXObject<'a> {
         })
     }
 
+    /// Whether the form has resources of its own, so that it is drawn with none of
+    /// those it is drawn from.
+    pub(crate) fn has_resources(&self) -> bool {
+        self.resources.is_some()
+    }
+
     pub(crate) fn draw(
         &self,
         resources: &Resources<'a>,

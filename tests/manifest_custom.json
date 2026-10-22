@@ -1048,6 +1048,11 @@
     "file": "pdfs/custom/mask_reuse.pdf"
   },
   {
+    "id": "mask_fallback_resources",
+    "svg": true,
+    "file": "pdfs/custom/mask_fallback_resources.pdf"
+  },
+  {
     "id": "resvg_masking_clipPath_mixed_clip_rule",
     "file": "pdfs/custom/resvg_masking_clipPath_mixed_clip_rule.pdf"
   },
