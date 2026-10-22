@@ -5,7 +5,7 @@ use crate::filter::ascii_hex;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Ends, Readable, ReaderContext, ReaderExt, Skippable, Unknown};
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -95,9 +95,28 @@ object!(String<'a>, String);
 
 impl Skippable for String<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
+        Self::skip_in(r, &Unknown)
+    }
+}
+
+impl String<'_> {
+    #[inline]
+    pub(crate) fn skip_in(r: &mut Reader<'_>, ends: &impl Ends) -> Option<()> {
         match r.peek_byte()? {
             b'<' => skip_hex(r),
-            b'(' => skip_literal(r),
+            b'(' => {
+                let start = r.offset();
+
+                if let Some(end) = ends.string_end(r.data, start) {
+                    // Where reading the string stops.
+                    r.jump(end.unwrap_or(r.len()));
+                    end.map(|_| {})
+                } else {
+                    let skipped = skip_literal(r);
+                    ends.read(r.offset() - start);
+                    skipped
+                }
+            }
             _ => None,
         }
     }

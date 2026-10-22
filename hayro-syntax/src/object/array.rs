@@ -4,7 +4,10 @@ use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{
+    Ends, Readable, ReaderContext, ReaderExt, Skippable, Unknown, skip_or_stay,
+    skip_white_spaces_and_comments_in,
+};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::marker::PhantomData;
@@ -87,6 +90,18 @@ impl Skippable for Array<'_> {
     }
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        Self::skip_in(r, is_content_stream, depth, &Unknown)
+    }
+}
+
+impl Array<'_> {
+    #[inline]
+    pub(crate) fn skip_in(
+        r: &mut Reader<'_>,
+        is_content_stream: bool,
+        depth: usize,
+        ends: &impl Ends,
+    ) -> Option<()> {
         if depth >= super::MAX_OBJECT_NESTING_DEPTH {
             return None;
         }
@@ -94,14 +109,14 @@ impl Skippable for Array<'_> {
         r.forward_tag(b"[")?;
 
         loop {
-            r.skip_white_spaces_and_comments();
+            skip_white_spaces_and_comments_in(r, ends);
 
             if let Some(()) = r.forward_tag(b"]") {
                 return Some(());
             } else if is_content_stream {
-                r.skip_with_depth::<Object<'_>>(true, depth + 1)?;
+                skip_or_stay(r, |r| Object::skip_in(r, true, depth + 1, ends))?;
             } else {
-                r.skip_with_depth::<MaybeRef<Object<'_>>>(false, depth + 1)?;
+                skip_or_stay(r, |r| Object::skip_maybe_ref_in(r, false, depth + 1, ends))?;
             }
         }
     }

@@ -17,7 +17,7 @@ use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt};
+use crate::reader::{Readable, ReaderContext, ReaderExt, skip_white_spaces_and_comments_in};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
 use crate::util::findr_needle;
@@ -29,6 +29,9 @@ use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
 use core::ops::Deref;
+use token_ends::LazyEnds;
+
+mod token_ends;
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -71,11 +74,16 @@ pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
 }
 
 fn fallback_xref_map<'a>(data: &'a PdfData, password: &[u8]) -> (XrefMap, Option<XRefInput<'a>>) {
-    fallback_xref_map_inner(data, ReaderContext::dummy(), true, password)
+    // The scan reads objects from many starting points inside one another, so it looks up
+    // where strings and comments end instead of reading through each again from every
+    // start.
+    let ends = LazyEnds::new(data.as_ref());
+    fallback_xref_map_inner(data, &ends, ReaderContext::dummy(), true, password)
 }
 
 fn fallback_xref_map_inner<'a>(
     data: &'a PdfData,
+    ends: &LazyEnds<'_>,
     mut dummy_ctx: ReaderContext<'a>,
     recurse: bool,
     password: &[u8],
@@ -95,11 +103,13 @@ fn fallback_xref_map_inner<'a>(
 
         // First try to check if we have an object identifier.
         if r.peek_byte().is_some_and(|b: u8| b.is_ascii_digit()) {
-            if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
+            let mut header = r.clone();
+            if let Some(obj_id) = ObjectIdentifier::read_in(&mut header, ends) {
+                r = header;
                 let mut cloned = r.clone();
                 // Check that the object following it is actually valid before inserting it.
-                cloned.skip_white_spaces_and_comments();
-                if cloned.skip::<Object<'_>>(false).is_some() {
+                skip_white_spaces_and_comments_in(&mut cloned, ends);
+                if Object::skip_in(&mut cloned, false, 0, ends).is_some() {
                     xref_map.insert(obj_id, EntryType::Normal(cur_pos));
                     last_obj_num = Some(obj_id);
                     dummy_ctx.set_obj_number(obj_id);
@@ -114,7 +124,7 @@ fn fallback_xref_map_inner<'a>(
             let mut probe_reader = r.clone();
             if r.peek_bytes(2).is_some_and(|b| b == b"<<")
                 && let Some(probe) =
-                    { probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>") }
+                    { probe_dict(&mut probe_reader, &dummy_ctx, ends, Some(b"<<"), b">>") }
             {
                 r = probe_reader;
                 if probe.has_root || probe.has_type {
@@ -248,7 +258,7 @@ fn fallback_xref_map_inner<'a>(
             password,
         ) {
             let ctx = ReaderContext::new(&xref, false);
-            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false, password);
+            let (patched_map, _) = fallback_xref_map_inner(data, ends, ctx, false, password);
             xref_map = patched_map;
         }
     }

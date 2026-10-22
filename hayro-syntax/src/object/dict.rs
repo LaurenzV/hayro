@@ -5,7 +5,10 @@ use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{
+    Ends, Readable, ReaderContext, ReaderExt, Skippable, Unknown, skip_or_stay,
+    skip_white_spaces_and_comments_in,
+};
 use crate::sync::Arc;
 use crate::sync::FxHashMap;
 use alloc::format;
@@ -169,6 +172,18 @@ impl Skippable for Dict<'_> {
     }
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        Self::skip_in(r, is_content_stream, depth, &Unknown)
+    }
+}
+
+impl Dict<'_> {
+    #[inline]
+    pub(crate) fn skip_in(
+        r: &mut Reader<'_>,
+        is_content_stream: bool,
+        depth: usize,
+        ends: &impl Ends,
+    ) -> Option<()> {
         if depth >= super::MAX_OBJECT_NESTING_DEPTH {
             return None;
         }
@@ -176,23 +191,29 @@ impl Skippable for Dict<'_> {
         r.forward_tag(b"<<")?;
 
         loop {
-            r.skip_white_spaces_and_comments();
+            skip_white_spaces_and_comments_in(r, ends);
 
             if let Some(()) = r.forward_tag(b">>") {
                 break Some(());
             } else {
                 let Some(_) = r.skip::<Name<'_>>(is_content_stream) else {
                     // In case there is garbage in-between, be lenient and just try to skip it.
-                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
+                    skip_or_stay(r, |r| {
+                        Object::skip_in(r, is_content_stream, depth + 1, ends)
+                    })?;
                     continue;
                 };
 
-                r.skip_white_spaces_and_comments();
+                skip_white_spaces_and_comments_in(r, ends);
 
                 if is_content_stream {
-                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
+                    skip_or_stay(r, |r| {
+                        Object::skip_in(r, is_content_stream, depth + 1, ends)
+                    })?;
                 } else {
-                    r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
+                    skip_or_stay(r, |r| {
+                        Object::skip_maybe_ref_in(r, is_content_stream, depth + 1, ends)
+                    })?;
                 }
             }
         }
@@ -223,6 +244,7 @@ fn read_inner<'a>(
     let data = parse_dict_with(
         r,
         ctx,
+        &Unknown,
         start_tag,
         end_tag,
         #[inline]
@@ -251,6 +273,7 @@ pub(crate) struct DictProbe<'a> {
 pub(crate) fn probe_dict<'a>(
     r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
+    ends: &impl Ends,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<DictProbe<'a>> {
@@ -260,6 +283,7 @@ pub(crate) fn probe_dict<'a>(
     let data = parse_dict_with(
         r,
         ctx,
+        ends,
         start_tag,
         end_tag,
         #[inline]
@@ -284,6 +308,7 @@ pub(crate) fn probe_dict<'a>(
 fn parse_dict_with<'a, F>(
     r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
+    ends: &impl Ends,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
     mut on_entry: F,
@@ -301,7 +326,7 @@ where
     }
 
     loop {
-        r.skip_white_spaces_and_comments();
+        skip_white_spaces_and_comments_in(r, ends);
 
         // Normal dictionaries end with '>>', inline image dictionaries end with BD.
         if let Some(()) = r.peek_tag(end_tag) {
@@ -315,13 +340,15 @@ where
                     // In case there is garbage in-between, be lenient and just try to skip it.
                     // But only do this if we are parsing a proper dictionary as opposed to an
                     // inline dictionary.
-                    r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
+                    skip_or_stay(r, |r| {
+                        Object::skip_in(r, ctx.in_content_stream(), depth, ends)
+                    })?;
                     continue;
                 } else {
                     return None;
                 }
             };
-            r.skip_white_spaces_and_comments();
+            skip_white_spaces_and_comments_in(r, ends);
 
             let offset = r.offset() - start_offset;
             // Do note that we are including objects in our dictionary even if they
@@ -334,9 +361,13 @@ where
             on_entry(name, offset, r)?;
 
             if ctx.in_content_stream() {
-                r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
+                skip_or_stay(r, |r| {
+                    Object::skip_in(r, ctx.in_content_stream(), depth, ends)
+                })?;
             } else {
-                r.skip_with_depth::<MaybeRef<Object<'_>>>(ctx.in_content_stream(), depth)?;
+                skip_or_stay(r, |r| {
+                    Object::skip_maybe_ref_in(r, ctx.in_content_stream(), depth, ends)
+                })?;
             }
         }
     }
