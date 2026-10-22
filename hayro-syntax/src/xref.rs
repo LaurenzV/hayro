@@ -544,6 +544,7 @@ impl XRef {
         };
 
         let mut r = Reader::new(repr.data.get().as_ref());
+        let caller_ctx = ctx;
         let mut ctx = ctx.clone();
         ctx.set_obj_number(id);
         ctx.set_in_content_stream(false);
@@ -565,21 +566,7 @@ impl XRef {
                     }
                 };
 
-                // The xref table is broken, try to repair if not already repaired.
-                if was_repaired {
-                    error!(
-                        "attempt was made at repairing xref, but object {id:?} still couldn't be read"
-                    );
-
-                    None
-                } else {
-                    warn!("broken xref, attempting to repair");
-
-                    self.repair();
-
-                    // Now try reading again.
-                    self.get_with::<T>(id, &ctx)
-                }
+                self.repair_and_get(id, caller_ctx, was_repaired)
             }
             EntryType::ObjStream(obj_stram_gen_num, index) => {
                 // Generation number is implicitly 0.
@@ -602,31 +589,40 @@ impl XRef {
                     return None;
                 }
 
-                let mut stream_ctx = ctx.clone();
-                stream_ctx.parent_chain_push(id);
+                ctx.parent_chain_push(id);
 
-                let object_stream = repr.data.object_stream(obj_stream_id, &stream_ctx)?;
+                let object_stream = repr.data.object_stream(obj_stream_id, &ctx)?;
 
                 if object_stream.obj_number(index) == Some(id.obj_number as u32) {
-                    return object_stream.get(index, &stream_ctx);
+                    return object_stream.get(index, &ctx);
                 }
 
-                // The xref table is broken, try to repair if not already repaired.
-                if was_repaired {
-                    error!(
-                        "attempt was made at repairing xref, but object {id:?} still couldn't be found in object stream {obj_stream_id:?}"
-                    );
-
-                    None
-                } else {
-                    warn!("broken xref, attempting to repair");
-
-                    self.repair();
-
-                    // Now try reading again.
-                    self.get_with::<T>(id, &ctx)
-                }
+                self.repair_and_get(id, caller_ctx, was_repaired)
             }
+        }
+    }
+
+    fn repair_and_get<'a, T>(
+        &'a self,
+        id: ObjectIdentifier,
+        ctx: &ReaderContext<'a>,
+        was_repaired: bool,
+    ) -> Option<T>
+    where
+        T: ObjectLike<'a>,
+    {
+        // The xref table is broken, try to repair if not already repaired.
+        if was_repaired {
+            error!("attempt was made at repairing xref, but object {id:?} still couldn't be read");
+
+            None
+        } else {
+            warn!("broken xref, attempting to repair");
+
+            self.repair();
+
+            // Now try reading again.
+            self.get_with::<T>(id, ctx)
         }
     }
 }
