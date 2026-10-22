@@ -12,6 +12,7 @@ use crate::object::dict::keys::{
 };
 use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
+use crate::object::stream::Endstreams;
 use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
@@ -390,6 +391,14 @@ impl XRef {
 
     pub(crate) fn dummy() -> &'static Self {
         &DUMMY_XREF
+    }
+
+    /// Where each `endstream` of the PDF is, if `data` is the original data of the PDF.
+    pub(crate) fn endstreams(&self, data: &[u8]) -> Option<&Endstreams> {
+        match &self.0 {
+            Inner::Dummy => None,
+            Inner::Some(r) => r.data.endstreams(data),
+        }
     }
 
     pub(crate) fn len(&self) -> usize {

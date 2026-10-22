@@ -1,8 +1,9 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
+use crate::object::stream::Endstreams;
 use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
-use crate::sync::{Arc, Mutex, MutexExt};
+use crate::sync::{Arc, Mutex, MutexExt, OnceLock};
 use crate::util::SegmentList;
 use crate::xref::ObjectStream;
 use alloc::vec::Vec;
@@ -67,6 +68,7 @@ pub(crate) struct Data {
     // 32 segments are more than enough as we can't have more objects than this.
     object_streams: SegmentList<ObjectStream, 32>,
     map: Mutex<FxHashMap<ObjectIdentifier, usize>>,
+    endstreams: OnceLock<Endstreams>,
 }
 
 impl Debug for Data {
@@ -82,12 +84,22 @@ impl Data {
             data,
             object_streams: SegmentList::new(),
             map: Mutex::new(FxHashMap::default()),
+            endstreams: OnceLock::new(),
         }
     }
 
     /// Get access to the original data of the PDF.
     pub(crate) fn get(&self) -> &PdfData {
         &self.data
+    }
+
+    /// Where each `endstream` of the PDF is, if `data` is the original data of the PDF.
+    pub(crate) fn endstreams(&self, data: &[u8]) -> Option<&Endstreams> {
+        let original = self.data.as_ref();
+
+        // Compares both the address and the length.
+        core::ptr::eq(original, data)
+            .then(|| self.endstreams.get_or_init(|| Endstreams::new(original)))
     }
 
     /// Get access to a decoded object stream.

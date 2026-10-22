@@ -233,7 +233,7 @@ impl<'a> Readable<'a> for Stream<'a> {
                 warn!("failed to parse stream, trying to parse it manually");
 
                 r.jump(offset);
-                parse_fallback(r, &dict)
+                parse_fallback(r, &dict, ctx)
             })
             .error_none("was unable to manually parse the stream")
     }
@@ -311,9 +311,14 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     Some(Stream::new(data, dict.clone()))
 }
 
-fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let stream_offset = find_needle(r.tail()?, b"stream")?;
-    r.read_bytes(stream_offset)?;
+fn parse_fallback<'a>(
+    r: &mut Reader<'a>,
+    dict: &Dict<'a>,
+    ctx: &ReaderContext<'a>,
+) -> Option<Stream<'a>> {
+    // Like `Object::read`, only treat a dictionary followed by `stream` as a stream, so
+    // that a dictionary doesn't pick up the data of a later object.
+    r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
 
     r.forward_tag(b"\n")
@@ -321,16 +326,77 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
-    let tail = r.tail()?;
-    let endstream_offset = find_needle(tail, b"endstream")?;
-    let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
-    let data = tail.get(..data_end)?;
-
-    r.read_bytes(endstream_offset)?;
-    r.skip_white_spaces();
-    r.forward_tag(b"endstream")?;
+    let start = r.offset();
+    let (endstream_offset, data_end) = match ctx.xref().endstreams(r.data) {
+        Some(endstreams) => endstreams.after(start)?,
+        None => endstream_after(r.data, start)?,
+    };
+    let data = r.data.get(start..data_end)?;
+    r.jump(endstream_offset + b"endstream".len());
 
     Some(Stream::new(data, dict.clone()))
+}
+
+/// The offset of the first `endstream` at or after `start` in `data`, and where the data
+/// from `start` up to it end, without the white space before it.
+fn endstream_after(data: &[u8], start: usize) -> Option<(usize, usize)> {
+    let tail = data.get(start..)?;
+    let offset = searched(tail, b"endstream")?;
+
+    Some((
+        start + offset,
+        start + trim_trailing_ascii_whitespace(&tail[..offset]),
+    ))
+}
+
+/// Where each `endstream` of a file is, found once for the whole file.
+///
+/// The data of a stream with a wrong /Length end at the first `endstream` after them.
+/// Searching the file for it on every read would take time quadratic in the file size
+/// when many streams have no `endstream` (or one stream is read many times) and the
+/// search runs on far beyond the stream, so the streams of a document are looked up here
+/// instead.
+#[derive(Debug, Default)]
+pub(crate) struct Endstreams(Vec<(usize, usize)>);
+
+impl Endstreams {
+    pub(crate) fn new(data: &[u8]) -> Self {
+        let mut endstreams = Vec::new();
+        let mut offset = 0;
+
+        while let Some(found) = searched(&data[offset..], b"endstream") {
+            let endstream_offset = offset + found;
+            endstreams.push((
+                endstream_offset,
+                trim_trailing_ascii_whitespace(&data[..endstream_offset]),
+            ));
+            offset = endstream_offset + b"endstream".len();
+        }
+
+        Self(endstreams)
+    }
+
+    /// The same as `endstream_after` for the file this was built from.
+    fn after(&self, start: usize) -> Option<(usize, usize)> {
+        let index = self.0.partition_point(|(offset, _)| *offset < start);
+        let (endstream_offset, data_end) = self.0.get(index)?;
+
+        Some((*endstream_offset, (*data_end).max(start)))
+    }
+}
+
+fn searched(data: &[u8], needle: &[u8]) -> Option<usize> {
+    let found = find_needle(data, needle);
+    #[cfg(test)]
+    SEARCHED.set(SEARCHED.get() + found.unwrap_or(data.len()));
+    found
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// The bytes searched for `endstream` on this thread, which the tests bound to show
+    /// that the streams of a file are read in linear time.
+    static SEARCHED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
@@ -373,6 +439,9 @@ mod tests {
     use crate::object::Stream;
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
+    use alloc::{format, vec};
 
     #[test]
     fn display() {
@@ -393,6 +462,187 @@ mod tests {
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn stream_fallback_without_endstream() {
+        // Without its own `endstream`, a stream's data run to the next one.
+        let data =
+            b"<< /Length 1 >> stream\nabc\nendobj\n2 0 obj\n<< /Length 1 >>\nstream\nx\nendstream";
+        let mut r = Reader::new(data);
+        let stream = r
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(
+            stream.data,
+            b"abc\nendobj\n2 0 obj\n<< /Length 1 >>\nstream\nx"
+        );
+        assert!(r.at_end());
+    }
+
+    #[test]
+    fn stream_fallback_endobj_in_data() {
+        let data = b"<< /Length 1 >> stream\n(endobj) abc\nendstream\nendobj";
+        let mut r = Reader::new(data);
+        let stream = r
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(stream.data, b"(endobj) abc");
+    }
+
+    #[test]
+    fn stream_fallback_dict_without_stream() {
+        let data = b"<< /Foo 1 >>\nendobj\n2 0 obj\n<< /Length 5 >>\nstream\nhello\nendstream";
+        let mut r = Reader::new(data);
+
+        assert!(
+            r.read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+                .is_none()
+        );
+    }
+
+    // Looking up `endstream` in the index finds what searching for it does, from every
+    // offset of files made of the pieces that matter to it.
+    #[test]
+    fn endstreams_match_search() {
+        let pieces: [&[u8]; 6] = [b"endstream", b"endstrea", b" ", b"\r\n", b"x", b"m"];
+        let mut seed = 1_u32;
+
+        for _ in 0..2000 {
+            let mut data = Vec::new();
+            for _ in 0..seed % 12 {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                data.extend_from_slice(pieces[seed as usize % pieces.len()]);
+            }
+
+            let endstreams = super::Endstreams::new(&data);
+            for start in 0..=data.len() {
+                assert_eq!(
+                    endstreams.after(start),
+                    super::endstream_after(&data, start),
+                    "{:?} from {start}",
+                    alloc::string::String::from_utf8_lossy(&data)
+                );
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Malformed {
+        /// Each page's content stream has a wrong /Length and no `endstream`.
+        NoEndstream,
+        /// As `NoEndstream`, and no object ends with `endobj`.
+        NoEndstreamNoEndobj,
+        /// As `NoEndstream`, with a comment inside each object header.
+        NoEndstreamCommentInHeader,
+        /// All pages share one content stream with a wrong /Length, whose object is
+        /// followed by a comment as long as the rest of the file.
+        SharedWithLongComment,
+    }
+
+    /// A file with `n` pages whose content streams are malformed as `malformed`, the
+    /// bytes searched for `endstream` while reading the content of every page, and the
+    /// content of each page.
+    fn read_malformed(n: usize, malformed: Malformed) -> (usize, Vec<Option<Vec<u8>>>) {
+        let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 3 + 2 * i)).collect();
+        let mut objects = vec![
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            format!("<< /Type /Pages /Kids [{}] /Count {n} >>", kids.join(" ")),
+        ];
+        for i in 0..n {
+            let contents = match malformed {
+                Malformed::SharedWithLongComment => 4,
+                _ => 4 + 2 * i,
+            };
+            objects.push(format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents {contents} 0 R >>"
+            ));
+            objects.push(match malformed {
+                Malformed::SharedWithLongComment if i == 0 => {
+                    "<< /Length 1 >>\nstream\n0 0 m 100 100 l S\nendstream".to_string()
+                }
+                Malformed::SharedWithLongComment => "null".to_string(),
+                _ => "<< /Length 1 >>\nstream\n0 0 m 100 100 l S".to_string(),
+            });
+        }
+
+        let mut file = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![0; objects.len()];
+        // Written last to first, so that another object follows each content stream.
+        for (i, object) in objects.iter().enumerate().rev() {
+            offsets[i] = file.len();
+            let number = i + 1;
+            file.extend(
+                match malformed {
+                    Malformed::NoEndstreamNoEndobj => format!("{number} 0 obj\n{object}\n"),
+                    Malformed::NoEndstreamCommentInHeader => {
+                        format!("{number} % c\n0 obj\n{object}\nendobj\n")
+                    }
+                    _ => format!("{number} 0 obj\n{object}\nendobj\n"),
+                }
+                .bytes(),
+            );
+            if matches!(malformed, Malformed::SharedWithLongComment) && number == 4 {
+                file.extend(format!("%{}\n", "x".repeat(100 * n)).bytes());
+            }
+        }
+        let xref = file.len();
+        file.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).bytes());
+        for offset in offsets {
+            file.extend(format!("{offset:010} 00000 n \n").bytes());
+        }
+        file.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .bytes(),
+        );
+
+        super::SEARCHED.set(0);
+        let pdf = crate::Pdf::new(file).unwrap();
+        let pages = pdf.pages();
+        assert_eq!(pages.len(), n, "{malformed:?}");
+        let contents = pages
+            .iter()
+            .map(|page| page.page_stream().map(<[u8]>::to_vec))
+            .collect();
+
+        (super::SEARCHED.get(), contents)
+    }
+
+    // Each page reads what it read before the index of `endstream` existed, and doubling
+    // the pages at most doubles the bytes searched.
+    #[test]
+    fn malformed_streams_load_in_linear_time() {
+        for malformed in [
+            Malformed::NoEndstream,
+            Malformed::NoEndstreamNoEndobj,
+            Malformed::NoEndstreamCommentInHeader,
+            Malformed::SharedWithLongComment,
+        ] {
+            let [(small, small_contents), (large, large_contents)] =
+                [500, 1000].map(|n| read_malformed(n, malformed));
+            assert!(
+                large < small * 21 / 10 + 100,
+                "{malformed:?}: bytes searched {small} for 500 pages, {large} for 1000"
+            );
+
+            let expected = match malformed {
+                Malformed::SharedWithLongComment => Some(b"0 0 m 100 100 l S".to_vec()),
+                _ => None,
+            };
+            for contents in [small_contents, large_contents] {
+                assert!(
+                    contents.iter().all(|content| *content == expected),
+                    "{malformed:?}"
+                );
+            }
+        }
     }
 
     #[test]
