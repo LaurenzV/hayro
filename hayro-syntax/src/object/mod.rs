@@ -4,7 +4,7 @@ pub use crate::object::array::Array;
 pub use crate::object::date::DateTime;
 pub use crate::object::dict::Dict;
 pub use crate::object::name::Name;
-use crate::object::name::skip_name_like;
+use crate::object::name::{read_word, skip_name_like};
 pub use crate::object::null::Null;
 pub use crate::object::number::Number;
 pub use crate::object::rect::Rect;
@@ -183,8 +183,6 @@ impl Skippable for Object<'_> {
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
         match r.peek_byte()? {
-            b'n' => Null::skip(r, is_content_stream),
-            b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
             b'<' => match r.peek_bytes(2)? {
                 // A stream can never appear in a dict/array, so it should never be skipped.
@@ -194,8 +192,7 @@ impl Skippable for Object<'_> {
             b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
-            // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
-            // array
+            // `true`, `false`, `null` and any other word, see the comment in `read`.
             _ => skip_name_like(r, false),
         }
     }
@@ -204,8 +201,6 @@ impl Skippable for Object<'_> {
 impl<'a> Readable<'a> for Object<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let object = match r.peek_byte()? {
-            b'n' => Self::Null(Null::read(r, ctx)?),
-            b't' | b'f' => Self::Boolean(bool::read(r, ctx)?),
             b'/' => Self::Name(Name::read(r, ctx)?),
             b'<' => match r.peek_bytes(2)? {
                 b"<<" => {
@@ -226,11 +221,15 @@ impl<'a> Readable<'a> for Object<'a> {
             b'(' => Self::String(String::read(r, ctx)?),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
             b'[' => Self::Array(Array::read(r, ctx)?),
-            // See the comment in `skip`.
-            _ => {
-                skip_name_like(r, false)?;
-                Self::Null(Null)
-            }
+            // A keyword is the whole word, so `true1` or `trust` isn't `true`. Like MuPDF, read
+            // any other word as null, so that it doesn't make the object around it unreadable.
+            // This includes content operators in an array (see test case
+            // operator-in-TJ-array-0).
+            _ => match read_word(r)? {
+                b"true" => Self::Boolean(true),
+                b"false" => Self::Boolean(false),
+                _ => Self::Null(Null),
+            },
         };
 
         Some(object)
@@ -370,6 +369,64 @@ mod tests {
     #[test]
     fn bool() {
         assert!(matches!(object_impl(b"true").unwrap(), Object::Boolean(_)));
+    }
+
+    #[test]
+    fn keywords_are_whole_words() {
+        // A word that only starts like `true`, `false` or `null` is another word, which reads
+        // as null like other unknown words, so the items after it are still read.
+        for (word, keyword) in [
+            ("true", Some(true)),
+            ("false", Some(false)),
+            ("null", None),
+            ("true1", None),
+            ("false0", None),
+            ("null5", None),
+            ("truefoo", None),
+            ("trust", None),
+            ("nul", None),
+            ("foo", None),
+            ("bar", None),
+        ] {
+            let is_expected = |object: &Object<'_>| match keyword {
+                Some(keyword) => matches!(object, Object::Boolean(b) if *b == keyword),
+                None => matches!(object, Object::Null(_)),
+            };
+
+            let input = format!("[{word} 7]");
+            let Some(Object::Array(array)) = object_impl(input.as_bytes()) else {
+                panic!("{input} isn't an array");
+            };
+            let items = array.iter::<Object<'_>>().collect::<Vec<_>>();
+            assert_eq!(items.len(), 2, "{input}");
+            assert!(is_expected(&items[0]), "{input}: {items:?}");
+            assert!(
+                matches!(items[1], Object::Number(n) if n.as_i64() == 7),
+                "{input}: {items:?}"
+            );
+            assert_eq!(array.iter::<bool>().next(), keyword, "{input}");
+
+            let input = format!("<< /Cap {word} /A 1 >>");
+            let Some(Object::Dict(dict)) = object_impl(input.as_bytes()) else {
+                panic!("{input} isn't a dictionary");
+            };
+            assert_eq!(dict.len(), 2, "{input}");
+            assert!(
+                is_expected(&dict.get::<Object<'_>>(b"Cap").unwrap()),
+                "{input}"
+            );
+            assert_eq!(dict.get::<bool>(b"Cap"), keyword, "{input}");
+            assert_eq!(dict.get::<i32>(b"A"), Some(1), "{input}");
+
+            // Skipping the word ends where reading it does.
+            let mut r = Reader::new(word.as_bytes());
+            r.skip::<Object<'_>>(false).unwrap();
+            assert!(r.at_end(), "{word}");
+            let mut r = Reader::new(word.as_bytes());
+            r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
+                .unwrap();
+            assert!(r.at_end(), "{word}");
+        }
     }
 
     #[test]

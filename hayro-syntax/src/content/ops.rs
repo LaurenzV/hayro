@@ -114,9 +114,10 @@ op_impl!(
 mod tests {
     use crate::content::TypedIter;
     use crate::content::ops::{
-        BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, FillPathNonZero, LineTo,
-        MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
-        SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
+        BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, EndPath, FillPathEvenOdd,
+        FillPathNonZero, InlineImage, LineTo, MarkedContentPointWithProperties, MoveTo,
+        NonStrokeColorDeviceRgb, NonStrokeColorNamed, SetGraphicsState, ShowTexts,
+        StrokeColorNamed, Transform, TypedInstruction,
     };
     use crate::object::Name;
     use crate::object::Number;
@@ -347,6 +348,61 @@ f
         assert!(matches!(
             iter.next(),
             Some(TypedInstruction::EndMarkedContent(EndMarkedContent))
+        ));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn words_that_only_start_like_keywords() {
+        // Operators such as `f*` and `n` are read as before. In an array or a dictionary, a
+        // word that only starts like `true`, `false` or `null`, such as an operator, reads as
+        // null like other words there, and the instructions after it are still read.
+        let input = b"[(a) f (b) true1 false] TJ 0 0 m f* n \
+            BI /IM truefoo /W 8 /H 1 /BPC 1 ID \xAA EI 0 0 1 rg";
+
+        let mut iter = TypedIter::new(input);
+
+        match iter.next() {
+            Some(TypedInstruction::ShowTexts(ShowTexts(array))) => {
+                let items = array.iter::<Object<'_>>().collect::<Vec<_>>();
+                assert!(
+                    matches!(
+                        items[..],
+                        [
+                            Object::String(_),
+                            Object::Null(_),
+                            Object::String(_),
+                            Object::Null(_),
+                            Object::Boolean(false),
+                        ]
+                    ),
+                    "{items:?}"
+                );
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::MoveTo(MoveTo(x, y))) if [x, y] == [n(0), n(0)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::FillPathEvenOdd(FillPathEvenOdd))
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::EndPath(EndPath))
+        ));
+        match iter.next() {
+            Some(TypedInstruction::InlineImage(InlineImage(image))) => {
+                assert_eq!(image.dict().get::<bool>(b"IM"), None);
+                assert_eq!(image.dict().get::<i32>(b"W"), Some(8));
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::NonStrokeColorDeviceRgb(_))
         ));
         assert!(iter.next().is_none());
     }
