@@ -787,23 +787,26 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
 }
 
 /// Rows of `len` bytes, each after its filter byte, unfiltered with pixels of `bpp` bytes. A
-/// row whose filter byte is unknown is kept as it is.
+/// row whose filter byte is unknown is kept as it is. A last row cut short is unfiltered as far
+/// as it goes and kept, as `MuPDF` keeps it: it needs a byte after its filter byte.
 fn unpredict_png(mut data: Vec<u8>, len: usize, bpp: usize) -> Vec<u8> {
     let (mut src, mut dst) = (0, 0);
 
-    while data.len() - src > len {
+    while src < data.len() {
         let filter = RowFilter::from_u8(data[src]);
+        // The row's bytes after its filter byte, fewer in a last row cut short.
+        let k = (data.len() - src - 1).min(len);
         // The row moves left, onto bytes that were moved before.
-        data.copy_within(src + 1..src + 1 + len, dst);
+        data.copy_within(src + 1..src + 1 + k, dst);
         let (done, rest) = data.split_at_mut(dst);
         let previous = done.len().checked_sub(len).map_or(&[][..], |p| &done[p..]);
 
         if let Some(filter) = filter {
-            png::unfilter(filter, bpp, previous, &mut rest[..len]);
+            png::unfilter(filter, bpp, previous, &mut rest[..k]);
         }
 
         src += len + 1;
-        dst += len;
+        dst += k;
     }
 
     data.truncate(dst);
@@ -811,18 +814,18 @@ fn unpredict_png(mut data: Vec<u8>, len: usize, bpp: usize) -> Vec<u8> {
     data
 }
 
-/// TIFF prediction of 8-bit components: each byte of a row adds the one `colors` before it.
+/// TIFF prediction of 8-bit components: each byte of a row adds the one `colors` before it. A
+/// last row cut short is kept.
 fn unpredict_tiff8(mut data: Vec<u8>, len: usize, colors: usize) -> Vec<u8> {
-    data.truncate(data.len() / len * len);
-
-    for row in data.chunks_exact_mut(len) {
+    for row in data.chunks_mut(len) {
         png::unfilter(RowFilter::Sub, colors, &[], row);
     }
 
     data
 }
 
-/// TIFF prediction of components of 1, 2, 4 or 16 bits, `components` to a row.
+/// TIFF prediction of components of 1, 2, 4 or 16 bits, `components` to a row. A last row cut
+/// short is kept.
 fn unpredict_tiff(
     mut data: Vec<u8>,
     len: usize,
@@ -830,11 +833,18 @@ fn unpredict_tiff(
     bpc: u8,
     components: usize,
 ) -> Vec<u8> {
-    data.truncate(data.len() / len * len);
+    // In a last row cut short inside a 16-bit component, `MuPDF` takes the missing low byte
+    // from where the row before held it, as stored (in a first row it reads a byte that is not
+    // established, taken as zero here).
+    let (whole, cut) = (data.len() / len, data.len() % len);
+    let missing = match whole.checked_sub(1) {
+        Some(before) if bpc == 16 && cut % 2 == 1 => data[before * len + cut],
+        _ => 0,
+    };
 
-    for row in data.chunks_exact_mut(len) {
+    for row in data.chunks_mut(len) {
         if bpc == 16 {
-            unpredict_tiff16(row, colors);
+            unpredict_tiff16(row, colors, missing);
         } else {
             unpredict_tiff_bits(row, colors, bpc, components);
         }
@@ -843,33 +853,41 @@ fn unpredict_tiff(
     data
 }
 
-/// A row of 16-bit components, each the sum of itself and the one `colors` before.
-fn unpredict_tiff16(row: &mut [u8], colors: usize) {
-    for s in colors..row.len() / 2 {
-        let at = |row: &[u8], s: usize| u16::from_be_bytes([row[2 * s], row[2 * s + 1]]);
-        let sum = at(row, s).wrapping_add(at(row, s - colors));
-        row[2 * s..2 * s + 2].copy_from_slice(&sum.to_be_bytes());
+/// A row of 16-bit components, each the sum of itself and the one `colors` before; a last
+/// component cut short takes `missing` as its low byte, and keeps its high one.
+fn unpredict_tiff16(row: &mut [u8], colors: usize, missing: u8) {
+    for s in colors..row.len().div_ceil(2) {
+        let at = |row: &[u8], s: usize| {
+            u16::from_be_bytes([row[2 * s], row.get(2 * s + 1).copied().unwrap_or(missing)])
+        };
+        let [high, low] = at(row, s).wrapping_add(at(row, s - colors)).to_be_bytes();
+        row[2 * s] = high;
+        if let Some(byte) = row.get_mut(2 * s + 1) {
+            *byte = low;
+        }
     }
 }
 
 /// A row of `components` of `bpc` (1, 2 or 4) bits, most significant first, each the sum of
-/// itself and the one `colors` before modulo 2^bpc. The bits after the last component are
-/// cleared, as `MuPDF` clears them.
+/// itself and the one `colors` before modulo 2^bpc; a last row cut short holds as many as its
+/// bytes do. The bits after the last component are cleared, as `MuPDF` clears them.
 fn unpredict_tiff_bits(row: &mut [u8], colors: usize, bpc: u8, components: usize) {
     let bpc = usize::from(bpc);
+    // A whole row's bits can exceed `usize` by the padding to a byte, on 32-bit targets.
+    let n = components.min(row.len().saturating_mul(8) / bpc);
     let mask = (1_u8 << bpc) - 1;
     let shift = |s: usize| 8 - bpc - s * bpc % 8;
 
-    for s in colors..components {
+    for s in colors..n {
         let left = (row[(s - colors) * bpc / 8] >> shift(s - colors)) & mask;
         let byte = &mut row[s * bpc / 8];
         let v = ((*byte >> shift(s)) & mask).wrapping_add(left) & mask;
         *byte = (*byte & !(mask << shift(s))) | (v << shift(s));
     }
 
-    let used = components * bpc % 8;
+    let used = n * bpc % 8;
     if used != 0 {
-        row[components * bpc / 8] &= !(0xFF >> used);
+        row[n * bpc / 8] &= !(0xFF >> used);
     }
 }
 
