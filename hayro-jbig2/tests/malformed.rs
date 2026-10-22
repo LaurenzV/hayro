@@ -21,3 +21,8 @@ fn huffman_value_out_of_range() {
 fn text_placement_out_of_range() {
     check_malformed("malformed_text_placement_out_of_range");
 }
+
+#[test]
+fn halftone_grid_too_large() {
+    check_malformed("malformed_halftone_grid_too_large");
+}
