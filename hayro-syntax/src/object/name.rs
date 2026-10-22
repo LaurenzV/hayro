@@ -95,16 +95,14 @@ impl<'a> Name<'a> {
         let mut r = Reader::new(data);
 
         while let Some(b) = r.read_byte() {
-            // Before PDF 1.2, `#` was a regular character in names, so keep it as is
-            // when it isn't followed by two hex digits.
-            let escaped = (b == b'#')
-                .then(|| r.peek_bytes(2))
-                .flatten()
-                .and_then(|hex| Some(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?));
-
-            if let Some(byte) = escaped {
+            // Before PDF 1.2, `#` was a regular character in names.
+            if b == b'#'
+                && let Some(hex) = r.peek_bytes(2)
+                && let (Some(high), Some(low)) =
+                    (decode_hex_digit(hex[0]), decode_hex_digit(hex[1]))
+            {
                 r.skip_bytes(2)?;
-                result.push(byte);
+                result.push(high << 4 | low);
             } else {
                 result.push(b);
             }
