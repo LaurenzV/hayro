@@ -12,6 +12,7 @@ use crate::object::dict::keys::{
 };
 use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
+use crate::object::stream::{DataEnd, find_data_end};
 use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
@@ -36,6 +37,39 @@ pub(crate) const XREF_ENTRY_LEN: usize = 20;
 pub(crate) enum XRefError {
     Unknown,
     Encryption(DecryptionError),
+}
+
+/// The end of stream data at the first `endstream` at or after an offset of the file.
+/// Asked at offsets that grow, it reads each part of the file once.
+#[derive(Default)]
+struct NextEndstream {
+    /// The offset the last search started at, and what it found, relative to that offset.
+    last: Option<(usize, Option<DataEnd>)>,
+}
+
+impl NextEndstream {
+    /// What [`find_data_end`] gives for the data from `offset`.
+    fn find(&mut self, data: &[u8], offset: usize) -> Option<DataEnd> {
+        let (from, found) = match self.last {
+            // No `endstream` starts between `from` and the one found after it.
+            Some((from, found))
+                if offset >= from && found.is_none_or(|found| offset <= from + found.endstream) =>
+            {
+                (from, found)
+            }
+            _ => {
+                let found = find_data_end(data.get(offset..)?);
+                self.last = Some((offset, found));
+                (offset, found)
+            }
+        };
+
+        // Data that starts within the white space before `endstream` is empty.
+        found.map(|found| DataEnd {
+            data: (from + found.data).saturating_sub(offset),
+            endstream: from + found.endstream - offset,
+        })
+    }
 }
 
 /// Parse the "root" xref from the PDF.
@@ -87,6 +121,7 @@ fn fallback_xref_map_inner<'a>(
     let mut r = Reader::new(data.as_ref());
 
     let mut last_obj_num = None;
+    let mut endstreams = NextEndstream::default();
 
     loop {
         let cur_pos = r.offset();
@@ -131,12 +166,29 @@ fn fallback_xref_map_inner<'a>(
                             root_ref = last_obj_num;
                         }
 
-                        if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
-                            && dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                        // Without the `stream` keyword right after the dictionary, reading
+                        // it as a stream would search the rest of the file for its data.
+                        if dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                            && {
+                                let mut after_dict = r.clone();
+                                after_dict.skip_white_spaces_and_comments();
+                                after_dict.forward_tag(b"stream").is_some()
+                            }
+                            // Object stream dictionaries can lie in the data of another
+                            // stream, each of whose data then runs to the same
+                            // `endstream`: it is searched for once for all of them, and
+                            // only their member tables are read.
+                            && let Some(stream) = Stream::read_with(
+                                &mut old_r,
+                                &dummy_ctx,
+                                |_, offset| endstreams.find(data.as_ref(), offset),
+                            )
                             && let Some(last_obj_num) = last_obj_num
-                            && let Some(obj_stream) = ObjectStream::new(&stream)
+                            && let Ok(decoded) = stream.decoded()
                         {
-                            for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
+                            let offsets =
+                                ObjectStream::read_offsets(&stream, &decoded).unwrap_or_default();
+                            for (idx, (obj_num, _)) in offsets.iter().enumerate() {
                                 let id = ObjectIdentifier::new(*obj_num as i32, 0);
                                 // If we already found an entry for that object number that was not
                                 // inside an object stream. Somewhat arbitrary and maybe
@@ -1142,6 +1194,46 @@ mod tests {
         let mut xref_map = FxHashMap::default();
         let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
         let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+    }
+
+    #[test]
+    fn next_endstream_finds_what_searching_finds() {
+        let data = b" endstream x \n endstreamendstream \r endstrea\t endstream";
+
+        for start in 0..=data.len() {
+            let mut next = NextEndstream::default();
+
+            for offset in (start..=data.len()).chain([0, 20, 13, 2, data.len()]) {
+                let expected = find_data_end(&data[offset..]);
+                assert_eq!(next.find(data, offset), expected, "{offset} after {start}");
+            }
+        }
+    }
+
+    // Each object stream dictionary in the data of a stream is read as a stream whose
+    // data runs to the end of the other's, or to the end of the file where no
+    // `endstream` follows. Doing so took time quadratic in their number.
+    #[test]
+    fn object_streams_in_stream_data() {
+        let head = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                     2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+                     3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n";
+        let inner = b"<< /Type /ObjStm /N 0 /First 0 >>\nstream\n".repeat(20_000);
+        // White space before `endstream` ends the data of each of them.
+        let space = b" ".repeat(inner.len());
+        let tail = b"trailer\n<< /Root 1 0 R >>\nstartxref\n999999999\n%%EOF\n";
+
+        for end in [&b"endstream\nendobj\n"[..], b""] {
+            let mut pdf = head.to_vec();
+            pdf.extend(format!("4 0 obj\n<< /Length {} >>\nstream\n", inner.len()).bytes());
+            pdf.extend(&inner);
+            pdf.extend(&space);
+            pdf.extend(end);
+            pdf.extend(tail);
+
+            let pdf = crate::Pdf::new(pdf).unwrap();
+            assert_eq!(pdf.pages().len(), 1);
+        }
     }
 
     #[test]

@@ -219,6 +219,19 @@ impl Skippable for Stream<'_> {
 
 impl<'a> Readable<'a> for Stream<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Self::read_with(r, ctx, |tail, _| find_data_end(tail))
+    }
+}
+
+impl<'a> Stream<'a> {
+    /// Reads a stream as [`Readable::read`] does, where `find_end` gives what
+    /// [`find_data_end`] gives for the tail of the data from an offset, given the tail and
+    /// the offset, if the stream's end has to be searched for.
+    pub(crate) fn read_with(
+        r: &mut Reader<'a>,
+        ctx: &ReaderContext<'a>,
+        find_end: impl FnOnce(&'a [u8], usize) -> Option<DataEnd>,
+    ) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 
         if dict.contains_key(F) {
@@ -233,7 +246,7 @@ impl<'a> Readable<'a> for Stream<'a> {
                 warn!("failed to parse stream, trying to parse it manually");
 
                 r.jump(offset);
-                parse_fallback(r, &dict)
+                parse_fallback(r, &dict, find_end)
             })
             .error_none("was unable to manually parse the stream")
     }
@@ -311,7 +324,11 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     Some(Stream::new(data, dict.clone()))
 }
 
-fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
+fn parse_fallback<'a>(
+    r: &mut Reader<'a>,
+    dict: &Dict<'a>,
+    find_end: impl FnOnce(&'a [u8], usize) -> Option<DataEnd>,
+) -> Option<Stream<'a>> {
     let stream_offset = find_needle(r.tail()?, b"stream")?;
     r.read_bytes(stream_offset)?;
     r.forward_tag(b"stream")?;
@@ -322,15 +339,34 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         .or_else(|| r.forward_tag(b"\r"))?;
 
     let tail = r.tail()?;
-    let endstream_offset = find_needle(tail, b"endstream")?;
-    let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
-    let data = tail.get(..data_end)?;
+    let end = find_end(tail, r.offset())?;
+    let data = tail.get(..end.data)?;
 
-    r.read_bytes(endstream_offset)?;
+    r.read_bytes(end.endstream)?;
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
     Some(Stream::new(data, dict.clone()))
+}
+
+/// Where the data of a stream ends when its end has to be searched for, relative to
+/// where the data starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DataEnd {
+    /// Where the white space before `endstream` starts.
+    pub(crate) data: usize,
+    /// Where `endstream` starts.
+    pub(crate) endstream: usize,
+}
+
+/// Where the data that starts `tail` ends, at the first `endstream`.
+pub(crate) fn find_data_end(tail: &[u8]) -> Option<DataEnd> {
+    let endstream = find_needle(tail, b"endstream")?;
+
+    Some(DataEnd {
+        data: trim_trailing_ascii_whitespace(&tail[..endstream]),
+        endstream,
+    })
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {

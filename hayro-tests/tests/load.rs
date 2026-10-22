@@ -901,3 +901,45 @@ fn concurrent_xref_repair_retries_original_entries() {
         });
     }
 }
+
+#[test]
+fn xref_rebuild_object_stream_without_stream() {
+    // Object 4 says it is an object stream but has no stream. Reading it as one
+    // anyway searches the rest of the file for the `stream` keyword, once for
+    // each such dictionary, and takes the data of the stream of object 5, which
+    // is not an object stream, as its own.
+    let file = b"%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>
+endobj
+4 0 obj
+<< /Type /ObjStm /N 1 /First 4 >>
+endobj
+5 0 obj
+<< /Length 13 >>
+stream
+6 0 << /V 1 >>
+endstream
+endobj
+trailer
+<< /Root 1 0 R >>
+startxref
+999999999
+%%EOF
+";
+
+    // The `startxref` offset is invalid, so the xref table has to be rebuilt.
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+    assert_eq!(pdf.pages().len(), 1);
+    assert!(
+        pdf.xref()
+            .get::<Dict<'_>>(ObjectIdentifier::new(6, 0))
+            .is_none()
+    );
+}
