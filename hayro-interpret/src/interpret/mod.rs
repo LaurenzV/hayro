@@ -282,6 +282,10 @@ pub fn interpret<'a>(
                 )
                 .to_path(0.1);
                 context.path_mut().extend(rect);
+
+                let p = Point::new(r.0.as_f64(), r.1.as_f64());
+                *(context.last_point_mut()) = p;
+                *(context.sub_path_start_mut()) = p;
             }
             TypedInstruction::MoveTo(m) => {
                 let p = Point::new(m.0.as_f64(), m.1.as_f64());
