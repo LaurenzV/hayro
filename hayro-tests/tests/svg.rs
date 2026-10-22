@@ -122,6 +122,15 @@ fn gradient_on_rotated_rect() {
 }
 
 #[test]
+fn pattern_tiling_cache_key() {
+    run_svg_test(
+        "pattern_tiling_cache_key",
+        "pdfs/custom/pattern_tiling_cache_key.pdf",
+        None,
+    );
+}
+
+#[test]
 fn pattern_tiling_simple() {
     run_svg_test(
         "pattern_tiling_simple",

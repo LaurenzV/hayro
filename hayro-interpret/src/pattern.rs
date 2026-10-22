@@ -255,7 +255,15 @@ impl<'a> TilingPattern<'a> {
 
 impl CacheKey for TilingPattern<'_> {
     fn cache_key(&self) -> u128 {
-        self.cache_key
+        // An uncolored pattern is drawn in the color it is painted with.
+        let colors = (!self.is_color).then(|| {
+            (
+                self.non_stroking_paint.to_rgba().to_rgba8(),
+                self.stroke_paint.to_rgba().to_rgba8(),
+            )
+        });
+
+        hash128(&(self.cache_key, self.matrix.cache_key(), colors))
     }
 }
 

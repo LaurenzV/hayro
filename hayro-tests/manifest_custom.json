@@ -834,6 +834,10 @@
     "file": "pdfs/custom/font_type3_shape_glyphs.pdf"
   },
   {
+    "id": "pattern_tiling_cache_key",
+    "file": "pdfs/custom/pattern_tiling_cache_key.pdf"
+  },
+  {
     "id": "pattern_tiling_inner_transform",
     "file": "pdfs/custom/pattern_tiling_inner_transform.pdf"
   },
