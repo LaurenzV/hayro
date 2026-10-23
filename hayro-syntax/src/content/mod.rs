@@ -47,10 +47,7 @@ use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
-// 6 operands are used for example for ctm or cubic curves, but anything
-// above should be pretty rare. The exception are DeviceN color spaces,
-// which can have up to 32 colorants (ISO 32000-1, Annex C), so `scn` and
-// `SCN` can take 33 operands when a pattern name follows the components.
+// `scn` with 32 DeviceN components and a pattern name.
 const OPERANDS_THRESHOLD: usize = 33;
 const INLINE_COLOR_COMPONENTS: usize = 4;
 
@@ -471,9 +468,6 @@ impl<'b, 'a> Instruction<'b, 'a> {
 pub struct Stack<'a> {
     // TODO: Explore using an object pool to avoid repeatedly
     // allocating/deallocating objects.
-    // The operands live on the heap to keep iterators small, since nested
-    // content streams (Form XObjects, patterns, Type 3 glyphs) each keep one
-    // on the stack.
     data: Vec<Object<'a>>,
 }
 

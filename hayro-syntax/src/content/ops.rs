@@ -264,7 +264,6 @@ f
 
     #[test]
     fn scn_device_n_pattern() {
-        // 32 DeviceN components followed by a pattern name.
         let input = [b"0.5 ".repeat(32), b"/P0 scn 0 0 m".to_vec()].concat();
 
         let mut iter = TypedIter::new(&input);
