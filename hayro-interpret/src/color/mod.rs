@@ -422,7 +422,7 @@ impl ColorSpace {
     }
 
     /// Get the number of components of the color space.
-    pub(crate) fn num_components(&self) -> u8 {
+    pub fn num_components(&self) -> u8 {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk(_) => 4,
             ColorSpaceType::DeviceGray(_) => 1,
@@ -574,6 +574,22 @@ impl Color {
             components,
             opacity,
         }
+    }
+
+    /// Return the color space of the color.
+    ///
+    /// If a transfer function was applied to the color, this is `DeviceRGB`.
+    pub fn color_space(&self) -> &ColorSpace {
+        &self.color_space
+    }
+
+    /// Return the components of the color, in its color space.
+    ///
+    /// These are the values given in the PDF, for example the operands of `scn`,
+    /// so in invalid files there can be fewer or more of them than the color space
+    /// has components.
+    pub fn components(&self) -> &[f32] {
+        &self.components
     }
 
     /// Return the color as an RGBA color.
