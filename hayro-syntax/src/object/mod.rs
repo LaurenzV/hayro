@@ -183,6 +183,7 @@ impl Skippable for Object<'_> {
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
         match r.peek_byte()? {
+            b'n' | b't' | b'f' => skip_name_like(r, false),
             b'/' => Name::skip(r, is_content_stream),
             b'<' => match r.peek_bytes(2)? {
                 // A stream can never appear in a dict/array, so it should never be skipped.
@@ -192,7 +193,8 @@ impl Skippable for Object<'_> {
             b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
-            // See the comment in `read`.
+            // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
+            // array
             _ => skip_name_like(r, false),
         }
     }
@@ -201,6 +203,11 @@ impl Skippable for Object<'_> {
 impl<'a> Readable<'a> for Object<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let object = match r.peek_byte()? {
+            b'n' | b't' | b'f' => match read_word(r)? {
+                b"true" => Self::Boolean(true),
+                b"false" => Self::Boolean(false),
+                _ => Self::Null(Null),
+            },
             b'/' => Self::Name(Name::read(r, ctx)?),
             b'<' => match r.peek_bytes(2)? {
                 b"<<" => {
@@ -221,13 +228,11 @@ impl<'a> Readable<'a> for Object<'a> {
             b'(' => Self::String(String::read(r, ctx)?),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
             b'[' => Self::Array(Array::read(r, ctx)?),
-            // Read unknown words as null so that they don't make the object around them
-            // unreadable (see test case operator-in-TJ-array-0).
-            _ => match read_word(r)? {
-                b"true" => Self::Boolean(true),
-                b"false" => Self::Boolean(false),
-                _ => Self::Null(Null),
-            },
+            // See the comment in `skip`.
+            _ => {
+                skip_name_like(r, false)?;
+                Self::Null(Null)
+            }
         };
 
         Some(object)
