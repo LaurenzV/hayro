@@ -5,7 +5,7 @@ use crate::filter::ascii_hex;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -254,7 +254,7 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
                             // the string; the resulting string value shall be
                             // identical to that which would be read if the string
                             // were not split.
-                            r.skip_eol_characters();
+                            skip_cr_lf(&mut r, next);
                         }
                         _ => result.push(next),
                     }
@@ -267,13 +267,22 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
             // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
             b'\n' | b'\r' => {
                 result.push(b'\n');
-                r.skip_eol_characters();
+                skip_cr_lf(&mut r, byte);
             }
             other => result.push(other),
         }
     }
 
     Some(StringInner::Owned(result))
+}
+
+/// Skip the LINE FEED of a CARRIAGE RETURN + LINE FEED end-of-line marker, given
+/// the byte that was just read. Only a single end-of-line marker may be skipped,
+/// any following ones are part of the string.
+fn skip_cr_lf(r: &mut Reader<'_>, eol: u8) {
+    if eol == b'\r' {
+        let _ = r.forward_if(|b| b == b'\n');
+    }
 }
 
 fn is_octal_digit(byte: u8) -> bool {
@@ -521,6 +530,72 @@ mod tests {
                 .unwrap()
                 .as_bytes(),
             b"\0Y"
+        );
+    }
+
+    #[test]
+    fn literal_string_13() {
+        assert_eq!(
+            Reader::new(b"(a\n\nb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"a\n\nb"
+        );
+    }
+
+    #[test]
+    fn literal_string_14() {
+        assert_eq!(
+            Reader::new(b"(a\r\n\r\nb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"a\n\nb"
+        );
+    }
+
+    #[test]
+    fn literal_string_15() {
+        assert_eq!(
+            Reader::new(b"(a\r\rb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"a\n\nb"
+        );
+    }
+
+    #[test]
+    fn literal_string_16() {
+        assert_eq!(
+            Reader::new(b"(a\\\n\nb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"a\nb"
+        );
+    }
+
+    #[test]
+    fn literal_string_17() {
+        assert_eq!(
+            Reader::new(b"(a\\\r\nb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"ab"
+        );
+    }
+
+    #[test]
+    fn literal_string_18() {
+        assert_eq!(
+            Reader::new(b"(a\\\r\n\r\nb)")
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes(),
+            b"a\nb"
         );
     }
 
