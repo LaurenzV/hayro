@@ -15,6 +15,7 @@ use std::sync::{Arc, LazyLock};
 #[rustfmt::skip]
 #[allow(non_snake_case)]
 mod render;
+mod images;
 mod load;
 mod svg;
 mod text;
