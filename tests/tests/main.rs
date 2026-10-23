@@ -101,7 +101,13 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
-        .chain([Test::unit("visibility", visibility)])
+        .chain([
+            Test::unit("visibility", visibility),
+            Test::unit(
+                "crop_box_clips_where_it_does_not_cover_the_target",
+                crop_box_clips_where_it_does_not_cover_the_target,
+            ),
+        ])
         .filter(|test| args.matches(&test.name))
         .collect();
     tests.sort_by(|a, b| a.name.cmp(&b.name));
@@ -317,4 +323,81 @@ fn visibility() {
             LoadPdfError::Invalid => {}
         }
     }
+}
+
+/// A one-page PDF with `boxes` in its page dictionary that fills the whole
+/// 40 by 40 media box red.
+fn red_page_pdf(boxes: &str) -> Vec<u8> {
+    let content = "1 0 0 rg -10 -10 60 60 re f";
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] {boxes} /Contents 4 0 R >>"),
+        format!(
+            "<< /Length {} >>\nstream\n{content}\nendstream",
+            content.len()
+        ),
+    ];
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", index + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
+    for offset in offsets {
+        pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    pdf
+}
+
+fn crop_box_clips_where_it_does_not_cover_the_target() {
+    use hayro::hayro_interpret::TransformExt;
+    use hayro::kurbo::Affine;
+    use hayro::vello_cpu::{RenderContext, Resources};
+
+    let render = |boxes: &str, transform: Affine| {
+        let pdf = Pdf::new(red_page_pdf(boxes)).unwrap();
+        let page = &pdf.pages()[0];
+        let mut ctx = RenderContext::new(40, 40);
+        hayro::render_into(
+            page,
+            &hayro::RenderCache::new(),
+            &interpreter_settings(),
+            &hayro::RenderSettings::default(),
+            &mut ctx,
+            transform * page.initial_transform(true).to_kurbo(),
+        );
+        ctx.flush();
+        let mut pixmap = hayro::vello_cpu::Pixmap::new(40, 40);
+        ctx.render(&mut pixmap, &mut Resources::default());
+        let data = pixmap.data_as_u8_slice();
+        let alpha = |x: usize, y: usize| data[(y * 40 + x) * 4 + 3];
+        [alpha(1, 1), alpha(20, 20), alpha(38, 38)]
+    };
+
+    // The crop box covers the target, upright, turned, or flipped.
+    assert_eq!(render("", Affine::IDENTITY), [255, 255, 255]);
+    assert_eq!(render("/Rotate 90", Affine::IDENTITY), [255, 255, 255]);
+    let flip = Affine::new([-1.0, 0.0, 0.0, 1.0, 40.0, 0.0]);
+    assert_eq!(render("", flip), [255, 255, 255]);
+    // A crop box inside the target, a shifted page, and a rotation that
+    // leaves corners uncovered still clip.
+    assert_eq!(
+        render("/CropBox [10 10 30 30]", Affine::translate((10.0, 10.0))),
+        [0, 255, 0]
+    );
+    assert_eq!(render("", Affine::translate((5.0, 5.0))), [0, 255, 255]);
+    let turned = Affine::rotate_about(0.3, hayro::kurbo::Point::new(20.0, 20.0));
+    assert_eq!(render("", turned)[0], 0);
 }
