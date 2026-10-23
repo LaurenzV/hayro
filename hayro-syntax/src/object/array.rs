@@ -411,8 +411,79 @@ mod tests {
     }
 
     #[test]
-    fn malformed_ref_is_not_valid_array() {
-        assert!(array_ref_impl(b"[8 0R]").is_none());
+    fn number_followed_by_regular_character_is_null() {
+        let res = array_ref_impl(b"[8 0R 1e3 1.2.3 .foo -foo .e3 5]").unwrap();
+        assert_eq!(res.len(), 8);
+        assert!(matches!(res[0], MaybeRef::NotRef(Object::Number(_))));
+        for item in &res[1..7] {
+            assert!(matches!(item, MaybeRef::NotRef(Object::Null(_))));
+        }
+        assert!(matches!(res[7], MaybeRef::NotRef(Object::Number(_))));
+    }
+
+    #[test]
+    fn number_followed_by_regular_character_is_not_a_number() {
+        for input in ["[.foo]", "[-foo]", "[.e3]"] {
+            let array = Array::from_bytes(input.as_bytes()).unwrap();
+            assert_eq!(array.iter::<i32>().next(), None);
+            assert_eq!(array.iter::<f32>().next(), None);
+        }
+    }
+
+    #[test]
+    fn damaged_generation_number_is_not_a_reference() {
+        for (input, len) in [
+            ("[8 -R 5]", 3),
+            ("[8 .R 5]", 3),
+            ("[8 -.R 5]", 3),
+            ("[99999999999 0 R 5]", 4),
+        ] {
+            let res = array_ref_impl(input.as_bytes()).unwrap();
+            assert_eq!(res.len(), len, "{input}");
+            assert!(
+                matches!(res[0], MaybeRef::NotRef(Object::Number(_))),
+                "{input}"
+            );
+            assert!(
+                matches!(res[len - 1], MaybeRef::NotRef(Object::Number(_))),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn reference_with_numbers_that_end_at_a_delimiter() {
+        // A reference is read where it was read before validation and reading agreed on
+        // it, as long as each of its numbers ends at white space or a delimiter.
+        for (input, expected) in [
+            ("[3 0.0 R 4 0 R]", &["3 0 R", "4 0 R"][..]),
+            ("[8 0.5 R 5]", &["8 0 R", "5"]),
+            ("[3.9 -0 R]", &["3 0 R"]),
+            ("[8 - R 5]", &["8 0 R", "5"]),
+            ("[8 0R]", &["8", "null"]),
+            ("[8 -R 5]", &["8", "null", "5"]),
+        ] {
+            let items = array_ref_impl(input.as_bytes())
+                .unwrap()
+                .iter()
+                .map(|item| match item {
+                    MaybeRef::Ref(r) => format!("{r}"),
+                    MaybeRef::NotRef(Object::Number(n)) => format!("{n}"),
+                    MaybeRef::NotRef(Object::Null(_)) => "null".to_string(),
+                    MaybeRef::NotRef(other) => format!("{other:?}"),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(items, expected, "{input}");
+        }
+    }
+
+    #[test]
+    fn reference_after_invalid_number() {
+        let res = array_ref_impl(b"[3 0 R .foo 4 0 R]").unwrap();
+        assert_eq!(res.len(), 3);
+        assert!(matches!(res[0], MaybeRef::Ref(_)));
+        assert!(matches!(res[1], MaybeRef::NotRef(Object::Null(_))));
+        assert!(matches!(res[2], MaybeRef::Ref(_)));
     }
 
     #[test]

@@ -766,6 +766,37 @@ fn nested_object_streams() {
 }
 
 #[test]
+fn page_tree_with_invalid_numbers() {
+    // `/Kids` is `[3 0 R .foo 4 0 R]`, the media box of the first page is
+    // `[0 0 1e3 500]`, and the pages override the inherited `/Rotate 90` with
+    // `/Rotate -foo` and `/Rotate .e3`.
+    let file = include_bytes!("../pdfs/load/page_tree_with_invalid_numbers.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+
+    assert_eq!(pdf.pages().len(), 2);
+    for page in pdf.pages().iter() {
+        assert!(matches!(
+            page.rotation(),
+            hayro_syntax::page::Rotation::Horizontal
+        ));
+    }
+}
+
+#[test]
+fn page_tree_with_real_generation_number() {
+    // `/Kids` is `[3 0.0 R 4 0 R]`, and the first page is 300 by 300, the second 200 by 200.
+    let file = include_bytes!("../pdfs/load/page_tree_with_real_generation_number.pdf");
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+
+    let sizes = pdf
+        .pages()
+        .iter()
+        .map(|page| page.base_dimensions())
+        .collect::<Vec<_>>();
+    assert_eq!(sizes, [(300.0, 300.0), (200.0, 200.0)]);
+}
+
+#[test]
 fn page_tree_cycle_with_siblings() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
     load_pdf(file);

@@ -1,9 +1,11 @@
 //! Object references.
 
+use crate::object::Number;
 use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 /// A reference to an object.
@@ -43,27 +45,57 @@ impl From<ObjectIdentifier> for ObjRef {
     }
 }
 
-impl Skippable for ObjRef {
-    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<i32>(false)?;
+impl ObjRef {
+    // Validating an array or dictionary skips its items with this, and reading an item
+    // reads it with this, so both take the same tokens as a reference. Its numbers are
+    // read like other numbers, so outside of content streams each must end at white space
+    // or a delimiter: `8 -R` and `8 0R` aren't references, `3 0.0 R` is.
+    fn read_in(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Self> {
+        if !in_content_stream {
+            has_ref_shape(r.clone())?;
+        }
+
+        let obj_number = read_ref_number(r, in_content_stream)?;
         r.skip_white_spaces();
-        r.skip::<i32>(false)?;
+        let gen_number = read_ref_number(r, in_content_stream)?;
         r.skip_white_spaces();
         r.forward_tag(b"R")?;
 
-        Some(())
+        Some(Self::new(obj_number, gen_number))
+    }
+}
+
+// Outside of content streams, a number that is read ends at white space or a delimiter, so
+// it spans a whole token. Checking the tokens first rules out most items that aren't a
+// reference without reading their numbers.
+fn has_ref_shape(mut r: Reader<'_>) -> Option<()> {
+    for _ in 0..2 {
+        if !matches!(r.peek_byte()?, b'.' | b'+' | b'-' | b'0'..=b'9') {
+            return None;
+        }
+        r.forward_while(is_regular_character);
+        r.skip_white_spaces();
+    }
+
+    r.forward_tag(b"R")
+}
+
+fn read_ref_number(r: &mut Reader<'_>, in_content_stream: bool) -> Option<i32> {
+    Number::read_in(r, in_content_stream)?
+        .as_i64()
+        .try_into()
+        .ok()
+}
+
+impl Skippable for ObjRef {
+    fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::read_in(r, is_content_stream).map(|_| ())
     }
 }
 
 impl Readable<'_> for ObjRef {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_ref = r.read_without_context::<i32>()?;
-        r.skip_white_spaces();
-        let gen_num = r.read_without_context::<i32>()?;
-        r.skip_white_spaces();
-        r.forward_tag(b"R")?;
-
-        Some(Self::new(obj_ref, gen_num))
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
+        Self::read_in(r, ctx.in_content_stream())
     }
 }
 

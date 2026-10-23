@@ -1022,7 +1022,7 @@ mod tests {
     use crate::object::dict::keys::{COLORSPACE, EXT_G_STATE, FONT, PROC_SET};
     use crate::object::dict::{Dict, InlineImageDict};
     use crate::object::string;
-    use crate::object::{FromBytes, Number};
+    use crate::object::{FromBytes, Number, Object};
     use crate::object::{Name, ObjRef};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
@@ -1183,6 +1183,36 @@ mod tests {
 
         assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
         assert_eq!(format!("{}", Dict::empty()), "<<>>");
+    }
+
+    #[test]
+    fn number_followed_by_regular_character_is_null() {
+        let dict = Dict::from_bytes(b"<< /A 1e3 /B .foo /C -foo /D .e3 /E 2 >>").unwrap();
+        assert_eq!(dict.len(), 5);
+        for key in [b"A", b"B", b"C", b"D"] {
+            assert!(matches!(dict.get::<Object<'_>>(key), Some(Object::Null(_))));
+            assert_eq!(dict.get::<i32>(key), None);
+            assert_eq!(dict.get::<f32>(key), None);
+        }
+        assert_eq!(dict.get::<i32>(b"E"), Some(2));
+    }
+
+    #[test]
+    fn damaged_generation_number_is_not_a_reference() {
+        for value in ["-R", ".R", "-.R"] {
+            let input = format!("<< /A 8 {value} /B 5 >>");
+            let dict = Dict::from_bytes(input.as_bytes()).unwrap();
+            assert_eq!(dict.get_ref(b"A"), None, "{input}");
+            assert_eq!(dict.get::<i32>(b"A"), Some(8), "{input}");
+            assert_eq!(dict.get::<i32>(b"B"), Some(5), "{input}");
+        }
+    }
+
+    #[test]
+    fn reference_with_real_generation_number() {
+        let dict = Dict::from_bytes(b"<< /A 3 0.0 R /B 5 >>").unwrap();
+        assert_eq!(dict.get_ref(b"A"), Some(ObjRef::new(3, 0)));
+        assert_eq!(dict.get::<i32>(b"B"), Some(5));
     }
 
     #[test]

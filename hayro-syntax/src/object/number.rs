@@ -111,21 +111,26 @@ impl Skippable for Number {
 
 impl Readable<'_> for Number {
     #[inline]
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
+        Self::read_in(r, ctx.in_content_stream())
+    }
+}
+
+impl Number {
+    #[inline]
+    pub(crate) fn read_in(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Self> {
         let old_offset = r.offset();
         Self::read_simple(r)
             .or_else(|| {
                 r.jump(old_offset);
-                read_inner(r)
+                read_inner(r, in_content_stream)
             })
             .or_else(|| {
                 r.jump(old_offset);
                 None
             })
     }
-}
 
-impl Number {
     #[inline(always)]
     pub(crate) fn read_simple(r: &mut Reader<'_>) -> Option<Self> {
         let negative = match r.peek_byte() {
@@ -184,7 +189,9 @@ impl Number {
             Some(shift) => {
                 let divisor = match POWERS_OF_10.get(shift as usize) {
                     Some(power) => *power,
-                    None => powi_f64(10.0, shift),
+                    // From 10^400 on the power is infinite in an f64 anyway, and
+                    // `powi` takes an `i32`.
+                    None => powi_f64(10.0, shift.min(400)),
                 };
                 let value = mantissa as f64 / divisor;
                 Self(InternalNumber::Real(if negative { -value } else { value }))
@@ -194,7 +201,7 @@ impl Number {
 }
 
 #[inline(always)]
-fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
+fn read_inner(r: &mut Reader<'_>, in_content_stream: bool) -> Option<Number> {
     let start_offset = r.offset();
     let negative = match r.peek_byte()? {
         b'-' => {
@@ -231,7 +238,7 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
                 }
                 has_digits = true;
                 if has_dot {
-                    decimal_shift += 1;
+                    decimal_shift = decimal_shift.saturating_add(1);
                 }
             }
             Some(b'.') if !has_dot => {
@@ -250,8 +257,12 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     }
 
     if !has_digits {
-        if negative || has_dot {
-            // Treat numbers like just `-`, `+` or `-.` as zero.
+        // Treat numbers like just `-`, `+` or `-.` as zero. Outside of content streams,
+        // not if a regular character follows, for the same reason as below: `.foo` is
+        // one token, and reading it as zero would leave `foo` as the next object.
+        if (negative || has_dot)
+            && (in_content_stream || !r.peek_byte().is_some_and(is_regular_character))
+        {
             return Some(Number(InternalNumber::Integer(0)));
         }
         return None;
@@ -350,10 +361,9 @@ impl Skippable for f32 {
     }
 }
 
-impl Readable<'_> for f32 {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        r.read_without_context::<Number>()
-            .map(|n| n.as_f64() as Self)
+impl<'a> Readable<'a> for f32 {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Number::read(r, ctx).map(|n| n.as_f64() as Self)
     }
 }
 
@@ -376,9 +386,9 @@ impl Skippable for f64 {
     }
 }
 
-impl Readable<'_> for f64 {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        r.read_without_context::<Number>().map(|n| n.as_f64())
+impl<'a> Readable<'a> for f64 {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Number::read(r, ctx).map(|n| n.as_f64())
     }
 }
 
@@ -408,6 +418,13 @@ mod tests {
     use crate::object::Number;
     use crate::reader::Reader;
     use crate::reader::ReaderExt;
+
+    #[test]
+    fn a_fraction_too_long_for_an_f64_is_zero() {
+        for shift in [400, i32::MAX as u32 + 1, u32::MAX] {
+            assert_eq!(Number::from_parts(false, 5, Some(shift)).as_f64(), 0.0);
+        }
+    }
 
     #[test]
     fn display() {
