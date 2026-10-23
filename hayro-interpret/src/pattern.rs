@@ -58,8 +58,6 @@ impl<'a> Pattern<'a> {
         }
     }
 
-    /// Set the opacity the pattern is painted with. This is the alpha of the
-    /// graphics state at the time the pattern is painted, not when it was selected.
     pub(crate) fn set_opacity(&mut self, opacity: f32) {
         match self {
             Self::Shading(p) => p.opacity = opacity,
@@ -189,7 +187,6 @@ impl<'a> TilingPattern<'a> {
             .color_space
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
-        // The colors are opaque, the opacity is applied to the whole pattern cell.
         let non_stroking_paint = Color::new(fill_cs, fill.color.clone(), 1.0);
 
         let stroke = ctx.stroke_paint();
