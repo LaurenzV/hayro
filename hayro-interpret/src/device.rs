@@ -86,4 +86,14 @@ impl<'a> MarkedContentProperties<'a> {
     pub fn actual_text(&self) -> Option<String<'a>> {
         self.dict.as_ref()?.get::<String<'a>>(ACTUAL_TEXT)
     }
+
+    /// The property list dictionary, if present.
+    ///
+    /// This gives access to the entries that don't have a dedicated getter,
+    /// such as `/Lang`, `/Alt` and `/E`, or the optional content group or
+    /// membership dictionary of an `/OC` sequence. For `BMC` and for property
+    /// lists that can't be resolved, this is `None`.
+    pub fn dict(&self) -> Option<&Dict<'a>> {
+        self.dict.as_ref()
+    }
 }
