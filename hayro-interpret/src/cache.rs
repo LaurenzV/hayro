@@ -70,8 +70,6 @@ impl CacheKey for Dict<'_> {
 
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
-        // TODO: Object identifiers are only unique within a document, so a cache shared
-        // across documents can confuse streams of different documents.
         match self.dict().obj_id() {
             Some(obj_id) => hash128(&obj_id),
             None => hash128(&(self.dict().data(), self.raw_data().as_ref())),

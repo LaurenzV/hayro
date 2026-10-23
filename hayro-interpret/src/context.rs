@@ -30,6 +30,8 @@ pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple interpreter invocations on the same document.
+// TODO: Cache keys are only unique within a document (streams, for example, are keyed by
+// their object identifier), so a cache shared across documents can mix up their objects.
 #[derive(Clone)]
 pub struct InterpreterCache<'a> {
     pub(crate) font_cache: Rc<RefCell<FxHashMap<u128, Option<Font<'a>>>>>,
