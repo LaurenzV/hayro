@@ -1,0 +1,56 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Contents 4 0 R /Resources << /ExtGState << /G << /ca 0.5 /CA 0.5 >> >> /ColorSpace << /PR [/Pattern /DeviceRGB] >> /Pattern << /C 5 0 R /U 6 0 R /S 7 0 R >> /XObject << /M 8 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 204 >>
+stream
+q /G gs /Pattern cs /C scn 100 0 0 100 0 0 cm /M Do Q
+q /G gs /PR cs 1 0 0 /U scn 100 0 0 100 100 0 cm /M Do Q
+q /G gs /Pattern cs /S scn 100 0 0 100 200 0 cm /M Do Q
+q /G gs 1 0 0 rg 300 0 100 100 re f Q
+endstream
+endobj
+5 0 obj
+<< /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >> /Length 23 >>
+stream
+1 0 0 rg 0 0 10 10 re f
+endstream
+endobj
+6 0 obj
+<< /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >> /Length 14 >>
+stream
+0 0 10 10 re f
+endstream
+endobj
+7 0 obj
+<< /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 1 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [1 0 0] /N 1 >> /Extend [true true] >> >>
+endobj
+8 0 obj
+<< /Type /XObject /Subtype /Image /ImageMask true /Width 8 /Height 8 /BitsPerComponent 1 /Filter /ASCIIHexDecode /Length 17 >>
+stream
+0000000000000000>
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000371 00000 n 
+0000000626 00000 n 
+0000000796 00000 n 
+0000000957 00000 n 
+0000001159 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1336
+%%EOF

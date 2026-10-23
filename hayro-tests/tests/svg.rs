@@ -158,6 +158,29 @@ fn pattern_tiling_rotated() {
 }
 
 #[test]
+fn pattern_alpha() {
+    run_svg_test("pattern_alpha", "pdfs/custom/pattern_alpha.pdf", None);
+}
+
+#[test]
+fn pattern_alpha_image_mask() {
+    run_svg_test(
+        "pattern_alpha_image_mask",
+        "pdfs/custom/pattern_alpha_image_mask.pdf",
+        None,
+    );
+}
+
+#[test]
+fn pattern_alpha_type3() {
+    run_svg_test(
+        "pattern_alpha_type3",
+        "pdfs/custom/pattern_alpha_type3.pdf",
+        None,
+    );
+}
+
+#[test]
 fn pdfium_41480161() {
     run_svg_test("pdfium_41480161", "downloads/pdfium/41480161.pdf", None);
 }

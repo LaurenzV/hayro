@@ -898,6 +898,18 @@
     "file": "pdfs/custom/pattern_tiling_with_text.pdf"
   },
   {
+    "id": "pattern_alpha",
+    "file": "pdfs/custom/pattern_alpha.pdf"
+  },
+  {
+    "id": "pattern_alpha_image_mask",
+    "file": "pdfs/custom/pattern_alpha_image_mask.pdf"
+  },
+  {
+    "id": "pattern_alpha_type3",
+    "file": "pdfs/custom/pattern_alpha_type3.pdf"
+  },
+  {
     "id": "pdftc_100k_1894",
     "file": "pdfs/custom/pdftc_100k_1894.pdf",
     "last_page": 0

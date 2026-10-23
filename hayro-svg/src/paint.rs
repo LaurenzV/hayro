@@ -196,7 +196,13 @@ impl<'a> SvgRenderer<'a> {
                     }
                 };
 
-                (format!("url(#{id})"), 1.0)
+                // The opacity of a shading pattern is applied to its colors.
+                let opacity = match p.as_ref() {
+                    Pattern::Shading(_) => 1.0,
+                    Pattern::Tiling(t) => t.opacity,
+                };
+
+                (format!("url(#{id})"), opacity)
             }
         }
     }

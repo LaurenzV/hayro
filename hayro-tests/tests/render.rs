@@ -219,6 +219,9 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pattern_tiling_small_x_step() { run_render_test("pattern_tiling_small_x_step", "pdfs/custom/pattern_tiling_small_x_step.pdf", None); }
 #[test] fn pattern_tiling_stencil() { run_render_test("pattern_tiling_stencil", "pdfs/custom/pattern_tiling_stencil.pdf", None); }
 #[test] fn pattern_tiling_with_text() { run_render_test("pattern_tiling_with_text", "pdfs/custom/pattern_tiling_with_text.pdf", None); }
+#[test] fn pattern_alpha() { run_render_test("pattern_alpha", "pdfs/custom/pattern_alpha.pdf", None); }
+#[test] fn pattern_alpha_image_mask() { run_render_test("pattern_alpha_image_mask", "pdfs/custom/pattern_alpha_image_mask.pdf", None); }
+#[test] fn pattern_alpha_type3() { run_render_test("pattern_alpha_type3", "pdfs/custom/pattern_alpha_type3.pdf", None); }
 #[test] fn pdftc_100k_1894() { run_render_test("pdftc_100k_1894", "pdfs/custom/pdftc_100k_1894.pdf", Some("..=0")); }
 #[test] fn pdftc_100l_0138() { run_render_test("pdftc_100l_0138", "pdfs/custom/pdftc_100k_0138.pdf", None); }
 #[test] fn pdftc_100l_1071() { run_render_test("pdftc_100l_1071", "pdfs/custom/pdftc_100k_1071.pdf", None); }

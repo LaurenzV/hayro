@@ -188,7 +188,7 @@ impl Renderer<'_> {
                                 x_extend: peniko::Extend::Repeat,
                                 y_extend: peniko::Extend::Repeat,
                                 quality: ImageQuality::Medium,
-                                alpha: 1.0,
+                                alpha: t.opacity,
                             },
                         };
 
