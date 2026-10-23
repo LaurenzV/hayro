@@ -1304,5 +1304,13 @@
   {
     "id": "image_inline_10",
     "file": "pdfs/custom/image_inline_10.pdf"
+  },
+  {
+    "id": "color_space_icc_same_dict",
+    "file": "pdfs/custom/color_space_icc_same_dict.pdf"
+  },
+  {
+    "id": "shading_mesh_same_dict",
+    "file": "pdfs/custom/shading_mesh_same_dict.pdf"
   }
 ]

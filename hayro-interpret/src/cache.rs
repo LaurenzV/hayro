@@ -70,7 +70,10 @@ impl CacheKey for Dict<'_> {
 
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
-        self.dict().cache_key()
+        match self.dict().obj_id() {
+            Some(obj_id) => hash128(&obj_id),
+            None => hash128(&(self.dict().data(), self.raw_data().as_ref())),
+        }
     }
 }
 

@@ -279,6 +279,24 @@ fn mask_reuse() {
 }
 
 #[test]
+fn color_space_icc_same_dict() {
+    run_svg_test(
+        "color_space_icc_same_dict",
+        "pdfs/custom/color_space_icc_same_dict.pdf",
+        None,
+    );
+}
+
+#[test]
+fn shading_mesh_same_dict() {
+    run_svg_test(
+        "shading_mesh_same_dict",
+        "pdfs/custom/shading_mesh_same_dict.pdf",
+        None,
+    );
+}
+
+#[test]
 fn pdfjs_issue11279() {
     run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
 }
