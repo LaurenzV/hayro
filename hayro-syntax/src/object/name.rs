@@ -156,7 +156,6 @@ impl<'a> Readable<'a> for Name<'a> {
 
 // This method is shared by `Name` and the parser for content stream operators (which behave like
 // names, except that they aren't preceded by a solidus.
-#[inline]
 pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
     // Note that we are not validating hex escape sequences here
     // (since this method can lie on the hot path), so it's possible
@@ -170,13 +169,6 @@ pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
     }
 
     Some(())
-}
-
-#[inline]
-pub(crate) fn read_word<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
-    let start = r.offset();
-    skip_name_like(r, false)?;
-    r.range(start..r.offset())
 }
 
 #[cfg(test)]
