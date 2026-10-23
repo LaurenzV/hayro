@@ -105,6 +105,14 @@ impl<'r> Renderer<'r> {
         }
     }
 
+    /// Whether `local` (in the space `transform` maps from), grown by `pad` device
+    /// pixels, misses the context entirely. Drawing it would only be clipped away.
+    pub(crate) fn culled(&self, local: Rect, transform: Affine, pad: f64) -> bool {
+        let ctx = Rect::new(0.0, 0.0, self.ctx.width() as f64, self.ctx.height() as f64);
+        let bbox = transform.transform_rect_bbox(local).inflate(pad, pad);
+        !bbox.overlaps(ctx)
+    }
+
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
         RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
     }

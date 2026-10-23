@@ -51,6 +51,13 @@ impl Renderer<'_> {
         stroke_props: &StrokeProps,
         is_text: bool,
     ) {
+        let pad = (stroke_props.line_width
+            * max_factor(&props.transform)
+            * stroke_props.miter_limit.max(1.0)) as f64
+            + 2.0;
+        if self.culled(path.bounding_box(), props.transform, pad) {
+            return;
+        }
         self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
 
@@ -70,6 +77,9 @@ impl Renderer<'_> {
     }
 
     pub(super) fn fill_path(&mut self, path: &BezPath, props: DrawProps<'_>, fill_rule: FillRule) {
+        if self.culled(path.bounding_box(), props.transform, 1.0) {
+            return;
+        }
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.apply_draw_props(&props);
 

@@ -433,6 +433,10 @@ impl Renderer<'_> {
         image: hayro_interpret::Image<'a, '_>,
         props: ImageDrawProps<'a>,
     ) {
+        let local = Rect::new(0.0, 0.0, image.width() as f64, image.height() as f64);
+        if self.culled(local, props.transform, 1.0) {
+            return;
+        }
         self.apply_image_props(&props);
         let mut transform = props.transform;
         self.ctx.set_paint_transform(Affine::IDENTITY);
