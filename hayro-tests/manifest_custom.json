@@ -24,6 +24,10 @@
     "file": "pdfs/custom/annotation_bbox_offset.pdf"
   },
   {
+    "id": "object_stream_wrong_index",
+    "file": "pdfs/custom/object_stream_wrong_index.pdf"
+  },
+  {
     "id": "clip_path_evenodd",
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },
