@@ -264,8 +264,6 @@ impl<'a> Page<'a> {
                 if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
                     convert_single(stream)
                 } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
-                    // Skip entries that are not streams, like `null` or references to
-                    // objects that don't exist, instead of stopping at them.
                     let streams = array
                         .raw_iter()
                         .filter_map(|item| item.resolve(&self.ctx)?.into_stream())
