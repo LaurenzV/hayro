@@ -28,6 +28,10 @@
     "file": "pdfs/custom/object_stream_wrong_index.pdf"
   },
   {
+    "id": "dict_read_as_stream",
+    "file": "pdfs/custom/dict_read_as_stream.pdf"
+  },
+  {
     "id": "clip_path_evenodd",
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },
