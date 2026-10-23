@@ -290,6 +290,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn image_lab_2() { run_render_test("image_lab_2", "pdfs/custom/image_lab_2.pdf", None); }
 #[test] fn separation_none() { run_render_test("separation_none", "pdfs/custom/separation_none.pdf", None); }
 #[test] fn devicen_none() { run_render_test("devicen_none", "pdfs/custom/devicen_none.pdf", None); }
+#[test] fn devicen_many_colorants() { run_render_test("devicen_many_colorants", "pdfs/custom/devicen_many_colorants.pdf", None); }
 #[test] fn andler_optimal_lot_size() { run_render_test("andler_optimal_lot_size", "pdfs/custom/andler-optimal-lot-size.pdf", None); }
 #[test] fn animated_distributions() { run_render_test("animated_distributions", "pdfs/custom/animated-distributions.pdf", None); }
 #[test] fn mask_in_type3_glyph() { run_render_test("mask_in_type3_glyph", "pdfs/custom/mask_in_type3_glyph.pdf", None); }
