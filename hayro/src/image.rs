@@ -559,7 +559,8 @@ impl Renderer<'_> {
             }
         }
 
-        self.ctx.set_aliasing_threshold(None);
+        self.ctx
+            .set_aliasing_threshold(self.global.aliasing_threshold);
     }
 }
 
