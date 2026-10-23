@@ -320,6 +320,8 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
+    // TODO: This search can take quadratic time in total when many streams with a wrong length
+    // have no `endstream` after them, or only a distant one.
     let tail = r.tail()?;
     let endstream_offset = find_needle(tail, b"endstream")?;
     let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
