@@ -114,6 +114,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn page_media_box_top_left() { run_render_test("page_media_box_top_left", "pdfs/custom/page_media_box_top_left.pdf", None); }
 #[test] fn page_media_box_top_right() { run_render_test("page_media_box_top_right", "pdfs/custom/page_media_box_top_right.pdf", None); }
 #[test] fn page_media_box_zoomed_out() { run_render_test("page_media_box_zoomed_out", "pdfs/custom/page_media_box_zoomed_out.pdf", None); }
+#[test] fn page_contents_unresolvable() { run_render_test("page_contents_unresolvable", "pdfs/custom/page_contents_unresolvable.pdf", None); }
 #[test] fn page_rotation_180() { run_render_test("page_rotation_180", "pdfs/custom/page_rotation_180.pdf", None); }
 #[test] fn page_rotation_270() { run_render_test("page_rotation_270", "pdfs/custom/page_rotation_270.pdf", None); }
 #[test] fn page_rotation_90() { run_render_test("page_rotation_90", "pdfs/custom/page_rotation_90.pdf", None); }
