@@ -7,6 +7,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn annotation_no_view() { run_render_test("annotation_no_view", "pdfs/custom/annotation_no_view.pdf", None); }
 #[test] fn annotation_bbox_offset() { run_render_test("annotation_bbox_offset", "pdfs/custom/annotation_bbox_offset.pdf", None); }
 #[test] fn object_stream_wrong_index() { run_render_test("object_stream_wrong_index", "pdfs/custom/object_stream_wrong_index.pdf", None); }
+#[test] fn dict_read_as_stream() { run_render_test("dict_read_as_stream", "pdfs/custom/dict_read_as_stream.pdf", None); }
 #[test] fn clip_path_evenodd() { run_render_test("clip_path_evenodd", "pdfs/custom/clip_path_evenodd.pdf", None); }
 #[test] fn clip_path_nested() { run_render_test("clip_path_nested", "pdfs/custom/clip_path_nested.pdf", None); }
 #[test] fn clip_path_painted() { run_render_test("clip_path_painted", "pdfs/custom/clip_path_painted.pdf", None); }

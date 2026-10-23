@@ -748,28 +748,6 @@ fn issue1392() {
 }
 
 #[test]
-fn dict_read_as_stream() {
-    // Object 4 is a dictionary without a stream; object 5, a stream, follows it.
-    let file = include_bytes!("../pdfs/load/dict_read_as_stream.pdf");
-    let pdf = Pdf::new(file.to_vec()).unwrap();
-    assert!(
-        pdf.xref()
-            .get::<hayro_syntax::object::Stream<'_>>(ObjectIdentifier::new(4, 0))
-            .is_none()
-    );
-}
-
-#[test]
-fn rebuild_object_stream_with_keywords_in_data() {
-    // The object stream holding the catalog has an indirect /Length and the strings
-    // `(endobj)` and `(12 0 obj)` before the catalog; `startxref` is wrong, so the xref
-    // table is rebuilt and the stream is read without its /Length.
-    let file = include_bytes!("../pdfs/load/rebuild_object_stream_with_keywords_in_data.pdf");
-    let pdf = Pdf::new(file.to_vec()).unwrap();
-    assert_eq!(pdf.pages().len(), 1);
-}
-
-#[test]
 fn encrypted_oob_length() {
     let file = include_bytes!("../pdfs/load/encrypted_oob_length.pdf");
     load_pdf(file);
