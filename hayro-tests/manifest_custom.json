@@ -470,6 +470,10 @@
     "file": "pdfs/custom/page_media_box_zoomed_out.pdf"
   },
   {
+    "id": "page_contents_unresolvable",
+    "file": "pdfs/custom/page_contents_unresolvable.pdf"
+  },
+  {
     "id": "page_rotation_180",
     "file": "pdfs/custom/page_rotation_180.pdf"
   },
