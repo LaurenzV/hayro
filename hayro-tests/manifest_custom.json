@@ -1186,6 +1186,10 @@
     "file": "pdfs/custom/devicen_none.pdf"
   },
   {
+    "id": "devicen_many_colorants",
+    "file": "pdfs/custom/devicen_many_colorants.pdf"
+  },
+  {
     "id": "andler-optimal-lot-size",
     "file": "pdfs/custom/andler-optimal-lot-size.pdf"
   },

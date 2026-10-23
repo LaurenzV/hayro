@@ -37,20 +37,18 @@ use crate::content::ops::TypedInstruction;
 use crate::object;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
-use crate::object::{Array, Null, Number, Object, Stream};
+use crate::object::{Array, Number, Object, Stream};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
 use crate::util::find_needle;
-use core::array;
+use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
-// 6 operands are used for example for ctm or cubic curves,
-// but anything above should be pretty rare (only for example for
-// DeviceN color spaces, or invalid PDF files). So we settle on 10.
-const OPERANDS_THRESHOLD: usize = 10;
+// `scn` with 32 DeviceN components and a pattern name.
+const OPERANDS_THRESHOLD: usize = 33;
 const INLINE_COLOR_COMPONENTS: usize = 4;
 
 impl Debug for Operator<'_> {
@@ -466,11 +464,11 @@ impl<'b, 'a> Instruction<'b, 'a> {
 }
 
 /// A stack holding the arguments of an operator.
+#[derive(Clone, PartialEq)]
 pub struct Stack<'a> {
     // TODO: Explore using an object pool to avoid repeatedly
     // allocating/deallocating objects.
-    data: [Object<'a>; OPERANDS_THRESHOLD],
-    len: usize,
+    data: Vec<Object<'a>>,
 }
 
 impl<'a> Default for Stack<'a> {
@@ -482,32 +480,28 @@ impl<'a> Default for Stack<'a> {
 impl<'a> Stack<'a> {
     /// Create a new, empty stack.
     pub fn new() -> Self {
-        Self {
-            data: array::from_fn(|_| Object::Null(Null)),
-            len: 0,
-        }
+        Self { data: Vec::new() }
     }
 
     fn push(&mut self, operand: Object<'a>) -> Option<()> {
-        if self.len >= OPERANDS_THRESHOLD {
+        if self.data.len() >= OPERANDS_THRESHOLD {
             return None;
         }
 
-        self.data[self.len] = operand;
-        self.len += 1;
+        self.data.push(operand);
         Some(())
     }
 
     fn clear(&mut self) {
-        self.len = 0;
+        self.data.clear();
     }
 
     fn len(&self) -> usize {
-        self.len
+        self.data.len()
     }
 
     fn as_slice(&self) -> &[Object<'a>] {
-        &self.data[..self.len]
+        &self.data
     }
 
     fn get<'b, T>(&'b self, index: usize) -> Option<T>
@@ -535,22 +529,6 @@ impl<'a> Stack<'a> {
 impl Debug for Stack<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()
-    }
-}
-
-impl Clone for Stack<'_> {
-    fn clone(&self) -> Self {
-        let mut stack = Self::new();
-        for item in self.as_slice() {
-            stack.push(item.clone()).unwrap();
-        }
-        stack
-    }
-}
-
-impl PartialEq for Stack<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_slice() == other.as_slice()
     }
 }
 
