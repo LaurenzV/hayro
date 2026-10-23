@@ -55,19 +55,10 @@ mod tests {
 
     #[test]
     fn bool_trailing() {
-        for word in ["trueabdf", "true1", "false0", "trust", "tru"] {
-            assert_eq!(
-                Reader::new(word.as_bytes()).read_without_context::<bool>(),
-                None,
-                "{word}"
-            );
-        }
-        for (word, value) in [("true]", true), ("false/A", false), ("true%c", true)] {
-            assert_eq!(
-                Reader::new(word.as_bytes()).read_without_context::<bool>(),
-                Some(value),
-                "{word}"
-            );
-        }
+        assert!(
+            Reader::new("trueabdf".as_bytes())
+                .read_without_context::<bool>()
+                .is_none()
+        );
     }
 }

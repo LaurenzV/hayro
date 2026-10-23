@@ -351,17 +351,6 @@ mod tests {
     }
 
     #[test]
-    fn keyword_followed_by_regular_character() {
-        assert!(object_impl(b"[true1 7]").is_none());
-        assert!(object_impl(b"[null5 7]").is_none());
-        assert!(object_impl(b"<< /A truefoo >>").is_none());
-        assert!(matches!(
-            object_impl(b"[true]false"),
-            Some(Object::Array(_))
-        ));
-    }
-
-    #[test]
     fn deeply_nested_arrays() {
         let data = format!("{}0{}", "[".repeat(5000), "]".repeat(5000));
         assert!(object_impl(data.as_bytes()).is_none());

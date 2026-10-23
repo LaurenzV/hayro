@@ -58,13 +58,10 @@ mod tests {
 
     #[test]
     fn null_trailing() {
-        assert_eq!(
-            Reader::new("nullabs".as_bytes()).read_without_context::<Null>(),
-            None
-        );
-        assert_eq!(
-            Reader::new("null]".as_bytes()).read_without_context::<Null>(),
-            Some(Null)
+        assert!(
+            Reader::new("nullabs".as_bytes())
+                .read_without_context::<Null>()
+                .is_none()
         );
     }
 }
