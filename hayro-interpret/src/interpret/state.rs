@@ -156,7 +156,7 @@ impl<'a> TextState<'a> {
         self.horizontal_scaling / 100.0
     }
 
-    fn font_horizontal(&self) -> bool {
+    pub(crate) fn font_horizontal(&self) -> bool {
         self.font
             .as_ref()
             .map(|f| f.is_horizontal())

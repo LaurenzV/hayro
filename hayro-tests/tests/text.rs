@@ -1,5 +1,5 @@
 use hayro::hayro_interpret::font::GlyphRun;
-use hayro::hayro_interpret::hayro_cmap::BfString;
+use hayro::hayro_interpret::hayro_cmap::{BfString, WritingMode};
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
@@ -57,6 +57,48 @@ fn page_text(file: &[u8]) -> String {
     interpret_page(&pdf.pages()[0], &mut context, &mut collector);
 
     collector.0
+}
+
+#[derive(Default)]
+struct WritingModeCollector(Vec<WritingMode>);
+
+impl<'a> Device<'a> for WritingModeCollector {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+    fn push_clip_path(&mut self, _: &ClipPath) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+        self.0.push(glyph_run.writing_mode());
+    }
+    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+    fn pop_clip(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
+}
+
+fn writing_modes(file: &[u8]) -> Vec<WritingMode> {
+    let pdf = Pdf::new(file.to_vec()).unwrap();
+    let cache = InterpreterCache::new();
+    let mut context = Context::new(
+        Affine::IDENTITY,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        &cache,
+        pdf.xref(),
+        crate::interpreter_settings(),
+    );
+    let mut collector = WritingModeCollector::default();
+    interpret_page(&pdf.pages()[0], &mut context, &mut collector);
+
+    collector.0
+}
+
+#[test]
+fn writing_mode() {
+    let horizontal = writing_modes(include_bytes!("../pdfs/text/marked_content.pdf"));
+    assert_eq!(horizontal, [WritingMode::Horizontal; 3]);
+
+    // Uses an embedded TrueType font with `Identity-V`.
+    let vertical = writing_modes(include_bytes!("../pdfs/custom/font_vertical.pdf"));
+    assert!(!vertical.is_empty());
+    assert!(vertical.iter().all(|mode| *mode == WritingMode::Vertical));
 }
 
 #[test]
