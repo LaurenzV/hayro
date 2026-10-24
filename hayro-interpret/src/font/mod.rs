@@ -154,10 +154,6 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     }
 
     /// Return the writing mode of the font the run was shown with.
-    ///
-    /// Only composite fonts with a vertical `CMap`, like `Identity-V`, have the
-    /// vertical writing mode, in which glyphs advance along the y axis of text
-    /// space.
     pub fn writing_mode(&self) -> WritingMode {
         self.writing_mode
     }
