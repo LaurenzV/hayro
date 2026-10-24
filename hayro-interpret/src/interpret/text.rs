@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::{Glyph, GlyphRun, PositionedGlyph, UNITS_PER_EM};
+use crate::font::{Glyph, GlyphRun, PositionedGlyph, TextProperties, UNITS_PER_EM};
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
 use hayro_cmap::WritingMode;
@@ -21,6 +21,7 @@ pub(crate) fn show_text_string<'a>(
 
 pub(crate) fn begin_glyph_run(ctx: &mut Context<'_>) {
     ctx.glyph_scratch.clear();
+    ctx.glyph_adjustment = 0.0;
 }
 
 pub(crate) fn append_text_string<'a>(
@@ -46,6 +47,7 @@ pub(crate) fn append_text_string<'a>(
     while cur_idx < bytes.len() {
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
+        let adjustment = std::mem::take(&mut ctx.glyph_adjustment);
 
         if show_glyphs && ctx.ocg_state.is_visible() {
             let origin_displacement = font.origin_displacement(code);
@@ -54,7 +56,11 @@ pub(crate) fn append_text_string<'a>(
                 * Affine::translate(origin_displacement);
             let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
 
-            ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
+            ctx.glyph_scratch.push(PositionedGlyph {
+                glyph,
+                transform,
+                adjustment,
+            });
         }
 
         ctx.text_state_mut().apply_code_advance(code, adv);
@@ -62,6 +68,7 @@ pub(crate) fn append_text_string<'a>(
 }
 
 pub(crate) fn apply_glyph_run_adjustment(ctx: &mut Context<'_>, adjustment: f32) {
+    ctx.glyph_adjustment += adjustment;
     ctx.text_state_mut().apply_adjustment(adjustment);
 }
 
@@ -88,9 +95,17 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
     };
 
     let clip_path = {
+        let text_state = ctx.text_state();
         let run = GlyphRun {
             glyphs: &ctx.glyph_scratch,
             writing_mode,
+            text_properties: TextProperties {
+                font_size: text_state.font_size,
+                char_spacing: text_state.char_space,
+                word_spacing: text_state.word_space,
+                horizontal_scaling: text_state.horizontal_scaling / 100.0,
+                rise: text_state.rise,
+            },
         };
 
         let clip_path = if matches!(
