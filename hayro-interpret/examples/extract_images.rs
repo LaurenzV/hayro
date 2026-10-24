@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 fn main() {
     let data = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/image_rgb8.pdf"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/pdfs/custom/image_rgb8.pdf"),
     )
     .unwrap();
 

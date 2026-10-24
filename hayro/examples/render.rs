@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 fn load_asset(name: &str) -> Option<(FontData, u32)> {
-    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/assets");
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/assets");
     let path = base.join(name);
     let data = std::fs::read(&path).ok()?;
     Some((Arc::new(data), 0))
