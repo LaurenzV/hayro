@@ -85,12 +85,6 @@ fn parse() -> Args {
         }
     }
 
-    for (var, flag) in [("REPLACE", "--update"), ("STORE", "--store")] {
-        if std::env::var_os(var).is_some() {
-            eprintln!("note: the `{var}` environment variable is ignored, pass `{flag}` instead");
-        }
-    }
-
     args
 }
 
