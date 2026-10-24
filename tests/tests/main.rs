@@ -17,7 +17,7 @@ use std::sync::{Arc, LazyLock};
 
 mod harness;
 mod load;
-mod render;
+mod raster;
 mod svg;
 mod text;
 mod write;
@@ -93,9 +93,9 @@ fn main() {
 }
 
 fn collect(args: &Args) -> (Vec<Test>, usize) {
-    let (render, ignored) = render::tests();
+    let (raster, ignored) = raster::tests();
 
-    let mut tests: Vec<Test> = render
+    let mut tests: Vec<Test> = raster
         .into_iter()
         .chain(svg::tests())
         .chain(write::tests())

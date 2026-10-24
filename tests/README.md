@@ -12,7 +12,7 @@ There are four different categories of tests:
 - PDFBox tests, which have been copied from the PDFBox issue tracker.
 - Corpus tests, which are taken from the [large-scale PDF corpus](https://pdfa.org/new-large-scale-pdf-corpus-now-publicly-available/).
 
-Each test category has its own manifest file, defining the names of the tests as well as some additional metadata. The render tests are created from these manifests when the test runner starts, so adding a new test only requires adding an entry to the corresponding manifest.
+Each test category has its own manifest file, defining the names of the tests as well as some additional metadata. The raster tests are created from these manifests when the test runner starts, so adding a new test only requires adding an entry to the corresponding manifest.
 
 ## Running the tests
 
@@ -26,7 +26,7 @@ The test suite uses its own test runner, which runs all tests in parallel and sh
 # Run all tests whose name contains `pdfjs_` or `load::`.
 cargo test -p hayro-tests --release -- pdfjs_ load::
 # Run a single test.
-cargo test -p hayro-tests --release -- --exact render::pdfjs_alphatrans
+cargo test -p hayro-tests --release -- --exact raster::pdfjs_alphatrans
 # List the selected tests without running them.
 cargo test -p hayro-tests --release -- --list svg::
 # Don't download anything, skip tests whose files are missing instead.
@@ -50,7 +50,7 @@ To also keep the rendered output of every test (the PNGs, SVGs and PDFs) in the 
 ## Test types
 There are currently four different categories of tests:
 - Load tests: They ensure that a file can be loaded/rendered without crashing. Those tests should ideally be run in debug mode.
-- Render tests: This category makes up the bulk and ensures that PDF render correctly.
+- Raster tests: This category makes up the bulk and ensures that PDFs are rasterized correctly.
 - SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`.
 - Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
 

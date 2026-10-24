@@ -9,7 +9,7 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Suite {
-    Render,
+    Raster,
     Svg,
     Write,
 }
@@ -17,7 +17,7 @@ pub(crate) enum Suite {
 impl Suite {
     fn dir(self) -> &'static str {
         match self {
-            Self::Render => "render",
+            Self::Raster => "raster",
             Self::Svg => "svg",
             Self::Write => "write",
         }

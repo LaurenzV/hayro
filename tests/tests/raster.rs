@@ -13,7 +13,7 @@ const MANIFESTS: [(&str, bool); 5] = [
     ("corpus", true),
 ];
 
-/// Returns the render tests of all manifests, as well as the names of the ignored ones.
+/// Returns the raster tests of all manifests, as well as the names of the ignored ones.
 pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
     let mut tests = vec![];
     let mut ignored = vec![];
@@ -28,7 +28,7 @@ pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
         for entry in &entries {
             let entry = Entry::parse(entry, kind, downloaded_by_default);
             if entry.ignore {
-                ignored.push(format!("render::{}", entry.name));
+                ignored.push(format!("raster::{}", entry.name));
             } else {
                 tests.push(entry.into_test());
             }
@@ -100,13 +100,13 @@ impl Entry {
         let mut files = vec![self.file.clone()];
         files.extend(FALLBACK_FONTS.map(String::from));
 
-        Test::new(format!("render::{}", self.name), files, move || {
+        Test::new(format!("raster::{}", self.name), files, move || {
             let pdf = match try_load_pdf(&self.file, &self.password) {
                 Ok(pdf) => pdf,
                 Err(err) => return Outcome::Failed(err),
             };
             let pages = render_pdf(&pdf, &self.name, interpreter_settings(), self.range.clone());
-            check(Suite::Render, &self.name, pages)
+            check(Suite::Raster, &self.name, pages)
         })
     }
 }
