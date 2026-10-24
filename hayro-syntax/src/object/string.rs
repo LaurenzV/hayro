@@ -5,7 +5,7 @@ use crate::filter::ascii_hex;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, Skippable};
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -199,9 +199,31 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
     let mut r = Reader::new(data);
     let mut result = SmallVec::new();
 
-    while let Some(byte) = r.read_byte() {
+    loop {
+        // An end-of-line marker appearing within a literal string
+        // without a preceding REVERSE SOLIDUS shall be treated as
+        // a byte value of (0Ah), irrespective of whether the end-of-line
+        // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
+        if r.read_eol().is_some() {
+            result.push(b'\n');
+            continue;
+        }
+
+        let Some(byte) = r.read_byte() else {
+            break;
+        };
+
         match byte {
             b'\\' => {
+                // A conforming reader shall disregard the REVERSE SOLIDUS
+                // and the end-of-line marker following it when reading
+                // the string; the resulting string value shall be
+                // identical to that which would be read if the string
+                // were not split.
+                if r.read_eol().is_some() {
+                    continue;
+                }
+
                 let next = r.read_byte()?;
 
                 if is_octal_digit(next) {
@@ -248,38 +270,16 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
                         b'(' => result.push(b'('),
                         b')' => result.push(b')'),
                         b'\\' => result.push(b'\\'),
-                        b'\n' | b'\r' => {
-                            // A conforming reader shall disregard the REVERSE SOLIDUS
-                            // and the end-of-line marker following it when reading
-                            // the string; the resulting string value shall be
-                            // identical to that which would be read if the string
-                            // were not split.
-                            skip_cr_lf(&mut r, next);
-                        }
                         _ => result.push(next),
                     }
                 }
             }
             b'(' | b')' => result.push(byte),
-            // An end-of-line marker appearing within a literal string
-            // without a preceding REVERSE SOLIDUS shall be treated as
-            // a byte value of (0Ah), irrespective of whether the end-of-line
-            // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
-            b'\n' | b'\r' => {
-                result.push(b'\n');
-                skip_cr_lf(&mut r, byte);
-            }
             other => result.push(other),
         }
     }
 
     Some(StringInner::Owned(result))
-}
-
-fn skip_cr_lf(r: &mut Reader<'_>, eol: u8) {
-    if eol == b'\r' {
-        let _ = r.forward_if(|b| b == b'\n');
-    }
 }
 
 fn is_octal_digit(byte: u8) -> bool {
