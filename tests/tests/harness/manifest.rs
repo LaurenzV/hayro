@@ -41,7 +41,7 @@ pub(crate) struct Entry {
     pub(crate) range: Option<RangeInclusive<usize>>,
     pub(crate) password: String,
     pub(crate) ignore: bool,
-    pub(crate) svg: Option<Option<RangeInclusive<usize>>>,
+    pub(crate) svg: bool,
 }
 
 impl Entry {
@@ -78,18 +78,10 @@ impl Entry {
             }
         };
 
-        let range = page_range(fields);
-        let svg = match fields.get("svg") {
-            None | Some(Value::Bool(false)) => None,
-            Some(Value::Bool(true)) => Some(range.clone()),
-            Some(Value::Object(svg)) => Some(page_range(svg)),
-            Some(other) => panic!("invalid `svg` field of {id} in {kind}: {other}"),
-        };
-
         Self {
             name,
             file,
-            range,
+            range: page_range(fields),
             password: fields
                 .get("password")
                 .and_then(Value::as_str)
@@ -99,7 +91,7 @@ impl Entry {
                 .get("ignore")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            svg,
+            svg: fields.get("svg").and_then(Value::as_bool).unwrap_or(false),
         }
     }
 }

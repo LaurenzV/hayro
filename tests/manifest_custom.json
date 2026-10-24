@@ -808,7 +808,7 @@
   },
   {
     "id": "image_jbig2_4",
-    "svg": { "last_page": 0 },
+    "svg": true,
     "link": true
   },
   {
