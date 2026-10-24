@@ -434,9 +434,8 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c0 = &c0.container[..max_len];
                 let c1 = &c1.container[..max_len];
 
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
+                for ((out, c0), c1) in buf.as_chunks_mut::<2>().0.iter_mut().zip(c0).zip(c1) {
+                    *out = [math::round_to_u8(*c0), math::round_to_u8(*c1)];
                 }
             }
             // RGB
@@ -449,10 +448,19 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c1 = &c1.container[..max_len];
                 let c2 = &c2.container[..max_len];
 
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
+                for (((out, c0), c1), c2) in buf
+                    .as_chunks_mut::<3>()
+                    .0
+                    .iter_mut()
+                    .zip(c0)
+                    .zip(c1)
+                    .zip(c2)
+                {
+                    *out = [
+                        math::round_to_u8(*c0),
+                        math::round_to_u8(*c1),
+                        math::round_to_u8(*c2),
+                    ];
                 }
             }
             // RGBA or CMYK.
@@ -467,11 +475,21 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 let c2 = &c2.container[..max_len];
                 let c3 = &c3.container[..max_len];
 
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c3[i]);
+                for ((((out, c0), c1), c2), c3) in buf
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(c0)
+                    .zip(c1)
+                    .zip(c2)
+                    .zip(c3)
+                {
+                    *out = [
+                        math::round_to_u8(*c0),
+                        math::round_to_u8(*c1),
+                        math::round_to_u8(*c2),
+                        math::round_to_u8(*c3),
+                    ];
                 }
             }
             _ => unreachable!(),
