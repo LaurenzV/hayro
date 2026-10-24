@@ -505,7 +505,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
         _ => unreachable!(),
     }
 
-    for (i, pixel) in tail.chunks_exact_mut(N).enumerate() {
+    for (i, pixel) in tail.as_chunks_mut::<N>().0.iter_mut().enumerate() {
         for (value, plane) in pixel.iter_mut().zip(planes) {
             *value = math::round_to_u8(plane[blocks + i]);
         }

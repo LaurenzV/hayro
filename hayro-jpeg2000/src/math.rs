@@ -179,7 +179,7 @@ mod inner {
                     to_u8(simd, channels[1]),
                     to_u8(simd, channels[2]),
                 );
-                for (out, [i0, i1, i2]) in out.chunks_exact_mut(16).zip(THREE_WAY) {
+                for (out, [i0, i1, i2]) in out.as_chunks_mut::<16>().0.iter_mut().zip(THREE_WAY) {
                     let interleaved = c0.swizzle_dyn_precise(i0)
                         | c1.swizzle_dyn_precise(i1)
                         | c2.swizzle_dyn_precise(i2);
@@ -456,7 +456,7 @@ mod inner {
         channels: [&[f32; 16]; N],
         out: &mut [u8],
     ) {
-        for (i, pixel) in out.chunks_exact_mut(N).enumerate() {
+        for (i, pixel) in out.as_chunks_mut::<N>().0.iter_mut().enumerate() {
             for (value, channel) in pixel.iter_mut().zip(channels) {
                 *value = super::round_to_u8(channel[i]);
             }
