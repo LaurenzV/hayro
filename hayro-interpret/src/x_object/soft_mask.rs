@@ -110,20 +110,10 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
         let nesting_depth = context.nesting_depth() + 1;
-        let parent_resources_key = group.resources.is_none().then(|| {
-            hash128(
-                &[
-                    &parent_resources.ext_g_states,
-                    &parent_resources.fonts,
-                    &parent_resources.properties,
-                    &parent_resources.color_spaces,
-                    &parent_resources.x_objects,
-                    &parent_resources.patterns,
-                    &parent_resources.shadings,
-                ]
-                .map(Dict::cache_key),
-            )
-        });
+        let parent_resources_key = group
+            .resources
+            .is_none()
+            .then(|| parent_resources.cache_key());
 
         Some(Self(Rc::new(Repr {
             dict_key: dict.cache_key(),
