@@ -127,7 +127,19 @@ pub struct DecodeSettings {
     pub strict: bool,
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
+    /// The maximum number of samples that may be allocated while decoding.
+    ///
+    /// This covers the decoded samples of all components at the decoded
+    /// resolution plus the internal coefficient storage, each sample taking
+    /// four bytes. Images exceeding the budget are rejected with an error
+    /// before any large allocation happens. Defaults to
+    /// [`DEFAULT_MAX_DECODED_SAMPLES`].
+    pub max_decoded_samples: u64,
 }
+
+/// The default value of [`DecodeSettings::max_decoded_samples`]: 2^28
+/// samples, i.e. 1 GiB of decoded data.
+pub const DEFAULT_MAX_DECODED_SAMPLES: u64 = 1 << 28;
 
 impl Default for DecodeSettings {
     fn default() -> Self {
@@ -135,6 +147,7 @@ impl Default for DecodeSettings {
             resolve_palette_indices: true,
             strict: false,
             target_resolution: None,
+            max_decoded_samples: DEFAULT_MAX_DECODED_SAMPLES,
         }
     }
 }

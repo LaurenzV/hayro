@@ -199,6 +199,9 @@ The tests replace a suite of files from SerenityOS, OpenJPEG and hayro itself. E
 | `too_few_exponents` | OpenJPEG (`4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2`), OpenJPEG (`dwt_interleave_h.gsr105.jp2`) |
 | `reduced_below_tile_levels` | OpenJPEG (`issue399.j2k`) |
 | `jp2_invalid_codestream` | OpenJPEG (`4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2`), OpenJPEG (`dwt_interleave_h.gsr105.jp2`) |
+| `too_large` | Custom |
+| `too_large_accepted_with_larger_budget` | Custom |
+| `budget_boundary` | Custom |
 
 ### `roi`
 
