@@ -6,6 +6,7 @@ use hayro::hayro_interpret::{
     InterpreterCache, MarkedContentProperties, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
+use hayro_syntax::object::dict::keys::{E, LANG, NAME};
 use std::fmt::Write;
 
 #[derive(Default)]
@@ -35,6 +36,14 @@ impl<'a> Device<'a> for TextCollector {
         if let Some(actual_text) = properties.actual_text() {
             let actual_text = String::from_utf8_lossy(actual_text.as_bytes());
             write!(self.0, " actual={actual_text}").unwrap();
+        }
+        if let Some(dict) = properties.dict() {
+            for (label, key) in [("lang", LANG), ("e", E), ("name", NAME)] {
+                if let Some(value) = dict.get::<hayro_syntax::object::String<'_>>(key) {
+                    let value = String::from_utf8_lossy(value.as_bytes());
+                    write!(self.0, " {label}={value}").unwrap();
+                }
+            }
         }
         self.0.push('>');
     }
@@ -94,5 +103,15 @@ fn marked_content() {
     assert_eq!(
         page_text(file),
         "<P mcid=0>Hi</><Span mcid=1 actual=fi>x</><Artifact>.</>"
+    );
+}
+
+#[test]
+fn marked_content_dict() {
+    let file = include_bytes!("../pdfs/text/marked_content_dict.pdf");
+
+    assert_eq!(
+        page_text(file),
+        "<Span lang=en-US e=Mister>Mr.</><OC name=Notes>N</>"
     );
 }
