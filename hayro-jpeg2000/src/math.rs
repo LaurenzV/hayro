@@ -165,6 +165,7 @@ mod inner {
         channels: [&[f32; 16]; N],
         out: &mut [u8],
     ) {
+        // TODO: This can be optimized on ARM by specializing it.
         match N {
             2 => {
                 let (low, high) =
