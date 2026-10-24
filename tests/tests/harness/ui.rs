@@ -1,5 +1,5 @@
-use crate::live::Live;
-use crate::runner::{Outcome, TestResult};
+use crate::harness::live::Live;
+use crate::harness::runner::{Outcome, TestResult};
 use console::{Style, measure_text_width, style, truncate_str};
 use std::collections::BTreeMap;
 use std::fmt::Write;

@@ -1,5 +1,5 @@
 use crate::WORKSPACE_PATH;
-use crate::runner::Test;
+use crate::harness::runner::Test;
 use hayro::hayro_interpret::font::GlyphRun;
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};

@@ -1,6 +1,6 @@
-use crate::assets::FALLBACK_FONTS;
-use crate::runner::{Outcome, Test};
-use crate::snapshot::{Suite, check};
+use crate::harness::assets::FALLBACK_FONTS;
+use crate::harness::runner::{Outcome, Test};
+use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, render_svg, svg_render_settings, try_load_pdf};
 use std::ops::RangeInclusive;
 

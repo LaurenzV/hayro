@@ -1,4 +1,4 @@
-use crate::ui::Ui;
+use crate::harness::ui::Ui;
 use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, PanicHookInfo};
 use std::sync::atomic::{AtomicUsize, Ordering};

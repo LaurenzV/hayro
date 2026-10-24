@@ -1,7 +1,7 @@
 use crate::WORKSPACE_PATH;
-use crate::args::args;
-use crate::runner::Outcome;
-use crate::ui::count;
+use crate::harness::args::args;
+use crate::harness::runner::Outcome;
+use crate::harness::ui::count;
 use image::{Rgba, RgbaImage, load_from_memory};
 use std::cmp::max;
 use std::fmt::Write;

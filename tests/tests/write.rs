@@ -1,6 +1,6 @@
-use crate::assets::FALLBACK_FONTS;
-use crate::runner::{Outcome, Test};
-use crate::snapshot::{Suite, check};
+use crate::harness::assets::FALLBACK_FONTS;
+use crate::harness::runner::{Outcome, Test};
+use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, load_pdf, render_pdf, try_load_pdf};
 use hayro_syntax::Pdf;
 use hayro_syntax::object::dict::keys::GROUP;
@@ -225,7 +225,7 @@ pub(crate) fn tests() -> Vec<Test> {
                 Kind::XObject => hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, pages),
             };
 
-            if crate::args::args().store {
+            if crate::harness::args::args().store {
                 let dir = crate::WORKSPACE_PATH.join("store");
                 let _ = std::fs::create_dir_all(&dir);
                 std::fs::write(dir.join(format!("{snapshot}.pdf")), &buf).unwrap();

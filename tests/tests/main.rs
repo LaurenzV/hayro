@@ -1,6 +1,7 @@
-use crate::args::Args;
-use crate::runner::Test;
-use crate::ui::Ui;
+use crate::harness::args::Args;
+use crate::harness::runner::Test;
+use crate::harness::ui::Ui;
+use crate::harness::{args, assets, runner, ui};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -14,16 +15,11 @@ use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-mod args;
-mod assets;
-mod live;
+mod harness;
 mod load;
 mod render;
-mod runner;
-mod snapshot;
 mod svg;
 mod text;
-mod ui;
 mod write;
 
 pub(crate) static WORKSPACE_PATH: LazyLock<PathBuf> =

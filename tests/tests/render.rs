@@ -1,6 +1,6 @@
-use crate::assets::FALLBACK_FONTS;
-use crate::runner::{Outcome, Test};
-use crate::snapshot::{Suite, check};
+use crate::harness::assets::FALLBACK_FONTS;
+use crate::harness::runner::{Outcome, Test};
+use crate::harness::snapshot::{Suite, check};
 use crate::{WORKSPACE_PATH, interpreter_settings, render_pdf, try_load_pdf};
 use serde_json::Value;
 use std::ops::RangeInclusive;

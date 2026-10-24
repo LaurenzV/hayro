@@ -1,6 +1,6 @@
 use crate::WORKSPACE_PATH;
-use crate::runner::{Outcome, Test};
-use crate::ui::Ui;
+use crate::harness::runner::{Outcome, Test};
+use crate::harness::ui::Ui;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;

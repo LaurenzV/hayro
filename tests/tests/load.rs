@@ -1,5 +1,5 @@
 use crate::WORKSPACE_PATH;
-use crate::runner::{Outcome, Test};
+use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::render_pdf;
 use hayro_jbig2::DecoderContext;
