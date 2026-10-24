@@ -23,7 +23,7 @@ use crate::trivia::is_white_space_character;
 use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
+use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
@@ -753,9 +753,20 @@ impl XRefEntry {
 }
 
 fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
-    let mut visited = BTreeSet::new();
-    populate_xref_impl_inner(data, pos, xref_map, &mut visited)
+    let mut sections = Sections::new();
+    populate_xref_impl_inner(data, pos, xref_map, &mut sections)
 }
+
+/// The byte ranges of the xref sections of a chain read so far, as a map from the
+/// start of each range to its end.
+///
+/// The sections of a valid chain never overlap. Each section is therefore only read on
+/// the bytes up to the next section that has already been read, and a section that
+/// starts inside one that has already been read is treated as a broken chain. Otherwise,
+/// a section nested in the trailer of another one (for example inside of a string)
+/// would cause the trailer of every section to be parsed over all sections nested
+/// inside of it.
+type Sections = BTreeMap<usize, usize>;
 
 /// Maximum number of allowed xref `Prev` pointers before we abort.
 const MAX_XREF_CHAIN_DEPTH: usize = 256;
@@ -764,15 +775,22 @@ fn populate_xref_impl_inner<'a>(
     data: &'a [u8],
     pos: usize,
     xref_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
+    sections: &mut Sections,
 ) -> Option<&'a [u8]> {
-    if !visited.insert(pos) {
-        warn!("circular xref PREV chain detected at offset {}", pos);
+    if sections
+        .range(..=pos)
+        .next_back()
+        .is_some_and(|(_, end)| *end > pos)
+    {
+        warn!(
+            "xref section at offset {} lies inside of another section of the chain",
+            pos
+        );
 
         return None;
     }
 
-    if visited.len() > MAX_XREF_CHAIN_DEPTH {
+    if sections.len() >= MAX_XREF_CHAIN_DEPTH {
         warn!(
             "xref PREV chain exceeds maximum depth of {}",
             MAX_XREF_CHAIN_DEPTH
@@ -781,7 +799,11 @@ fn populate_xref_impl_inner<'a>(
         return None;
     }
 
-    let mut reader = Reader::new(data);
+    let limit = sections
+        .range(pos..)
+        .next()
+        .map_or(data.len(), |(start, _)| *start);
+    let mut reader = Reader::new(&data[..limit]);
     reader.jump(pos);
     // In case the position points to before the object number of a xref stream.
     reader.skip_white_spaces_and_comments();
@@ -792,9 +814,9 @@ fn populate_xref_impl_inner<'a>(
         .read_without_context::<ObjectIdentifier>()
         .is_some()
     {
-        populate_from_xref_stream(data, &mut r2, xref_map, visited)
+        populate_from_xref_stream(data, pos, &mut r2, xref_map, sections)
     } else {
-        populate_from_xref_table(data, &mut r2, xref_map, visited)
+        populate_from_xref_table(data, pos, &mut r2, xref_map, sections)
     }
 }
 
@@ -818,13 +840,16 @@ impl Readable<'_> for SubsectionHeader {
 /// Populate the xref table, and return the trailer dict.
 fn populate_from_xref_table<'a>(
     data: &'a [u8],
+    pos: usize,
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
+    sections: &mut Sections,
 ) -> Option<&'a [u8]> {
     let trailer = {
         let mut reader = reader.clone();
-        read_xref_table_trailer(&mut reader, &ReaderContext::dummy())?
+        let trailer = read_xref_table_trailer(&mut reader, &ReaderContext::dummy())?;
+        sections.insert(pos, reader.offset());
+        trailer
     };
 
     reader.skip_white_spaces();
@@ -835,13 +860,13 @@ fn populate_from_xref_table<'a>(
 
     if let Some(prev) = trailer.get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
+        populate_xref_impl_inner(data, prev as usize, insert_map, sections)?;
     }
 
     // In hybrid files, entries in `XRefStm` should have higher priority, therefore we insert them
     // after looking at `PREV`.
     if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
-        populate_xref_impl_inner(data, xref_stm as usize, insert_map, visited)?;
+        populate_xref_impl_inner(data, xref_stm as usize, insert_map, sections)?;
     }
 
     while let Some(header) = reader.read_without_context::<SubsectionHeader>() {
@@ -871,17 +896,21 @@ fn populate_from_xref_table<'a>(
 
 fn populate_from_xref_stream<'a>(
     data: &'a [u8],
+    pos: usize,
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
+    sections: &mut Sections,
 ) -> Option<&'a [u8]> {
-    let stream = reader
-        .read_with_context::<IndirectObject<Stream<'_>>>(&ReaderContext::dummy())?
-        .get();
+    // The object is read up to `endstream` only: the optional `endobj` after it is
+    // looked for past white space and comments, which may belong to the next section.
+    reader.read_without_context::<ObjectIdentifier>()?;
+    reader.skip_white_spaces_and_comments();
+    let stream = reader.read_with_context::<Stream<'_>>(&ReaderContext::dummy())?;
+    sections.insert(pos, reader.offset());
 
     if let Some(prev) = stream.dict().get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        let _ = populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
+        let _ = populate_xref_impl_inner(data, prev as usize, insert_map, sections)?;
     }
 
     let size = stream.dict().get::<u32>(SIZE)?;
@@ -1184,6 +1213,107 @@ mod tests {
         let mut xref_map = FxHashMap::default();
         let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
         let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+    }
+
+    /// An xref table whose single entry places object 1 at `offset`, followed by
+    /// `trailer` and the start of the trailer dictionary. The caller closes the
+    /// dictionary.
+    fn xref_section(offset: usize) -> String {
+        format!("xref\n0 2\n0000000000 65535 f \n{offset:010} 00000 n \ntrailer\n<< /Size 2 ")
+    }
+
+    fn read_chain(pdf: &[u8]) -> Option<XrefMap> {
+        let mut xref_map = FxHashMap::default();
+        let xref_pos = find_last_xref_pos(pdf).unwrap();
+        populate_xref_impl(pdf, xref_pos, &mut xref_map)?;
+        Some(xref_map)
+    }
+
+    #[test]
+    fn prev_chain_with_adjacent_sections() {
+        // Two sections of an incremental update with no bytes in between, the second
+        // one overriding the entry of the first one.
+        let mut pdf = b"%PDF-1.0\n1 0 obj\n<< /Type /Catalog >>\nendobj\n".to_vec();
+        let first = pdf.len();
+        pdf.extend_from_slice(format!("{}>>", xref_section(9)).as_bytes());
+        let second = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "{}/Prev {first} >>\nstartxref\n{second}\n%%EOF",
+                xref_section(10)
+            )
+            .as_bytes(),
+        );
+
+        let xref_map = read_chain(&pdf).unwrap();
+        assert_eq!(
+            xref_map.get(&ObjectIdentifier::new(1, 0)),
+            Some(&EntryType::Normal(10))
+        );
+    }
+
+    #[test]
+    fn prev_section_inside_trailer() {
+        // The `Prev` section lies inside a string of the trailer that points to it.
+        let mut pdf = b"%PDF-1.0\n1 0 obj\n<< /Type /Catalog >>\nendobj\n".to_vec();
+        let outer = pdf.len();
+        let prefix = format!("{}/Prev ", xref_section(9));
+        let inner = outer + prefix.len() + "0000000000 /S (".len();
+        pdf.extend_from_slice(
+            format!(
+                "{prefix}{inner:010} /S ({}>>) >>\nstartxref\n{outer}\n%%EOF",
+                xref_section(9)
+            )
+            .as_bytes(),
+        );
+
+        assert!(read_chain(&pdf).is_none());
+    }
+
+    #[test]
+    fn prev_section_around_trailer() {
+        // The trailer lies inside a string of the trailer of its `Prev` section.
+        let mut pdf = b"%PDF-1.0\n1 0 obj\n<< /Type /Catalog >>\nendobj\n".to_vec();
+        let outer = pdf.len();
+        let prefix = format!("{}/S (", xref_section(9));
+        let inner = outer + prefix.len();
+        pdf.extend_from_slice(
+            format!(
+                "{prefix}{}/Prev {outer} >>) >>\nstartxref\n{inner}\n%%EOF",
+                xref_section(9)
+            )
+            .as_bytes(),
+        );
+
+        assert!(read_chain(&pdf).is_none());
+    }
+
+    #[test]
+    fn prev_section_after_stream_without_endobj() {
+        // An xref stream without `endobj`, followed by white space or a comment before the
+        // table its `Prev` points to, at the first byte after `endstream` or later.
+        for (between, prev_skip) in [("\n", 0), ("\n% comment\n", 0), ("\n% comment\n", 1)] {
+            let mut pdf = b"%PDF-1.5\n1 0 obj\n<< /Type /Catalog >>\nendobj\n".to_vec();
+            let stream = pdf.len();
+            let entries = [[0, 0, 0, 0], [1, 0, 9, 0], [1, 0, stream as u8, 0]];
+            let head = "2 0 obj\n<< /Type /XRef /Size 3 /W [1 2 1] /Prev 0000000000 /Length 12 >>\nstream\n";
+            let prev = stream + head.len() + 12 + "\nendstream".len() + prev_skip;
+            pdf.extend_from_slice(
+                head.replace("0000000000", &format!("{prev:010}"))
+                    .as_bytes(),
+            );
+            pdf.extend(entries.iter().flatten());
+            pdf.extend_from_slice(b"\nendstream");
+            pdf.extend_from_slice(
+                format!("{between}{}>>\nstartxref\n{stream}\n%%EOF", xref_section(9)).as_bytes(),
+            );
+
+            let xref_map = read_chain(&pdf).unwrap();
+            assert_eq!(
+                xref_map.get(&ObjectIdentifier::new(2, 0)),
+                Some(&EntryType::Normal(stream))
+            );
+        }
     }
 
     #[test]
