@@ -44,7 +44,7 @@ use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context, DrawMode, DrawProps, ImageDrawProps, SoftMask};
 use hayro_interpret::{ClipPath, interpret_page};
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{Affine, BezPath, Rect};
 use pic_scale::Scaler;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -278,9 +278,10 @@ pub fn render_into<'a>(
     ctx: &mut RenderContext,
     transform: Affine,
 ) {
+    let target = Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64);
     let mut state = Context::new(
         transform,
-        Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64),
+        target,
         &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
@@ -292,22 +293,16 @@ pub fn render_into<'a>(
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
     let crop_box = page.intersected_crop_box().to_kurbo();
-    let target = Rect::new(
-        0.0,
-        0.0,
-        device.ctx.width() as f64,
-        device.ctx.height() as f64,
-    );
-    // Clipping to a crop box that covers the whole target changes nothing, but
-    // a clip layer makes every fill intersect its strips with the clip's.
-    let clip_crop_box = !covers(transform, crop_box, target);
+    let [a, b, c, d, _, _] = transform.as_coeffs();
+    let axis_aligned = (b == 0.0 && c == 0.0) || (a == 0.0 && d == 0.0);
+    let mapped_crop_box = transform
+        .transform_rect_bbox(crop_box)
+        .inflate(1.0 / 256.0, 1.0 / 256.0);
+    let clip_crop_box = !axis_aligned || !mapped_crop_box.contains_rect(target);
+
     if clip_crop_box {
-        let mut clip_path = crop_box.to_path(0.1);
-        clip_path.apply_affine(transform);
-        device.push_clip_path(&ClipPath {
-            path: clip_path,
-            fill: FillRule::NonZero,
-        });
+        device.ctx.set_transform(transform);
+        device.ctx.push_clip_rect(&crop_box);
     }
 
     interpret_page(page, &mut state, &mut device);
@@ -315,21 +310,6 @@ pub fn render_into<'a>(
     if clip_crop_box {
         device.pop_clip();
     }
-}
-
-/// Whether `rect` mapped through `transform` covers `target`.
-///
-/// Only transforms that keep rectangles axis-aligned (scales, flips, and
-/// quarter turns) are considered; any other transform reports `false`.
-fn covers(transform: Affine, rect: Rect, target: Rect) -> bool {
-    let [a, b, c, d, _, _] = transform.as_coeffs();
-    let axis_aligned = (b == 0.0 && c == 0.0) || (a == 0.0 && d == 0.0);
-    let mapped = transform.transform_rect_bbox(rect);
-    axis_aligned
-        && mapped.x0 <= target.x0
-        && mapped.y0 <= target.y0
-        && mapped.x1 >= target.x1
-        && mapped.y1 >= target.y1
 }
 
 // Just a convenience method for testing.
