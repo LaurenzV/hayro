@@ -8,8 +8,7 @@ use hayro::hayro_interpret::{
     InterpreterCache, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
-use hayro_syntax::object::Dict;
-use hayro_syntax::object::dict::keys::{ACTUAL_TEXT, MCID};
+use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
@@ -49,14 +48,11 @@ impl<'a> Device<'a> for TextCollector {
     fn pop_transparency_group(&mut self) {}
     fn begin_marked_content(&mut self, tag: &[u8], properties: Option<&Dict<'_>>) {
         write!(self.0, "<{}", String::from_utf8_lossy(tag)).unwrap();
-        if let Some(mcid) = properties.and_then(|p| p.get::<i32>(MCID)) {
-            write!(self.0, " mcid={mcid}").unwrap();
-        }
-        if let Some(actual_text) =
-            properties.and_then(|p| p.get::<hayro_syntax::object::String<'_>>(ACTUAL_TEXT))
-        {
-            let actual_text = String::from_utf8_lossy(actual_text.as_bytes());
-            write!(self.0, " actual={actual_text}").unwrap();
+        if let Some(properties) = properties {
+            for key in properties.keys() {
+                let value = properties.get::<Object<'_>>(&key).unwrap();
+                write!(self.0, " {key} {value}").unwrap();
+            }
         }
         self.0.push('>');
     }
@@ -110,6 +106,6 @@ fn marked_content() {
 
     assert_eq!(
         page_text(file),
-        "<P mcid=0>Hi</><Span mcid=1 actual=fi>x</><Artifact>.</>"
+        r#"<P /MCID 0>Hi</><Span /MCID 1 /ActualText "fi">x</><Artifact>.</>"#
     );
 }
