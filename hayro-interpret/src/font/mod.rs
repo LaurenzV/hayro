@@ -66,7 +66,7 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
 }
 
 use crate::util::hash128;
-use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection};
+use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection, WritingMode};
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 
@@ -144,12 +144,18 @@ impl<'a> Deref for PositionedGlyph<'a> {
 /// A fully materialized run of positioned glyphs.
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
+    pub(crate) writing_mode: WritingMode,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
     /// Return the glyphs in the run.
     pub fn glyphs(&self) -> &'run [PositionedGlyph<'a>] {
         self.glyphs
+    }
+
+    /// Return the writing mode of the font the run was shown with.
+    pub fn writing_mode(&self) -> WritingMode {
+        self.writing_mode
     }
 }
 
