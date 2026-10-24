@@ -127,6 +127,49 @@ pub struct DecodeSettings {
     pub strict: bool,
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
+    /// Only decode this rectangle of the image.
+    ///
+    /// The decoded image then has exactly the size of the region, and its
+    /// samples are identical to the same rectangle cropped out of a decode
+    /// without a region. See [`Region`] for the coordinate system. Tiles,
+    /// code-blocks and wavelet coefficients that do not contribute to the
+    /// region are skipped, so decoding a small window of a large image is
+    /// much cheaper than decoding the whole image.
+    ///
+    /// If the region is empty or does not lie completely inside of the
+    /// image, creating the [`Image`] fails with
+    /// [`ValidationError::InvalidRegion`].
+    pub region: Option<Region>,
+}
+
+/// A rectangular region of an image.
+///
+/// The coordinates refer to the pixel grid of the image as it is returned by
+/// [`Image::decode`] without a region, i.e. at the resolution selected by
+/// [`DecodeSettings::target_resolution`]. The origin `(0, 0)` is the
+/// top-left pixel of the image area. Image area and tile offsets of the
+/// codestream (`XOsiz`/`YOsiz` and `XTOsiz`/`YTOsiz` in the `SIZ` marker)
+/// therefore don't need to be considered, and tile boundaries have no
+/// influence on the coordinates.
+///
+/// Precisely, if `r` resolution levels are skipped and `d` is the horizontal
+/// subsampling factor shared by all components (or 1 if the components
+/// have different subsampling factors), column `x` of the region corresponds
+/// to column `ceil(XOsiz / (d * 2^r)) + x` of the reference grid reduced by
+/// `d * 2^r`. The same holds vertically. Components that are subsampled
+/// relative to the image grid are upsampled by repeating samples, exactly
+/// as in a full decode, so every decoded component has `width * height`
+/// samples.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Region {
+    /// The left edge of the region.
+    pub x: u32,
+    /// The top edge of the region.
+    pub y: u32,
+    /// The width of the region.
+    pub width: u32,
+    /// The height of the region.
+    pub height: u32,
 }
 
 impl Default for DecodeSettings {
@@ -135,6 +178,7 @@ impl Default for DecodeSettings {
             resolve_palette_indices: true,
             strict: false,
             target_resolution: None,
+            region: None,
         }
     }
 }
@@ -178,14 +222,18 @@ impl<'a> Image<'a> {
         &self.color_space
     }
 
-    /// The width of the image.
+    /// The width of the decoded image.
+    ///
+    /// This is the width of [`DecodeSettings::region`] if one was set.
     pub fn width(&self) -> u32 {
-        self.header.size_data.image_width()
+        self.header.region.width()
     }
 
-    /// The height of the image.
+    /// The height of the decoded image.
+    ///
+    /// This is the height of [`DecodeSettings::region`] if one was set.
     pub fn height(&self) -> u32 {
-        self.header.size_data.image_height()
+        self.header.region.height()
     }
 
     /// The original bit depth of the image. You usually don't need to do anything

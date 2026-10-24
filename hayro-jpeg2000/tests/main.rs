@@ -10,6 +10,7 @@ mod mct;
 mod packets;
 mod palette;
 mod quantization;
+mod region;
 mod roi;
 mod tile_parts;
 mod wavelet;

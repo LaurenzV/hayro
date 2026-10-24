@@ -87,6 +87,8 @@ pub enum ValidationError {
     MissingStepSize,
     /// Invalid quantization exponents.
     InvalidExponents,
+    /// The decode region is empty or lies outside of the image.
+    InvalidRegion,
 }
 
 /// Errors related to decoding operations.
@@ -192,6 +194,7 @@ impl fmt::Display for ValidationError {
             }
             Self::MissingStepSize => write!(f, "missing exponent step size"),
             Self::InvalidExponents => write!(f, "invalid quantization exponents"),
+            Self::InvalidRegion => write!(f, "decode region is empty or outside of the image"),
         }
     }
 }

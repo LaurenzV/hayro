@@ -873,6 +873,7 @@ mod tests {
             ppm_packets: vec![],
             progression_changes: vec![],
             skipped_resolution_levels: 0,
+            region: IntRect::from_xywh(0, 0, 1280, 720),
             strict: false,
         };
 
