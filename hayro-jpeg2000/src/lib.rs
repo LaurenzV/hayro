@@ -418,16 +418,7 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
         // Fast path for the common case.
         match num_components {
             // Gray-scale.
-            1 => {
-                for (output, input) in output_iter.zip(
-                    components[0]
-                        .container
-                        .iter()
-                        .map(|v| math::round_to_u8(*v)),
-                ) {
-                    *output = input;
-                }
-            }
+            1 => interleave_to_u8([plane(0)], buf),
             // Gray-scale with alpha.
             2 => interleave_to_u8([plane(0), plane(1)], buf),
             // RGB
@@ -466,6 +457,11 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
     let plane = |c: usize| planes[c][..blocks].as_chunks::<16>().0;
 
     match N {
+        1 => {
+            for (out, c0) in out.as_chunks_mut::<16>().0.iter_mut().zip(plane(0)) {
+                math::round_and_interleave(simd, [c0], out);
+            }
+        }
         2 => {
             for ((out, c0), c1) in out
                 .as_chunks_mut::<32>()

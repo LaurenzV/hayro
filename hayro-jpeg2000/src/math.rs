@@ -167,6 +167,7 @@ mod inner {
     ) {
         // TODO: This can be optimized on ARM by specializing it.
         match N {
+            1 => to_u8(simd, channels[0]).store_slice(out),
             2 => {
                 let (low, high) =
                     simd.interleave_u8x16(to_u8(simd, channels[0]), to_u8(simd, channels[1]));
