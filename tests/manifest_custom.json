@@ -33,10 +33,12 @@
   },
   {
     "id": "clip_path_evenodd",
+    "svg": true,
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },
   {
     "id": "clip_path_nested",
+    "svg": true,
     "file": "pdfs/custom/clip_path_nested.pdf"
   },
   {
@@ -77,6 +79,7 @@
   },
   {
     "id": "fill_degenerate",
+    "svg": true,
     "file": "pdfs/custom/fill_degenerate.pdf"
   },
   {
@@ -273,6 +276,7 @@
   },
   {
     "id": "image_ccit_4",
+    "svg": true,
     "file": "pdfs/custom/image_ccit_4.pdf"
   },
   {
@@ -361,6 +365,7 @@
   },
   {
     "id": "image_mask_alpha",
+    "svg": true,
     "file": "pdfs/custom/image_mask_alpha.pdf"
   },
   {
@@ -381,6 +386,7 @@
   },
   {
     "id": "image_rgb8",
+    "svg": true,
     "file": "pdfs/custom/image_rgb8.pdf"
   },
   {
@@ -405,6 +411,7 @@
   },
   {
     "id": "image_rgba8",
+    "svg": true,
     "file": "pdfs/custom/image_rgba8.pdf"
   },
   {
@@ -417,6 +424,7 @@
   },
   {
     "id": "integration_coat_of_arms",
+    "svg": true,
     "file": "pdfs/custom/integration_coat_of_arms.pdf"
   },
   {
@@ -771,6 +779,7 @@
   },
   {
     "id": "text_rendering_stroking_clipping",
+    "svg": true,
     "file": "pdfs/custom/text_rendering_stroking_clipping.pdf"
   },
   {
@@ -799,6 +808,7 @@
   },
   {
     "id": "image_jbig2_4",
+    "svg": true,
     "link": true
   },
   {
@@ -835,18 +845,22 @@
   },
   {
     "id": "font_type3_filled_glyphs",
+    "svg": true,
     "file": "pdfs/custom/font_type3_filled_glyphs.pdf"
   },
   {
     "id": "font_type3_stroked_glyphs",
+    "svg": true,
     "file": "pdfs/custom/font_type3_stroked_glyphs.pdf"
   },
   {
     "id": "font_type3_shape_glyphs",
+    "svg": true,
     "file": "pdfs/custom/font_type3_shape_glyphs.pdf"
   },
   {
     "id": "pattern_tiling_cache_key",
+    "svg": true,
     "file": "pdfs/custom/pattern_tiling_cache_key.pdf"
   },
   {
@@ -863,10 +877,12 @@
   },
   {
     "id": "pattern_tiling_nested",
+    "svg": true,
     "file": "pdfs/custom/pattern_tiling_nested.pdf"
   },
   {
     "id": "pattern_tiling_rotated",
+    "svg": true,
     "file": "pdfs/custom/pattern_tiling_rotated.pdf"
   },
   {
@@ -875,6 +891,7 @@
   },
   {
     "id": "pattern_tiling_simple",
+    "svg": true,
     "file": "pdfs/custom/pattern_tiling_simple.pdf"
   },
   {
@@ -903,14 +920,17 @@
   },
   {
     "id": "pattern_alpha",
+    "svg": true,
     "file": "pdfs/custom/pattern_alpha.pdf"
   },
   {
     "id": "pattern_alpha_image_mask",
+    "svg": true,
     "file": "pdfs/custom/pattern_alpha_image_mask.pdf"
   },
   {
     "id": "pattern_alpha_type3",
+    "svg": true,
     "file": "pdfs/custom/pattern_alpha_type3.pdf"
   },
   {
@@ -1014,14 +1034,17 @@
   },
   {
     "id": "mask_no_cs",
+    "svg": true,
     "file": "pdfs/custom/mask_no_cs.pdf"
   },
   {
     "id": "mask_luminosity_no_cs",
+    "svg": true,
     "file": "pdfs/custom/mask_luminosity_no_cs.pdf"
   },
   {
     "id": "mask_reuse",
+    "svg": true,
     "file": "pdfs/custom/mask_reuse.pdf"
   },
   {
@@ -1038,6 +1061,7 @@
   },
   {
     "id": "resvg_masking_mask_with_clip_path",
+    "svg": true,
     "file": "pdfs/custom/resvg_masking_mask_with_clip_path.pdf"
   },
   {
@@ -1046,10 +1070,12 @@
   },
   {
     "id": "resvg_masking_mask_mask_type_alpha",
+    "svg": true,
     "file": "pdfs/custom/resvg_masking_mask_mask_type_alpha.pdf"
   },
   {
     "id": "resvg_masking_mask_mask_type_luminance",
+    "svg": true,
     "file": "pdfs/custom/resvg_masking_mask_mask_type_luminance.pdf"
   },
   {
@@ -1086,6 +1112,7 @@
   },
   {
     "id": "image_interpolate",
+    "svg": true,
     "file": "pdfs/custom/image_interpolate.pdf"
   },
   {
@@ -1099,10 +1126,12 @@
   },
   {
     "id": "gradient_on_rect",
+    "svg": true,
     "file": "pdfs/custom/gradient_on_rect.pdf"
   },
   {
     "id": "gradient_on_rotated_rect",
+    "svg": true,
     "file": "pdfs/custom/gradient_on_rotated_rect.pdf"
   },
   {
@@ -1119,10 +1148,12 @@
   },
   {
     "id": "fillrule_evenodd",
+    "svg": true,
     "file": "pdfs/custom/fillrule_evenodd.pdf"
   },
   {
     "id": "stroke_properties",
+    "svg": true,
     "file": "pdfs/custom/stroke_properties.pdf"
   },
   {
@@ -1159,10 +1190,12 @@
   },
   {
     "id": "issue_isolate_shading_transform",
+    "svg": true,
     "file": "pdfs/custom/issue_isolate_shading_transform.pdf"
   },
   {
     "id": "mask_bc",
+    "svg": true,
     "file": "pdfs/custom/mask_bc.pdf"
   },
   {
@@ -1195,6 +1228,7 @@
   },
   {
     "id": "issue_typst_7269",
+    "svg": true,
     "link": true
   },
   {
@@ -1269,6 +1303,7 @@
   },
   {
     "id": "issue968",
+    "svg": true,
     "file": "pdfs/custom/issue968.pdf"
   },
   {
@@ -1327,10 +1362,12 @@
   },
   {
     "id": "color_space_icc_same_dict",
+    "svg": true,
     "file": "pdfs/custom/color_space_icc_same_dict.pdf"
   },
   {
     "id": "shading_mesh_same_dict",
+    "svg": true,
     "file": "pdfs/custom/shading_mesh_same_dict.pdf"
   }
 ]

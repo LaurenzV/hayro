@@ -310,7 +310,10 @@
     "last_page": 99
   },
   "issue1127",
-  "issue11279",
+  {
+    "id": "issue11279",
+    "svg": true
+  },
   {
     "id": "issue11287",
     "last_page": 0
@@ -435,7 +438,10 @@
   "issue13242",
   "issue13316",
   "issue13325",
-  "issue13372",
+  {
+    "id": "issue13372",
+    "svg": true
+  },
   {
     "id": "issue13433",
     "last_page": 0
@@ -699,7 +705,10 @@
   "issue2139",
   "issue215",
   "issue2176",
-  "issue2177",
+  {
+    "id": "issue2177",
+    "svg": true
+  },
   {
     "id": "issue2386",
     "last_page": 1
@@ -1067,7 +1076,10 @@
   "issue8424",
   "issue845",
   "issue8480",
-  "issue8565",
+  {
+    "id": "issue8565",
+    "svg": true
+  },
   "issue8570",
   "issue8613",
   "issue8697",
@@ -1134,7 +1146,10 @@
   "issue269_1",
   "issue19326",
   "issue11004",
-  "issue9650",
+  {
+    "id": "issue9650",
+    "svg": true
+  },
   "bug1901253",
   {
     "id": "issue4648",

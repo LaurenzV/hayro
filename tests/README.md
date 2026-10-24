@@ -51,7 +51,7 @@ To also keep the rendered output of every test (the PNGs, SVGs and PDFs) in the 
 There are currently four different categories of tests:
 - Load tests: They ensure that a file can be loaded/rendered without crashing. Those tests should ideally be run in debug mode.
 - Raster tests: This category makes up the bulk and ensures that PDFs are rasterized correctly.
-- SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`.
+- SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`. A manifest entry is turned into an SVG test by adding `"svg": true` to it.
 - Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
 
 ## Other
