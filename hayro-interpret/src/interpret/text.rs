@@ -91,6 +91,7 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
         let run = GlyphRun {
             glyphs: &ctx.glyph_scratch,
             writing_mode,
+            font: ctx.text_state().font.as_ref().and_then(|f| f.properties()),
         };
 
         let clip_path = if matches!(
