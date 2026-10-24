@@ -8,9 +8,9 @@ use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::array::ArrayIter;
 use crate::object::dict::keys::*;
-use crate::object::{MaybeRef, Object};
+use crate::object::{MaybeRef, Object, ObjectIdentifier};
 use crate::reader::ReaderContext;
-use crate::sync::{FxHashSet, OnceLock};
+use crate::sync::{FxHashMap, FxHashSet, OnceLock};
 use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
@@ -24,7 +24,7 @@ struct PagesContext<'a> {
     media_box: Option<Rect>,
     crop_box: Option<Rect>,
     rotate: Option<i32>,
-    resources: Dict<'a>,
+    resources: Resources<'a>,
 }
 
 impl PagesContext<'_> {
@@ -33,8 +33,38 @@ impl PagesContext<'_> {
             media_box: None,
             crop_box: None,
             rotate: None,
-            resources: Dict::empty(),
+            resources: Resources::new(Dict::empty()),
         }
+    }
+}
+
+/// The resources read while building the list of pages, by object, so that pages sharing a
+/// resource dictionary (or one of its categories) share one parsed copy of it instead of each
+/// parsing it again.
+#[derive(Default)]
+struct ResourceCache<'a> {
+    resources: FxHashMap<ObjectIdentifier, Resources<'a>>,
+    categories: FxHashMap<ObjectIdentifier, Dict<'a>>,
+}
+
+impl<'a> ResourceCache<'a> {
+    /// The resources in the `/Resources` entry of a page or page tree node, if it has a
+    /// dictionary there.
+    fn read(&mut self, dict: &Dict<'a>) -> Option<Resources<'a>> {
+        let id = dict.get_ref(RESOURCES).map(ObjectIdentifier::from);
+
+        if let Some(resources) = id.and_then(|id| self.resources.get(&id)) {
+            return Some(resources.clone());
+        }
+
+        let resources =
+            Resources::new_cached(dict.get::<Dict<'a>>(RESOURCES)?, &mut self.categories);
+
+        if let Some(id) = id {
+            self.resources.insert(id, resources.clone());
+        }
+
+        Some(resources)
     }
 }
 
@@ -53,7 +83,8 @@ impl<'a> Pages<'a> {
     ) -> Option<Self> {
         let mut pages = vec![];
         let pages_ctx = PagesContext::new();
-        resolve_pages(pages_dict, &mut pages, pages_ctx, ctx)?;
+        let mut cache = ResourceCache::default();
+        resolve_pages(pages_dict, &mut pages, pages_ctx, ctx, &mut cache)?;
 
         Some(Self { pages, xref })
     }
@@ -64,10 +95,12 @@ impl<'a> Pages<'a> {
     /// this is still better than nothing.
     pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Self> {
         let mut pages = vec![];
+        let pages_ctx = PagesContext::new();
+        let mut cache = ResourceCache::default();
 
         for object in xref.objects() {
             if let Some(dict) = object.into_dict()
-                && let Some(page) = Page::new(&dict, &PagesContext::new(), ctx, true)
+                && let Some(page) = Page::new(&dict, &pages_ctx, ctx, true, &mut cache)
             {
                 pages.push(page);
             }
@@ -100,11 +133,15 @@ struct PageTreeFrame<'a> {
 }
 
 impl<'a> PageTreeFrame<'a> {
-    fn new(dict: &Dict<'a>, mut ctx: PagesContext<'a>) -> Option<Self> {
+    fn new(
+        dict: &Dict<'a>,
+        mut ctx: PagesContext<'a>,
+        cache: &mut ResourceCache<'a>,
+    ) -> Option<Self> {
         ctx.media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box);
         ctx.crop_box = dict.get::<Rect>(CROP_BOX).or(ctx.crop_box);
         ctx.rotate = dict.get::<i32>(ROTATE).or(ctx.rotate);
-        if let Some(resources) = dict.get::<Dict<'a>>(RESOURCES) {
+        if let Some(resources) = cache.read(dict) {
             ctx.resources = resources;
         }
 
@@ -120,6 +157,7 @@ fn resolve_pages<'a>(
     entries: &mut Vec<Page<'a>>,
     ctx: PagesContext<'a>,
     reader_ctx: &ReaderContext<'a>,
+    cache: &mut ResourceCache<'a>,
 ) -> Option<()> {
     let mut visited = FxHashSet::default();
 
@@ -127,7 +165,7 @@ fn resolve_pages<'a>(
         visited.insert(id);
     }
 
-    let mut stack = vec![PageTreeFrame::new(pages_dict, ctx)?];
+    let mut stack = vec![PageTreeFrame::new(pages_dict, ctx, cache)?];
 
     while let Some(frame) = stack.last_mut() {
         let Some(kid) = frame.kids.next() else {
@@ -155,14 +193,14 @@ fn resolve_pages<'a>(
 
         match dict.get::<Name<'_>>(TYPE).as_deref() {
             Some(PAGES) => {
-                if let Some(child) = PageTreeFrame::new(&dict, frame.ctx.clone()) {
+                if let Some(child) = PageTreeFrame::new(&dict, frame.ctx.clone(), cache) {
                     stack.push(child);
                 }
             }
             // Let's be lenient and assume it's a `Page` in case it's `None` or something else
             // (see corpus test case 0083781).
             _ => {
-                if let Some(page) = Page::new(&dict, &frame.ctx, reader_ctx, false) {
+                if let Some(page) = Page::new(&dict, &frame.ctx, reader_ctx, false, cache) {
                     entries.push(page);
                 }
             }
@@ -202,6 +240,7 @@ impl<'a> Page<'a> {
         ctx: &PagesContext<'a>,
         reader_ctx: &ReaderContext<'a>,
         brute_force: bool,
+        cache: &mut ResourceCache<'a>,
     ) -> Option<Self> {
         // In general, pages without content are allowed, but in case we are brute-forcing
         // we ignore them.
@@ -229,10 +268,7 @@ impl<'a> Page<'a> {
             _ => Rotation::None,
         };
 
-        let resources = Resources::new(
-            dict.get::<Dict<'a>>(RESOURCES)
-                .unwrap_or_else(|| ctx.resources.clone()),
-        );
+        let resources = cache.read(dict).unwrap_or_else(|| ctx.resources.clone());
 
         Some(Self {
             inner: dict.clone(),
@@ -435,13 +471,37 @@ pub struct Resources<'a> {
 impl<'a> Resources<'a> {
     /// Create a new `Resources` object.
     pub fn new(resources: Dict<'a>) -> Self {
-        let ext_g_states = resources.get::<Dict<'_>>(EXT_G_STATE).unwrap_or_default();
-        let fonts = resources.get::<Dict<'_>>(FONT).unwrap_or_default();
-        let color_spaces = resources.get::<Dict<'_>>(COLORSPACE).unwrap_or_default();
-        let x_objects = resources.get::<Dict<'_>>(XOBJECT).unwrap_or_default();
-        let patterns = resources.get::<Dict<'_>>(PATTERN).unwrap_or_default();
-        let shadings = resources.get::<Dict<'_>>(SHADING).unwrap_or_default();
-        let properties = resources.get::<Dict<'_>>(PROPERTIES).unwrap_or_default();
+        Self::read(|key| resources.get::<Dict<'a>>(key))
+    }
+
+    /// Create a new `Resources` object, taking the categories that are references from `cache`
+    /// (and adding them to it), so that resource dictionaries sharing a category share one parsed
+    /// copy of it.
+    fn new_cached(resources: Dict<'a>, cache: &mut FxHashMap<ObjectIdentifier, Dict<'a>>) -> Self {
+        Self::read(|key| {
+            let Some(id) = resources.get_ref(key).map(ObjectIdentifier::from) else {
+                return resources.get::<Dict<'a>>(key);
+            };
+
+            if let Some(dict) = cache.get(&id) {
+                return Some(dict.clone());
+            }
+
+            let dict = resources.get::<Dict<'a>>(key)?;
+            cache.insert(id, dict.clone());
+
+            Some(dict)
+        })
+    }
+
+    fn read(mut get: impl FnMut(&'static [u8]) -> Option<Dict<'a>>) -> Self {
+        let ext_g_states = get(EXT_G_STATE).unwrap_or_default();
+        let fonts = get(FONT).unwrap_or_default();
+        let color_spaces = get(COLORSPACE).unwrap_or_default();
+        let x_objects = get(XOBJECT).unwrap_or_default();
+        let patterns = get(PATTERN).unwrap_or_default();
+        let shadings = get(SHADING).unwrap_or_default();
+        let properties = get(PROPERTIES).unwrap_or_default();
 
         Self {
             ext_g_states,
@@ -541,5 +601,80 @@ pub(crate) mod cached {
         pub(crate) fn get(&self) -> &Pages<'_> {
             &self.pages
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Pdf;
+    use crate::object::Name;
+    use alloc::format;
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// A document with four pages under one `/Pages` node: the first inherits the node's
+    /// resources, the second and third share an indirect `/Resources`, the fourth has its own
+    /// `/Resources` whose `/ExtGState` is an indirect object the third page's resources share too.
+    fn document() -> Vec<u8> {
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [5 0 R 6 0 R 7 0 R 8 0 R] /Count 4 \
+             /Resources << /ExtGState << /Inherited << /ca 0.5 >> >> >> >>",
+            "<< /ExtGState 4 0 R /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>",
+            "<< /Shared << /ca 0.25 >> >>",
+            "<< /Type /Page /Parent 2 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /Resources 3 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /Resources 3 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /Resources << /ExtGState 4 0 R >> >>",
+        ];
+        let mut pdf = String::from("%PDF-1.7\n");
+        let mut offsets = Vec::new();
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.push_str(&format!("{} 0 obj\n{object}\nendobj\n", index + 1));
+        }
+        let xref = pdf.len();
+        pdf.push_str(&format!(
+            "xref\n0 {}\n0000000000 65535 f \n",
+            objects.len() + 1
+        ));
+        for offset in offsets {
+            pdf.push_str(&format!("{offset:010} 00000 n \n"));
+        }
+        pdf.push_str(&format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        ));
+        pdf.into_bytes()
+    }
+
+    #[test]
+    fn pages_sharing_resources_each_read_them() {
+        let pdf = Pdf::new(document()).unwrap();
+        let pages = pdf.pages();
+        assert_eq!(pages.len(), 4);
+
+        let state = |index: usize, name: &[u8]| {
+            pages[index]
+                .resources()
+                .get_ext_g_state(&Name::new_unescaped(name))
+                .and_then(|state| state.get::<f32>(b"ca"))
+        };
+        let has_font = |index: usize| {
+            pages[index]
+                .resources()
+                .get_font(&Name::new_unescaped(b"F1"))
+                .is_some()
+        };
+
+        assert_eq!(state(0, b"Inherited"), Some(0.5));
+        assert_eq!(state(0, b"Shared"), None);
+        for index in 1..3 {
+            assert_eq!(state(index, b"Shared"), Some(0.25));
+            assert_eq!(state(index, b"Inherited"), None);
+            assert!(has_font(index));
+        }
+        assert_eq!(state(3, b"Shared"), Some(0.25));
+        assert!(!has_font(3));
     }
 }
