@@ -1369,5 +1369,10 @@
     "id": "shading_mesh_same_dict",
     "svg": true,
     "file": "pdfs/custom/shading_mesh_same_dict.pdf"
+  },
+  {
+    "id": "literal_string_raw_eol",
+    "svg": true,
+    "file": "pdfs/custom/literal_string_raw_eol.pdf"
   }
 ]

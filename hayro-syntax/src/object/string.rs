@@ -199,9 +199,31 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
     let mut r = Reader::new(data);
     let mut result = SmallVec::new();
 
-    while let Some(byte) = r.read_byte() {
+    loop {
+        // An end-of-line marker appearing within a literal string
+        // without a preceding REVERSE SOLIDUS shall be treated as
+        // a byte value of (0Ah), irrespective of whether the end-of-line
+        // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
+        if r.read_eol().is_some() {
+            result.push(b'\n');
+            continue;
+        }
+
+        let Some(byte) = r.read_byte() else {
+            break;
+        };
+
         match byte {
             b'\\' => {
+                // A conforming reader shall disregard the REVERSE SOLIDUS
+                // and the end-of-line marker following it when reading
+                // the string; the resulting string value shall be
+                // identical to that which would be read if the string
+                // were not split.
+                if r.read_eol().is_some() {
+                    continue;
+                }
+
                 let next = r.read_byte()?;
 
                 if is_octal_digit(next) {
@@ -248,27 +270,11 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
                         b'(' => result.push(b'('),
                         b')' => result.push(b')'),
                         b'\\' => result.push(b'\\'),
-                        b'\n' | b'\r' => {
-                            // A conforming reader shall disregard the REVERSE SOLIDUS
-                            // and the end-of-line marker following it when reading
-                            // the string; the resulting string value shall be
-                            // identical to that which would be read if the string
-                            // were not split.
-                            r.skip_eol_characters();
-                        }
                         _ => result.push(next),
                     }
                 }
             }
             b'(' | b')' => result.push(byte),
-            // An end-of-line marker appearing within a literal string
-            // without a preceding REVERSE SOLIDUS shall be treated as
-            // a byte value of (0Ah), irrespective of whether the end-of-line
-            // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
-            b'\n' | b'\r' => {
-                result.push(b'\n');
-                r.skip_eol_characters();
-            }
             other => result.push(other),
         }
     }
@@ -522,6 +528,23 @@ mod tests {
                 .as_bytes(),
             b"\0Y"
         );
+    }
+
+    #[test]
+    fn literal_string_eol() {
+        let read = |data: &[u8]| {
+            Reader::new(data)
+                .read_without_context::<String<'_>>()
+                .unwrap()
+                .as_bytes()
+                .to_vec()
+        };
+
+        assert_eq!(read(b"(a\n\nb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\r\n\r\nb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\r\rb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\\\n\nb)"), b"a\nb");
+        assert_eq!(read(b"(a\\\r\n\r\nb)"), b"a\nb");
     }
 
     #[test]
