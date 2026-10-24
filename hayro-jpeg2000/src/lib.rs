@@ -413,6 +413,8 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
     let mut output_iter = buf.iter_mut();
 
     if all_same_bit_depth == Some(8) && num_components <= 4 {
+        let plane = |c: usize| &components[c].container[..max_len];
+
         // Fast path for the common case.
         match num_components {
             // Gray-scale.
@@ -427,71 +429,11 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                 }
             }
             // Gray-scale with alpha.
-            2 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-
-                for ((out, c0), c1) in buf.as_chunks_mut::<2>().0.iter_mut().zip(c0).zip(c1) {
-                    *out = [math::round_to_u8(*c0), math::round_to_u8(*c1)];
-                }
-            }
+            2 => interleave_to_u8([plane(0), plane(1)], buf),
             // RGB
-            3 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-
-                for (((out, c0), c1), c2) in buf
-                    .as_chunks_mut::<3>()
-                    .0
-                    .iter_mut()
-                    .zip(c0)
-                    .zip(c1)
-                    .zip(c2)
-                {
-                    *out = [
-                        math::round_to_u8(*c0),
-                        math::round_to_u8(*c1),
-                        math::round_to_u8(*c2),
-                    ];
-                }
-            }
+            3 => interleave_to_u8([plane(0), plane(1), plane(2)], buf),
             // RGBA or CMYK.
-            4 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-                let c3 = &components[3];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-                let c3 = &c3.container[..max_len];
-
-                for ((((out, c0), c1), c2), c3) in buf
-                    .as_chunks_mut::<4>()
-                    .0
-                    .iter_mut()
-                    .zip(c0)
-                    .zip(c1)
-                    .zip(c2)
-                    .zip(c3)
-                {
-                    *out = [
-                        math::round_to_u8(*c0),
-                        math::round_to_u8(*c1),
-                        math::round_to_u8(*c2),
-                        math::round_to_u8(*c3),
-                    ];
-                }
-            }
+            4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], buf),
             _ => unreachable!(),
         }
     } else {
@@ -505,6 +447,67 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
                         * mul_factor,
                 );
             }
+        }
+    }
+}
+
+fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], out: &mut [u8]) {
+    dispatch!(Level::new(), simd => interleave_to_u8_impl(simd, planes, out));
+}
+
+#[inline(always)]
+fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], out: &mut [u8]) {
+    let pixels = planes
+        .iter()
+        .map(|plane| plane.len())
+        .fold(out.len() / N, usize::min);
+    let blocks = pixels / 16 * 16;
+    let (out, tail) = out[..pixels * N].split_at_mut(blocks * N);
+    let plane = |c: usize| planes[c][..blocks].as_chunks::<16>().0;
+
+    match N {
+        2 => {
+            for ((out, c0), c1) in out
+                .as_chunks_mut::<32>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+            {
+                math::round_and_interleave(simd, [c0, c1], out);
+            }
+        }
+        3 => {
+            for (((out, c0), c1), c2) in out
+                .as_chunks_mut::<48>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+                .zip(plane(2))
+            {
+                math::round_and_interleave(simd, [c0, c1, c2], out);
+            }
+        }
+        4 => {
+            for ((((out, c0), c1), c2), c3) in out
+                .as_chunks_mut::<64>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+                .zip(plane(2))
+                .zip(plane(3))
+            {
+                math::round_and_interleave(simd, [c0, c1, c2, c3], out);
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    for (i, pixel) in tail.as_chunks_mut::<N>().0.iter_mut().enumerate() {
+        for (value, plane) in pixel.iter_mut().zip(planes) {
+            *value = math::round_to_u8(plane[blocks + i]);
         }
     }
 }
