@@ -73,6 +73,7 @@ pub(crate) struct GlobalState {
     outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     scaler: Scaler,
     force_image_interpolation: bool,
+    aliasing_threshold: Option<u8>,
 }
 
 impl GlobalState {
@@ -82,6 +83,7 @@ impl GlobalState {
             outline_cache: cache.outline_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
+            aliasing_threshold: settings.aliasing_threshold,
         }
     }
 }
@@ -106,7 +108,10 @@ impl<'r> Renderer<'r> {
     }
 
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
-        RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
+        let mut ctx =
+            RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()));
+        ctx.set_aliasing_threshold(self.global.aliasing_threshold);
+        ctx
     }
 
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
@@ -197,6 +202,13 @@ impl<'a> RenderCache<'a> {
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
+    /// The aliasing threshold of every fill and stroke.
+    ///
+    /// `None`, the default, anti-aliases. `Some(threshold)` paints a pixel
+    /// fully when its coverage exceeds `threshold` (between 0 and 255), and
+    /// not at all otherwise; see
+    /// [`RenderContext::set_aliasing_threshold`](vello_cpu::RenderContext::set_aliasing_threshold).
+    pub aliasing_threshold: Option<u8>,
 }
 
 /// Settings for the output pixmap.
@@ -288,6 +300,7 @@ pub fn render_into<'a>(
     ctx.take_current_state();
     ctx.reset_mask();
     ctx.reset_filter_effect();
+    ctx.set_aliasing_threshold(render_settings.aliasing_threshold);
 
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);

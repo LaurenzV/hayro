@@ -65,6 +65,7 @@ fn draw_soft_mask(
     global: &GlobalState,
 ) -> Mask {
     let mut ctx = vello_cpu::RenderContext::new_with(width, height, derive_settings(&settings));
+    ctx.set_aliasing_threshold(global.aliasing_threshold);
     let mut renderer = Renderer::new(&mut ctx, global);
 
     let bg_color = mask.background_color().to_rgba();
