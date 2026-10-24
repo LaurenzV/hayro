@@ -110,9 +110,7 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
         let nesting_depth = context.nesting_depth() + 1;
-        // The group falls back to the resources of the place that sets the mask only
-        // where it has none of its own, so only there are they part of the key.
-        let parent_resources_key = (!group.has_resources()).then(|| {
+        let parent_resources_key = group.resources.is_none().then(|| {
             hash128(
                 &[
                     &parent_resources.ext_g_states,

@@ -16,7 +16,7 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
-    resources: Option<Resources<'a>>,
+    pub(crate) resources: Option<Resources<'a>>,
 }
 
 impl<'a> FormXObject<'a> {
@@ -41,12 +41,6 @@ impl<'a> FormXObject<'a> {
             dict: dict.clone(),
             resources,
         })
-    }
-
-    /// Whether the form has resources of its own, so that it is drawn with none of
-    /// those it is drawn from.
-    pub(crate) fn has_resources(&self) -> bool {
-        self.resources.is_some()
     }
 
     pub(crate) fn draw(
