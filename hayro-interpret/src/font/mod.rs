@@ -12,12 +12,13 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
+use crate::util::RectExt;
 use crate::{CMapResolverFn, CacheKey, FontResolverFn, InterpreterSettings, Paint};
 use bitflags::bitflags;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::SUBTYPE;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::{Dict, Stream};
+use hayro_syntax::object::{Array, Dict, Stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Rect, Vec2};
@@ -145,6 +146,7 @@ impl<'a> Deref for PositionedGlyph<'a> {
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
     pub(crate) writing_mode: WritingMode,
+    pub(crate) font: Option<&'run FontProperties<'a>>,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
@@ -156,6 +158,109 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     /// Return the writing mode of the font the run was shown with.
     pub fn writing_mode(&self) -> WritingMode {
         self.writing_mode
+    }
+
+    /// Return the properties of the font the run was shown with.
+    ///
+    /// Returns `None` if the content stream selected no font or one that could
+    /// not be loaded, in which case the run is shown with a fallback font that
+    /// has no font dictionary.
+    pub fn font(&self) -> Option<&'run FontProperties<'a>> {
+        self.font
+    }
+}
+
+/// The properties of a font, as described by its font dictionary and font
+/// descriptor.
+///
+/// These are the values the PDF states, which is what text extraction needs to
+/// reason about a font: the name and flags of the font, and the metrics it
+/// declares. Metrics are in glyph space, i.e. in thousandths of a unit of text
+/// space. Fonts without a font descriptor, such as most uses of the 14 standard
+/// fonts, return `None` for all values that come from the descriptor.
+#[derive(Clone, Debug)]
+pub struct FontProperties<'a> {
+    dict: Dict<'a>,
+    descriptor: Option<Dict<'a>>,
+}
+
+impl<'a> FontProperties<'a> {
+    pub(crate) fn new(dict: Dict<'a>) -> Self {
+        // A composite font keeps its descriptor in its descendant font.
+        let descriptor = if dict.get::<Name<'_>>(SUBTYPE).as_deref() == Some(TYPE0) {
+            dict.get::<Array<'_>>(DESCENDANT_FONTS)
+                .and_then(|fonts| fonts.iter::<Dict<'_>>().next())
+                .and_then(|descendant| descendant.get::<Dict<'_>>(FONT_DESC))
+        } else {
+            dict.get::<Dict<'_>>(FONT_DESC)
+        };
+
+        Self { dict, descriptor }
+    }
+
+    /// Return the font dictionary.
+    pub fn dict(&self) -> &Dict<'a> {
+        &self.dict
+    }
+
+    /// Return the font descriptor, if the font has one.
+    pub fn descriptor(&self) -> Option<&Dict<'a>> {
+        self.descriptor.as_ref()
+    }
+
+    /// Return the `/BaseFont` name of the font, including any subset prefix.
+    pub fn base_font(&self) -> Option<Name<'a>> {
+        self.dict.get::<Name<'a>>(BASE_FONT)
+    }
+
+    /// Return the `/Flags` of the font descriptor.
+    ///
+    /// Bits that are reserved by the specification are retained rather than
+    /// discarded.
+    pub fn flags(&self) -> Option<FontFlags> {
+        self.descriptor
+            .as_ref()?
+            .get::<u32>(FLAGS)
+            .map(FontFlags::from_bits_retain)
+    }
+
+    /// Return the `/FontWeight` of the font descriptor.
+    pub fn weight(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(FONT_WEIGHT)
+    }
+
+    /// Return the `/StemV` of the font descriptor.
+    pub fn stem_v(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(STEM_V)
+    }
+
+    /// Return the `/ItalicAngle` of the font descriptor, in degrees
+    /// counterclockwise from the vertical.
+    pub fn italic_angle(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(ITALIC_ANGLE)
+    }
+
+    /// Return the `/Ascent` of the font descriptor.
+    pub fn ascent(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(ASCENT)
+    }
+
+    /// Return the `/Descent` of the font descriptor, which is usually negative.
+    pub fn descent(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(DESCENT)
+    }
+
+    /// Return the `/CapHeight` of the font descriptor.
+    pub fn cap_height(&self) -> Option<f32> {
+        self.descriptor.as_ref()?.get::<f32>(CAP_HEIGHT)
+    }
+
+    /// Return the `/FontBBox` of the font descriptor.
+    pub fn bbox(&self) -> Option<Rect> {
+        self.descriptor
+            .as_ref()?
+            .get::<hayro_syntax::object::Rect>(FONT_BBOX)
+            .map(|rect| rect.to_kurbo())
     }
 }
 
@@ -288,7 +393,7 @@ impl CacheKey for Type3Glyph<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Font<'a>(u128, FontType<'a>);
+pub(crate) struct Font<'a>(u128, FontType<'a>, Option<FontProperties<'a>>);
 
 impl<'a> Font<'a> {
     pub(crate) fn new(
@@ -320,7 +425,11 @@ impl<'a> Font<'a> {
 
         let cache_key = dict.cache_key();
 
-        Some(Self(cache_key, f_type))
+        Some(Self(
+            cache_key,
+            f_type,
+            Some(FontProperties::new(dict.clone())),
+        ))
     }
 
     pub(crate) fn new_standard(
@@ -329,7 +438,11 @@ impl<'a> Font<'a> {
     ) -> Option<Self> {
         let font = Type1Font::new_standard(standard_font, font_resolver)?;
 
-        Some(Self(0, FontType::Type1(Rc::new(font))))
+        Some(Self(0, FontType::Type1(Rc::new(font)), None))
+    }
+
+    pub(crate) fn properties(&self) -> Option<&FontProperties<'a>> {
+        self.2.as_ref()
     }
 
     pub(crate) fn map_code(&self, code: u32) -> GlyphId {
@@ -533,16 +646,25 @@ impl FontStretch {
 
 bitflags! {
     /// Bitflags describing various characteristics of fonts.
-    #[derive(Debug)]
-    pub(crate) struct FontFlags: u32 {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FontFlags: u32 {
+        /// All glyphs have the same width.
         const FIXED_PITCH = 1 << 0;
+        /// Glyphs have serifs.
         const SERIF = 1 << 1;
+        /// The font contains glyphs outside the standard Latin character set.
         const SYMBOLIC = 1 << 2;
+        /// Glyphs resemble cursive handwriting.
         const SCRIPT = 1 << 3;
+        /// The font uses the standard Latin character set or a subset of it.
         const NON_SYMBOLIC = 1 << 5;
+        /// Glyphs have dominant vertical strokes that are slanted.
         const ITALIC = 1 << 6;
+        /// The font contains no lowercase letters.
         const ALL_CAP = 1 << 16;
+        /// Lowercase letters are displayed as smaller uppercase letters.
         const SMALL_CAP = 1 << 17;
+        /// Bold glyphs are painted with extra pixels even at small text sizes.
         const FORCE_BOLD = 1 << 18;
     }
 }
