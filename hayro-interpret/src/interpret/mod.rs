@@ -2,7 +2,7 @@ use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
-use crate::device::{Device, MarkedContentProperties};
+use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
@@ -515,7 +515,7 @@ pub fn interpret<'a>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content(bdc.0, &MarkedContentProperties::new(properties));
+                device.begin_marked_content(bdc.0, properties.as_ref());
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -525,7 +525,7 @@ pub fn interpret<'a>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(bmc.0, &MarkedContentProperties::default());
+                device.begin_marked_content(bmc.0, None);
             }
             TypedInstruction::BeginText(_) => {
                 context.text_state_mut().text_matrix = Affine::IDENTITY;

@@ -5,9 +5,10 @@ use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
-    InterpreterCache, MarkedContentProperties, SoftMask, interpret_page,
+    InterpreterCache, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
+use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
@@ -45,14 +46,13 @@ impl<'a> Device<'a> for TextCollector {
     fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
-    fn begin_marked_content(&mut self, tag: &[u8], properties: &MarkedContentProperties<'_>) {
+    fn begin_marked_content(&mut self, tag: &[u8], properties: Option<&Dict<'_>>) {
         write!(self.0, "<{}", String::from_utf8_lossy(tag)).unwrap();
-        if let Some(mcid) = properties.mcid() {
-            write!(self.0, " mcid={mcid}").unwrap();
-        }
-        if let Some(actual_text) = properties.actual_text() {
-            let actual_text = String::from_utf8_lossy(actual_text.as_bytes());
-            write!(self.0, " actual={actual_text}").unwrap();
+        if let Some(properties) = properties {
+            for key in properties.keys() {
+                let value = properties.get::<Object<'_>>(&key).unwrap();
+                write!(self.0, " {key} {value}").unwrap();
+            }
         }
         self.0.push('>');
     }
@@ -106,6 +106,6 @@ fn marked_content() {
 
     assert_eq!(
         page_text(file),
-        "<P mcid=0>Hi</><Span mcid=1 actual=fi>x</><Artifact>.</>"
+        r#"<P /MCID 0>Hi</><Span /MCID 1 /ActualText "fi">x</><Artifact>.</>"#
     );
 }
