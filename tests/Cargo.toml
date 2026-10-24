@@ -39,6 +39,5 @@ memchr = { version = "2.7.6"}
 hayro-syntax = { workspace = true }
 image = {  workspace = true }
 console = "0.16"
-indicatif = "0.18"
 serde_json = "1"
 ureq = "3"

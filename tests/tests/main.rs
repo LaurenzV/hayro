@@ -16,6 +16,7 @@ use std::sync::{Arc, LazyLock};
 
 mod args;
 mod assets;
+mod live;
 mod load;
 mod render;
 mod runner;

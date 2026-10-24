@@ -1,6 +1,6 @@
+use crate::live::Live;
 use crate::runner::{Outcome, TestResult};
-use console::{Style, Term, measure_text_width, style, truncate_str};
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use console::{Style, measure_text_width, style, truncate_str};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::{Duration, Instant};
@@ -11,7 +11,7 @@ const SLOW: Duration = Duration::from_secs(10);
 const PLAIN_PROGRESS_EVERY: usize = 250;
 
 pub(crate) struct Ui {
-    live: Option<ProgressBar>,
+    live: Option<Live>,
     total: usize,
     done: usize,
     failed: usize,
@@ -21,12 +21,8 @@ pub(crate) struct Ui {
 
 impl Ui {
     pub(crate) fn new() -> Self {
-        let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
-        bar.set_style(ProgressStyle::with_template("{msg}").unwrap());
-        let live = (!bar.is_hidden()).then_some(bar);
-
         Self {
-            live,
+            live: Live::new(),
             total: 0,
             done: 0,
             failed: 0,
@@ -35,14 +31,14 @@ impl Ui {
         }
     }
 
-    pub(crate) fn line(&self, line: impl AsRef<str>) {
-        match &self.live {
-            Some(bar) => bar.println(line),
+    pub(crate) fn line(&mut self, line: impl AsRef<str>) {
+        match &mut self.live {
+            Some(live) => live.println(line.as_ref()),
             None => eprintln!("{}", line.as_ref()),
         }
     }
 
-    pub(crate) fn header(&self, suites: &BTreeMap<String, usize>, total: usize, jobs: usize) {
+    pub(crate) fn header(&mut self, suites: &BTreeMap<String, usize>, total: usize, jobs: usize) {
         let mut suites: Vec<_> = suites.iter().collect();
         suites.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
 
@@ -96,9 +92,9 @@ impl Ui {
         }
     }
 
-    fn draw_download(&self, file: &str) {
-        if let Some(bar) = &self.live {
-            bar.set_message(format!(
+    fn draw_download(&mut self, file: &str) {
+        if let Some(live) = &mut self.live {
+            live.set(format!(
                 "{} {}  {}{}  {}",
                 style("Downloading").bold(),
                 progress_bar(self.done, self.total, 30),
@@ -129,7 +125,8 @@ impl Ui {
                 if let Some(location) = location {
                     write!(line, "  {}", dim(location)).unwrap();
                 }
-                self.line(self.fit(line));
+                let line = self.fit(line);
+                self.line(line);
             }
             Outcome::Created(pages) => self.line(format!(
                 "{} {name}  {}",
@@ -159,7 +156,7 @@ impl Ui {
     }
 
     pub(crate) fn tick(&mut self, running: &[(String, Instant)]) {
-        let Some(bar) = &self.live else { return };
+        let Some(live) = &mut self.live else { return };
         self.ticks += 1;
 
         let mut block = format!(
@@ -209,16 +206,16 @@ impl Ui {
             .unwrap();
         }
 
-        bar.set_message(block);
+        live.set(block);
     }
 
-    pub(crate) fn clear(&self) {
-        if let Some(bar) = &self.live {
-            bar.set_message("");
+    pub(crate) fn clear(&mut self) {
+        if let Some(live) = &mut self.live {
+            live.clear();
         }
     }
 
-    pub(crate) fn summary(&self, results: &[TestResult], ignored: usize) {
+    pub(crate) fn summary(&mut self, results: &[TestResult], ignored: usize) {
         self.clear();
 
         let mut failed: Vec<_> = results
@@ -340,18 +337,12 @@ impl Ui {
             .unwrap();
         }
 
-        if let Some(bar) = &self.live {
-            bar.finish_and_clear();
-        }
         eprint!("{out}");
     }
 
     fn fit(&self, line: String) -> String {
         match &self.live {
-            Some(_) => {
-                let width = Term::stderr().size().1 as usize;
-                truncate_str(&line, width.max(40), "…").into_owned()
-            }
+            Some(live) => truncate_str(&line, live.width() - 1, "…").into_owned(),
             None => line,
         }
     }
