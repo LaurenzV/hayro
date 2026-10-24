@@ -3,10 +3,10 @@ resolver = "2"
 members = [
     "hayro-interpret",
     "hayro",
-    "hayro-bench",
+    "benches",
     "hayro-syntax",
     "hayro-demo",
-    "hayro-tests",
+    "tests",
     "hayro-write",
     "hayro-svg",
     "hayro-jpeg2000",

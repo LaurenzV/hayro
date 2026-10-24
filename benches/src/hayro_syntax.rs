@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 const LIMIT: usize = 200;
-const ROOTS: &[&str] = &["hayro-tests/downloads", "hayro-tests/pdfs/custom"];
+const ROOTS: &[&str] = &["tests/downloads", "tests/pdfs/custom"];
 
 struct BenchResult {
     path: PathBuf,

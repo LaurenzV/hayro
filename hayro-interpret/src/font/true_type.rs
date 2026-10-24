@@ -198,8 +198,8 @@ impl TrueTypeFont {
 
         // TODO: The test PDFs below fail (but mutool can render them correctly).
         // There is likely some other strategy that requires processing the font tables
-        // hayro-tests/pdfs/custom/font_truetype_7.pdf
-        // hayro-tests/pdfs/custom/font_truetype_6.pdf
+        // tests/pdfs/custom/font_truetype_7.pdf
+        // tests/pdfs/custom/font_truetype_6.pdf
     }
 }
 

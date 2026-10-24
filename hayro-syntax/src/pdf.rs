@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn pdf_version_header() {
-        let data = std::fs::read("../hayro-tests/downloads/pdfjs/alphatrans.pdf").unwrap();
+        let data = std::fs::read("../tests/downloads/pdfjs/alphatrans.pdf").unwrap();
         let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf17);
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn pdf_version_catalog() {
-        let data = std::fs::read("../hayro-tests/downloads/pdfbox/2163.pdf").unwrap();
+        let data = std::fs::read("../tests/downloads/pdfbox/2163.pdf").unwrap();
         let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
