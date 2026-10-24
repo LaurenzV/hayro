@@ -105,6 +105,11 @@ impl<'r> Renderer<'r> {
         }
     }
 
+    fn misses_target(&self, bbox: Rect) -> bool {
+        let target = Rect::new(0.0, 0.0, self.ctx.width() as f64, self.ctx.height() as f64);
+        !bbox.overlaps(target)
+    }
+
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
         RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
     }

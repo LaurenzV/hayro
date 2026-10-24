@@ -434,8 +434,7 @@ impl Renderer<'_> {
         props: ImageDrawProps<'a>,
     ) {
         let local = Rect::new(0.0, 0.0, image.width() as f64, image.height() as f64);
-        let target = Rect::new(0.0, 0.0, self.ctx.width() as f64, self.ctx.height() as f64);
-        if !props.transform.transform_rect_bbox(local).overlaps(target) {
+        if self.misses_target(props.transform.transform_rect_bbox(local)) {
             return;
         }
 
