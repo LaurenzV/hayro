@@ -72,20 +72,44 @@ pub fn convert<'a>(
     interpreter_settings: &InterpreterSettings,
     render_settings: &SvgRenderSettings,
 ) -> String {
-    let mut state = Context::new(
+    convert_with_transform(
+        page,
+        cache,
+        interpreter_settings,
+        render_settings,
         page.initial_transform(true).to_kurbo(),
-        Rect::new(
-            0.0,
-            0.0,
-            page.render_dimensions().0 as f64,
-            page.render_dimensions().1 as f64,
-        ),
+        page.render_dimensions(),
+    )
+}
+
+/// Convert the given page into an SVG string with the given transform and
+/// viewport size.
+///
+/// The transform maps the user space of the page to the coordinate system of
+/// the SVG, whose viewport spans from `(0, 0)` to `size`. Content outside of the
+/// viewport is not visible.
+///
+/// [`convert`] is the same as passing `page.initial_transform(true)` as the
+/// transform and `page.render_dimensions()` as the size. For example, prepending
+/// `Affine::scale(2.0)` to that transform and doubling the size produces an
+/// SVG that is twice as large.
+pub fn convert_with_transform<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &SvgRenderSettings,
+    transform: Affine,
+    size: (f32, f32),
+) -> String {
+    let mut state = Context::new(
+        transform,
+        Rect::new(0.0, 0.0, size.0 as f64, size.1 as f64),
         &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
     );
-    let mut device = SvgRenderer::new(page, render_settings.clone());
-    device.write_header(page.render_dimensions());
+    let mut device = SvgRenderer::new(size, render_settings.clone());
+    device.write_header(size);
 
     interpret_page(page, &mut state, &mut device);
 
@@ -363,7 +387,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 }
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn new(page: &'a Page<'a>, render_settings: SvgRenderSettings) -> Self {
+    pub(crate) fn new(dimensions: (f32, f32), render_settings: SvgRenderSettings) -> Self {
         Self {
             render_settings,
             xml: XmlWriter::new(Options::default()),
@@ -376,7 +400,7 @@ impl<'a> SvgRenderer<'a> {
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
             active_clips: Vec::new(),
-            dimensions: page.render_dimensions(),
+            dimensions,
         }
     }
 
