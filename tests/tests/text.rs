@@ -5,9 +5,11 @@ use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
-    InterpreterCache, MarkedContentProperties, SoftMask, interpret_page,
+    InterpreterCache, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::dict::keys::{ACTUAL_TEXT, MCID};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
@@ -45,12 +47,14 @@ impl<'a> Device<'a> for TextCollector {
     fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
-    fn begin_marked_content(&mut self, tag: &[u8], properties: &MarkedContentProperties<'_>) {
+    fn begin_marked_content(&mut self, tag: &[u8], properties: Option<&Dict<'_>>) {
         write!(self.0, "<{}", String::from_utf8_lossy(tag)).unwrap();
-        if let Some(mcid) = properties.mcid() {
+        if let Some(mcid) = properties.and_then(|p| p.get::<i32>(MCID)) {
             write!(self.0, " mcid={mcid}").unwrap();
         }
-        if let Some(actual_text) = properties.actual_text() {
+        if let Some(actual_text) =
+            properties.and_then(|p| p.get::<hayro_syntax::object::String<'_>>(ACTUAL_TEXT))
+        {
             let actual_text = String::from_utf8_lossy(actual_text.as_bytes());
             write!(self.0, " actual={actual_text}").unwrap();
         }
