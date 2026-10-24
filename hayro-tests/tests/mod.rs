@@ -16,6 +16,7 @@ use std::sync::{Arc, LazyLock};
 #[allow(non_snake_case)]
 mod render;
 mod load;
+mod paint;
 mod svg;
 mod text;
 mod write;
