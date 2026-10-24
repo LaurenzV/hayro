@@ -16,7 +16,8 @@ path = "src/experiment.rs"
 
 [[test]]
 name = "tests"
-path = "tests/mod.rs"
+path = "tests/main.rs"
+harness = false
 
 [dependencies]
 hayro = { workspace = true, features = ["embed-cmaps", "simd"] }
@@ -37,3 +38,6 @@ memchr = { version = "2.7.6"}
 [dev-dependencies]
 hayro-syntax = { workspace = true }
 image = {  workspace = true }
+console = "0.16"
+serde_json = "1"
+ureq = "3"

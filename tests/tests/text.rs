@@ -1,3 +1,5 @@
+use crate::WORKSPACE_PATH;
+use crate::harness::runner::Test;
 use hayro::hayro_interpret::font::GlyphRun;
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
@@ -7,6 +9,22 @@ use hayro::hayro_interpret::{
 };
 use hayro_syntax::Pdf;
 use std::fmt::Write;
+
+pub(crate) fn tests() -> Vec<Test> {
+    let units: [(&str, fn()); 5] = [
+        ("text::glyph_names", glyph_names),
+        ("text::type3_glyph_names", type3_glyph_names),
+        ("text::zapf_dingbats", zapf_dingbats),
+        ("text::tex_glyph_names", tex_glyph_names),
+        ("text::marked_content", marked_content),
+    ];
+
+    units.map(|(name, run)| Test::unit(name, run)).into()
+}
+
+fn read(path: &str) -> Vec<u8> {
+    std::fs::read(WORKSPACE_PATH.join(path)).unwrap()
+}
 
 #[derive(Default)]
 struct TextCollector(String);
@@ -59,37 +77,32 @@ fn page_text(file: &[u8]) -> String {
     collector.0
 }
 
-#[test]
 fn glyph_names() {
-    let file = include_bytes!("../pdfs/text/glyph_names.pdf");
+    let file = &read("pdfs/text/glyph_names.pdf");
 
     assert_eq!(page_text(file), "Menu: Waffles, Café & Coffee-Shop");
 }
 
-#[test]
 fn type3_glyph_names() {
-    let file = include_bytes!("../pdfs/text/type3_glyph_names.pdf");
+    let file = &read("pdfs/text/type3_glyph_names.pdf");
 
     assert_eq!(page_text(file), "Hello, Type 3!");
 }
 
-#[test]
 fn zapf_dingbats() {
-    let file = include_bytes!("../pdfs/text/zapf_dingbats.pdf");
+    let file = &read("pdfs/text/zapf_dingbats.pdf");
 
     assert_eq!(page_text(file), "✔ ★ ☎");
 }
 
-#[test]
 fn tex_glyph_names() {
-    let file = include_bytes!("../pdfs/text/tex_glyph_names.pdf");
+    let file = &read("pdfs/text/tex_glyph_names.pdf");
 
     assert_eq!(page_text(file), "⌊ℓ⌋");
 }
 
-#[test]
 fn marked_content() {
-    let file = include_bytes!("../pdfs/text/marked_content.pdf");
+    let file = &read("pdfs/text/marked_content.pdf");
 
     assert_eq!(
         page_text(file),

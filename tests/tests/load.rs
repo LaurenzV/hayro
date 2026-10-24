@@ -1,3 +1,5 @@
+use crate::WORKSPACE_PATH;
+use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::render_pdf;
 use hayro_jbig2::DecoderContext;
@@ -41,612 +43,68 @@ fn load_jpeg2000(file: &[u8]) {
     }
 }
 
-#[test]
-fn issue50() {
-    let file = include_bytes!("../pdfs/load/issue50.pdf");
-    load_pdf(file);
+pub(crate) fn tests() -> Vec<Test> {
+    let dir = WORKSPACE_PATH.join("pdfs/load");
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|err| panic!("couldn't read {}: {err}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    files.sort();
+
+    let files = files.into_iter().filter_map(|path| {
+        let loader: fn(&[u8]) = match path.extension()?.to_str()? {
+            "pdf" => load_pdf,
+            "jb2" => load_jbig2,
+            "jp2" => load_jpeg2000,
+            _ => return None,
+        };
+        let stem = path.file_stem()?.to_str()?.replace(['-', '.'], "_");
+        let file = path
+            .strip_prefix(&*WORKSPACE_PATH)
+            .ok()?
+            .to_str()?
+            .to_string();
+
+        Some(Test::new(
+            format!("load::{stem}"),
+            vec![file.clone()],
+            move || {
+                loader(&read(&file));
+                Outcome::Passed
+            },
+        ))
+    });
+
+    let units: [(&str, fn()); 4] = [
+        ("load::metadata_in_object_stream", metadata_in_object_stream),
+        (
+            "load::concurrent_object_stream_resolution",
+            concurrent_object_stream_resolution,
+        ),
+        (
+            "load::concurrent_xref_repair_does_not_panic",
+            concurrent_xref_repair_does_not_panic,
+        ),
+        (
+            "load::concurrent_xref_repair_retries_original_entries",
+            concurrent_xref_repair_retries_original_entries,
+        ),
+    ];
+
+    files
+        .chain(units.map(|(name, run)| Test::unit(name, run)))
+        .collect()
+}
+
+fn read(path: &str) -> Vec<u8> {
+    std::fs::read(WORKSPACE_PATH.join(path)).unwrap()
 }
 
-#[test]
-fn issue52() {
-    let file = include_bytes!("../pdfs/load/issue52.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue54() {
-    let file = include_bytes!("../pdfs/load/issue54.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue55() {
-    let file = include_bytes!("../pdfs/load/issue55.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue56() {
-    let file = include_bytes!("../pdfs/load/issue56.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue61() {
-    let file = include_bytes!("../pdfs/load/issue61.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue62() {
-    let file = include_bytes!("../pdfs/load/issue62.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue63() {
-    let file = include_bytes!("../pdfs/load/issue63.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue67() {
-    let file = include_bytes!("../pdfs/load/issue67.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue68() {
-    let file = include_bytes!("../pdfs/load/issue68.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue83() {
-    let file = include_bytes!("../pdfs/load/issue83.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue152() {
-    let file = include_bytes!("../pdfs/load/issue152.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue153() {
-    let file = include_bytes!("../pdfs/load/issue153.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue154() {
-    let file = include_bytes!("../pdfs/load/issue154.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue156() {
-    let file = include_bytes!("../pdfs/load/issue156.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue157() {
-    let file = include_bytes!("../pdfs/load/issue157.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue178() {
-    let file = include_bytes!("../pdfs/load/issue178.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue180() {
-    let file = include_bytes!("../pdfs/load/issue180.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue182() {
-    let file = include_bytes!("../pdfs/load/issue182.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue203() {
-    let file = include_bytes!("../pdfs/load/issue203.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue204() {
-    let file = include_bytes!("../pdfs/load/issue204.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue205() {
-    let file = include_bytes!("../pdfs/load/issue205.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue206() {
-    let file = include_bytes!("../pdfs/load/issue206.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue207() {
-    let file = include_bytes!("../pdfs/load/issue207.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue208() {
-    let file = include_bytes!("../pdfs/load/issue208.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue222() {
-    let file = include_bytes!("../pdfs/load/issue222.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue223() {
-    let file = include_bytes!("../pdfs/load/issue223.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue224() {
-    let file = include_bytes!("../pdfs/load/issue224.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue234() {
-    let file = include_bytes!("../pdfs/load/issue234.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue235() {
-    let file = include_bytes!("../pdfs/load/issue235.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue236() {
-    let file = include_bytes!("../pdfs/load/issue236.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue256() {
-    let file = include_bytes!("../pdfs/load/issue256.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue273_180b() {
-    let file = include_bytes!("../pdfs/load/issue273_180b.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue323() {
-    let file = include_bytes!("../pdfs/load/issue323.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue324() {
-    let file = include_bytes!("../pdfs/load/issue324.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue325() {
-    let file = include_bytes!("../pdfs/load/issue325.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue351() {
-    let file = include_bytes!("../pdfs/load/issue351.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue352() {
-    let file = include_bytes!("../pdfs/load/issue352.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue355() {
-    let file = include_bytes!("../pdfs/load/issue355.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue356() {
-    let file = include_bytes!("../pdfs/load/issue356.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue357() {
-    let file = include_bytes!("../pdfs/load/issue357.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue372() {
-    let file = include_bytes!("../pdfs/load/issue372.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue389() {
-    let file = include_bytes!("../pdfs/load/issue389.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue390() {
-    let file = include_bytes!("../pdfs/load/issue390.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue391() {
-    let file = include_bytes!("../pdfs/load/issue391.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue409() {
-    let file = include_bytes!("../pdfs/load/issue409.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue472() {
-    let file = include_bytes!("../pdfs/load/issue472.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue506() {
-    let file = include_bytes!("../pdfs/load/issue506.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue507() {
-    let file = include_bytes!("../pdfs/load/issue507.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue513() {
-    let file = include_bytes!("../pdfs/load/issue513.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue514() {
-    let file = include_bytes!("../pdfs/load/issue514.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue515() {
-    let file = include_bytes!("../pdfs/load/issue515.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue520() {
-    let file = include_bytes!("../pdfs/load/issue520.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue538() {
-    let file = include_bytes!("../pdfs/load/issue538.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue563() {
-    let file = include_bytes!("../pdfs/load/issue563.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue564() {
-    let file = include_bytes!("../pdfs/load/issue564.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue577() {
-    let file = include_bytes!("../pdfs/load/issue577.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue578() {
-    let file = include_bytes!("../pdfs/load/issue578.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue579() {
-    let file = include_bytes!("../pdfs/load/issue579.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue585() {
-    let file = include_bytes!("../pdfs/load/issue585.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn page_tree_cycle() {
-    let file = include_bytes!("../pdfs/load/page_tree_cycle.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn xobject_cycle_two_forms() {
-    let file = include_bytes!("../pdfs/load/xobject_cycle_two_forms.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue645() {
-    let file = include_bytes!("../pdfs/load/issue645.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue675() {
-    let file = include_bytes!("../pdfs/load/issue675.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue677() {
-    let file = include_bytes!("../pdfs/load/issue677.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue678() {
-    let file = include_bytes!("../pdfs/load/issue678.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue679() {
-    let file = include_bytes!("../pdfs/load/issue679.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue680() {
-    let file = include_bytes!("../pdfs/load/issue680.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue681() {
-    let file = include_bytes!("../pdfs/load/issue681.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue682() {
-    let file = include_bytes!("../pdfs/load/issue682.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue683() {
-    let file = include_bytes!("../pdfs/load/issue683.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue676() {
-    let file = include_bytes!("../pdfs/load/issue676.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue684() {
-    let file = include_bytes!("../pdfs/load/issue684.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue705() {
-    let file = include_bytes!("../pdfs/load/issue705.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue716() {
-    let file = include_bytes!("../pdfs/load/issue716.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn image_offset_overflow() {
-    let file = include_bytes!("../pdfs/load/image_offset_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn unsupported_color_type() {
-    let file = include_bytes!("../pdfs/load/unsupported_color_type.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn different_resolution_levels() {
-    let file = include_bytes!("../pdfs/load/different_resolution_levels.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn large_layer_count() {
-    let file = include_bytes!("../pdfs/load/large_layer_count.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn too_many_coding_passes() {
-    let file = include_bytes!("../pdfs/load/too_many_coding_passes.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn precinct_overflow() {
-    let file = include_bytes!("../pdfs/load/precinct_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn num_bitplanes_underflow() {
-    let file = include_bytes!("../pdfs/load/num_bitplanes_underflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn bitplane_overflow() {
-    let file = include_bytes!("../pdfs/load/bitplane_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn lab_conversion_overflow() {
-    let file = include_bytes!("../pdfs/load/lab_conversion_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn pow2_overflow() {
-    let file = include_bytes!("../pdfs/load/pow2_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn invalid_precinct_index() {
-    let file = include_bytes!("../pdfs/load/invalid_precinct_index.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn progression_iterator_overflow() {
-    let file = include_bytes!("../pdfs/load/progression_iterator_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn idwt_capacity() {
-    let file = include_bytes!("../pdfs/load/idwt_capacity.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn gray_scale_no_alpha_with_2_channels() {
-    let file = include_bytes!("../pdfs/load/gray_scale_no_alpha_with_2_channels.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn large_tile_offsets() {
-    let file = include_bytes!("../pdfs/load/large_tile_offsets.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn ppx_ppy_underflow() {
-    let file = include_bytes!("../pdfs/load/ppx_ppy_underflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn progression_iterator_overflow_2() {
-    let file = include_bytes!("../pdfs/load/progression_iterator_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn palette_num_components() {
-    let file = include_bytes!("../pdfs/load/palette_num_components.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn exponent_underflow() {
-    let file = include_bytes!("../pdfs/load/exponent_underflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn exponent_oob() {
-    let file = include_bytes!("../pdfs/load/exponent_oob.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn lab_conversion_overflow_2() {
-    let file = include_bytes!("../pdfs/load/lab_conversion_overflow_2.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn segment_resolving_overflow() {
-    let file = include_bytes!("../pdfs/load/segment_resolving_overflow.jp2");
-    load_jpeg2000(file);
-}
-
-#[test]
-fn issue388() {
-    let file = include_bytes!("../pdfs/load/issue388.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue202() {
-    let file = include_bytes!("../pdfs/load/issue202.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue1051() {
-    let file = include_bytes!("../pdfs/load/issue1051.pdf");
-    load_pdf(file);
-}
-
-#[test]
 fn metadata_in_object_stream() {
     // Normally, in an encrypted PDF file strings need to be encrypted when they are not
     // in a stream. Therefore, we need to ensure that no encryption is applied when the object
     // itself is in an object stream.
-    let file = include_bytes!("../pdfs/custom/metadata_in_object_stream_encrypted.pdf");
+    let file = &read("pdfs/custom/metadata_in_object_stream_encrypted.pdf");
     let pdf = Pdf::new(file.to_vec()).unwrap();
 
     let expected = Metadata {
@@ -681,135 +139,8 @@ fn metadata_in_object_stream() {
     assert_eq!(pdf.metadata(), &expected);
 }
 
-#[test]
-fn generic_refinement_decoding_overflow() {
-    let file = include_bytes!("../pdfs/load/generic_refinement_decoding_overflow.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn invalid_strip_delta() {
-    let file = include_bytes!("../pdfs/load/invalid_strip_delta.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn conflicting_huffman_codes() {
-    let file = include_bytes!("../pdfs/load/conflicting_huffman_codes.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn custom_huffman_table_oob() {
-    let file = include_bytes!("../pdfs/load/custom_huffman_table_oob.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn integer_decode_overflow() {
-    let file = include_bytes!("../pdfs/load/integer_decode_overflow.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn too_many_symbol_instances() {
-    let file = include_bytes!("../pdfs/load/too_many_symbol_instances.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn refinement_tpgr_overflow() {
-    let file = include_bytes!("../pdfs/load/refinement_tpgr_overflow.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn zero_dimension_bitmap() {
-    let file = include_bytes!("../pdfs/load/zero_dimension_bitmap.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn huffman_code_overflow() {
-    let file = include_bytes!("../pdfs/load/huffman_code_overflow.jb2");
-    load_jbig2(file);
-}
-
-#[test]
-fn issue1321() {
-    let file = include_bytes!("../pdfs/load/issue1321.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn issue1392() {
-    let file = include_bytes!("../pdfs/load/issue1392.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn encrypted_oob_length() {
-    let file = include_bytes!("../pdfs/load/encrypted_oob_length.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn deeply_nested_page_tree() {
-    let file = include_bytes!("../pdfs/load/deeply_nested_page_tree.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn nested_object_streams() {
-    let file = include_bytes!("../pdfs/load/nested_object_streams.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn page_tree_cycle_with_siblings() {
-    let file = include_bytes!("../pdfs/load/page_tree_cycle_with_siblings.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn object_stream_cycle() {
-    let file = include_bytes!("../pdfs/load/object_stream_cycle.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn object_stream_lookups() {
-    let file = include_bytes!("../pdfs/load/object_stream_lookups.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn separation_tint_one_output() {
-    let file = include_bytes!("../pdfs/load/separation_tint_one_output.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn separation_tint_varying_outputs() {
-    let file = include_bytes!("../pdfs/load/separation_tint_varying_outputs.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn device_n_tint_one_output() {
-    let file = include_bytes!("../pdfs/load/device_n_tint_one_output.pdf");
-    load_pdf(file);
-}
-
-#[test]
-fn shading_pattern_color_space() {
-    let file = include_bytes!("../pdfs/load/shading_pattern_color_space.pdf");
-    load_pdf(file);
-}
-
-#[test]
 fn concurrent_object_stream_resolution() {
-    let data = include_bytes!("../pdfs/load/concurrent_object_streams.pdf");
+    let data = &read("pdfs/load/concurrent_object_streams.pdf");
 
     for _ in 0..32 {
         let pdf = Pdf::new(data.to_vec()).unwrap();
@@ -837,9 +168,8 @@ fn concurrent_object_stream_resolution() {
     }
 }
 
-#[test]
 fn concurrent_xref_repair_does_not_panic() {
-    let data = include_bytes!("../pdfs/load/concurrent_xref_repair.pdf");
+    let data = &read("pdfs/load/concurrent_xref_repair.pdf");
 
     for _ in 0..32 {
         let pdf = Pdf::new(data.to_vec()).unwrap();
@@ -872,9 +202,8 @@ fn concurrent_xref_repair_does_not_panic() {
     }
 }
 
-#[test]
 fn concurrent_xref_repair_retries_original_entries() {
-    let data = include_bytes!("../pdfs/load/concurrent_xref_repair.pdf");
+    let data = &read("pdfs/load/concurrent_xref_repair.pdf");
 
     for _ in 0..32 {
         let pdf = Pdf::new(data.to_vec()).unwrap();

@@ -1,349 +1,331 @@
-use crate::run_svg_test;
+use crate::harness::assets::FALLBACK_FONTS;
+use crate::harness::runner::{Outcome, Test};
+use crate::harness::snapshot::{Suite, check};
+use crate::{interpreter_settings, render_svg, svg_render_settings, try_load_pdf};
+use std::ops::RangeInclusive;
+
+type SvgTest = (
+    &'static str,
+    &'static str,
+    &'static str,
+    Option<RangeInclusive<usize>>,
+);
 
 // TODO: Ideally those tests are also generated from the manifest files so they stay in sync.
-
-#[test]
-fn integration_coat_of_arms() {
-    run_svg_test(
+const TESTS: &[SvgTest] = &[
+    (
+        "integration_coat_of_arms",
         "integration_coat_of_arms",
         "pdfs/custom/integration_coat_of_arms.pdf",
         None,
-    );
-}
-
-#[test]
-fn image_rgb8() {
-    run_svg_test("image_rgb8", "pdfs/custom/image_rgb8.pdf", None);
-}
-
-#[test]
-fn image_rgba8() {
-    run_svg_test("image_rgba8", "pdfs/custom/image_rgba8.pdf", None);
-}
-
-#[test]
-fn image_mask_alpha() {
-    run_svg_test("image_mask_alpha", "pdfs/custom/image_mask_alpha.pdf", None);
-}
-
-#[test]
-fn clip_path_evenodd() {
-    run_svg_test(
+    ),
+    (
+        "image_rgb8",
+        "image_rgb8",
+        "pdfs/custom/image_rgb8.pdf",
+        None,
+    ),
+    (
+        "image_rgba8",
+        "image_rgba8",
+        "pdfs/custom/image_rgba8.pdf",
+        None,
+    ),
+    (
+        "image_mask_alpha",
+        "image_mask_alpha",
+        "pdfs/custom/image_mask_alpha.pdf",
+        None,
+    ),
+    (
+        "clip_path_evenodd",
         "clip_path_evenodd",
         "pdfs/custom/clip_path_evenodd.pdf",
         None,
-    );
-}
-
-#[test]
-fn clip_path_nested() {
-    run_svg_test("clip_path_nested", "pdfs/custom/clip_path_nested.pdf", None);
-}
-
-#[test]
-fn pdfbox_2814() {
-    run_svg_test("pdfbox_2814", "downloads/pdfbox/2814.pdf", None);
-}
-
-#[test]
-fn pdfbox_2726() {
-    run_svg_test("pdfbox_2726", "downloads/pdfbox/2726.pdf", None);
-}
-
-#[test]
-fn pdfbox_3640() {
-    run_svg_test("pdfbox_3640", "downloads/pdfbox/3640.pdf", None);
-}
-
-#[test]
-fn pdfbox_3647() {
-    run_svg_test("pdfbox_3647", "downloads/pdfbox/3647.pdf", None);
-}
-
-#[test]
-fn pdfbox_5795() {
-    run_svg_test("pdfbox_5795", "downloads/pdfbox/5795.pdf", None);
-}
-
-#[test]
-fn pdfbox_6024() {
-    run_svg_test("pdfbox_6024", "downloads/pdfbox/6024.pdf", None);
-}
-
-#[test]
-fn pdfbox_3000_3() {
-    run_svg_test("pdfbox_3000_3", "downloads/pdfbox/3000_3.pdf", None);
-}
-
-#[test]
-fn image_interpolate() {
-    run_svg_test(
+    ),
+    (
+        "clip_path_nested",
+        "clip_path_nested",
+        "pdfs/custom/clip_path_nested.pdf",
+        None,
+    ),
+    (
+        "pdfbox_2814",
+        "pdfbox_2814",
+        "downloads/pdfbox/2814.pdf",
+        None,
+    ),
+    (
+        "pdfbox_2726",
+        "pdfbox_2726",
+        "downloads/pdfbox/2726.pdf",
+        None,
+    ),
+    (
+        "pdfbox_3640",
+        "pdfbox_3640",
+        "downloads/pdfbox/3640.pdf",
+        None,
+    ),
+    (
+        "pdfbox_3647",
+        "pdfbox_3647",
+        "downloads/pdfbox/3647.pdf",
+        None,
+    ),
+    (
+        "pdfbox_5795",
+        "pdfbox_5795",
+        "downloads/pdfbox/5795.pdf",
+        None,
+    ),
+    (
+        "pdfbox_6024",
+        "pdfbox_6024",
+        "downloads/pdfbox/6024.pdf",
+        None,
+    ),
+    (
+        "pdfbox_3000_3",
+        "pdfbox_3000_3",
+        "downloads/pdfbox/3000_3.pdf",
+        None,
+    ),
+    (
+        "image_interpolate",
         "image_interpolate",
         "pdfs/custom/image_interpolate.pdf",
         None,
-    );
-}
-
-#[test]
-fn image_jbig2_4() {
-    run_svg_test(
+    ),
+    (
+        "image_jbig2_4",
         "image_jbig2_4",
         "downloads/custom/image_jbig2_4.pdf",
-        Some("..=0"),
-    );
-}
-
-#[test]
-fn text_rendering_stroking_clipping() {
-    run_svg_test(
+        Some(0..=0),
+    ),
+    (
+        "text_rendering_stroking_clipping",
         "text_rendering_stroking_clipping",
         "pdfs/custom/text_rendering_stroking_clipping.pdf",
         None,
-    );
-}
-
-#[test]
-fn image_ccit_4() {
-    run_svg_test("image_ccit_4", "pdfs/custom/image_ccit_4.pdf", None);
-}
-
-#[test]
-fn gradient_on_rect() {
-    run_svg_test("gradient_on_rect", "pdfs/custom/gradient_on_rect.pdf", None);
-}
-
-#[test]
-fn gradient_on_rotated_rect() {
-    run_svg_test(
+    ),
+    (
+        "image_ccit_4",
+        "image_ccit_4",
+        "pdfs/custom/image_ccit_4.pdf",
+        None,
+    ),
+    (
+        "gradient_on_rect",
+        "gradient_on_rect",
+        "pdfs/custom/gradient_on_rect.pdf",
+        None,
+    ),
+    (
+        "gradient_on_rotated_rect",
         "gradient_on_rotated_rect",
         "pdfs/custom/gradient_on_rotated_rect.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_tiling_cache_key() {
-    run_svg_test(
+    ),
+    (
+        "pattern_tiling_cache_key",
         "pattern_tiling_cache_key",
         "pdfs/custom/pattern_tiling_cache_key.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_tiling_simple() {
-    run_svg_test(
+    ),
+    (
+        "pattern_tiling_simple",
         "pattern_tiling_simple",
         "pdfs/custom/pattern_tiling_simple.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_tiling_nested() {
-    run_svg_test(
+    ),
+    (
+        "pattern_tiling_nested",
         "pattern_tiling_nested",
         "pdfs/custom/pattern_tiling_nested.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_tiling_rotated() {
-    run_svg_test(
+    ),
+    (
+        "pattern_tiling_rotated",
         "pattern_tiling_rotated",
         "pdfs/custom/pattern_tiling_rotated.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_alpha() {
-    run_svg_test("pattern_alpha", "pdfs/custom/pattern_alpha.pdf", None);
-}
-
-#[test]
-fn pattern_alpha_image_mask() {
-    run_svg_test(
+    ),
+    (
+        "pattern_alpha",
+        "pattern_alpha",
+        "pdfs/custom/pattern_alpha.pdf",
+        None,
+    ),
+    (
+        "pattern_alpha_image_mask",
         "pattern_alpha_image_mask",
         "pdfs/custom/pattern_alpha_image_mask.pdf",
         None,
-    );
-}
-
-#[test]
-fn pattern_alpha_type3() {
-    run_svg_test(
+    ),
+    (
+        "pattern_alpha_type3",
         "pattern_alpha_type3",
         "pdfs/custom/pattern_alpha_type3.pdf",
         None,
-    );
-}
-
-#[test]
-fn pdfium_41480161() {
-    run_svg_test("pdfium_41480161", "downloads/pdfium/41480161.pdf", None);
-}
-
-#[test]
-fn mask_luminance() {
-    run_svg_test(
+    ),
+    (
+        "pdfium_41480161",
+        "pdfium_41480161",
+        "downloads/pdfium/41480161.pdf",
+        None,
+    ),
+    (
+        "mask_luminance",
         "mask_luminance",
         "pdfs/custom/resvg_masking_mask_mask_type_luminance.pdf",
         None,
-    );
-}
-
-#[test]
-fn mask_alpha() {
-    run_svg_test(
+    ),
+    (
+        "mask_alpha",
         "mask_alpha",
         "pdfs/custom/resvg_masking_mask_mask_type_alpha.pdf",
         None,
-    );
-}
-
-#[test]
-fn mask_with_clip_path() {
-    run_svg_test(
+    ),
+    (
+        "mask_with_clip_path",
         "mask_with_clip_path",
         "pdfs/custom/resvg_masking_mask_with_clip_path.pdf",
         None,
-    );
-}
-
-#[test]
-fn font_type3_shape_glyphs() {
-    run_svg_test(
+    ),
+    (
+        "font_type3_shape_glyphs",
         "font_type3_shape_glyphs",
         "pdfs/custom/font_type3_shape_glyphs.pdf",
         None,
-    );
-}
-
-#[test]
-fn font_type3_filled_glyphs() {
-    run_svg_test(
+    ),
+    (
+        "font_type3_filled_glyphs",
         "font_type3_filled_glyphs",
         "pdfs/custom/font_type3_filled_glyphs.pdf",
         None,
-    );
-}
-
-#[test]
-fn font_type3_stroked_glyphs() {
-    run_svg_test(
+    ),
+    (
+        "font_type3_stroked_glyphs",
         "font_type3_stroked_glyphs",
         "pdfs/custom/font_type3_stroked_glyphs.pdf",
         None,
-    );
-}
-
-#[test]
-fn pdfjs_issue13372() {
-    run_svg_test("pdfjs_issue13372", "downloads/pdfjs/issue13372.pdf", None);
-}
-
-#[test]
-fn pdfjs_issue2177() {
-    run_svg_test("pdfjs_issue2177", "downloads/pdfjs/issue2177.pdf", None);
-}
-
-#[test]
-fn pdfjs_issue8565() {
-    run_svg_test("pdfjs_issue8565", "downloads/pdfjs/issue8565.pdf", None);
-}
-
-#[test]
-fn fillrule_evenodd() {
-    run_svg_test("fillrule_evenodd", "pdfs/custom/fillrule_evenodd.pdf", None);
-}
-
-#[test]
-fn stroke_properties() {
-    run_svg_test(
+    ),
+    (
+        "pdfjs_issue13372",
+        "pdfjs_issue13372",
+        "downloads/pdfjs/issue13372.pdf",
+        None,
+    ),
+    (
+        "pdfjs_issue2177",
+        "pdfjs_issue2177",
+        "downloads/pdfjs/issue2177.pdf",
+        None,
+    ),
+    (
+        "pdfjs_issue8565",
+        "pdfjs_issue8565",
+        "downloads/pdfjs/issue8565.pdf",
+        None,
+    ),
+    (
+        "fillrule_evenodd",
+        "fillrule_evenodd",
+        "pdfs/custom/fillrule_evenodd.pdf",
+        None,
+    ),
+    (
+        "stroke_properties",
         "stroke_properties",
         "pdfs/custom/stroke_properties.pdf",
         None,
-    );
-}
-
-#[test]
-fn issue_isolate_shading_transform() {
-    run_svg_test(
+    ),
+    (
+        "issue_isolate_shading_transform",
         "issue_isolate_shading_transform",
         "pdfs/custom/issue_isolate_shading_transform.pdf",
         None,
-    );
-}
-
-#[test]
-fn mask_bc() {
-    run_svg_test("mask_bc", "pdfs/custom/mask_bc.pdf", None);
-}
-
-#[test]
-fn mask_no_cs() {
-    run_svg_test("mask_no_cs", "pdfs/custom/mask_no_cs.pdf", None);
-}
-
-#[test]
-fn mask_luminosity_no_cs() {
-    run_svg_test(
+    ),
+    ("mask_bc", "mask_bc", "pdfs/custom/mask_bc.pdf", None),
+    (
+        "mask_no_cs",
+        "mask_no_cs",
+        "pdfs/custom/mask_no_cs.pdf",
+        None,
+    ),
+    (
+        "mask_luminosity_no_cs",
         "mask_luminosity_no_cs",
         "pdfs/custom/mask_luminosity_no_cs.pdf",
         None,
-    );
-}
-
-#[test]
-fn mask_reuse() {
-    run_svg_test("mask_reuse", "pdfs/custom/mask_reuse.pdf", None);
-}
-
-#[test]
-fn color_space_icc_same_dict() {
-    run_svg_test(
+    ),
+    (
+        "mask_reuse",
+        "mask_reuse",
+        "pdfs/custom/mask_reuse.pdf",
+        None,
+    ),
+    (
+        "color_space_icc_same_dict",
         "color_space_icc_same_dict",
         "pdfs/custom/color_space_icc_same_dict.pdf",
         None,
-    );
-}
-
-#[test]
-fn shading_mesh_same_dict() {
-    run_svg_test(
+    ),
+    (
+        "shading_mesh_same_dict",
         "shading_mesh_same_dict",
         "pdfs/custom/shading_mesh_same_dict.pdf",
         None,
-    );
-}
-
-#[test]
-fn pdfjs_issue11279() {
-    run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
-}
-
-#[test]
-fn pdfjs_issue9650() {
-    run_svg_test("pdfjs_issue9650", "downloads/pdfjs/issue9650.pdf", None);
-}
-
-#[test]
-fn issue_typst_7269() {
-    run_svg_test(
+    ),
+    (
+        "pdfjs_issue11279",
+        "pdfjs_issue11279",
+        "downloads/pdfjs/issue11279.pdf",
+        None,
+    ),
+    (
+        "pdfjs_issue9650",
+        "pdfjs_issue9650",
+        "downloads/pdfjs/issue9650.pdf",
+        None,
+    ),
+    (
+        "issue_typst_7269",
         "issue_typst_7269",
         "downloads/custom/issue_typst_7269.pdf",
         None,
-    );
-}
+    ),
+    ("issue_986", "issue968", "pdfs/custom/issue968.pdf", None),
+    (
+        "fill_degenerate",
+        "fill_degenerate",
+        "pdfs/custom/fill_degenerate.pdf",
+        None,
+    ),
+];
 
-#[test]
-fn issue_986() {
-    run_svg_test("issue968", "pdfs/custom/issue968.pdf", None);
-}
+pub(crate) fn tests() -> Vec<Test> {
+    TESTS
+        .iter()
+        .map(|(name, snapshot, file, range)| {
+            let mut files = vec![file.to_string()];
+            files.extend(FALLBACK_FONTS.map(String::from));
 
-#[test]
-fn fill_degenerate() {
-    run_svg_test("fill_degenerate", "pdfs/custom/fill_degenerate.pdf", None);
+            Test::new(format!("svg::{name}"), files, move || {
+                let pdf = match try_load_pdf(file, "") {
+                    Ok(pdf) => pdf,
+                    Err(err) => return Outcome::Failed(err),
+                };
+                let pages = render_svg(
+                    &pdf,
+                    snapshot,
+                    interpreter_settings(),
+                    svg_render_settings(),
+                    range.clone(),
+                );
+                check(Suite::Svg, snapshot, pages)
+            })
+        })
+        .collect()
 }

@@ -4,7 +4,7 @@ This is the test suite for hayro, which mainly aims to ensure there are no regre
 in rendering when applying changes to the code base (though some tests are for exampled based on fuzzed PDFs and only serve the purpose of ensuring there are no crashes).
 
 ## Introduction
-A number of the PDFs that are used as part of the tests can be found inside of the `pdfs` folder. However, the vast majority are not included in this repository and need to be downloaded separately via the `sync.py` script. The PDFs are hosted on a Cloudflare R2 object storage and will simply be downloaded one after another when running the script.
+A number of the PDFs that are used as part of the tests can be found inside of the `pdfs` folder. However, the vast majority are not included in this repository. They are hosted on a Cloudflare R2 object storage and the test runner downloads the ones it needs into the `downloads` folder the first time they are required, together with the CJK fallback fonts in the `assets` folder.
 
 There are four different categories of tests:
 - Custom tests, which include custom-selected PDFs (like for example from the hayro issue tracker).
@@ -12,41 +12,45 @@ There are four different categories of tests:
 - PDFBox tests, which have been copied from the PDFBox issue tracker.
 - Corpus tests, which are taken from the [large-scale PDF corpus](https://pdfa.org/new-large-scale-pdf-corpus-now-publicly-available/).
 
-Each test category has its own manifest file, defining the names of the tests as well as some additional metadata. As mentioned, all corpus, PDFBox and pdf.js files need to be downloaded first, while only some of the custom category are not checked into the repository.
+Each test category has its own manifest file, defining the names of the tests as well as some additional metadata. The raster tests are created from these manifests when the test runner starts, so adding a new test only requires adding an entry to the corresponding manifest.
 
-## Synchronizing the corpus
+## Running the tests
 
-1. Install the Python dependency required by the `sync.py` script:
-   ```bash
-   python3 -m pip install --user rich
-   ```
-2. Download the corpora, fonts, and regenerate the manifests and Rust tests:
-   ```bash
-   python3 sync.py
-   ```
+```bash
+cargo test -p hayro-tests --release
+```
 
-Doing so will create a new `downloads` folder containing all PDF files. It will also download any missing font files into the `assets` folder. These fonts are not checked into the repository and needed for the tests. In case you have added new tests to a manifest file, it will also regenerate the corresponding Rust tests.
+The test suite uses its own test runner, which runs all tests in parallel and shows the tests that are currently running as well as all failures as they happen. Arguments after `--` select the tests to run and change how they are run:
+
+```bash
+# Run all tests whose name contains `pdfjs_` or `load::`.
+cargo test -p hayro-tests --release -- pdfjs_ load::
+# Run a single test.
+cargo test -p hayro-tests --release -- --exact raster::pdfjs_alphatrans
+# List the selected tests without running them.
+cargo test -p hayro-tests --release -- --list svg::
+# Don't download anything, skip tests whose files are missing instead.
+cargo test -p hayro-tests --release -- --offline
+```
+
+Run `cargo test -p hayro-tests --release -- --help` to see all options.
 
 ## Generating the baseline snapshots
 
-The test suite is based on reference image snapshots, which are not checked into the GitHub repository. Therefore, you first need to generate the "baseline" snapshots from the `main` branch of the repository by running the test suite once:
+The test suite is based on reference image snapshots, which are not checked into the GitHub repository. Therefore, you first need to generate the "baseline" snapshots from the `main` branch of the repository by running the test suite once. Whenever a test doesn't have a reference image yet, the rendered page is stored under `snapshots/` and the test is reported as new.
+
+Afterwards, if you run the same command again, all tests should pass. Now, if you make changes to the code base, you can simply rerun the command to ensure there are no visual differences in any of the PDFs. In case there are, you can observe the difference in the diff image that is created in the `diffs` folder. In case the changes are not a regression, you can rerun the failing tests with `--update` to replace their reference snapshots:
 
 ```bash
-cargo test --release
+cargo test -p hayro-tests --release -- --update
 ```
 
-This initial run renders every configured page and stores the results under `snapshots/`. Afterwards, if you run the same command again, all tests should pass. Now, if you make changes to the code base, you can simply rerun the command to ensure there are no visual differences in any of the PDFs. In case there are, you can observe the difference in the diff image that is created in the `diffs` folder. In case the changes are not a regression, you can rerun the tests as below to replace all not-matching reference snapshots:
-
-```bash
-REPLACE=1 cargo test --release
-```
-
-Once the snapshots have been refreshed, run the tests again (without `REPLACE`) to confirm that the suite now passes cleanly.
+To also keep the rendered output of every test (the PNGs, SVGs and PDFs) in the `store` folder, pass `--store`.
 
 ## Test types
 There are currently four different categories of tests:
 - Load tests: They ensure that a file can be loaded/rendered without crashing. Those tests should ideally be run in debug mode.
-- Render tests: This category makes up the bulk and ensures that PDF render correctly.
+- Raster tests: This category makes up the bulk and ensures that PDFs are rasterized correctly.
 - SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`.
 - Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
 
