@@ -13,6 +13,7 @@ autotests = false
 [[bin]]
 name = "experiment"
 path = "src/experiment.rs"
+test = false
 
 [[test]]
 name = "tests"
