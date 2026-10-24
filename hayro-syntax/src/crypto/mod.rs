@@ -10,11 +10,11 @@ use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
-    CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
+    CF, CFM, ENCRYPT_META_DATA, FILTER, IDENTITY, LENGTH, O, OE, P, R, STD_CF, STM_F, STR_F, U, UE,
+    V,
 };
 use crate::object::{Dict, Name, ObjectIdentifier};
 use crate::sync::HashMap;
-use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp;
@@ -74,34 +74,55 @@ pub(crate) enum Decryptor {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DecryptionTarget {
+pub(crate) enum DecryptionTarget<'n> {
     String,
     Stream,
+    /// A stream under a /Crypt filter that names one of the document's crypt
+    /// filters, by that name.
+    Named(&'n [u8]),
 }
 
 impl Decryptor {
+    // The key and method that decrypt `target`; `None` for a crypt filter the
+    // document does not define. As in MuPDF's `pdf_parse_crypt_filter`
+    // (`pdf-crypt.c`), /Identity is no encryption, and a document without /CF
+    // encrypts with RC4 under /StdCF; unlike there, a filter whose /CFM is unknown
+    // does not pass the data through.
+    fn method(&self, target: DecryptionTarget<'_>) -> Option<(&[u8], DecryptorTag)> {
+        if let DecryptionTarget::Named(name) = target
+            && name == IDENTITY
+        {
+            return Some((&[], DecryptorTag::None));
+        }
+        match self {
+            Self::None => Some((&[], DecryptorTag::None)),
+            Self::Rc4 { key } => match target {
+                DecryptionTarget::Named(name) if name != STD_CF => None,
+                _ => Some((key, DecryptorTag::Rc4)),
+            },
+            Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
+                let filter = match target {
+                    DecryptionTarget::String => dict.string_filter,
+                    DecryptionTarget::Stream => dict.stream_filter,
+                    DecryptionTarget::Named(name) => dict.named(name)?,
+                };
+                Some((key, filter.cfm))
+            }
+        }
+    }
+
     pub(crate) fn decrypt(
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        target: DecryptionTarget,
+        target: DecryptionTarget<'_>,
     ) -> Option<Vec<u8>> {
-        match self {
-            Self::None => Some(data.to_vec()),
-            Self::Rc4 { key } => decrypt_rc4(key, data, id),
-            Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
-                let crypt_dict = match target {
-                    DecryptionTarget::String => dict.string_filter,
-                    DecryptionTarget::Stream => dict.stream_filter,
-                };
-
-                match crypt_dict.cfm {
-                    DecryptorTag::None => Some(data.to_vec()),
-                    DecryptorTag::Rc4 => decrypt_rc4(key, data, id),
-                    DecryptorTag::Aes128 => decrypt_aes128(key, data, id),
-                    DecryptorTag::Aes256 => decrypt_aes256(key, data),
-                }
-            }
+        let (key, method) = self.method(target)?;
+        match method {
+            DecryptorTag::None => Some(data.to_vec()),
+            DecryptorTag::Rc4 => decrypt_rc4(key, data, id),
+            DecryptorTag::Aes128 => decrypt_aes128(key, data, id),
+            DecryptorTag::Aes256 => decrypt_aes256(key, data),
         }
     }
 }
@@ -274,37 +295,53 @@ fn decrypt_rc_aes(
     with_key(final_key)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
+    /// The crypt filters of /CF by name, `None` without /CF.
+    filters: Option<HashMap<Vec<u8>, CryptDictionary>>,
 }
 
 impl DecryptorData {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
-        let mut mappings = HashMap::new();
-
-        if let Some(dict) = dict.get::<Dict<'_>>(CF) {
+        let filters = dict.get::<Dict<'_>>(CF).map(|dict| {
+            let mut mappings = HashMap::new();
             for key in dict.keys() {
                 if let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
-                    mappings.insert(key.as_str().to_string(), crypt_dict);
+                    mappings.insert(key.deref().to_vec(), crypt_dict);
                 }
             }
-        }
-
-        let stm_f = *mappings
-            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
-            .unwrap_or(&CryptDictionary::identity(default_length));
-        let str_f = *mappings
-            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
-            .unwrap_or(&CryptDictionary::identity(default_length));
+            mappings
+        });
+        let named = |key: &[u8]| -> Option<CryptDictionary> {
+            let name = dict.get::<Name<'_>>(key)?;
+            Some(
+                filters
+                    .as_ref()
+                    .and_then(|filters| filters.get(name.deref()).copied())
+                    .unwrap_or(CryptDictionary::identity(default_length)),
+            )
+        };
 
         Some(Self {
-            stream_filter: stm_f,
-            string_filter: str_f,
+            stream_filter: named(STM_F)?,
+            string_filter: named(STR_F)?,
+            filters,
         })
+    }
+
+    /// The crypt filter `name`, other than /Identity.
+    fn named(&self, name: &[u8]) -> Option<CryptDictionary> {
+        match &self.filters {
+            Some(filters) => filters.get(name).copied(),
+            None => (name == STD_CF).then_some(CryptDictionary {
+                cfm: DecryptorTag::Rc4,
+                _length: 0,
+            }),
+        }
     }
 }
 
@@ -675,4 +712,121 @@ fn decryption_key_rev56(
     // the file encryption key as the key. Verify that bytes 9-11 of the result are the characters "a", "d",
     // "b". Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, are the user
     // permissions. They shall match the value in the P key.
+}
+
+/// Encrypted test files.
+#[cfg(test)]
+pub(crate) mod fixture {
+    use super::aes::AES128Cipher;
+    use super::rc4::Rc4;
+    use super::{PASSWORD_PADDING, md5};
+    use alloc::format;
+    use alloc::vec::Vec;
+
+    /// An object of a test file.
+    pub(crate) enum Part<'a> {
+        /// An object without strings, written as it is.
+        Plain(&'a str),
+        /// A stream with `dict`'s entries and `data`, encrypted unless `encrypt` is false.
+        Stream {
+            dict: &'a str,
+            data: &'a [u8],
+            encrypt: bool,
+        },
+    }
+
+    const ID: [u8; 16] = *b"hayro-test-file!";
+    const PERMISSIONS: i32 = -4;
+
+    fn rc4_rounds(key: &[u8], data: &[u8]) -> Vec<u8> {
+        let mut out = Rc4::new(key).encrypt(data);
+        for i in 1..=19_u8 {
+            let key: Vec<u8> = key.iter().map(|b| b ^ i).collect();
+            out = Rc4::new(&key).encrypt(&out);
+        }
+        out
+    }
+
+    /// A file encrypted with AES-128 (/V 4 /R 4) and the empty user and owner
+    /// password, whose objects are numbered from 1, the first being the catalog.
+    pub(crate) fn aes128(objects: &[Part<'_>]) -> Vec<u8> {
+        // Algorithm 3: /O from the empty owner password.
+        let mut hash = md5::calculate(&PASSWORD_PADDING);
+        for _ in 0..50 {
+            hash = md5::calculate(&hash);
+        }
+        let owner = rc4_rounds(&hash, &PASSWORD_PADDING);
+        // Algorithm 2: the file key.
+        let mut input = PASSWORD_PADDING.to_vec();
+        input.extend(&owner);
+        input.extend(PERMISSIONS.to_le_bytes());
+        input.extend(ID);
+        let mut key = md5::calculate(&input);
+        for _ in 0..50 {
+            key = md5::calculate(&key);
+        }
+        // Algorithm 5: /U.
+        let mut input = PASSWORD_PADDING.to_vec();
+        input.extend(ID);
+        let mut user = rc4_rounds(&key, &md5::calculate(&input));
+        user.extend([0; 16]);
+
+        let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>();
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, part) in objects.iter().enumerate() {
+            let number = i + 1;
+            offsets.push(out.len());
+            out.extend(format!("{number} 0 obj\n").bytes());
+            match part {
+                Part::Plain(object) => out.extend(object.bytes()),
+                Part::Stream {
+                    dict,
+                    data,
+                    encrypt,
+                } => {
+                    let data = if *encrypt {
+                        let mut input = key.to_vec();
+                        input.extend(&(number as u32).to_le_bytes()[..3]);
+                        input.extend([0, 0]);
+                        input.extend(b"sAlT");
+                        let object_key = md5::calculate(&input);
+                        let iv = [7; 16];
+                        let mut encrypted = iv.to_vec();
+                        encrypted.extend(
+                            AES128Cipher::new(&object_key)
+                                .unwrap()
+                                .encrypt_cbc(data, &iv),
+                        );
+                        encrypted
+                    } else {
+                        data.to_vec()
+                    };
+                    out.extend(format!("<< {dict} /Length {} >>\nstream\n", data.len()).bytes());
+                    out.extend(data);
+                    out.extend(b"\nendstream");
+                }
+            }
+            out.extend(b"\nendobj\n");
+        }
+        let xref = out.len();
+        out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).bytes());
+        for offset in offsets {
+            out.extend(format!("{offset:010} 00000 n \n").bytes());
+        }
+        let id = hex(&ID).concat();
+        out.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R /ID [<{id}> <{id}>] /Encrypt << /Filter \
+                 /Standard /V 4 /R 4 /Length 128 /CF << /StdCF << /CFM /AESV2 /AuthEvent \
+                 /DocOpen /Length 16 >> >> /StmF /StdCF /StrF /StdCF /P {PERMISSIONS} /O <{}> \
+                 /U <{}> >> >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1,
+                hex(&owner).concat(),
+                hex(&user).concat(),
+            )
+            .bytes(),
+        );
+        out
+    }
 }
