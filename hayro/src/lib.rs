@@ -44,7 +44,7 @@ use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context, DrawMode, DrawProps, ImageDrawProps, SoftMask};
 use hayro_interpret::{ClipPath, interpret_page};
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{Affine, BezPath, Rect};
 use pic_scale::Scaler;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -278,9 +278,10 @@ pub fn render_into<'a>(
     ctx: &mut RenderContext,
     transform: Affine,
 ) {
+    let target = Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64);
     let mut state = Context::new(
         transform,
-        Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64),
+        target,
         &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
@@ -291,16 +292,24 @@ pub fn render_into<'a>(
 
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
-    let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
-    clip_path.apply_affine(transform);
-    device.push_clip_path(&ClipPath {
-        path: clip_path,
-        fill: FillRule::NonZero,
-    });
+    let crop_box = page.intersected_crop_box().to_kurbo();
+    let [a, b, c, d, _, _] = transform.as_coeffs();
+    let axis_aligned = (b == 0.0 && c == 0.0) || (a == 0.0 && d == 0.0);
+    let mapped_crop_box = transform
+        .transform_rect_bbox(crop_box)
+        .inflate(1.0 / 256.0, 1.0 / 256.0);
+    let clip_crop_box = !axis_aligned || !mapped_crop_box.contains_rect(target);
+
+    if clip_crop_box {
+        device.ctx.set_transform(transform);
+        device.ctx.push_clip_rect(&crop_box);
+    }
 
     interpret_page(page, &mut state, &mut device);
 
-    device.pop_clip();
+    if clip_crop_box {
+        device.pop_clip();
+    }
 }
 
 // Just a convenience method for testing.
