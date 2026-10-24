@@ -1,6 +1,6 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::runner::Test;
-use hayro::hayro_interpret::font::GlyphRun;
+use hayro::hayro_interpret::font::{GlyphRun, TextProperties};
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
@@ -12,13 +12,14 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 7] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
+        ("text::text_properties", text_properties),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -115,4 +116,57 @@ fn clip_mode() {
     let file = &read("pdfs/text/clip_mode.pdf");
 
     assert_eq!(page_text(file), "Clip and fill");
+}
+
+#[derive(Default)]
+struct RunCollector(Vec<(TextProperties, Vec<f32>)>);
+
+impl<'a> Device<'a> for RunCollector {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+    fn push_clip_path(&mut self, _: &ClipPath) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+        let adjustments = glyph_run.glyphs().iter().map(|g| g.adjustment()).collect();
+        self.0.push((glyph_run.text_properties(), adjustments));
+    }
+    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+    fn pop_clip(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
+}
+
+fn text_properties() {
+    let pdf = Pdf::new(read("pdfs/text/text_properties.pdf")).unwrap();
+    let cache = InterpreterCache::new();
+    let mut context = Context::new(
+        Affine::IDENTITY,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        &cache,
+        pdf.xref(),
+        crate::interpreter_settings(),
+    );
+    let mut collector = RunCollector::default();
+    interpret_page(&pdf.pages()[0], &mut context, &mut collector);
+
+    let spaced = TextProperties {
+        font_size: 10.0,
+        char_spacing: 2.0,
+        word_spacing: 3.0,
+        horizontal_scaling: 1.5,
+        rise: 4.0,
+    };
+    let plain = TextProperties {
+        font_size: 12.0,
+        char_spacing: 0.0,
+        word_spacing: 0.0,
+        horizontal_scaling: 1.0,
+        rise: 0.0,
+    };
+    assert_eq!(
+        collector.0,
+        [
+            (spaced, vec![0.0, 0.0, -250.0, 150.0]),
+            (plain, vec![300.0]),
+            (plain, vec![0.0]),
+        ]
+    );
 }
