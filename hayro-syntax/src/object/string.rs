@@ -276,9 +276,6 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
     Some(StringInner::Owned(result))
 }
 
-/// Skip the LINE FEED of a CARRIAGE RETURN + LINE FEED end-of-line marker, given
-/// the byte that was just read. Only a single end-of-line marker may be skipped,
-/// any following ones are part of the string.
 fn skip_cr_lf(r: &mut Reader<'_>, eol: u8) {
     if eol == b'\r' {
         let _ = r.forward_if(|b| b == b'\n');
@@ -534,69 +531,20 @@ mod tests {
     }
 
     #[test]
-    fn literal_string_13() {
-        assert_eq!(
-            Reader::new(b"(a\n\nb)")
+    fn literal_string_eol() {
+        let read = |data: &[u8]| {
+            Reader::new(data)
                 .read_without_context::<String<'_>>()
                 .unwrap()
-                .as_bytes(),
-            b"a\n\nb"
-        );
-    }
+                .as_bytes()
+                .to_vec()
+        };
 
-    #[test]
-    fn literal_string_14() {
-        assert_eq!(
-            Reader::new(b"(a\r\n\r\nb)")
-                .read_without_context::<String<'_>>()
-                .unwrap()
-                .as_bytes(),
-            b"a\n\nb"
-        );
-    }
-
-    #[test]
-    fn literal_string_15() {
-        assert_eq!(
-            Reader::new(b"(a\r\rb)")
-                .read_without_context::<String<'_>>()
-                .unwrap()
-                .as_bytes(),
-            b"a\n\nb"
-        );
-    }
-
-    #[test]
-    fn literal_string_16() {
-        assert_eq!(
-            Reader::new(b"(a\\\n\nb)")
-                .read_without_context::<String<'_>>()
-                .unwrap()
-                .as_bytes(),
-            b"a\nb"
-        );
-    }
-
-    #[test]
-    fn literal_string_17() {
-        assert_eq!(
-            Reader::new(b"(a\\\r\nb)")
-                .read_without_context::<String<'_>>()
-                .unwrap()
-                .as_bytes(),
-            b"ab"
-        );
-    }
-
-    #[test]
-    fn literal_string_18() {
-        assert_eq!(
-            Reader::new(b"(a\\\r\n\r\nb)")
-                .read_without_context::<String<'_>>()
-                .unwrap()
-                .as_bytes(),
-            b"a\nb"
-        );
+        assert_eq!(read(b"(a\n\nb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\r\n\r\nb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\r\rb)"), b"a\n\nb");
+        assert_eq!(read(b"(a\\\n\nb)"), b"a\nb");
+        assert_eq!(read(b"(a\\\r\n\r\nb)"), b"a\nb");
     }
 
     #[test]
