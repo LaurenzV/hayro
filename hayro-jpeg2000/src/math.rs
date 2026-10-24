@@ -163,23 +163,26 @@ mod inner {
     pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
         simd: S,
         channels: [&[f32; 16]; N],
+        scale: f32,
         out: &mut [u8],
     ) {
         // TODO: This can be optimized on ARM by specializing it.
         match N {
-            1 => to_u8(simd, channels[0]).store_slice(out),
+            1 => to_u8(simd, channels[0], scale).store_slice(out),
             2 => {
-                let (low, high) =
-                    simd.interleave_u8x16(to_u8(simd, channels[0]), to_u8(simd, channels[1]));
+                let (low, high) = simd.interleave_u8x16(
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                );
                 let (out_low, out_high) = out.split_at_mut(16);
                 low.store_slice(out_low);
                 high.store_slice(out_high);
             }
             3 => {
                 let (c0, c1, c2) = (
-                    to_u8(simd, channels[0]),
-                    to_u8(simd, channels[1]),
-                    to_u8(simd, channels[2]),
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
                 );
                 for (out, [i0, i1, i2]) in out.as_chunks_mut::<16>().0.iter_mut().zip(THREE_WAY) {
                     let interleaved = c0.swizzle_dyn_precise(i0)
@@ -190,10 +193,10 @@ mod inner {
             }
             4 => {
                 let channels = [
-                    to_u8(simd, channels[0]),
-                    to_u8(simd, channels[1]),
-                    to_u8(simd, channels[2]),
-                    to_u8(simd, channels[3]),
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
+                    to_u8(simd, channels[3], scale),
                 ];
                 simd.store_four_interleaved_u8x16(channels, out.try_into().unwrap());
             }
@@ -202,12 +205,13 @@ mod inner {
     }
 
     #[inline(always)]
-    fn to_u8<S: Simd>(simd: S, values: &[f32; 16]) -> fearless_simd::u8x16<S> {
+    fn to_u8<S: Simd>(simd: S, values: &[f32; 16], scale: f32) -> fearless_simd::u8x16<S> {
+        let scale = fearless_simd::f32x8::splat(simd, scale);
         let half = fearless_simd::f32x8::splat(simd, 0.5);
         let zero = fearless_simd::f32x8::splat(simd, 0.0);
         let max = fearless_simd::f32x8::splat(simd, 255.0);
         let convert = |i: usize| {
-            let v = fearless_simd::f32x8::from_slice(simd, &values[i..i + 8]) + half;
+            let v = fearless_simd::f32x8::from_slice(simd, &values[i..i + 8]) * scale + half;
             simd.split_i32x8(simd.cvt_i32_f32x8(simd.min_f32x8(simd.max_f32x8(v, zero), max)))
         };
         let (a, b) = convert(0);
@@ -456,11 +460,12 @@ mod inner {
     pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
         _simd: S,
         channels: [&[f32; 16]; N],
+        scale: f32,
         out: &mut [u8],
     ) {
         for (i, pixel) in out.as_chunks_mut::<N>().0.iter_mut().enumerate() {
             for (value, channel) in pixel.iter_mut().zip(channels) {
-                *value = super::round_to_u8(channel[i]);
+                *value = super::round_to_u8(channel[i] * scale);
             }
         }
     }
