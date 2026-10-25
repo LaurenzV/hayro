@@ -21,8 +21,7 @@ path = "tests/main.rs"
 harness = false
 
 [dependencies]
-# We don't enable the `simd` feature because pic-scale's SIMD paths cause large differences across platforms.
-hayro = { workspace = true, features = ["embed-cmaps"] }
+hayro = { workspace = true, features = ["embed-cmaps", "simd"] }
 hayro-cmap = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
