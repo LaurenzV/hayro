@@ -37,9 +37,15 @@ Run `cargo test -p hayro-tests --release -- --help` to see all options.
 
 ## Generating the baseline snapshots
 
-The test suite is based on reference image snapshots, which are not checked into the GitHub repository. Therefore, you first need to generate the "baseline" snapshots from the `main` branch of the repository by running the test suite once. Whenever a test doesn't have a reference image yet, the rendered page is stored under `snapshots/` and the test is reported as new.
+The test suite is based on reference image snapshots, which are not checked into the GitHub repository. Therefore, you first need to generate the "baseline" snapshots from the `main` branch of the repository by running the test suite once with `--update`:
 
-Afterwards, if you run the same command again, all tests should pass. Now, if you make changes to the code base, you can simply rerun the command to ensure there are no visual differences in any of the PDFs. In case there are, the test runner writes a report to `report.html`, which lists every page that differs and lets you compare it with its reference side by side, as a diff overlay or by flipping between the two. In case the changes are not a regression, you can rerun the failing tests with `--update` to replace their reference snapshots:
+```bash
+cargo test -p hayro-tests --release -- --update
+```
+
+Without `--update`, a test whose reference image is missing fails, and its rendered page is included in `report.html` so that you can check it before accepting it.
+
+Afterwards, if you run the tests again without `--update`, all tests should pass. Now, if you make changes to the code base, you can simply rerun the command to ensure there are no visual differences in any of the PDFs. In case there are, the test runner writes a report to `report.html`, which lists every page that differs and lets you compare it with its reference side by side, as a diff overlay or by flipping between the two. In case the changes are not a regression, you can rerun the failing tests with `--update` to replace their reference snapshots:
 
 ```bash
 cargo test -p hayro-tests --release -- --update

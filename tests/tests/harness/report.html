@@ -9,7 +9,7 @@
   --bg: #f4f4f2; --panel: #ffffff; --raised: #fafaf8; --border: #e4e3de; --text: #1d1d1b; --muted: #74736d;
   --accent: #2f6fd6; --accent-bg: #e8effb; --select: #eef2fa;
   --d1: #c9a400; --d1-bg: #fbf3cf; --d2: #e07b00; --d2-bg: #fde7cc; --d3: #d93025; --d3-bg: #fbdcd9;
-  --panic: #8e44ad; --panic-bg: #efe1f5;
+  --panic: #8e44ad; --panic-bg: #efe1f5; --missing: #2f6fd6; --missing-bg: #e3ecfb;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .05);
 }
@@ -17,7 +17,7 @@
   :root {
     --bg: #141413; --panel: #1c1c1b; --raised: #232321; --border: #2f2f2c; --text: #ebeae5; --muted: #9b9a94;
     --accent: #82aef7; --accent-bg: #22314a; --select: #232c3b;
-    --d1-bg: #3a3313; --d2-bg: #3d2a12; --d3-bg: #432019; --panic-bg: #33213c;
+    --d1-bg: #3a3313; --d2-bg: #3d2a12; --d3-bg: #432019; --panic-bg: #33213c; --missing: #82aef7; --missing-bg: #22314a;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .3);
   }
 }
@@ -52,6 +52,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px v
 .sev2 { --sev: var(--d2); --sev-bg: var(--d2-bg); }
 .sev3 { --sev: var(--d3); --sev-bg: var(--d3-bg); }
 .sevp { --sev: var(--panic); --sev-bg: var(--panic-bg); }
+.sevm { --sev: var(--missing); --sev-bg: var(--missing-bg); }
 
 #view { display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; }
 .bar { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
@@ -126,16 +127,18 @@ const state = { mode: 'side', filtered: [], index: 0, showActual: false };
 try { state.mode = localStorage.getItem('hayro-report-mode') || state.mode; } catch (_) {}
 if (!['side', 'diff', 'blink'].includes(state.mode)) state.mode = 'side';
 
-const pageCount = entries.filter(e => e.page).length;
+const pageCount = entries.filter(e => e.page && !e.page.missing).length;
 $('stats').innerHTML =
-  `<span class="pill failed"><b>${fmt(data.failed)}</b> failed</span>` +
+  (data.failed ? `<span class="pill failed"><b>${fmt(data.failed)}</b> failed</span>` : '') +
   `<span class="pill"><b>${fmt(data.total)}</b> tests</span>` +
-  `<span class="pill"><b>${fmt(pageCount)}</b> differing pages</span>`;
+  (pageCount ? `<span class="pill"><b>${fmt(pageCount)}</b> differing pages</span>` : '');
 
-const severity = (e) => !e.page ? 'sevp' : e.page.max_delta <= 2 ? 'sev1' : e.page.max_delta <= 20 ? 'sev2' : 'sev3';
+const severity = (e) => !e.page ? 'sevp' : e.page.missing ? 'sevm' : e.page.max_delta <= 2 ? 'sev1' : e.page.max_delta <= 20 ? 'sev2' : 'sev3';
 const label = (e) => e.page && e.page.page !== null ? `${e.test.name} · page ${e.page.page}` : e.test.name;
-const badge = (e) => e.page ? `Δ ${e.page.max_delta}` : 'failed';
-const badgeTitle = (e) => e.page ? 'Largest difference in any color channel between reference and actual' : 'The test failed without a rendering';
+const badge = (e) => !e.page ? 'failed' : e.page.missing ? 'missing' : `Δ ${e.page.max_delta}`;
+const badgeTitle = (e) => !e.page ? 'The test failed without a rendering'
+  : e.page.missing ? 'No reference image exists yet, run the tests with --update to make this rendering the reference'
+  : 'Largest difference in any color channel between reference and actual';
 const key = (e) => e.page && e.page.page !== null ? `${e.test.name}@${e.page.page}` : e.test.name;
 const firstLine = (text) => (text || '').split('\n')[0];
 
@@ -144,8 +147,12 @@ function applyFilter(keepKey) {
   const sort = $('sort').value;
   state.filtered = entries.filter(e => e.test.name.toLowerCase().includes(text));
   const byName = (a, b) => key(a).localeCompare(key(b), 'en', { numeric: true });
-  const metric = { delta: e => e.page ? e.page.max_delta : 256, pixels: e => e.page ? e.page.pixels : Infinity }[sort];
-  state.filtered.sort(metric ? (a, b) => (metric(b) - metric(a)) || byName(a, b) : byName);
+  const isMissing = e => e.page && e.page.missing ? 1 : 0;
+  const metric = {
+    delta: e => !e.page ? 256 : e.page.missing ? 0 : e.page.max_delta,
+    pixels: e => !e.page ? Infinity : e.page.missing ? 0 : e.page.pixels,
+  }[sort];
+  state.filtered.sort((a, b) => (isMissing(b) - isMissing(a)) || (metric ? metric(b) - metric(a) : 0) || byName(a, b));
   const found = state.filtered.findIndex(e => key(e) === keepKey);
   state.index = found >= 0 ? found : 0;
   renderList();
@@ -163,7 +170,8 @@ function renderList() {
     item.querySelector('.name').title = label(entry);
     item.querySelector('.badge').textContent = badge(entry);
     item.querySelector('.badge').title = badgeTitle(entry);
-    item.querySelector('.pixels').textContent = entry.page ? `${fmt(entry.page.pixels)} pixels` : firstLine(entry.test.message);
+    item.querySelector('.pixels').textContent = !entry.page ? firstLine(entry.test.message)
+      : entry.page.missing ? 'missing reference' : `${fmt(entry.page.pixels)} pixels`;
     item.onclick = () => select(i);
     list.appendChild(item);
   });
@@ -239,7 +247,9 @@ function renderView() {
   b.textContent = badge(entry);
   b.title = badgeTitle(entry);
   meta.append(b);
-  if (entry.page) {
+  if (entry.page && entry.page.missing) {
+    meta.append(`missing reference · ${entry.page.actual_size[0]} × ${entry.page.actual_size[1]}`);
+  } else if (entry.page) {
     const p = entry.page;
     let text = `${fmt(p.pixels)} differing pixels · ${p.reference_size[0]} × ${p.reference_size[1]}`;
     if (p.reference_size[0] !== p.actual_size[0] || p.reference_size[1] !== p.actual_size[1]) {
@@ -262,7 +272,9 @@ function renderView() {
   canvas.id = 'canvas';
   stage.append(canvas);
 
-  if (state.mode === 'side') {
+  if (p.missing) {
+    canvas.append(figure('Rendering', img(p.actual)));
+  } else if (state.mode === 'side') {
     canvas.append(figure('Reference', img(p.reference)), figure('Actual', img(p.actual)));
   } else if (state.mode === 'diff') {
     canvas.append(figure('Differing pixels', img(p.reference, 'dimmed'), img(p.diff, 'layer')));
@@ -281,7 +293,7 @@ function renderView() {
 
 function flip() {
   const entry = state.filtered[state.index];
-  if (state.mode !== 'blink' || !entry || !entry.page) return;
+  if (state.mode !== 'blink' || !entry || !entry.page || entry.page.missing) return;
   state.showActual = !state.showActual;
   const fig = $('stage').querySelector('figure');
   fig.querySelector('figcaption').textContent = state.showActual ? 'Actual' : 'Reference';

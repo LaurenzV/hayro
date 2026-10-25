@@ -3,7 +3,7 @@ use crate::harness::args::args;
 use crate::harness::report;
 use crate::harness::runner::Outcome;
 use crate::harness::ui::count;
-use image::{Rgba, RgbaImage, load_from_memory};
+use image::{GenericImageView, Rgba, RgbaImage, load_from_memory};
 use std::cmp::max;
 use std::fmt::Write;
 use std::path::Path;
@@ -52,8 +52,17 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
         let ref_path = refs_dir.join(&file);
 
         let Ok(reference) = std::fs::read(&ref_path) else {
-            write_file(&ref_path, page);
-            created += 1;
+            if args().update {
+                write_file(&ref_path, page);
+                created += 1;
+            } else {
+                failures.push((index, "missing reference image".to_string()));
+                report::add(report::Page::Missing {
+                    index: (pages.len() > 1).then_some(index),
+                    size: load_from_memory(page).unwrap().dimensions(),
+                    png: page.clone(),
+                });
+            }
             continue;
         };
 
@@ -79,7 +88,7 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
             .unwrap();
 
         let relative = relative.to_string_lossy().replace('\\', "/");
-        report::add(report::Page {
+        report::add(report::Page::Changed {
             index: (pages.len() > 1).then_some(index),
             reference: format!("snapshots/{relative}/{file}"),
             actual: format!("report/{relative}/{file}"),
@@ -89,28 +98,28 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
             reference_size: reference.dimensions(),
             actual_size: actual.dimensions(),
         });
-        failures.push((index, diff.pixels, diff.max_delta));
+        failures.push((
+            index,
+            format!(
+                "{} pixels differ (max deviation {})",
+                count(diff.pixels as usize),
+                diff.max_delta
+            ),
+        ));
     }
-
-    let describe = |pixels: u32, max_delta: u8| {
-        format!(
-            "{} pixels differ (max deviation {max_delta})",
-            count(pixels as usize)
-        )
-    };
 
     match failures.as_slice() {
         [] if updated > 0 => Outcome::Updated(updated),
         [] if created > 0 => Outcome::Created(created),
         [] => Outcome::Passed,
-        [(index, pixels, max_delta)] if pages.len() > 1 => {
-            Outcome::Failed(format!("page {index}: {}", describe(*pixels, *max_delta)))
+        [(index, failure)] if pages.len() > 1 => {
+            Outcome::Failed(format!("page {index}: {failure}"))
         }
-        [(_, pixels, max_delta)] => Outcome::Failed(describe(*pixels, *max_delta)),
+        [(_, failure)] => Outcome::Failed(failure.clone()),
         failures => {
-            let mut message = format!("{} pages differ", failures.len());
-            for (index, pixels, max_delta) in failures {
-                write!(message, "\npage {index}: {}", describe(*pixels, *max_delta)).unwrap();
+            let mut message = format!("{} pages failed", failures.len());
+            for (index, failure) in failures {
+                write!(message, "\npage {index}: {failure}").unwrap();
             }
             Outcome::Failed(message)
         }
