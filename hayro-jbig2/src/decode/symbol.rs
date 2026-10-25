@@ -615,7 +615,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         // each byte. Rows are padded to the byte boundary.
         let row_bytes = ctx.total_width.div_ceil(8);
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
+        let mut bitmap = Bitmap::new_wide(ctx.total_width, ctx.height_class_height)?;
         for y in 0..ctx.height_class_height {
             for byte_x in 0..row_bytes {
                 let byte = ctx
@@ -641,7 +641,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .read_bytes(bitmap_size as usize)
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
+        let mut bitmap = Bitmap::new_wide(ctx.total_width, ctx.height_class_height)?;
         decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict)?;
         bitmap
     };
