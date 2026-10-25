@@ -7,7 +7,7 @@ pub(crate) const SIMD_WIDTH: usize = 8;
 mod inner {
     use super::SIMD_WIDTH;
     use core::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Sub, SubAssign};
-    use fearless_simd::{Bytes, SimdBase, SimdFloat};
+    use fearless_simd::{SimdBase, SimdFloat};
 
     pub(crate) use fearless_simd::{Level, Simd, dispatch};
 
@@ -208,19 +208,31 @@ mod inner {
     fn to_u8<S: Simd>(simd: S, values: &[f32; 16], scale: f32) -> fearless_simd::u8x16<S> {
         let scale = fearless_simd::f32x8::splat(simd, scale);
         let half = fearless_simd::f32x8::splat(simd, 0.5);
-        let zero = fearless_simd::f32x8::splat(simd, 0.0);
-        let max = fearless_simd::f32x8::splat(simd, 255.0);
         let convert = |i: usize| {
             let v = fearless_simd::f32x8::from_slice(simd, &values[i..i + 8]) * scale + half;
-            simd.split_i32x8(simd.cvt_i32_f32x8(simd.min_f32x8(simd.max_f32x8(v, zero), max)))
+
+            // On NEON, the unsigned conversion and the narrowing saturate by themselves,
+            // which saves the explicit clamping.
+            #[cfg(target_arch = "aarch64")]
+            {
+                let (a, b) = simd.split_u32x8(simd.cvt_u32_precise_f32x8(v));
+                simd.saturating_narrow_u32x4(a, b)
+            }
+
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                use fearless_simd::Bytes;
+
+                let zero = fearless_simd::f32x8::splat(simd, 0.0);
+                let max = fearless_simd::f32x8::splat(simd, 255.0);
+                let (a, b) = simd
+                    .split_i32x8(simd.cvt_i32_f32x8(simd.min_f32x8(simd.max_f32x8(v, zero), max)));
+                simd.relaxed_narrow_i32x4(a, b).bitcast()
+            }
         };
-        let (a, b) = convert(0);
-        let (c, d) = convert(8);
-        let low = simd.relaxed_narrow_i32x4(a, b);
-        let high = simd.relaxed_narrow_i32x4(c, d);
         // A relaxed narrow here makes LLVM fuse both steps into a 32-to-8-bit truncation,
         // which it scalarizes on wasm.
-        simd.saturating_narrow_u16x8(low.bitcast(), high.bitcast())
+        simd.saturating_narrow_u16x8(convert(0), convert(8))
     }
 
     const THREE_WAY: [[[u8; 16]; 3]; 3] = three_way_indices();
