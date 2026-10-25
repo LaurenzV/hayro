@@ -724,28 +724,33 @@ pub fn interpret<'a>(
 
                 let transfer_function = context.compositing().transfer_function.clone();
 
-                if let Some(sp) = resources
-                    .get_shading(s.0)
-                    .and_then(|o| {
-                        let (dict, stream) = dict_or_stream(&o)?;
-                        Shading::new(dict, stream, &context.interpreter_cache.object_cache)
-                    })
-                    .map(|s| {
-                        Pattern::Shading(ShadingPattern {
-                            shading: Arc::new(s),
-                            matrix: Affine::IDENTITY,
-                            opacity: 1.0,
-                            transfer_function: transfer_function.clone(),
-                        })
-                    })
-                {
+                if let Some(mut shading) = resources.get_shading(s.0).and_then(|o| {
+                    let (dict, stream) = dict_or_stream(&o)?;
+                    Shading::new(dict, stream, &context.interpreter_cache.object_cache)
+                }) {
+                    // The background only applies to shading patterns, not to `sh`.
+                    shading.background = None;
+
+                    let mut bbox = context.bbox();
+                    if let Some(bounds) = shading.mesh_bounds {
+                        // Snapped outwards to whole pixels, so that the sampled texture stays
+                        // aligned with the device pixels.
+                        let bounds = context.ctm().transform_rect_bbox(bounds);
+                        bbox = bbox.intersect(bounds.expand().inflate(1.0, 1.0));
+                    }
+
                     context.save_state();
                     context.push_root_transform();
                     let paint = context.fill_paint_mut();
-                    paint.pattern = Some(sp);
+                    paint.pattern = Some(Pattern::Shading(ShadingPattern {
+                        shading: Arc::new(shading),
+                        matrix: Affine::IDENTITY,
+                        opacity: 1.0,
+                        transfer_function: transfer_function.clone(),
+                    }));
                     paint.color_space = ColorSpace::pattern();
 
-                    let bbox = context.bbox().to_path(0.1);
+                    let bbox = bbox.to_path(0.1);
                     let inverted_bbox = context.ctm().inverse() * bbox;
                     fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));
 
