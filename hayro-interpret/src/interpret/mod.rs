@@ -13,6 +13,7 @@ use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
 use crate::util::{OptionLog, RectExt};
 use crate::x_object::{FormXObject, ImageXObject, XObject};
+use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
@@ -99,11 +100,8 @@ pub struct InterpreterSettings {
     /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
     /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
     pub warning_sink: WarningSinkFn,
-    /// Whether annotations should be rendered as well.
-    ///
-    /// Note that this feature is currently not fully implemented yet, so some
-    /// annotations might be missing.
-    pub render_annotations: bool,
+    /// Which parts of a page should be rendered.
+    pub render_content: RenderContent,
 }
 
 impl Default for InterpreterSettings {
@@ -121,8 +119,19 @@ impl Default for InterpreterSettings {
             #[cfg(not(feature = "embed-cmaps"))]
             cmap_resolver: Arc::new(|_| None),
             warning_sink: Arc::new(|_| {}),
-            render_annotations: true,
+            render_content: RenderContent::all(),
         }
+    }
+}
+
+bitflags! {
+    /// The parts of a page that should be rendered.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct RenderContent: u8 {
+        /// The content stream of the page.
+        const PAGE = 1 << 0;
+        /// The annotations of the page.
+        const ANNOTATIONS = 1 << 1;
     }
 }
 
@@ -146,9 +155,13 @@ pub fn interpret_page<'a>(
     device: &mut impl Device<'a>,
 ) {
     let resources = page.resources();
-    interpret(page.typed_operations(), resources, context, device);
+    let render_content = context.settings.render_content;
 
-    if context.settings.render_annotations
+    if render_content.contains(RenderContent::PAGE) {
+        interpret(page.typed_operations(), resources, context, device);
+    }
+
+    if render_content.contains(RenderContent::ANNOTATIONS)
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
         for annot in annot_arr.iter::<Dict<'_>>() {
@@ -157,10 +170,7 @@ pub fn interpret_page<'a>(
     }
 }
 
-/// Interpret the normal appearance of one annotation of a page and render it into
-/// the device, as [`interpret_page`] does for each annotation after the page's
-/// contents. `resources` are the page's, used when the appearance stream has none.
-pub fn interpret_annotation<'a>(
+fn interpret_annotation<'a>(
     annot: &Dict<'a>,
     resources: &Resources<'a>,
     context: &mut Context<'a>,
