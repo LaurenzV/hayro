@@ -22,7 +22,7 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
-const MAX_SYMBOLS: u32 = u16::MAX as u32;
+const MAX_SYMBOLS: u32 = 1 << 20;
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
@@ -845,7 +845,7 @@ pub(crate) fn parse<'a>(
     let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
-    if num_exported_symbols.saturating_add(num_new_symbols) > MAX_SYMBOLS {
+    if num_exported_symbols > MAX_SYMBOLS || num_new_symbols > MAX_SYMBOLS {
         bail!(OverflowError::SymbolCount)
     }
 
