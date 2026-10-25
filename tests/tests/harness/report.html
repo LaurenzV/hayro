@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hayro test report</title>
+<style>
+:root {
+  --bg: #f4f4f2; --panel: #ffffff; --raised: #fafaf8; --border: #e4e3de; --text: #1d1d1b; --muted: #74736d;
+  --accent: #2f6fd6; --accent-bg: #e8effb; --select: #eef2fa;
+  --d1: #c9a400; --d1-bg: #fbf3cf; --d2: #e07b00; --d2-bg: #fde7cc; --d3: #d93025; --d3-bg: #fbdcd9;
+  --panic: #8e44ad; --panic-bg: #efe1f5;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413; --panel: #1c1c1b; --raised: #232321; --border: #2f2f2c; --text: #ebeae5; --muted: #9b9a94;
+    --accent: #82aef7; --accent-bg: #22314a; --select: #232c3b;
+    --d1-bg: #3a3313; --d2-bg: #3d2a12; --d3-bg: #432019; --panic-bg: #33213c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .3);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: grid; grid-template-rows: auto 1fr; }
+
+header { display: flex; align-items: center; gap: 20px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand b { font-size: 15px; letter-spacing: -.01em; }
+.brand span { color: var(--muted); }
+.pills { display: flex; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.pill b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pill.failed { background: var(--d3-bg); border-color: transparent; color: var(--d3); }
+.pill.failed b { color: var(--d3); }
+
+main { display: grid; grid-template-columns: 360px 1fr; min-height: 0; }
+aside { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.controls { padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; border-bottom: 1px solid var(--border); }
+input, select, button { font: inherit; color: inherit; background: var(--raised); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; outline: none; }
+input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+#list { overflow-y: auto; flex: 1; padding: 6px; }
+.item { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 7px 10px 7px 12px; border-radius: 8px; cursor: pointer; position: relative; }
+.item::before { content: ""; position: absolute; left: 3px; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--sev); }
+.item:hover { background: var(--raised); }
+.item.active { background: var(--select); }
+.item .name { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .pixels { grid-column: 1; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { grid-row: 1 / span 2; grid-column: 2; font: 600 11px var(--mono); padding: 2px 7px; border-radius: 6px; color: var(--sev); background: var(--sev-bg); }
+.sev1 { --sev: var(--d1); --sev-bg: var(--d1-bg); }
+.sev2 { --sev: var(--d2); --sev-bg: var(--d2-bg); }
+.sev3 { --sev: var(--d3); --sev-bg: var(--d3-bg); }
+.sevp { --sev: var(--panic); --sev-bg: var(--panic-bg); }
+
+#view { display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; }
+.bar { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+.heading { min-width: 0; flex: 1; }
+.heading .name { font: 600 14px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heading .meta { color: var(--muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.heading .meta .badge { grid-row: auto; grid-column: auto; }
+.segmented { display: inline-flex; background: var(--raised); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+.segmented button { border: 0; background: transparent; border-radius: 7px; padding: 5px 12px; cursor: pointer; color: var(--muted); }
+.segmented button:hover { color: var(--text); }
+.segmented button.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+.pos { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+.message { margin: 20px; padding: 12px 14px; border-radius: 8px; background: var(--panic-bg); white-space: pre-wrap; font: 12px/1.5 var(--mono); }
+
+#stage { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+#canvas { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 24px; padding: 20px; }
+figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+figcaption { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.frame { position: relative; line-height: 0; background: #fff; border-radius: 4px; box-shadow: var(--shadow); outline: 1px solid var(--border); }
+.frame img { display: block; max-width: var(--max-w); max-height: var(--max-h); }
+.frame .layer { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; }
+.dimmed { filter: grayscale(1); opacity: .3; }
+.footer { display: flex; justify-content: center; gap: 16px; padding: 0 20px 16px; color: var(--muted); font-size: 12px; align-items: center; }
+.footer span { display: inline-flex; gap: 6px; align-items: center; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--sev); }
+.empty { color: var(--muted); margin: auto; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>hayro</b><span>test report</span></div>
+  <div class="pills" id="stats"></div>
+</header>
+<main>
+  <aside>
+    <div class="controls">
+      <input id="filter" type="search" placeholder="Filter by name">
+      <select id="sort">
+        <option value="delta">Max deviation</option>
+        <option value="pixels">Differing pixels</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </aside>
+  <section id="view">
+    <div class="bar">
+      <div class="heading" id="heading"></div>
+      <div class="segmented">
+        <button data-mode="side">Side by side</button>
+        <button data-mode="diff">Diff</button>
+        <button data-mode="blink">Blink</button>
+      </div>
+      <span class="pos" id="pos"></span>
+    </div>
+    <div id="stage"></div>
+  </section>
+</main>
+<script id="data" type="application/json">__REPORT_DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById('data').textContent);
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n.toLocaleString('en-US');
+
+const entries = [];
+for (const test of data.tests) {
+  if (test.pages.length === 0) entries.push({ test, page: null });
+  else for (const page of test.pages) entries.push({ test, page });
+}
+
+const state = { mode: 'side', filtered: [], index: 0, showActual: false };
+try { state.mode = localStorage.getItem('hayro-report-mode') || state.mode; } catch (_) {}
+if (!['side', 'diff', 'blink'].includes(state.mode)) state.mode = 'side';
+
+const pageCount = entries.filter(e => e.page).length;
+$('stats').innerHTML =
+  `<span class="pill failed"><b>${fmt(data.failed)}</b> failed</span>` +
+  `<span class="pill"><b>${fmt(data.total)}</b> tests</span>` +
+  `<span class="pill"><b>${fmt(pageCount)}</b> differing pages</span>`;
+
+const severity = (e) => !e.page ? 'sevp' : e.page.max_delta <= 2 ? 'sev1' : e.page.max_delta <= 20 ? 'sev2' : 'sev3';
+const label = (e) => e.page && e.page.page !== null ? `${e.test.name} · page ${e.page.page}` : e.test.name;
+const badge = (e) => e.page ? `Δ ${e.page.max_delta}` : 'failed';
+const badgeTitle = (e) => e.page ? 'Largest difference in any color channel between reference and actual' : 'The test failed without a rendering';
+const key = (e) => e.page && e.page.page !== null ? `${e.test.name}@${e.page.page}` : e.test.name;
+const firstLine = (text) => (text || '').split('\n')[0];
+
+function applyFilter(keepKey) {
+  const text = $('filter').value.trim().toLowerCase();
+  const sort = $('sort').value;
+  state.filtered = entries.filter(e => e.test.name.toLowerCase().includes(text));
+  const byName = (a, b) => key(a).localeCompare(key(b), 'en', { numeric: true });
+  const metric = { delta: e => e.page ? e.page.max_delta : 256, pixels: e => e.page ? e.page.pixels : Infinity }[sort];
+  state.filtered.sort(metric ? (a, b) => (metric(b) - metric(a)) || byName(a, b) : byName);
+  const found = state.filtered.findIndex(e => key(e) === keepKey);
+  state.index = found >= 0 ? found : 0;
+  renderList();
+  renderView();
+}
+
+function renderList() {
+  const list = $('list');
+  list.textContent = '';
+  state.filtered.forEach((entry, i) => {
+    const item = document.createElement('div');
+    item.className = `item ${severity(entry)}` + (i === state.index ? ' active' : '');
+    item.innerHTML = '<span class="name"></span><span class="badge"></span><span class="pixels"></span>';
+    item.querySelector('.name').textContent = label(entry);
+    item.querySelector('.name').title = label(entry);
+    item.querySelector('.badge').textContent = badge(entry);
+    item.querySelector('.badge').title = badgeTitle(entry);
+    item.querySelector('.pixels').textContent = entry.page ? `${fmt(entry.page.pixels)} pixels` : firstLine(entry.test.message);
+    item.onclick = () => select(i);
+    list.appendChild(item);
+  });
+  list.children[state.index]?.scrollIntoView({ block: 'nearest' });
+}
+
+function select(i) {
+  if (state.filtered.length === 0) return;
+  state.index = Math.max(0, Math.min(state.filtered.length - 1, i));
+  const items = $('list').children;
+  for (let j = 0; j < items.length; j++) items[j].classList.toggle('active', j === state.index);
+  items[state.index]?.scrollIntoView({ block: 'nearest' });
+  state.showActual = false;
+  renderView();
+}
+
+function img(src, cls) {
+  const el = document.createElement('img');
+  el.src = src;
+  el.draggable = false;
+  if (cls) el.className = cls;
+  return el;
+}
+
+function figure(caption, ...images) {
+  const fig = document.createElement('figure');
+  const cap = document.createElement('figcaption');
+  cap.textContent = caption;
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  frame.append(...images);
+  fig.append(cap, frame);
+  return fig;
+}
+
+function fit() {
+  const canvas = $('canvas');
+  if (!canvas) return;
+  const figures = canvas.querySelectorAll('figure').length || 1;
+  const style = getComputedStyle(canvas);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const gap = parseFloat(style.columnGap) || 0;
+  const w = (canvas.clientWidth - padX - gap * (figures - 1)) / figures;
+  const h = canvas.clientHeight - padY - 26;
+  canvas.style.setProperty('--max-w', Math.max(40, w) + 'px');
+  canvas.style.setProperty('--max-h', Math.max(40, h) + 'px');
+}
+
+function renderView() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+  const heading = $('heading');
+  const stage = $('stage');
+  heading.textContent = '';
+  stage.textContent = '';
+  $('pos').textContent = state.filtered.length ? `${state.index + 1} / ${state.filtered.length}` : '';
+
+  const entry = state.filtered[state.index];
+  if (!entry) {
+    stage.innerHTML = '<div class="empty">No failures match the current filter.</div>';
+    return;
+  }
+  history.replaceState(null, '', '#' + encodeURIComponent(key(entry)));
+
+  const name = document.createElement('div');
+  name.className = 'name';
+  name.textContent = label(entry);
+  name.title = label(entry);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const b = document.createElement('span');
+  b.className = `badge ${severity(entry)}`;
+  b.textContent = badge(entry);
+  b.title = badgeTitle(entry);
+  meta.append(b);
+  if (entry.page) {
+    const p = entry.page;
+    let text = `${fmt(p.pixels)} differing pixels · ${p.reference_size[0]} × ${p.reference_size[1]}`;
+    if (p.reference_size[0] !== p.actual_size[0] || p.reference_size[1] !== p.actual_size[1]) {
+      text += ` → ${p.actual_size[0]} × ${p.actual_size[1]}`;
+    }
+    meta.append(text);
+  }
+  heading.append(name, meta);
+
+  if (!entry.page) {
+    const pre = document.createElement('pre');
+    pre.className = 'message';
+    pre.textContent = entry.test.message;
+    stage.append(pre);
+    return;
+  }
+
+  const p = entry.page;
+  const canvas = document.createElement('div');
+  canvas.id = 'canvas';
+  stage.append(canvas);
+
+  if (state.mode === 'side') {
+    canvas.append(figure('Reference', img(p.reference)), figure('Actual', img(p.actual)));
+  } else if (state.mode === 'diff') {
+    canvas.append(figure('Differing pixels', img(p.reference, 'dimmed'), img(p.diff, 'layer')));
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    footer.innerHTML = '<span class="sev1"><i class="swatch"></i>Δ 1–2</span><span class="sev2"><i class="swatch"></i>Δ 3–20</span><span class="sev3"><i class="swatch"></i>Δ &gt; 20</span>';
+    stage.append(footer);
+  } else {
+    const fig = figure(state.showActual ? 'Actual' : 'Reference', img(state.showActual ? p.actual : p.reference));
+    fig.querySelector('.frame').style.cursor = 'pointer';
+    fig.querySelector('.frame').onclick = flip;
+    canvas.append(fig);
+  }
+  fit();
+}
+
+function flip() {
+  const entry = state.filtered[state.index];
+  if (state.mode !== 'blink' || !entry || !entry.page) return;
+  state.showActual = !state.showActual;
+  const fig = $('stage').querySelector('figure');
+  fig.querySelector('figcaption').textContent = state.showActual ? 'Actual' : 'Reference';
+  fig.querySelector('img').src = state.showActual ? entry.page.actual : entry.page.reference;
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  try { localStorage.setItem('hayro-report-mode', mode); } catch (_) {}
+  renderView();
+}
+
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+const current = () => state.filtered[state.index] && key(state.filtered[state.index]);
+$('filter').oninput = () => applyFilter(current());
+$('sort').onchange = () => applyFilter(current());
+window.addEventListener('resize', fit);
+
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const typing = e.target.tagName === 'INPUT';
+  if (typing && (e.key === 'Escape' || e.key === 'Enter')) { e.target.blur(); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    select(state.index + (e.key === 'ArrowDown' ? 1 : -1));
+    e.preventDefault();
+    return;
+  }
+  if (typing || e.target.tagName === 'SELECT') return;
+  const modes = { '1': 'side', '2': 'diff', '3': 'blink' };
+  if (modes[e.key]) setMode(modes[e.key]);
+  else if (e.key === ' ') { if (state.mode !== 'blink') setMode('blink'); else flip(); e.preventDefault(); }
+  else if (e.key === '/') { $('filter').focus(); e.preventDefault(); }
+});
+
+applyFilter(decodeURIComponent(location.hash.slice(1)));
+</script>
+</body>
+</html>

@@ -58,7 +58,12 @@ pub(crate) struct TestResult {
 
 thread_local! {
     static IS_WORKER: Cell<bool> = const { Cell::new(false) };
+    static CURRENT_TEST: RefCell<Option<String>> = const { RefCell::new(None) };
     static PANIC: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn current_test() -> Option<String> {
+    CURRENT_TEST.with(|test| test.borrow().clone())
 }
 
 // Panics on threads spawned by a test itself. They resurface on the worker as a generic
@@ -136,6 +141,7 @@ pub(crate) fn run(tests: Vec<Test>, jobs: usize, ui: &mut Ui) -> Vec<TestResult>
 }
 
 fn run_one(test: &Test) -> Outcome {
+    CURRENT_TEST.with(|current| *current.borrow_mut() = Some(test.name.clone()));
     PANIC.with(|panic| panic.borrow_mut().take());
     lock(&THREAD_PANIC).take();
 
