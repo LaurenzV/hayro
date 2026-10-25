@@ -3,6 +3,7 @@ use crate::harness::runner::{Outcome, TestResult};
 use console::{Style, measure_text_width, style, truncate_str};
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -215,7 +216,12 @@ impl Ui {
         }
     }
 
-    pub(crate) fn summary(&mut self, results: &[TestResult], ignored: usize) {
+    pub(crate) fn summary(
+        &mut self,
+        results: &[TestResult],
+        ignored: usize,
+        report: Option<&Path>,
+    ) {
         self.clear();
 
         let mut failed: Vec<_> = results
@@ -317,6 +323,10 @@ impl Ui {
             dim(format!("in {}", secs(self.start.elapsed())))
         )
         .unwrap();
+
+        if let Some(report) = report {
+            writeln!(out, "{} file://{}", dim("report:"), report.display()).unwrap();
+        }
 
         if !failed.is_empty() && failed.len() <= 20 {
             let release = if cfg!(debug_assertions) {
