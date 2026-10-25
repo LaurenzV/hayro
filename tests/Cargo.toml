@@ -37,6 +37,7 @@ memchr = { version = "2.7.6"}
 
 
 [dev-dependencies]
+base64 = { workspace = true }
 hayro-syntax = { workspace = true }
 image = {  workspace = true }
 console = "0.16"

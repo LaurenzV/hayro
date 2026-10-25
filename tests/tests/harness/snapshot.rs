@@ -3,7 +3,7 @@ use crate::harness::args::args;
 use crate::harness::report;
 use crate::harness::runner::Outcome;
 use crate::harness::ui::count;
-use image::{Rgba, RgbaImage, load_from_memory};
+use image::{GenericImageView, Rgba, RgbaImage, load_from_memory};
 use std::cmp::max;
 use std::fmt::Write;
 use std::path::Path;
@@ -54,6 +54,11 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
         let Ok(reference) = std::fs::read(&ref_path) else {
             write_file(&ref_path, page);
             created += 1;
+            report::add(report::Page::New {
+                index: (pages.len() > 1).then_some(index),
+                size: load_from_memory(page).unwrap().dimensions(),
+                png: page.clone(),
+            });
             continue;
         };
 
@@ -79,7 +84,7 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
             .unwrap();
 
         let relative = relative.to_string_lossy().replace('\\', "/");
-        report::add(report::Page {
+        report::add(report::Page::Changed {
             index: (pages.len() > 1).then_some(index),
             reference: format!("snapshots/{relative}/{file}"),
             actual: format!("report/{relative}/{file}"),
