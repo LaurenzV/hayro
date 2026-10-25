@@ -1072,9 +1072,9 @@ dependencies = [
 
 [[package]]
 name = "pic-scale"
-version = "0.7.9"
+version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b05a62c3762cb26cb62665b915fea652def8a9f609b0b289b7f782a7394307b"
+checksum = "6edb0ff645d35accaec252de081d55984a0d6c952cb1e5dc2b9afa7c78f07288"
 dependencies = [
  "num-traits",
  "pxfm",
