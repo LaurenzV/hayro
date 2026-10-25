@@ -15,8 +15,7 @@ kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
 bytemuck = { workspace = true, features = ["bytemuck_derive"] }
 vello_cpu = { workspace = true }
-# `rdm` is left out on purpose: its lower-precision path makes the results on ARM differ from
-# those on all other platforms.
+# We don't use `rdm` because it causes larger discrepancies between platforms.
 pic-scale = { workspace = true, features = ["neon", "sse", "avx"] }
 rustc-hash = { workspace = true }
 fearless_simd = { workspace = true }
