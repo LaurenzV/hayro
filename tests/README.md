@@ -35,21 +35,13 @@ cargo test -p hayro-tests --release -- --offline
 
 Run `cargo test -p hayro-tests --release -- --help` to see all options.
 
-## Generating the baseline snapshots
+## Reference images
 
-The test suite is based on reference image snapshots, which are not checked into the GitHub repository. Therefore, you first need to generate the "baseline" snapshots from the `main` branch of the repository by running the test suite once with `--update`:
+The rendered pages are compared against reference images, which are not checked into the repository. Instead, `references.lock` stores a hash of every reference image, and the images themselves are stored on the R2 object storage under their hash. When a page renders exactly like its reference image, its hash matches and the test passes without needing the image at all. Otherwise, the test runner downloads the reference image into the `references` folder and compares both images.
 
-```bash
-cargo test -p hayro-tests --release -- --update
-```
+The reference images are always rendered on CI. Since other platforms round slightly differently in a few places, local runs accept deviations of up to 3 per color channel. Some tests deviate by more than that on some pages, in which case `"max_diff_pixels": <n>` in their manifest entry allows up to `n` pixels per page to deviate further.
 
-Without `--update`, a test whose reference image is missing fails, and its rendered page is included in `report.html` so that you can check it before accepting it.
-
-Afterwards, if you run the tests again without `--update`, all tests should pass. Now, if you make changes to the code base, you can simply rerun the command to ensure there are no visual differences in any of the PDFs. In case there are, the test runner writes a report to `report.html`, which lists every page that differs and lets you compare it with its reference side by side, as a diff overlay or by flipping between the two. In case the changes are not a regression, you can rerun the failing tests with `--update` to replace their reference snapshots:
-
-```bash
-cargo test -p hayro-tests --release -- --update
-```
+If a page differs from its reference image or doesn't have one yet, the test fails, and the test runner writes a report to `report.html`. It lists every affected page and lets you compare it with its reference side by side, as a diff overlay or by flipping between the two. The reference images and `references.lock` are only ever updated by CI when a pull request is merged, so there's nothing to update locally.
 
 To also keep the rendered output of every test (the PNGs, SVGs and PDFs) in the `store` folder, pass `--store`.
 
@@ -58,8 +50,6 @@ There are currently four different categories of tests:
 - Load tests: They ensure that a file can be loaded/rendered without crashing. Those tests should ideally be run in debug mode.
 - Raster tests: This category makes up the bulk and ensures that PDFs are rasterized correctly.
 - SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`. A manifest entry is turned into an SVG test by adding `"svg": true` to it.
-
-Some tests render slightly differently depending on the platform. For those, `"max_diff_pixels": <n>` in the manifest entry allows up to `n` pixels per page to differ from the reference image.
 - Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
 
 ## Other

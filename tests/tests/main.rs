@@ -1,7 +1,7 @@
 use crate::harness::args::Args;
 use crate::harness::runner::Test;
 use crate::harness::ui::Ui;
-use crate::harness::{args, assets, report, runner, ui};
+use crate::harness::{args, assets, references, report, runner, ui};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -47,6 +47,10 @@ fn main() {
     }
 
     report::clear();
+    if let Some(dir) = &args.ci {
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir).unwrap();
+    }
 
     let jobs = args
         .jobs
@@ -80,6 +84,9 @@ fn main() {
 
     let mut results = runner::run(runnable, jobs, &mut ui);
     results.append(&mut not_run);
+    if let Some(dir) = &args.ci {
+        references::write_lockfile(dir);
+    }
     let report = report::write(&results);
     ui.summary(&results, ignored, report.as_deref());
 

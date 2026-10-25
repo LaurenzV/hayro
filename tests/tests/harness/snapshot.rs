@@ -1,9 +1,8 @@
-use crate::WORKSPACE_PATH;
 use crate::harness::args::args;
-use crate::harness::report;
 use crate::harness::runner::Outcome;
 use crate::harness::ui::count;
-use image::{GenericImageView, Rgba, RgbaImage, load_from_memory};
+use crate::harness::{references, report};
+use image::{Rgba, RgbaImage, load_from_memory};
 use std::cmp::max;
 use std::fmt::Write;
 use std::path::Path;
@@ -26,13 +25,15 @@ impl Suite {
 }
 
 /// Compares the rendered pages against the reference images of the snapshot `name`, allowing up
-/// to `max_diff_pixels` differing pixels per page.
+/// to `max_diff_pixels` pixels per page to deviate by more than the tolerance.
 pub(crate) fn check(
     suite: Suite,
     name: &str,
     pages: Vec<Vec<u8>>,
     max_diff_pixels: u32,
 ) -> Outcome {
+    const PIXEL_THRESHOLD: u8 = 3;
+
     if pages.is_empty() {
         return Outcome::Failed("document has no pages".into());
     }
@@ -42,11 +43,12 @@ pub(crate) fn check(
         .find_map(|kind| Some((kind, name.strip_prefix(kind)?.strip_prefix('_')?)))
         .unwrap_or(("custom", name));
 
-    let relative = Path::new(suite.dir()).join(kind);
-    let refs_dir = WORKSPACE_PATH.join("snapshots").join(&relative);
+    let ci = args().ci.is_some();
+    let tolerance = if ci { 0 } else { PIXEL_THRESHOLD };
+    let relative = format!("{}/{kind}", suite.dir());
 
-    let mut created = 0;
-    let mut updated = 0;
+    let mut new = 0;
+    let mut changed = 0;
     let mut failures = vec![];
 
     for (index, page) in pages.iter().enumerate() {
@@ -55,48 +57,58 @@ pub(crate) fn check(
         } else {
             format!("{stem}_p{index}.png")
         };
-        let ref_path = refs_dir.join(&file);
+        let key = format!("{relative}/{file}");
+        let page_index = (pages.len() > 1).then_some(index);
 
-        let Ok(reference) = std::fs::read(&ref_path) else {
-            if args().update {
-                write_file(&ref_path, page);
-                created += 1;
+        let actual = load_from_memory(page).unwrap().into_rgba8();
+        let hash = references::hash(&actual);
+        references::record(&key, &hash, page);
+
+        let report_dir = report::files_dir().join(&relative);
+
+        let Some(expected) = references::expected(&key) else {
+            write_file(&report_dir.join(&file), page);
+            report::add(report::Page::Missing {
+                index: page_index,
+                actual: format!("report/{relative}/{file}"),
+                size: actual.dimensions(),
+            });
+            if ci {
+                new += 1;
             } else {
                 failures.push((index, "missing reference image".to_string()));
-                report::add(report::Page::Missing {
-                    index: (pages.len() > 1).then_some(index),
-                    size: load_from_memory(page).unwrap().dimensions(),
-                    png: page.clone(),
-                });
             }
             continue;
         };
 
-        let reference = load_from_memory(&reference).unwrap().into_rgba8();
-        let actual = load_from_memory(page).unwrap().into_rgba8();
-        let diff = get_diff(&reference, &actual);
-
-        if diff.pixels <= max_diff_pixels {
+        if hash == expected {
             continue;
         }
 
-        if args().update {
-            write_file(&ref_path, page);
-            updated += 1;
+        let (reference, reference_path) = match references::load(expected) {
+            Ok(reference) => reference,
+            Err(err) => {
+                failures.push((index, err));
+                continue;
+            }
+        };
+        let diff = get_diff(&reference, &actual, tolerance);
+
+        if !ci && diff.exceeding <= max_diff_pixels {
             continue;
         }
 
-        let report_dir = report::files_dir().join(&relative);
+        let reference_file = file.replace(".png", ".ref.png");
         let diff_file = file.replace(".png", ".diff.png");
         write_file(&report_dir.join(&file), page);
+        std::fs::copy(&reference_path, report_dir.join(&reference_file)).unwrap();
         diff.mask
             .save_with_format(report_dir.join(&diff_file), image::ImageFormat::Png)
             .unwrap();
 
-        let relative = relative.to_string_lossy().replace('\\', "/");
         report::add(report::Page::Changed {
-            index: (pages.len() > 1).then_some(index),
-            reference: format!("snapshots/{relative}/{file}"),
+            index: page_index,
+            reference: format!("report/{relative}/{reference_file}"),
             actual: format!("report/{relative}/{file}"),
             diff: format!("report/{relative}/{diff_file}"),
             pixels: diff.pixels,
@@ -104,19 +116,24 @@ pub(crate) fn check(
             reference_size: reference.dimensions(),
             actual_size: actual.dimensions(),
         });
-        failures.push((
-            index,
-            format!(
-                "{} pixels differ (max deviation {})",
-                count(diff.pixels as usize),
-                diff.max_delta
-            ),
-        ));
+
+        if ci {
+            changed += 1;
+        } else {
+            failures.push((
+                index,
+                format!(
+                    "{} pixels differ by more than {tolerance} (max deviation {})",
+                    count(diff.exceeding as usize),
+                    diff.max_delta
+                ),
+            ));
+        }
     }
 
     match failures.as_slice() {
-        [] if updated > 0 => Outcome::Updated(updated),
-        [] if created > 0 => Outcome::Created(created),
+        [] if changed > 0 => Outcome::Changed(changed),
+        [] if new > 0 => Outcome::New(new),
         [] => Outcome::Passed,
         [(index, failure)] if pages.len() > 1 => {
             Outcome::Failed(format!("page {index}: {failure}"))
@@ -139,16 +156,18 @@ fn write_file(path: &Path, data: &[u8]) {
 
 struct Diff {
     pixels: u32,
+    exceeding: u32,
     max_delta: u8,
     mask: RgbaImage,
 }
 
-fn get_diff(expected: &RgbaImage, actual: &RgbaImage) -> Diff {
+fn get_diff(expected: &RgbaImage, actual: &RgbaImage, tolerance: u8) -> Diff {
     let width = max(expected.width(), actual.width());
     let height = max(expected.height(), actual.height());
 
     let mut mask = RgbaImage::new(width, height);
     let mut pixels = 0;
+    let mut exceeding = 0;
     let mut max_delta = 0;
 
     for y in 0..height {
@@ -166,6 +185,9 @@ fn get_diff(expected: &RgbaImage, actual: &RgbaImage) -> Diff {
             }
 
             pixels += 1;
+            if delta > tolerance {
+                exceeding += 1;
+            }
             max_delta = max_delta.max(delta);
             let color = match delta {
                 1..=2 => [201, 164, 0, 255],
@@ -180,6 +202,7 @@ fn get_diff(expected: &RgbaImage, actual: &RgbaImage) -> Diff {
 
     Diff {
         pixels,
+        exceeding,
         max_delta,
         mask,
     }
@@ -212,10 +235,6 @@ fn add_halo(mask: &mut RgbaImage) {
 }
 
 fn deviation(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> u8 {
-    if pixel1.0[3] == 0 && pixel2.0[3] == 0 {
-        return 0;
-    }
-
     pixel1
         .0
         .iter()

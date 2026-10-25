@@ -1,8 +1,6 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::args::args;
 use crate::harness::runner::{Outcome, TestResult, current_test};
-use base64::Engine;
-use base64::prelude::BASE64_STANDARD;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,7 +23,7 @@ pub(crate) enum Page {
     },
     Missing {
         index: Option<usize>,
-        png: Vec<u8>,
+        actual: String,
         size: (u32, u32),
     },
 }
@@ -59,10 +57,14 @@ impl Page {
                 "reference_size": [reference_size.0, reference_size.1],
                 "actual_size": [actual_size.0, actual_size.1],
             }),
-            Self::Missing { index, png, size } => json!({
+            Self::Missing {
+                index,
+                actual,
+                size,
+            } => json!({
                 "page": index,
                 "missing": true,
-                "actual": format!("data:image/png;base64,{}", BASE64_STANDARD.encode(png)),
+                "actual": actual,
                 "actual_size": [size.0, size.1],
             }),
         }
@@ -92,28 +94,29 @@ pub(crate) fn add(page: Page) {
 }
 
 pub(crate) fn write(results: &[TestResult]) -> Option<PathBuf> {
-    if args().update {
-        return None;
-    }
-
     let mut pages: HashMap<String, Vec<Page>> = HashMap::new();
     for (test, page) in std::mem::take(&mut *PAGES.lock().unwrap_or_else(PoisonError::into_inner)) {
         pages.entry(test).or_default().push(page);
     }
 
-    let mut failed: Vec<_> = results
+    let mut reported: Vec<_> = results
         .iter()
         .filter_map(|result| match &result.outcome {
-            Outcome::Failed(message) => Some((&result.name, message)),
+            Outcome::Failed(message) => Some((&result.name, Some(message))),
+            _ if pages.contains_key(&result.name) => Some((&result.name, None)),
             _ => None,
         })
         .collect();
-    if failed.is_empty() {
+    if reported.is_empty() {
         return None;
     }
-    failed.sort();
+    reported.sort();
 
-    let tests: Vec<Value> = failed
+    let failed = reported
+        .iter()
+        .filter(|(_, message)| message.is_some())
+        .count();
+    let tests: Vec<Value> = reported
         .iter()
         .map(|(name, message)| {
             let mut test_pages = pages.remove(*name).unwrap_or_default();
@@ -128,7 +131,8 @@ pub(crate) fn write(results: &[TestResult]) -> Option<PathBuf> {
 
     let data = json!({
         "total": results.len(),
-        "failed": failed.len(),
+        "failed": failed,
+        "ci": args().ci.is_some(),
         "tests": tests,
     });
     // Keeps the data from closing the surrounding script element.

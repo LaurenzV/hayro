@@ -129,15 +129,18 @@ impl Ui {
                 let line = self.fit(line);
                 self.line(line);
             }
-            Outcome::Created(pages) => self.line(format!(
+            Outcome::New(pages) => self.line(format!(
                 "{} {name}  {}",
                 style("+").yellow(),
-                dim(format!("created {}", plural(*pages, "reference")))
+                dim(format!(
+                    "{} without reference image",
+                    plural(*pages, "page")
+                ))
             )),
-            Outcome::Updated(pages) => self.line(format!(
+            Outcome::Changed(pages) => self.line(format!(
                 "{} {name}  {}",
                 style("↻").yellow(),
-                dim(format!("updated {}", plural(*pages, "reference")))
+                dim(format!("{} changed", plural(*pages, "page")))
             )),
         }
 
@@ -280,8 +283,8 @@ impl Ui {
             results.iter().filter_map(|r| f(&r.outcome)).sum()
         };
         let passed = tally(|o| matches!(o, Outcome::Passed).then_some(1));
-        let created = tally(|o| matches!(o, Outcome::Created(_)).then_some(1));
-        let updated = tally(|o| matches!(o, Outcome::Updated(_)).then_some(1));
+        let new = tally(|o| matches!(o, Outcome::New(_)).then_some(1));
+        let changed = tally(|o| matches!(o, Outcome::Changed(_)).then_some(1));
         let skipped = tally(|o| matches!(o, Outcome::Skipped(_)).then_some(1));
 
         let mut parts = vec![
@@ -296,16 +299,12 @@ impl Ui {
                     .to_string(),
             );
         }
-        if created > 0 {
-            parts.push(
-                style(format!("{} new", count(created)))
-                    .yellow()
-                    .to_string(),
-            );
+        if new > 0 {
+            parts.push(style(format!("{} new", count(new))).yellow().to_string());
         }
-        if updated > 0 {
+        if changed > 0 {
             parts.push(
-                style(format!("{} updated", count(updated)))
+                style(format!("{} changed", count(changed)))
                     .yellow()
                     .to_string(),
             );

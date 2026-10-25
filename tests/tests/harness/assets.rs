@@ -2,6 +2,8 @@ use crate::WORKSPACE_PATH;
 use crate::harness::runner::{Outcome, Test};
 use crate::harness::ui::Ui;
 use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -75,12 +77,21 @@ fn url(file: &str) -> Option<String> {
     }
 }
 
-fn download<'a>(downloads: &[(&'a str, String)], ui: &mut Ui) -> Vec<(&'a str, String)> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
+static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
+    ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(15)))
         .timeout_recv_response(Some(Duration::from_secs(30)))
         .build()
-        .into();
+        .into()
+});
+
+pub(crate) fn download_reference(hash: &str, file: &Path) -> Result<u64, String> {
+    let url = format!("{BASE_URL}/references/{hash}.png");
+    download_one(&AGENT, &url, &file.to_string_lossy())
+}
+
+fn download<'a>(downloads: &[(&'a str, String)], ui: &mut Ui) -> Vec<(&'a str, String)> {
+    let agent = &*AGENT;
 
     let next = AtomicUsize::new(0);
     let mut failures = vec![];
@@ -94,7 +105,7 @@ fn download<'a>(downloads: &[(&'a str, String)], ui: &mut Ui) -> Vec<(&'a str, S
 
         for _ in 0..DOWNLOAD_THREADS.min(downloads.len()) {
             let sender = sender.clone();
-            let (agent, next) = (&agent, &next);
+            let next = &next;
             scope.spawn(move || {
                 while let Some((file, url)) = downloads.get(next.fetch_add(1, Ordering::Relaxed)) {
                     let _ = sender.send((*file, download_one(agent, url, file)));
