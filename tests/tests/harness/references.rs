@@ -1,6 +1,7 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::args::args;
 use crate::harness::assets;
+use crate::harness::snapshot::encode_png;
 use image::{RgbaImage, load_from_memory};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -58,7 +59,7 @@ pub(crate) fn hash(image: &RgbaImage) -> String {
         })
 }
 
-pub(crate) fn record(key: &str, hash: &str, png: &[u8]) {
+pub(crate) fn record(key: &str, hash: &str, image: &RgbaImage) {
     let Some(dir) = &args().ci else { return };
 
     RENDERED
@@ -69,7 +70,7 @@ pub(crate) fn record(key: &str, hash: &str, png: &[u8]) {
     if expected(key) != Some(hash) {
         let path = dir.join("images").join(format!("{hash}.png"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, png).unwrap();
+        std::fs::write(path, encode_png(image)).unwrap();
     }
 }
 

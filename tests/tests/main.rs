@@ -1,13 +1,18 @@
 use crate::harness::args::Args;
 use crate::harness::runner::Test;
+use crate::harness::snapshot::encode_png;
 use crate::harness::ui::Ui;
 use crate::harness::{args, assets, references, report, runner, ui};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
+use hayro::vello_cpu::Pixels;
+use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro_svg::SvgRenderSettings;
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
+use image::buffer::ConvertBuffer;
+use image::{RgbImage, RgbaImage};
 use resvg::tiny_skia::{Color, Pixmap, PixmapPaint};
 use resvg::usvg::{Options, Transform, Tree};
 use std::collections::BTreeMap;
@@ -191,22 +196,26 @@ pub(crate) fn render_pdf(
     name: &str,
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
-) -> Vec<Vec<u8>> {
+) -> Vec<RgbaImage> {
     hayro::render_pdf(pdf, 1.0, settings, range)
         .unwrap()
         .into_iter()
         .enumerate()
-        .map(|(idx, d)| {
-            let png = d.into_png().unwrap();
+        .map(|(idx, pixmap)| {
+            let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
+            let page = match pixmap.try_take_rgb8(ImageAlphaType::Alpha) {
+                Pixels::Rgb8(data) => RgbImage::from_raw(width, height, data).unwrap().convert(),
+                Pixels::Rgba8(data) => RgbaImage::from_raw(width, height, data).unwrap(),
+            };
 
             if args::args().store {
                 let dir = WORKSPACE_PATH.join("store/pdf");
                 let _ = std::fs::create_dir_all(&dir);
 
-                std::fs::write(dir.join(format!("{name}_{idx}.png")), &png).unwrap();
+                std::fs::write(dir.join(format!("{name}_{idx}.png")), encode_png(&page)).unwrap();
             }
 
-            png
+            page
         })
         .collect()
 }
@@ -217,7 +226,7 @@ pub(crate) fn render_svg(
     interpreter_settings: InterpreterSettings,
     render_settings: SvgRenderSettings,
     range: Option<RangeInclusive<usize>>,
-) -> Vec<Vec<u8>> {
+) -> Vec<RgbaImage> {
     let cache = hayro_svg::RenderCache::new();
     pdf.pages()
         .iter()
@@ -256,7 +265,16 @@ pub(crate) fn render_svg(
                 None,
             );
 
-            Some(composited.encode_png().unwrap())
+            let data = composited
+                .pixels()
+                .iter()
+                .flat_map(|pixel| {
+                    let pixel = pixel.demultiply();
+                    [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+                })
+                .collect();
+
+            Some(RgbaImage::from_raw(composited.width(), composited.height(), data).unwrap())
         })
         .collect::<Vec<_>>()
 }
