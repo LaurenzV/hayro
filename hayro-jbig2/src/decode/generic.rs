@@ -476,22 +476,31 @@ macro_rules! decode_default_template_fast_loop {
                     0
                 };
 
-                // In an all-white or all-black area, all pixels of the byte have the
-                // same context, so they can be decoded at once.
+                // If the context and the pixels the rows above bring in next are all
+                // white (or all black), the context stays the same for all eight
+                // pixels as long as they decode to that same color. If that color is
+                // the context's MPS and the decoder can decode eight MPS without
+                // renormalizing, all eight pixels have that color.
                 let prev2_mask = ($params).prev2_next_mask * 0xff;
                 let prev1_mask = ($params).prev1_next_mask * 0xff;
                 let incoming_prev2 = val_prev2 & prev2_mask;
                 let incoming_prev1 = (val_prev1 >> ($params).prev1_shift) & prev1_mask;
-                let white = context == 0 && incoming_prev2 == 0 && incoming_prev1 == 0;
-                let black = context == ($params).full_context
+                let uniform_color = if context == 0 && incoming_prev2 == 0 && incoming_prev1 == 0 {
+                    Some(0)
+                } else if context == ($params).full_context
                     && incoming_prev2 == prev2_mask
-                    && incoming_prev1 == prev1_mask;
+                    && incoming_prev1 == prev1_mask
+                {
+                    Some(1)
+                } else {
+                    None
+                };
 
-                if white || black {
+                if let Some(color) = uniform_color {
                     let state = $contexts[context as usize];
 
-                    if state.mps() == black as u32 && $decoder.skip_mps(state, BYTE_BITS) {
-                        $bitmap.set_row_byte(y, byte_idx, if black { 0xff } else { 0 });
+                    if state.mps() == color && $decoder.decode_mps_run(state, BYTE_BITS) {
+                        $bitmap.set_row_byte(y, byte_idx, if color == 1 { 0xff } else { 0 });
                         continue;
                     }
                 }
