@@ -44,8 +44,8 @@ impl Test {
 #[derive(Debug, Clone)]
 pub(crate) enum Outcome {
     Passed,
-    Created(usize),
-    Updated(usize),
+    New(usize),
+    Changed(usize),
     Skipped(String),
     Failed(String),
 }

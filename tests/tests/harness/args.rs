@@ -1,3 +1,5 @@
+use crate::WORKSPACE_PATH;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 static ARGS: OnceLock<Args> = OnceLock::new();
@@ -10,21 +12,25 @@ Runs every test whose name contains one of the filters (all tests if none are gi
 Options:
       --exact        Only run tests whose name matches a filter exactly
       --list         List the selected tests without running them
-  -u, --update       Replace the reference images of failing tests
       --store        Write the rendered output to `store/`
       --offline      Don't download missing files, skip the affected tests instead
   -j, --jobs <N>     Number of tests to run in parallel
-  -h, --help         Print this help";
+  -h, --help         Print this help
+
+Environment variables:
+  HAYRO_CI=1         Compare exactly, don't fail on changed or new reference images, and write
+                     the resulting `references.lock` and the images that aren't known
+                     reference images yet to `ci/`";
 
 #[derive(Debug, Default)]
 pub(crate) struct Args {
     pub(crate) filters: Vec<String>,
     pub(crate) exact: bool,
     pub(crate) list: bool,
-    pub(crate) update: bool,
     pub(crate) store: bool,
     pub(crate) offline: bool,
     pub(crate) jobs: Option<usize>,
+    pub(crate) ci: Option<PathBuf>,
 }
 
 impl Args {
@@ -64,7 +70,6 @@ fn parse() -> Args {
         match flag.as_str() {
             "--exact" => args.exact = true,
             "--list" => args.list = true,
-            "-u" | "--update" => args.update = true,
             "--store" => args.store = true,
             "--offline" => args.offline = true,
             "-j" | "--jobs" | "--test-threads" => {
@@ -83,6 +88,10 @@ fn parse() -> Args {
             _ if flag.starts_with('-') => fail(&format!("unknown option `{arg}`")),
             _ => args.filters.push(arg),
         }
+    }
+
+    if std::env::var_os("HAYRO_CI").is_some_and(|value| !value.is_empty()) {
+        args.ci = Some(WORKSPACE_PATH.join("ci"));
     }
 
     args

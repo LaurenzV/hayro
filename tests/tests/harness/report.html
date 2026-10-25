@@ -135,9 +135,11 @@ $('stats').innerHTML =
 
 const severity = (e) => !e.page ? 'sevp' : e.page.missing ? 'sevm' : e.page.max_delta <= 2 ? 'sev1' : e.page.max_delta <= 20 ? 'sev2' : 'sev3';
 const label = (e) => e.page && e.page.page !== null ? `${e.test.name} · page ${e.page.page}` : e.test.name;
-const badge = (e) => !e.page ? 'failed' : e.page.missing ? 'missing' : `Δ ${e.page.max_delta}`;
+const missingLabel = data.ci ? 'new' : 'missing';
+const badge = (e) => !e.page ? 'failed' : e.page.missing ? missingLabel : `Δ ${e.page.max_delta}`;
 const badgeTitle = (e) => !e.page ? 'The test failed without a rendering'
-  : e.page.missing ? 'No reference image exists yet, run the tests with --update to make this rendering the reference'
+  : e.page.missing && data.ci ? 'This page has no reference image yet, merging the pull request makes this rendering the reference'
+  : e.page.missing ? 'This page has no reference image yet, it gets one once the test is merged'
   : 'Largest difference in any color channel between reference and actual';
 const key = (e) => e.page && e.page.page !== null ? `${e.test.name}@${e.page.page}` : e.test.name;
 const firstLine = (text) => (text || '').split('\n')[0];
@@ -171,7 +173,7 @@ function renderList() {
     item.querySelector('.badge').textContent = badge(entry);
     item.querySelector('.badge').title = badgeTitle(entry);
     item.querySelector('.pixels').textContent = !entry.page ? firstLine(entry.test.message)
-      : entry.page.missing ? 'missing reference' : `${fmt(entry.page.pixels)} pixels`;
+      : entry.page.missing ? `${missingLabel} reference` : `${fmt(entry.page.pixels)} pixels`;
     item.onclick = () => select(i);
     list.appendChild(item);
   });
@@ -248,7 +250,7 @@ function renderView() {
   b.title = badgeTitle(entry);
   meta.append(b);
   if (entry.page && entry.page.missing) {
-    meta.append(`missing reference · ${entry.page.actual_size[0]} × ${entry.page.actual_size[1]}`);
+    meta.append(`${missingLabel} reference · ${entry.page.actual_size[0]} × ${entry.page.actual_size[1]}`);
   } else if (entry.page) {
     const p = entry.page;
     let text = `${fmt(p.pixels)} differing pixels · ${p.reference_size[0]} × ${p.reference_size[1]}`;
