@@ -21,7 +21,7 @@ path = "tests/main.rs"
 harness = false
 
 [dependencies]
-hayro = { workspace = true, features = ["embed-cmaps", "simd"] }
+hayro = { workspace = true, features = ["embed-cmaps"] }
 hayro-cmap = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
