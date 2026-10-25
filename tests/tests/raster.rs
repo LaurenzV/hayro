@@ -30,7 +30,7 @@ pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
                 interpreter_settings(),
                 entry.range.clone(),
             );
-            check(Suite::Raster, &entry.name, pages)
+            check(Suite::Raster, &entry.name, pages, entry.max_diff_pixels)
         }));
     }
 

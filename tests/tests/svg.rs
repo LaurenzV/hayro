@@ -24,7 +24,7 @@ pub(crate) fn tests() -> Vec<Test> {
                     svg_render_settings(),
                     entry.range.clone(),
                 );
-                check(Suite::Svg, &entry.name, pages)
+                check(Suite::Svg, &entry.name, pages, entry.max_diff_pixels)
             })
         })
         .collect()

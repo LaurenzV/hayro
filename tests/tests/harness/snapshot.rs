@@ -25,8 +25,14 @@ impl Suite {
     }
 }
 
-/// Compares the rendered pages against the reference images of the snapshot `name`.
-pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
+/// Compares the rendered pages against the reference images of the snapshot `name`, allowing up
+/// to `max_diff_pixels` differing pixels per page.
+pub(crate) fn check(
+    suite: Suite,
+    name: &str,
+    pages: Vec<Vec<u8>>,
+    max_diff_pixels: u32,
+) -> Outcome {
     if pages.is_empty() {
         return Outcome::Failed("document has no pages".into());
     }
@@ -70,7 +76,7 @@ pub(crate) fn check(suite: Suite, name: &str, pages: Vec<Vec<u8>>) -> Outcome {
         let actual = load_from_memory(page).unwrap().into_rgba8();
         let diff = get_diff(&reference, &actual);
 
-        if diff.pixels == 0 {
+        if diff.pixels <= max_diff_pixels {
             continue;
         }
 
