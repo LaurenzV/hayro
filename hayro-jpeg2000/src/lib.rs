@@ -412,6 +412,10 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
 
     let mut output_iter = buf.iter_mut();
 
+    fn to_u8_scale(bit_depth: u8) -> f32 {
+        255.0 / ((1_u32 << bit_depth) - 1) as f32
+    }
+
     if let Some(bit_depth) = all_same_bit_depth
         && num_components <= 4
     {
@@ -441,10 +445,6 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
             }
         }
     }
-}
-
-fn to_u8_scale(bit_depth: u8) -> f32 {
-    255.0 / ((1_u32 << bit_depth) - 1) as f32
 }
 
 fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], scale: f32, out: &mut [u8]) {
