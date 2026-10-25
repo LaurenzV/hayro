@@ -1,0 +1,56 @@
+name: Bootstrap reference images
+
+on:
+  push:
+    branches: [reference-lockfile]
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-26.04
+    env:
+      RUSTFLAGS: --cfg disable_dispatch_avx512
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --release --locked -p hayro-tests
+        env:
+          HAYRO_CI: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: references-lock
+          path: tests/ci/references.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference-images
+          path: tests/ci/images
+          retention-days: 1
+
+  upload:
+    needs: render
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: reference-images
+          path: images
+      - name: Upload reference images
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: >
+          aws s3 sync images "s3://$R2_BUCKET/references/"
+          --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          --size-only --no-progress
+          --content-type image/png
+          --cache-control "public, max-age=31536000, immutable"
