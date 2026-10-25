@@ -412,42 +412,52 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
 
     let mut output_iter = buf.iter_mut();
 
-    if all_same_bit_depth == Some(8) && num_components <= 4 {
+    fn to_u8_scale(bit_depth: u8) -> f32 {
+        255.0 / ((1_u32 << bit_depth) - 1) as f32
+    }
+
+    if let Some(bit_depth) = all_same_bit_depth
+        && num_components <= 4
+    {
+        let scale = to_u8_scale(bit_depth);
         let plane = |c: usize| &components[c].container[..max_len];
 
-        // Fast path for the common case.
         match num_components {
             // Gray-scale.
-            1 => interleave_to_u8([plane(0)], buf),
+            1 => interleave_to_u8([plane(0)], scale, buf),
             // Gray-scale with alpha.
-            2 => interleave_to_u8([plane(0), plane(1)], buf),
+            2 => interleave_to_u8([plane(0), plane(1)], scale, buf),
             // RGB
-            3 => interleave_to_u8([plane(0), plane(1), plane(2)], buf),
+            3 => interleave_to_u8([plane(0), plane(1), plane(2)], scale, buf),
             // RGBA or CMYK.
-            4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], buf),
+            4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], scale, buf),
             _ => unreachable!(),
         }
     } else {
-        // Slow path that also requires us to scale to 8 bit.
-        let mul_factor = ((1 << 8) - 1) as f32;
+        let scales = components
+            .iter()
+            .map(|c| to_u8_scale(c.bit_depth))
+            .collect::<Vec<_>>();
 
         for sample in 0..max_len {
-            for channel in components.iter() {
-                *output_iter.next().unwrap() = math::round_to_u8(
-                    (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
-                        * mul_factor,
-                );
+            for (channel, scale) in components.iter().zip(&scales) {
+                *output_iter.next().unwrap() = math::round_to_u8(channel.container[sample] * scale);
             }
         }
     }
 }
 
-fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], out: &mut [u8]) {
-    dispatch!(Level::new(), simd => interleave_to_u8_impl(simd, planes, out));
+fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], scale: f32, out: &mut [u8]) {
+    dispatch!(Level::new(), simd => interleave_to_u8_impl(simd, planes, scale, out));
 }
 
 #[inline(always)]
-fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], out: &mut [u8]) {
+fn interleave_to_u8_impl<S: Simd, const N: usize>(
+    simd: S,
+    planes: [&[f32]; N],
+    scale: f32,
+    out: &mut [u8],
+) {
     let pixels = planes
         .iter()
         .map(|plane| plane.len())
@@ -459,7 +469,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
     match N {
         1 => {
             for (out, c0) in out.as_chunks_mut::<16>().0.iter_mut().zip(plane(0)) {
-                math::round_and_interleave(simd, [c0], out);
+                math::round_and_interleave(simd, [c0], scale, out);
             }
         }
         2 => {
@@ -470,7 +480,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
                 .zip(plane(0))
                 .zip(plane(1))
             {
-                math::round_and_interleave(simd, [c0, c1], out);
+                math::round_and_interleave(simd, [c0, c1], scale, out);
             }
         }
         3 => {
@@ -482,7 +492,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
                 .zip(plane(1))
                 .zip(plane(2))
             {
-                math::round_and_interleave(simd, [c0, c1, c2], out);
+                math::round_and_interleave(simd, [c0, c1, c2], scale, out);
             }
         }
         4 => {
@@ -495,7 +505,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
                 .zip(plane(2))
                 .zip(plane(3))
             {
-                math::round_and_interleave(simd, [c0, c1, c2, c3], out);
+                math::round_and_interleave(simd, [c0, c1, c2, c3], scale, out);
             }
         }
         _ => unreachable!(),
@@ -503,7 +513,7 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(simd: S, planes: [&[f32]; N], 
 
     for (i, pixel) in tail.as_chunks_mut::<N>().0.iter_mut().enumerate() {
         for (value, plane) in pixel.iter_mut().zip(planes) {
-            *value = math::round_to_u8(plane[blocks + i]);
+            *value = math::round_to_u8(plane[blocks + i] * scale);
         }
     }
 }
