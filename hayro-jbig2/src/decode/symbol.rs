@@ -22,7 +22,7 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
-const MAX_SYMBOLS: u32 = 1 << 20;
+pub(crate) const MAX_SYMBOLS: u32 = 1 << 20;
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
