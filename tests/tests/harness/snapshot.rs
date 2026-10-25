@@ -2,7 +2,9 @@ use crate::harness::args::args;
 use crate::harness::runner::Outcome;
 use crate::harness::ui::count;
 use crate::harness::{references, report};
-use image::{Rgba, RgbaImage, load_from_memory};
+use image::buffer::ConvertBuffer;
+use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+use image::{ExtendedColorType, ImageEncoder, RgbImage, Rgba, RgbaImage};
 use std::cmp::max;
 use std::fmt::Write;
 use std::path::Path;
@@ -29,7 +31,7 @@ impl Suite {
 pub(crate) fn check(
     suite: Suite,
     name: &str,
-    pages: Vec<Vec<u8>>,
+    pages: Vec<RgbaImage>,
     max_diff_pixels: u32,
 ) -> Outcome {
     const PIXEL_THRESHOLD: u8 = 3;
@@ -51,7 +53,7 @@ pub(crate) fn check(
     let mut changed = 0;
     let mut failures = vec![];
 
-    for (index, page) in pages.iter().enumerate() {
+    for (index, actual) in pages.iter().enumerate() {
         let file = if pages.len() == 1 {
             format!("{stem}.png")
         } else {
@@ -60,14 +62,13 @@ pub(crate) fn check(
         let key = format!("{relative}/{file}");
         let page_index = (pages.len() > 1).then_some(index);
 
-        let actual = load_from_memory(page).unwrap().into_rgba8();
-        let hash = references::hash(&actual);
-        references::record(&key, &hash, page);
+        let hash = references::hash(actual);
+        references::record(&key, &hash, actual);
 
         let report_dir = report::files_dir().join(&relative);
 
         let Some(expected) = references::expected(&key) else {
-            write_file(&report_dir.join(&file), page);
+            write_file(&report_dir.join(&file), &encode_png(actual));
             report::add(report::Page::Missing {
                 index: page_index,
                 actual: format!("report/{relative}/{file}"),
@@ -92,7 +93,7 @@ pub(crate) fn check(
                 continue;
             }
         };
-        let diff = get_diff(&reference, &actual, tolerance);
+        let diff = get_diff(&reference, actual, tolerance);
 
         if !ci && diff.exceeding <= max_diff_pixels {
             continue;
@@ -100,7 +101,7 @@ pub(crate) fn check(
 
         let reference_file = file.replace(".png", ".ref.png");
         let diff_file = file.replace(".png", ".diff.png");
-        write_file(&report_dir.join(&file), page);
+        write_file(&report_dir.join(&file), &encode_png(actual));
         std::fs::copy(&reference_path, report_dir.join(&reference_file)).unwrap();
         diff.mask
             .save_with_format(report_dir.join(&diff_file), image::ImageFormat::Png)
@@ -147,6 +148,22 @@ pub(crate) fn check(
             Outcome::Failed(message)
         }
     }
+}
+
+pub(crate) fn encode_png(image: &RgbaImage) -> Vec<u8> {
+    let mut png = vec![];
+    let encoder =
+        PngEncoder::new_with_quality(&mut png, CompressionType::Default, FilterType::Adaptive);
+    let (width, height) = image.dimensions();
+    if image.pixels().all(|pixel| pixel.0[3] == 255) {
+        let rgb: RgbImage = image.convert();
+        encoder.write_image(&rgb, width, height, ExtendedColorType::Rgb8)
+    } else {
+        encoder.write_image(image, width, height, ExtendedColorType::Rgba8)
+    }
+    .unwrap();
+
+    png
 }
 
 fn write_file(path: &Path, data: &[u8]) {
