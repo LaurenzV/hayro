@@ -6,6 +6,7 @@
 )]
 
 use core::convert::TryInto;
+use core::ops::Range;
 
 mod paeth;
 
@@ -22,11 +23,8 @@ pub(crate) enum BytesPerPixel {
 
 // Note: This impl is not from the png crate.
 impl BytesPerPixel {
-    pub(crate) fn from_row_len(row_len: usize, bpp: usize) -> Option<Self> {
-        if !row_len.is_multiple_of(bpp) {
-            return None;
-        }
-
+    /// The pixel size the unrolled code handles, where it is one.
+    fn of(bpp: usize) -> Option<Self> {
         match bpp {
             1 => Some(Self::One),
             2 => Some(Self::Two),
@@ -62,12 +60,51 @@ impl RowFilter {
     }
 }
 
-pub(crate) fn unfilter(
-    mut filter: RowFilter,
-    tbpp: BytesPerPixel,
+// Note: This function is not from the png crate.
+/// Unfilters `current`, a row of pixels of `bpp` bytes, under the row `previous` (empty for
+/// the first row). The row's length need not be a whole number of pixels: each byte of a last
+/// pixel cut short is unfiltered from the bytes left of and above it, as those of a whole one.
+pub(crate) fn unfilter(filter: RowFilter, bpp: usize, previous: &[u8], current: &mut [u8]) {
+    match BytesPerPixel::of(bpp) {
+        Some(tbpp) => {
+            let whole = current.len() / bpp * bpp;
+            unfilter_whole(filter, tbpp, previous, &mut current[..whole]);
+            unfilter_bytes(filter, bpp, previous, current, whole..current.len());
+        }
+        None => unfilter_bytes(filter, bpp, previous, current, 0..current.len()),
+    }
+}
+
+// Note: This function is not from the png crate.
+/// Unfilters bytes `range` of `current` one at a time, the bytes before them unfiltered; a
+/// byte of `previous` past its end is zero.
+fn unfilter_bytes(
+    filter: RowFilter,
+    bpp: usize,
     previous: &[u8],
     current: &mut [u8],
+    range: Range<usize>,
 ) {
+    if filter == RowFilter::NoFilter {
+        return;
+    }
+
+    for i in range {
+        let left = i.checked_sub(bpp);
+        let a = left.map_or(0, |j| current[j]);
+        let b = previous.get(i).copied().unwrap_or(0);
+        let c = left.and_then(|j| previous.get(j)).copied().unwrap_or(0);
+        current[i] = current[i].wrapping_add(match filter {
+            RowFilter::NoFilter => 0,
+            RowFilter::Sub => a,
+            RowFilter::Up => b,
+            RowFilter::Avg => ((u16::from(a) + u16::from(b)) / 2) as u8,
+            RowFilter::Paeth => paeth::filter_paeth(a, b, c),
+        });
+    }
+}
+
+fn unfilter_whole(mut filter: RowFilter, tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8]) {
     use self::RowFilter::*;
 
     // If the previous row is empty, then treat it as if it were filled with zeros.
@@ -318,5 +355,44 @@ pub(crate) fn unfilter(
             }
         },
         Paeth => paeth::unfilter(tbpp, previous, current),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    /// A row unfiltered whole comes out as unfiltering it a byte at a time does: for every
+    /// filter and pixel size, with a previous row and without, and with a last pixel cut
+    /// short.
+    #[test]
+    fn a_row_unfiltered_whole_matches_it_a_byte_at_a_time() {
+        let bytes = |n: usize, seed: u32| -> Vec<u8> {
+            let mut x = seed.wrapping_mul(2_654_435_761) | 1;
+            (0..n)
+                .map(|_| {
+                    x ^= x << 13;
+                    x ^= x >> 17;
+                    x ^= x << 5;
+                    (x >> 24) as u8
+                })
+                .collect()
+        };
+        for bpp in [1, 2, 3, 4, 5, 6, 7, 8, 12, 64] {
+            for len in [9 * bpp, 9 * bpp - 1, 8 * bpp + 1] {
+                for filter in 0..5 {
+                    let filter = RowFilter::from_u8(filter).unwrap();
+                    for previous in [Vec::new(), bytes(9 * bpp, 7)] {
+                        let encoded = bytes(len, bpp as u32 + 11);
+                        let mut whole = encoded.clone();
+                        unfilter(filter, bpp, &previous, &mut whole);
+                        let mut bytewise = encoded.clone();
+                        unfilter_bytes(filter, bpp, &previous, &mut bytewise, 0..len);
+                        assert_eq!(whole, bytewise, "{filter:?} bpp {bpp} len {len}");
+                    }
+                }
+            }
+        }
     }
 }
