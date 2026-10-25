@@ -233,7 +233,7 @@ pub(crate) fn tests() -> Vec<Test> {
 
             let pdf = Pdf::new(buf).unwrap();
             let rendered = render_pdf(&pdf, snapshot, interpreter_settings(), None);
-            check(Suite::Write, snapshot, rendered)
+            check(Suite::Write, snapshot, rendered, 0)
         })
     });
 

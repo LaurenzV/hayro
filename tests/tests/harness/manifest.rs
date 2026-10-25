@@ -42,6 +42,7 @@ pub(crate) struct Entry {
     pub(crate) password: String,
     pub(crate) ignore: bool,
     pub(crate) svg: bool,
+    pub(crate) max_diff_pixels: u32,
 }
 
 impl Entry {
@@ -92,6 +93,10 @@ impl Entry {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             svg: fields.get("svg").and_then(Value::as_bool).unwrap_or(false),
+            max_diff_pixels: fields
+                .get("max_diff_pixels")
+                .and_then(Value::as_u64)
+                .map_or(0, |pixels| pixels as u32),
         }
     }
 }

@@ -286,7 +286,11 @@
   "issue10519",
   "issue10542",
   "issue1055",
-  "issue10572",
+  {
+    "id": "issue10572",
+    "max_diff_pixels": 600,
+    "comment": "TODO: Differs on x86 because vello_common wraps negative gradient LUT values on AVX2 instead of clamping them to 0. Report this upstream."
+  },
   {
     "id": "issue10614",
     "last_page": 0
