@@ -87,7 +87,7 @@ use decode::halftone;
 use decode::pattern;
 use decode::pattern::PatternDictionary;
 use decode::symbol;
-use decode::symbol::SymbolDictionary;
+use decode::symbol::{MAX_SYMBOLS, SymbolDictionary};
 use decode::text;
 use file::parse_file;
 use huffman_table::{HuffmanTable, StandardHuffmanTables};
@@ -944,6 +944,10 @@ impl Dictionaries {
 
         for &num in referred_segments {
             if let Some(dictionary) = self.get_symbol_dictionary(num, globals) {
+                if symbols.len() + dictionary.exported_symbols.len() > MAX_SYMBOLS as usize {
+                    bail!(OverflowError::SymbolCount);
+                }
+
                 symbols.extend(dictionary.exported_symbols.iter());
             } else if let Some(table) = self.get_huffman_table(num, globals) {
                 tables.push(table.clone());
