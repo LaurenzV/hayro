@@ -409,12 +409,22 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
     Some(())
 }
 
+/// The maximum number of procedures that may be nested in each other; deeper programs
+/// would otherwise overflow the stack when parsing, evaluating or dropping them. Writers
+/// nest an `ifelse` per gradient stop (krilla, and therefore Typst, does), so the bound
+/// follows the most lenient viewer: Acrobat allows 256 levels, and Chrome 128.
+const MAX_PROCEDURE_DEPTH: usize = 256;
+
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     let mut r = Reader::new(data);
-    parse_procedure_inner(&mut r)
+    parse_procedure_inner(&mut r, 0)
 }
 
-fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
+fn parse_procedure_inner(r: &mut Reader<'_>, depth: usize) -> Option<Vec<PostScriptOp>> {
+    if depth >= MAX_PROCEDURE_DEPTH {
+        return None;
+    }
+
     let mut stack = ParseStack::new();
 
     let mut ops = vec![];
@@ -429,7 +439,7 @@ fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
 
             break;
         } else if r.peek_byte()? == b'{' {
-            stack.push(parse_procedure_inner(r)?);
+            stack.push(parse_procedure_inner(r, depth + 1)?);
         } else {
             let op = PostScriptOp::from_reader(r, &mut stack)?;
             ops.push(op);
@@ -552,12 +562,34 @@ impl PostScriptOp {
 
 #[cfg(test)]
 mod tests {
-    use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
+    use crate::function::type4::{MAX_PROCEDURE_DEPTH, PostScriptOp, Type4, parse_procedure};
     use crate::function::{Function, FunctionType, Interval, Repr};
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
     use hayro_syntax::object::Number;
+
+    /// A program of `depth` procedures, each nested in an `if` of the one around it.
+    fn nested_program(depth: usize) -> Vec<u8> {
+        let mut program = "{ true ".repeat(depth - 1);
+        program.push_str("{ 1 }");
+        program.push_str(&" if }".repeat(depth - 1));
+
+        program.into_bytes()
+    }
+
+    #[test]
+    fn nested_procedures_up_to_bound() {
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH)).is_some());
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH + 1)).is_none());
+    }
+
+    #[test]
+    fn deep_procedure_nesting_fails() {
+        // Without a bound, parsing this program recurses 300,000 times and overflows the stack.
+        let program = format!("{}{}", "{".repeat(300_000), "}".repeat(300_000));
+        assert!(parse_procedure(program.as_bytes()).is_none());
+    }
 
     #[test]
     fn lex_1() {

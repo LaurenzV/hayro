@@ -19,6 +19,12 @@ use std::sync::{Arc, OnceLock};
 
 pub(crate) const MAX_COMPONENTS: usize = 32;
 
+/// The maximum number of functions that may be nested in each other through the
+/// `/Functions` of stitching functions. Real documents nest at most a few levels;
+/// deeper chains would otherwise overflow the stack when building, evaluating or
+/// dropping the function.
+const MAX_FUNCTION_DEPTH: u8 = 32;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Interval {
     pub(crate) min: f32,
@@ -73,6 +79,15 @@ pub struct Function(Arc<Repr>);
 impl Function {
     /// Create a new function.
     pub fn new(obj: &Object<'_>) -> Option<Self> {
+        Self::new_nested(obj, 0)
+    }
+
+    /// Create a new function that is nested `depth` levels deep in another one.
+    fn new_nested(obj: &Object<'_>, depth: u8) -> Option<Self> {
+        if depth >= MAX_FUNCTION_DEPTH {
+            return None;
+        }
+
         let (dict, stream) = dict_or_stream(obj)?;
         let function_type = dict.get::<u8>(FUNCTION_TYPE)?;
         let domain = read_intervals(dict, DOMAIN)?;
@@ -100,7 +115,7 @@ impl Function {
                 (FunctionType::Type2(function), num_outputs)
             }
             3 => {
-                let function = Type3::new(dict, domain[0])?;
+                let function = Type3::new(dict, domain[0], depth)?;
                 let num_outputs = function.num_outputs();
 
                 (FunctionType::Type3(function), num_outputs)
@@ -246,5 +261,62 @@ impl Function {
         self.eval(input, &mut output)?;
 
         Some(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Function, MAX_FUNCTION_DEPTH};
+    use hayro_syntax::Pdf;
+    use hayro_syntax::object::{Object, ObjectIdentifier};
+
+    /// Build a document whose objects 10 to `10 + len - 1` are stitching functions that
+    /// each name the next one as their only function, and whose last object is a type 2
+    /// function.
+    fn stitching_chain(len: usize) -> Pdf {
+        let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+            .to_vec();
+
+        for i in 0..len {
+            let num = 10 + i;
+            let body = if i + 1 == len {
+                "<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >>".to_string()
+            } else {
+                format!(
+                    "<< /FunctionType 3 /Domain [0 1] /Functions [{} 0 R] /Bounds [] /Encode [0 1] >>",
+                    num + 1
+                )
+            };
+            data.extend(format!("{num} 0 obj\n{body}\nendobj\n").as_bytes());
+        }
+
+        data.extend(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        Pdf::new(data).unwrap()
+    }
+
+    fn function_of_chain(len: usize) -> Option<Function> {
+        let pdf = stitching_chain(len);
+        let object = pdf
+            .xref()
+            .get::<Object<'_>>(ObjectIdentifier::new(10, 0))
+            .unwrap();
+
+        Function::new(&object)
+    }
+
+    #[test]
+    fn nested_functions_up_to_bound() {
+        let function = function_of_chain(MAX_FUNCTION_DEPTH as usize).unwrap();
+        assert_eq!(function.eval_one(&[0.25]).unwrap().as_slice(), &[0.25]);
+
+        assert!(function_of_chain(MAX_FUNCTION_DEPTH as usize + 1).is_none());
+    }
+
+    #[test]
+    fn deep_function_chain_fails() {
+        // Without a bound, building this chain recurses 20,000 times and overflows the stack.
+        assert!(function_of_chain(20_000).is_none());
     }
 }

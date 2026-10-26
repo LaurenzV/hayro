@@ -156,12 +156,22 @@ pub(crate) enum ColorSpaceType {
     DeviceN(DeviceN),
 }
 
+/// The maximum number of color spaces that may be nested in each other, for example
+/// through the base of an `Indexed` space or the alternate of a `Separation` space.
+/// Real documents nest at most a few levels; deeper chains would otherwise overflow
+/// the stack.
+const MAX_COLOR_SPACE_DEPTH: u8 = 32;
+
 impl ColorSpaceType {
-    fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
-        Self::new_inner(object, cache)
+    fn new(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
+        if depth >= MAX_COLOR_SPACE_DEPTH {
+            return None;
+        }
+
+        Self::new_inner(object, cache, depth)
     }
 
-    fn new_inner(object: Object<'_>, cache: &Cache) -> Option<Self> {
+    fn new_inner(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         if let Object::Name(name) = object {
             return Self::new_from_name(&name);
         } else if let Object::Array(color_array) = object {
@@ -190,7 +200,7 @@ impl ColorSpaceType {
                                 })
                                 .or_else(|| {
                                     dict.get::<Object<'_>>(ALTERNATE)
-                                        .and_then(|o| Self::new(o, cache))
+                                        .and_then(|o| Self::new(o, cache, depth + 1))
                                 })
                                 .or_else(|| match dict.get::<u8>(N) {
                                     Some(1) => Some(Self::DeviceGray(DeviceGray)),
@@ -220,18 +230,22 @@ impl ColorSpaceType {
                     return Some(Self::Lab(Lab::new(&lab_dict)?));
                 }
                 INDEXED | I => {
-                    return Some(Self::Indexed(Indexed::new(&color_array, cache)?));
+                    return Some(Self::Indexed(Indexed::new(&color_array, cache, depth + 1)?));
                 }
                 SEPARATION => {
-                    return Some(Self::Separation(Separation::new(&color_array, cache)?));
+                    return Some(Self::Separation(Separation::new(
+                        &color_array,
+                        cache,
+                        depth + 1,
+                    )?));
                 }
                 DEVICE_N => {
-                    return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
+                    return Some(Self::DeviceN(DeviceN::new(&color_array, cache, depth + 1)?));
                 }
                 PATTERN => {
                     let cs = iter
                         .next::<Object<'_>>()
-                        .and_then(|o| ColorSpace::new(o, cache))
+                        .and_then(|o| ColorSpace::new_nested(o, cache, depth + 1))
                         .unwrap_or(ColorSpace::device_rgb());
                     return Some(Self::Pattern(Pattern::new(cs)));
                 }
@@ -263,7 +277,12 @@ pub struct ColorSpace(Arc<ColorSpaceType>);
 impl ColorSpace {
     /// Create a new color space from the given object.
     pub(crate) fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
-        Some(Self(Arc::new(ColorSpaceType::new(object, cache)?)))
+        Self::new_nested(object, cache, 0)
+    }
+
+    /// Create a new color space that is nested `depth` levels deep in another one.
+    pub(super) fn new_nested(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
+        Some(Self(Arc::new(ColorSpaceType::new(object, cache, depth)?)))
     }
 
     /// Create a new color space from the name.
@@ -633,4 +652,56 @@ fn encode_components(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[u8; 4]> 
             (((*value - min) / (max - min)) * 255.0 + 0.5) as u8
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ColorSpace, MAX_COLOR_SPACE_DEPTH};
+    use crate::cache::Cache;
+    use hayro_syntax::Pdf;
+    use hayro_syntax::object::{Object, ObjectIdentifier};
+
+    /// Build a document whose objects 10 to `10 + len - 1` are `Indexed` color spaces that
+    /// each name the next one as their base, and whose last object is `DeviceGray`.
+    fn indexed_chain(len: usize) -> Pdf {
+        let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+            .to_vec();
+
+        for i in 0..len {
+            let num = 10 + i;
+            let body = if i + 1 == len {
+                "/DeviceGray".to_string()
+            } else {
+                format!("[/Indexed {} 0 R 0 <00>]", num + 1)
+            };
+            data.extend(format!("{num} 0 obj\n{body}\nendobj\n").as_bytes());
+        }
+
+        data.extend(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        Pdf::new(data).unwrap()
+    }
+
+    fn color_space_of_chain(len: usize) -> Option<ColorSpace> {
+        let pdf = indexed_chain(len);
+        let object = pdf
+            .xref()
+            .get::<Object<'_>>(ObjectIdentifier::new(10, 0))
+            .unwrap();
+
+        ColorSpace::new(object, &Cache::new())
+    }
+
+    #[test]
+    fn nested_color_spaces_up_to_bound() {
+        assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize).is_some());
+        assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize + 1).is_none());
+    }
+
+    #[test]
+    fn deep_color_space_chain_fails() {
+        // Without a bound, building this chain recurses 20,000 times and overflows the stack.
+        assert!(color_space_of_chain(20_000).is_none());
+    }
 }
