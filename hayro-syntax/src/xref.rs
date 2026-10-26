@@ -141,7 +141,7 @@ fn fallback_xref_map_inner<'a>(
                                     continue;
                                 }
 
-                                let id = ObjectIdentifier::new(*obj_num as i32, 0);
+                                let id = ObjectIdentifier::new(*obj_num, 0);
                                 // If we already found an entry for that object number that was not
                                 // inside an object stream. Somewhat arbitrary and maybe
                                 // we can do better, but that seems to work for the current
@@ -152,10 +152,7 @@ fn fallback_xref_map_inner<'a>(
                                 {
                                     xref_map.insert(
                                         id,
-                                        EntryType::ObjStream(
-                                            last_obj_num.obj_number as u32,
-                                            idx as u32,
-                                        ),
+                                        EntryType::ObjStream(last_obj_num.obj_number, idx as u32),
                                     );
                                 }
                             }
@@ -203,7 +200,7 @@ fn fallback_xref_map_inner<'a>(
                     }
                     Some(EntryType::ObjStream(obj_num, idx)) => {
                         if let Some(EntryType::Normal(offset)) =
-                            xref_map.get(&ObjectIdentifier::new(*obj_num as i32, 0))
+                            xref_map.get(&ObjectIdentifier::new(*obj_num, 0))
                         {
                             let mut reader = Reader::new(&data.as_ref()[*offset..]);
 
@@ -434,7 +431,7 @@ impl XRef {
                             EntryType::Normal(o) => (*o, 0),
                             EntryType::ObjStream(id, index) => {
                                 if let Some(EntryType::Normal(offset)) =
-                                    locked.xref_map.get(&ObjectIdentifier::new(*id as i32, 0))
+                                    locked.xref_map.get(&ObjectIdentifier::new(*id, 0))
                                 {
                                     (*offset, *index)
                                 } else {
@@ -569,7 +566,7 @@ impl XRef {
             }
             EntryType::ObjStream(obj_stram_gen_num, index) => {
                 // Generation number is implicitly 0.
-                let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
+                let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num, 0);
 
                 if obj_stream_id == id || ctx.parent_chain_contains(&id) {
                     return None;
@@ -588,7 +585,7 @@ impl XRef {
 
                 let object_stream = repr.data.object_stream(obj_stream_id, &ctx)?;
 
-                if object_stream.obj_number(index) == Some(id.obj_number as u32) {
+                if object_stream.obj_number(index) == Some(id.obj_number) {
                     return object_stream.get(index, &ctx);
                 }
 
@@ -839,7 +836,7 @@ fn populate_from_xref_table<'a>(
             // not important?
             if entry.used {
                 insert_map.insert(
-                    ObjectIdentifier::new(obj_number as i32, entry.gen_number),
+                    ObjectIdentifier::new(obj_number, entry.gen_number),
                     EntryType::Normal(entry.offset),
                 );
             }
@@ -941,7 +938,7 @@ fn xref_stream_subsection<'a>(
             xref_reader.read_bytes(1)?[0]
         };
 
-        let obj_number = start + i;
+        let obj_number = start.checked_add(i)?;
 
         match f_type {
             // We don't care about free objects.
@@ -964,7 +961,7 @@ fn xref_stream_subsection<'a>(
                 };
 
                 insert_map.insert(
-                    ObjectIdentifier::new(obj_number as i32, gen_number as i32),
+                    ObjectIdentifier::new(obj_number, gen_number as i32),
                     EntryType::Normal(offset as usize),
                 );
             }
@@ -982,7 +979,7 @@ fn xref_stream_subsection<'a>(
                 };
 
                 insert_map.insert(
-                    ObjectIdentifier::new(obj_number as i32, gen_number),
+                    ObjectIdentifier::new(obj_number, gen_number),
                     EntryType::ObjStream(obj_stream_number, index),
                 );
             }
@@ -1163,5 +1160,65 @@ mod tests {
         let data = b"xref\n0 999999999999999999999\ntrailer\n<<>>";
         let mut reader = Reader::new(data);
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
+    }
+
+    fn pdf_with_object_above_i32_max(with_xref: bool) -> Vec<u8> {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+        for object in [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Big 3000000000 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n",
+            "3000000000 0 obj\n<< /V 42 >>\nendobj\n",
+        ] {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(object.as_bytes());
+        }
+        let xref_pos = pdf.len();
+        if with_xref {
+            pdf.extend_from_slice(
+                format!(
+                    "xref\n\
+                     0 3\n\
+                     0000000000 65535 f \r\n\
+                     {:010} 00000 n \r\n\
+                     {:010} 00000 n \r\n\
+                     3000000000 1\n\
+                     {:010} 00000 n \r\n",
+                    offsets[0], offsets[1], offsets[2]
+                )
+                .as_bytes(),
+            );
+        }
+        pdf.extend_from_slice(
+            format!(
+                "trailer\n<< /Size 3000000001 /Root 1 0 R >>\n\
+                 startxref\n{xref_pos}\n%%EOF"
+            )
+            .as_bytes(),
+        );
+        pdf
+    }
+
+    #[test]
+    fn object_number_above_i32_max() {
+        for with_xref in [true, false] {
+            let pdf = crate::Pdf::new(pdf_with_object_above_i32_max(with_xref)).unwrap();
+            let id = ObjectIdentifier::new(3_000_000_000, 0);
+            let value = pdf
+                .xref()
+                .get::<Dict<'_>>(id)
+                .and_then(|dict| dict.get::<i32>(b"V".as_ref()));
+            assert_eq!(value, Some(42), "with_xref: {with_xref}");
+        }
+    }
+
+    #[test]
+    fn xref_stream_subsection_rejects_overflowing_object_number() {
+        let data = [1, 0, 1, 0];
+        let mut xref_map = FxHashMap::default();
+        let result =
+            xref_stream_subsection(&mut Reader::new(&data), u32::MAX, 2, 1, 1, 0, &mut xref_map);
+        assert!(result.is_none());
+        assert!(xref_map.contains_key(&ObjectIdentifier::new(u32::MAX, 0)));
     }
 }
