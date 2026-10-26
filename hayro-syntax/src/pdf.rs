@@ -69,8 +69,7 @@ impl Pdf {
         })
     }
 
-    /// Read a PDF whose objects come from a caller-supplied source instead
-    /// of file bytes.
+    /// Read a PDF from a caller-supplied object source.
     ///
     /// Returns `Err` if the trailer or the page tree cannot be read.
     pub fn from_source(source: Arc<dyn ObjectSource>) -> Result<Self, LoadPdfError> {
@@ -235,8 +234,7 @@ mod tests {
         assert_eq!(pdf.pages().len(), 1);
         let page = &pdf.pages()[0];
         assert_eq!(page.base_dimensions(), (200.0, 100.0));
-        // The stream's `/Length` refers to the stream itself: the cycle check
-        // refuses it, and the stream is read up to `endstream`.
+        // A cyclic /Length falls back to scanning for endstream.
         assert_eq!(page.page_stream(), Some(&b"0 0 m"[..]));
         assert_eq!(pdf.metadata().title.as_deref(), Some(&b"From a source"[..]));
         assert!(

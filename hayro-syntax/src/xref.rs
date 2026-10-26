@@ -283,11 +283,9 @@ pub trait SourceBounds {}
 #[cfg(not(feature = "std"))]
 impl<T: ?Sized> SourceBounds for T {}
 
-/// A caller-supplied source of objects, used instead of the bytes of a PDF file.
+/// A caller-supplied source of resolved, decrypted objects.
 ///
-/// The source owns the cross-reference data, any repair, and decryption: hayro
-/// neither reads cross-reference sections nor repairs nor decrypts objects that
-/// come from a source.
+/// The source handles cross-reference data and repair.
 pub trait ObjectSource: SourceBounds {
     /// Return the bytes of the object with the given identifier, or `None` if it
     /// is absent or free, which is read as null.
@@ -463,7 +461,6 @@ impl XRef {
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
         let elements = match &self.0 {
             Inner::Dummy => unimplemented!(),
-            // A source does not enumerate its objects.
             Inner::Source(_) => Vec::new(),
             Inner::Some(r) => {
                 let locked = r.map.get();
@@ -515,7 +512,6 @@ impl XRef {
     pub(crate) fn repair(&self) {
         let r = match &self.0 {
             Inner::Some(r) => r,
-            // A source repairs on its own.
             Inner::Source(_) => return,
             Inner::Dummy => unreachable!(),
         };
@@ -674,7 +670,7 @@ fn get_from_source<'a, T>(
 where
     T: ObjectLike<'a>,
 {
-    // The same cycle check as for an indirect object read from file bytes.
+    // Match the cycle check for indirect objects read from file bytes.
     if ctx.parent_chain_contains(&id) {
         return None;
     }
@@ -689,7 +685,6 @@ where
     Reader::new(data).read_with_context::<T>(&ctx)
 }
 
-/// Read the trailer dictionary and the parts of the catalog that the xref keeps.
 fn read_trailer(
     xref: &XRef,
     trailer_dict_data: &[u8],
