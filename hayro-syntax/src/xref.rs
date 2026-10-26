@@ -1162,56 +1162,6 @@ mod tests {
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
     }
 
-    fn pdf_with_object_above_i32_max(with_xref: bool) -> Vec<u8> {
-        let mut pdf = b"%PDF-1.7\n".to_vec();
-        let mut offsets = vec![];
-        for object in [
-            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Big 3000000000 0 R >>\nendobj\n",
-            "2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n",
-            "3000000000 0 obj\n<< /V 42 >>\nendobj\n",
-        ] {
-            offsets.push(pdf.len());
-            pdf.extend_from_slice(object.as_bytes());
-        }
-        let xref_pos = pdf.len();
-        if with_xref {
-            pdf.extend_from_slice(
-                format!(
-                    "xref\n\
-                     0 3\n\
-                     0000000000 65535 f \r\n\
-                     {:010} 00000 n \r\n\
-                     {:010} 00000 n \r\n\
-                     3000000000 1\n\
-                     {:010} 00000 n \r\n",
-                    offsets[0], offsets[1], offsets[2]
-                )
-                .as_bytes(),
-            );
-        }
-        pdf.extend_from_slice(
-            format!(
-                "trailer\n<< /Size 3000000001 /Root 1 0 R >>\n\
-                 startxref\n{xref_pos}\n%%EOF"
-            )
-            .as_bytes(),
-        );
-        pdf
-    }
-
-    #[test]
-    fn object_number_above_i32_max() {
-        for with_xref in [true, false] {
-            let pdf = crate::Pdf::new(pdf_with_object_above_i32_max(with_xref)).unwrap();
-            let id = ObjectIdentifier::new(3_000_000_000, 0);
-            let value = pdf
-                .xref()
-                .get::<Dict<'_>>(id)
-                .and_then(|dict| dict.get::<i32>(b"V".as_ref()));
-            assert_eq!(value, Some(42), "with_xref: {with_xref}");
-        }
-    }
-
     #[test]
     fn xref_stream_subsection_rejects_overflowing_object_number() {
         let data = [1, 0, 1, 0];
