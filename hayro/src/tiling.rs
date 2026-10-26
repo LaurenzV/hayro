@@ -55,19 +55,11 @@ impl Renderer<'_> {
         let to_texture =
             Affine::scale_non_uniform(x.scale, y.scale) * Affine::translate((-x.start, -y.start));
         let mut ctx = self.child_context(x.size, y.size);
-        let copies = x.copies.clone().count() * y.copies.clone().count();
-        let (x_copies, y_copies) = if copies > MAX_COPIES {
-            let (x0, y0) = (*x.copies.start(), *y.copies.start());
-            (x0..=x0, y0..=y0)
-        } else {
-            (x.copies.clone(), y.copies.clone())
-        };
-
         let mut renderer = Renderer::new(&mut ctx, self.global);
         renderer.inside_pattern = true;
 
-        for j in y_copies {
-            for i in x_copies.clone() {
+        for j in y.copies.clone() {
+            for i in x.copies.clone() {
                 let offset = Affine::translate((f64::from(i) * x.step, f64::from(j) * y.step));
                 t.interpret(&mut renderer, to_texture * offset, is_stroke);
             }
@@ -80,9 +72,6 @@ impl Renderer<'_> {
         pixmap
     }
 }
-
-const MAX_TEXTURE_SIZE: f64 = 8192.0;
-const MAX_COPIES: usize = 64;
 
 struct TileAxis {
     start: f64,
@@ -99,9 +88,7 @@ impl TileAxis {
         let width = cell.end - cell.start;
         let visible = (area.end - area.start).max(0.0);
         let repeat = visible >= step;
-        let extent = if repeat { step } else { visible };
 
-        let scale = scale.min(MAX_TEXTURE_SIZE / extent.max(width));
         let scale = (step * scale).round().max(1.0) / step;
 
         if repeat {
