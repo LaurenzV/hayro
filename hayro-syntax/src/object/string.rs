@@ -159,7 +159,7 @@ fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
 
     // Exclude outer brackets.
     let raw = r.range(start + 1..end - 1)?;
-    let decoded = ascii_hex::decode_into(raw)?;
+    let decoded = ascii_hex::decode_into(raw, usize::MAX)?;
 
     Some(decoded)
 }
