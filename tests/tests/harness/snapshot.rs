@@ -77,7 +77,10 @@ pub(crate) fn check(
             if ci {
                 new += 1;
             } else {
-                failures.push((index, "missing reference image".to_string()));
+                failures.push((
+                    index,
+                    format!("missing reference image (rendered hash {hash})"),
+                ));
             }
             continue;
         };
@@ -124,7 +127,7 @@ pub(crate) fn check(
             failures.push((
                 index,
                 format!(
-                    "{} pixels differ by more than {tolerance} (max deviation {})",
+                    "{} pixels differ by more than {tolerance} (max deviation {}, rendered hash {hash}, expected {expected})",
                     count(diff.exceeding as usize),
                     diff.max_delta
                 ),
