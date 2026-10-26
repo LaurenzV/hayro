@@ -202,11 +202,10 @@ impl<'a> RenderCache<'a> {
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
-    /// The aliasing threshold of every fill and stroke.
+    /// The aliasing threshold for fills and strokes.
     ///
-    /// `None`, the default, anti-aliases. `Some(threshold)` paints a pixel
-    /// fully when its coverage exceeds `threshold` (between 0 and 255), and
-    /// not at all otherwise; see
+    /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
+    /// whose coverage exceeds the threshold. See
     /// [`RenderContext::set_aliasing_threshold`](vello_cpu::RenderContext::set_aliasing_threshold).
     pub aliasing_threshold: Option<u8>,
 }

@@ -496,8 +496,6 @@ fn visibility() {
     }
 }
 
-/// A one-page PDF of 40 by 40 points whose content draws `content` with the
-/// tiling pattern `/P0`, which paints a curve in each 10 by 10 cell.
 fn single_page_pdf(content: &str) -> Vec<u8> {
     let pattern = "0 1 0 rg 1 1 m 1 9 9 9 9 1 c f";
     let objects = [
@@ -541,9 +539,7 @@ fn single_page_pdf(content: &str) -> Vec<u8> {
 
 #[test]
 fn aliasing_threshold_applies_to_every_fill() {
-    // A curve, a rotated black inline image, a curve after it, and a tiling
-    // pattern, which renders in a context of its own: none may leave a
-    // partially covered pixel.
+    // Exercise images, subsequent fills, and a tiling pattern's child context.
     let content = "0 0 1 rg 5 20 m 5 35 20 38 35 20 c f \
         q 20 10 -10 20 12 2 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\x00\x00\x00 EI Q \
         1 0 0 rg 2 2 m 30 8 l 10 16 l f \
