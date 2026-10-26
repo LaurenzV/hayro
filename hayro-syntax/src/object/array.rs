@@ -51,9 +51,8 @@ impl<'a> Array<'a> {
 
     /// Returns an iterator over the byte spans of the items of the array.
     ///
-    /// The spans are relative to [`Array::data`], in the order of the items. They are
-    /// found by scanning the array again when this method is called, so an array that
-    /// never calls it pays nothing for them.
+    /// The iterator rescans the array and yields spans relative to [`Array::data`]
+    /// in source order.
     pub fn spans(&self) -> ArraySpans<'a> {
         ArraySpans {
             reader: Reader::new(self.data),
