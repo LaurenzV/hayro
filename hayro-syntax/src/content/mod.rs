@@ -256,17 +256,12 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
     Some(())
 }
 
-/// Decides which `EI` ends the data of an inline image.
-///
-/// The candidates are asked in order, and one search serves all of them, so
-/// that what was found behind one candidate is not searched again for the
-/// next one.
+// Reuse lookahead between successive `EI` candidates.
 struct EndSearch<'a> {
     data: &'a [u8],
-    /// The first `BI` that starts another inline image, at or after the
-    /// position it was searched from, once searched.
+    // None means unsearched; Some(None) means no later inline image.
     next_bi: Option<Option<usize>>,
-    /// The last `EI` before a `BI` from `next_bi` (or the end of the data).
+    // Cache the last `EI` with the `BI` that bounds the search.
     last_ei: Option<(Option<usize>, Option<usize>)>,
     binary: BinaryTracker,
 }
@@ -291,32 +286,22 @@ impl<'a> EndSearch<'a> {
         let tail = ei + 2;
         let bi = self.next_bi(tail);
 
-        // If another inline image follows before any further "EI", the
-        // candidate is the end of data.
         let Some(last_ei) = self.last_ei_before(tail, bi) else {
             return true;
         };
 
-        // If there is any binary data in-between, we for sure have not
-        // reached the end. The data up to the next "EI" is checked first, as
-        // it is all that a candidate that fails the next check needs.
+        // Scan only to the next `EI` until the content check succeeds.
         let next_ei = find_needle(&self.data[tail..], b"EI").map_or(last_ei, |ei| tail + ei);
         if self.binary.found_before(self.data, tail, next_ei) {
             return false;
         }
 
-        // The rest of the data decides as well; while the scan has already
-        // covered it, that costs nothing, so it comes before the next check.
+        // A cached rejection avoids repeating the content check.
         if self.binary.has_scanned(last_ei) && self.binary.found_before(self.data, tail, last_ei) {
             return false;
         }
 
-        // Otherwise, the only possibility that we reached an
-        // "EI", even though the previous one was valid, is
-        // that it's part of a string in the content
-        // stream that follows the inline image. Therefore,
-        // it should be valid to interpret the tail as a content
-        // stream. If not, we are likely still within the image data.
+        // A later `EI` can belong to a string in the content after this image.
         if !starts_with_content(&self.data[tail..]) {
             return false;
         }
@@ -324,7 +309,6 @@ impl<'a> EndSearch<'a> {
         !self.binary.found_before(self.data, tail, last_ei)
     }
 
-    /// The first `BI` at or after `from` that starts another inline image.
     fn next_bi(&mut self, from: usize) -> Option<usize> {
         if let Some(bi) = self.next_bi
             && bi.is_none_or(|bi| bi >= from)
@@ -350,10 +334,8 @@ impl<'a> EndSearch<'a> {
         bi
     }
 
-    /// The last `EI` at or after `from` and before `bi`.
     fn last_ei_before(&mut self, from: usize, bi: Option<usize>) -> Option<usize> {
         let ei = match self.last_ei {
-            // Searched from an earlier position for the same `bi`.
             Some((searched_bi, ei)) if searched_bi == bi => ei,
             _ => {
                 let end = bi.unwrap_or(self.data.len());
@@ -399,22 +381,15 @@ fn starts_with_content(data: &[u8]) -> bool {
 
 // Content streams only hold non-ASCII bytes within strings, so one outside
 // of them means that we are still within binary image data.
-//
-// A scan from an earlier candidate sees the same as one from a later
-// candidate from where that one starts on, unless the later candidate lies
-// within a string, so the scan is shared in that case.
+// Reuse the scan unless a later candidate starts within a string it has seen.
 #[derive(Default)]
 struct BinaryTracker {
-    /// Where the scan started.
     start: usize,
-    /// The scan has looked at every byte before `pos`.
     pos: usize,
     string_depth: usize,
     escaped: bool,
-    /// Where the string that the scan is in opened.
     string_start: usize,
-    /// The strings that the scan has passed, as the positions of their
-    /// opening and closing parentheses.
+    // Opening and closing parentheses of completed strings.
     strings: VecDeque<(usize, usize)>,
     found: bool,
 }
@@ -435,7 +410,6 @@ impl BinaryTracker {
         self.found
     }
 
-    /// Whether the scan has decided [`Self::found_before`] for `end`.
     fn has_scanned(&self, end: usize) -> bool {
         self.found || end <= self.pos
     }
@@ -445,8 +419,7 @@ impl BinaryTracker {
             self.scan(data, start);
         }
 
-        // A scan that found binary data before `start` says nothing about
-        // what follows it.
+        // A binary byte before `start` invalidates the cached scan.
         let lost = self.found && self.pos < start;
 
         if lost || self.in_string_at(start) {
@@ -460,7 +433,6 @@ impl BinaryTracker {
         }
     }
 
-    /// Whether `start` lies within a string that the scan has seen.
     fn in_string_at(&mut self, start: usize) -> bool {
         if self.string_depth > 0 && self.string_start < start && start <= self.pos {
             return true;
@@ -899,8 +871,6 @@ mod tests {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    /// The data of the inline image that `content` starts with, and the
-    /// operators behind it.
     fn read(content: &[u8]) -> (Vec<u8>, Vec<String>) {
         let mut typed = TypedIter::new(content);
         let data = match typed.next() {
