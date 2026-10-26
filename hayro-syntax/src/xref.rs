@@ -271,6 +271,43 @@ fn fallback_xref_map_inner<'a>(
 
 const DUMMY_XREF: XRef = XRef(Inner::Dummy);
 
+/// The thread-safety bounds of an [`ObjectSource`].
+#[cfg(feature = "std")]
+pub trait SourceBounds: Send + Sync {}
+#[cfg(feature = "std")]
+impl<T: Send + Sync + ?Sized> SourceBounds for T {}
+
+/// The thread-safety bounds of an [`ObjectSource`].
+#[cfg(not(feature = "std"))]
+pub trait SourceBounds {}
+#[cfg(not(feature = "std"))]
+impl<T: ?Sized> SourceBounds for T {}
+
+/// A caller-supplied source of objects, used instead of the bytes of a PDF file.
+///
+/// The source owns the cross-reference data, any repair, and decryption: hayro
+/// neither reads cross-reference sections nor repairs nor decrypts objects that
+/// come from a source.
+pub trait ObjectSource: SourceBounds {
+    /// Return the bytes of the object with the given identifier, or `None` if it
+    /// is absent or free, which is read as null.
+    ///
+    /// The bytes hold the object's value only, without `n g obj` and `endobj`.
+    /// A stream is its dictionary followed by `stream`, its encoded data, and
+    /// `endstream`. Members of object streams are returned like any other
+    /// object, and strings and stream data are already decrypted.
+    fn object(&self, id: ObjectIdentifier) -> Option<&[u8]>;
+
+    /// Return the bytes of the trailer dictionary. It must have `/Root`; any
+    /// `/Encrypt` entry is ignored.
+    fn trailer(&self) -> &[u8];
+
+    /// Return the version in the file header, if there is one.
+    fn header_version(&self) -> Option<PdfVersion> {
+        None
+    }
+}
+
 /// An xref table.
 #[derive(Debug, Clone)]
 pub struct XRef(Inner);
@@ -318,7 +355,7 @@ impl XRef {
         };
 
         match &mut xref.0 {
-            Inner::Dummy => unreachable!(),
+            Inner::Dummy | Inner::Source(_) => unreachable!(),
             Inner::Some(r) => {
                 let mutable = Arc::make_mut(r);
                 mutable.decryptor = Arc::new(decryptor.clone());
@@ -327,33 +364,7 @@ impl XRef {
 
         let (trailer_data, has_ocgs, metadata) = match input {
             XRefInput::TrailerDictData(trailer_dict_data) => {
-                let mut r = Reader::new(trailer_dict_data);
-
-                let trailer_dict = r
-                    .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
-                    .ok_or(XRefError::Unknown)?;
-
-                let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
-                let root = trailer_dict
-                    .get::<Dict<'_>>(ROOT)
-                    .ok_or(XRefError::Unknown)?;
-                let metadata = trailer_dict
-                    .get::<Dict<'_>>(INFO)
-                    .map(|d| parse_metadata(&d))
-                    .unwrap_or_default();
-                let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
-                let has_ocgs = root.get::<Dict<'_>>(OCPROPERTIES).is_some();
-                let version = root
-                    .get::<Name<'_>>(VERSION)
-                    .and_then(|v| PdfVersion::from_bytes(v.deref()));
-
-                let td = TrailerData {
-                    pages_ref: pages_ref.into(),
-                    root_ref: root_ref.into(),
-                    version,
-                };
-
-                (td, has_ocgs, metadata)
+                read_trailer(&xref, trailer_dict_data)?
             }
             XRefInput::RootRef(root_ref) => {
                 let root = xref.get::<Dict<'_>>(root_ref).ok_or(XRefError::Unknown)?;
@@ -370,7 +381,7 @@ impl XRef {
         };
 
         match &mut xref.0 {
-            Inner::Dummy => unreachable!(),
+            Inner::Dummy | Inner::Source(_) => unreachable!(),
             Inner::Some(r) => {
                 let mutable = Arc::make_mut(r);
                 mutable.trailer_data = trailer_data;
@@ -383,6 +394,30 @@ impl XRef {
         Ok(xref)
     }
 
+    /// Create an xref that resolves every object through the given source.
+    pub fn from_source(source: Arc<dyn ObjectSource>) -> Option<Self> {
+        let mut xref = Self(Inner::Source(Arc::new(SourceRepr {
+            source: source.clone(),
+            metadata: Arc::new(Metadata::default()),
+            has_ocgs: false,
+            trailer_data: TrailerData::dummy(),
+        })));
+
+        let (trailer_data, has_ocgs, metadata) = read_trailer(&xref, source.trailer()).ok()?;
+
+        match &mut xref.0 {
+            Inner::Source(r) => {
+                let mutable = Arc::make_mut(r);
+                mutable.trailer_data = trailer_data;
+                mutable.has_ocgs = has_ocgs;
+                mutable.metadata = Arc::new(metadata);
+            }
+            _ => unreachable!(),
+        }
+
+        Some(xref)
+    }
+
     pub(crate) fn dummy() -> &'static Self {
         &DUMMY_XREF
     }
@@ -391,6 +426,7 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => 0,
             Inner::Some(r) => r.map.get().xref_map.len(),
+            Inner::Source(_) => 0,
         }
     }
 
@@ -398,6 +434,7 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => &r.trailer_data,
+            Inner::Source(r) => &r.trailer_data,
         }
     }
 
@@ -405,6 +442,7 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => &r.metadata,
+            Inner::Source(r) => &r.metadata,
         }
     }
 
@@ -418,12 +456,15 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => false,
             Inner::Some(r) => r.has_ocgs,
+            Inner::Source(r) => r.has_ocgs,
         }
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
-        match &self.0 {
+        let elements = match &self.0 {
             Inner::Dummy => unimplemented!(),
+            // A source does not enumerate its objects.
+            Inner::Source(_) => Vec::new(),
             Inner::Some(r) => {
                 let locked = r.map.get();
                 let mut elements = locked
@@ -451,27 +492,32 @@ impl XRef {
                 // PDF.
                 elements.sort_by_key(|e1| e1.1);
 
-                let mut iter = elements.into_iter();
-
-                iter::from_fn(move || {
-                    for next in iter.by_ref() {
-                        if let Some(obj) = self.get_with(next.0, &ReaderContext::new(self, false)) {
-                            return Some(obj);
-                        } else {
-                            // Skip invalid objects.
-                            continue;
-                        }
-                    }
-
-                    None
-                })
+                elements
             }
-        }
+        };
+
+        let mut iter = elements.into_iter();
+
+        iter::from_fn(move || {
+            for next in iter.by_ref() {
+                if let Some(obj) = self.get_with(next.0, &ReaderContext::new(self, false)) {
+                    return Some(obj);
+                } else {
+                    // Skip invalid objects.
+                    continue;
+                }
+            }
+
+            None
+        })
     }
 
     pub(crate) fn repair(&self) {
-        let Inner::Some(r) = &self.0 else {
-            unreachable!();
+        let r = match &self.0 {
+            Inner::Some(r) => r,
+            // A source repairs on its own.
+            Inner::Source(_) => return,
+            Inner::Dummy => unreachable!(),
         };
 
         let mut locked = r.map.put();
@@ -487,7 +533,7 @@ impl XRef {
     #[inline]
     pub(crate) fn needs_decryption(&self, ctx: &ReaderContext<'_>) -> bool {
         match &self.0 {
-            Inner::Dummy => false,
+            Inner::Dummy | Inner::Source(_) => false,
             Inner::Some(r) => {
                 if matches!(r.decryptor.as_ref(), Decryptor::None) {
                     false
@@ -506,7 +552,7 @@ impl XRef {
         target: DecryptionTarget,
     ) -> Option<Vec<u8>> {
         match &self.0 {
-            Inner::Dummy => Some(data.to_vec()),
+            Inner::Dummy | Inner::Source(_) => Some(data.to_vec()),
             Inner::Some(r) => r.decryptor.decrypt(id, data, target),
         }
     }
@@ -531,8 +577,10 @@ impl XRef {
     where
         T: ObjectLike<'a>,
     {
-        let Inner::Some(repr) = &self.0 else {
-            return None;
+        let repr = match &self.0 {
+            Inner::Some(repr) => repr,
+            Inner::Source(repr) => return get_from_source(repr, id, ctx),
+            Inner::Dummy => return None,
         };
 
         // The flag must describe the map this entry came from.
@@ -618,6 +666,63 @@ impl XRef {
     }
 }
 
+fn get_from_source<'a, T>(
+    repr: &'a SourceRepr,
+    id: ObjectIdentifier,
+    ctx: &ReaderContext<'a>,
+) -> Option<T>
+where
+    T: ObjectLike<'a>,
+{
+    // The same cycle check as for an indirect object read from file bytes.
+    if ctx.parent_chain_contains(&id) {
+        return None;
+    }
+
+    let data = repr.source.object(id)?;
+    let mut ctx = ctx.clone();
+    ctx.set_obj_number(id);
+    ctx.set_in_content_stream(false);
+    ctx.set_in_object_stream(false);
+    ctx.parent_chain_push(id);
+
+    Reader::new(data).read_with_context::<T>(&ctx)
+}
+
+/// Read the trailer dictionary and the parts of the catalog that the xref keeps.
+fn read_trailer(
+    xref: &XRef,
+    trailer_dict_data: &[u8],
+) -> Result<(TrailerData, bool, Metadata), XRefError> {
+    let mut r = Reader::new(trailer_dict_data);
+
+    let trailer_dict = r
+        .read_with_context::<Dict<'_>>(&ReaderContext::new(xref, false))
+        .ok_or(XRefError::Unknown)?;
+
+    let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
+    let root = trailer_dict
+        .get::<Dict<'_>>(ROOT)
+        .ok_or(XRefError::Unknown)?;
+    let metadata = trailer_dict
+        .get::<Dict<'_>>(INFO)
+        .map(|d| parse_metadata(&d))
+        .unwrap_or_default();
+    let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
+    let has_ocgs = root.get::<Dict<'_>>(OCPROPERTIES).is_some();
+    let version = root
+        .get::<Name<'_>>(VERSION)
+        .and_then(|v| PdfVersion::from_bytes(v.deref()));
+
+    let td = TrailerData {
+        pages_ref: pages_ref.into(),
+        root_ref: root_ref.into(),
+        version,
+    };
+
+    Ok((td, has_ocgs, metadata))
+}
+
 /// An input that is passed to the xref constructor so that we can fully resolve
 /// the PDF.
 #[derive(Debug, Copy, Clone)]
@@ -693,12 +798,30 @@ struct SomeRepr {
     trailer_data: TrailerData,
 }
 
+#[derive(Clone)]
+struct SourceRepr {
+    source: Arc<dyn ObjectSource>,
+    metadata: Arc<Metadata>,
+    has_ocgs: bool,
+    trailer_data: TrailerData,
+}
+
+impl core::fmt::Debug for SourceRepr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SourceRepr")
+            .field("trailer_data", &self.trailer_data)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Inner {
     /// A dummy xref table that doesn't have any entries.
     Dummy,
     /// A proper xref table.
     Some(Arc<SomeRepr>),
+    /// Objects that a caller-supplied source resolves.
+    Source(Arc<SourceRepr>),
 }
 
 #[derive(Debug)]
