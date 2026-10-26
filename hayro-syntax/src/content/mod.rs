@@ -111,6 +111,7 @@ pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
     operator: Option<Operator<'a>>,
+    stopped_before_end: bool,
 }
 
 impl<'a> UntypedIter<'a> {
@@ -120,6 +121,7 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(data),
             stack: Stack::new(),
             operator: None,
+            stopped_before_end: false,
         }
     }
 
@@ -129,7 +131,14 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(&[]),
             stack: Stack::new(),
             operator: None,
+            stopped_before_end: false,
         }
+    }
+
+    /// Return whether the iterator stopped before the end of the data because the
+    /// rest of it could not be read. The instructions after that point are left out.
+    pub fn stopped_before_end(&self) -> bool {
+        self.stopped_before_end
     }
 
     /// Return the next instruction.
@@ -137,7 +146,17 @@ impl<'a> UntypedIter<'a> {
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
         self.stack.clear();
 
-        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        let Some(operator) = read_instruction(&mut self.reader, &mut self.stack) else {
+            if !self.reader.at_end() {
+                // The rest of the data could not be read, for example because an operand
+                // is nested more deeply than `MAX_OBJECT_NESTING_DEPTH` or because there
+                // are too many operands.
+                self.stopped_before_end = true;
+                self.reader.jump_to_end();
+            }
+
+            return None;
+        };
         self.operator = Some(operator);
         Some(Instruction {
             operands: &self.stack,
@@ -181,10 +200,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
             }
             _ => {
                 *r = cur;
-                let Some(operator) = r.read_without_context::<Operator<'a>>() else {
-                    r.jump_to_end();
-                    return None;
-                };
+                let operator = r.read_without_context::<Operator<'a>>()?;
 
                 // Inline images need special casing...
                 if operator.as_ref() == b"BI" {
@@ -411,6 +427,12 @@ impl<'a> TypedIter<'a> {
 
     pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> Self {
         Self { untyped }
+    }
+
+    /// Return whether the iterator stopped before the end of the data because the
+    /// rest of it could not be read. See [`UntypedIter::stopped_before_end`].
+    pub fn stopped_before_end(&self) -> bool {
+        self.untyped.stopped_before_end()
     }
 
     /// Return the next typed instruction.
@@ -777,4 +799,59 @@ mod macros {
     pub(crate) use op3;
     pub(crate) use op4;
     pub(crate) use op6;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UntypedIter;
+
+    /// A `TJ` instruction whose operand is `depth` arrays nested in each other, between
+    /// a `q` and a `Q`.
+    fn nested_operand(depth: usize) -> Vec<u8> {
+        format!("q {}(X){} TJ Q", "[".repeat(depth), "]".repeat(depth)).into_bytes()
+    }
+
+    fn read_operators(data: &[u8]) -> (Vec<Vec<u8>>, bool) {
+        let mut iter = UntypedIter::new(data);
+        let mut operators = vec![];
+
+        while let Some(instruction) = iter.next() {
+            operators.push(instruction.operator.as_ref().to_vec());
+        }
+
+        (operators, iter.stopped_before_end())
+    }
+
+    #[test]
+    fn reads_to_end() {
+        let (operators, stopped) = read_operators(&nested_operand(1));
+        assert_eq!(operators, [&b"q"[..], b"TJ", b"Q"]);
+        assert!(!stopped);
+    }
+
+    #[test]
+    fn nested_operand_up_to_bound() {
+        // `MAX_OBJECT_NESTING_DEPTH` is 512.
+        let (operators, stopped) = read_operators(&nested_operand(512));
+        assert_eq!(operators, [&b"q"[..], b"TJ", b"Q"]);
+        assert!(!stopped);
+
+        let (operators, stopped) = read_operators(&nested_operand(513));
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
+
+    #[test]
+    fn deep_operand_stops_before_end() {
+        let (operators, stopped) = read_operators(&nested_operand(300_000));
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
+
+    #[test]
+    fn unterminated_operand_stops_before_end() {
+        let (operators, stopped) = read_operators(b"q (unterminated Q");
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
 }
