@@ -120,14 +120,11 @@ impl<'a> Dict<'a> {
         Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
-    /// An iterator over the entries of the dictionary in source order, with the byte
-    /// spans of each key and value.
+    /// An iterator over dictionary entries with the byte spans of each key and value.
     ///
-    /// The spans are relative to [`Dict::data`]. Unlike [`Dict::entries`], every entry
-    /// is reported as it appears in the source, including a key that occurs more than
-    /// once (of which [`Dict::get`] returns the last). The spans are found by scanning
-    /// the dictionary again when this method is called, so a dictionary that never
-    /// calls it pays nothing for them.
+    /// The iterator rescans the dictionary in source order, including duplicate keys,
+    /// and yields spans relative to [`Dict::data`]. [`Dict::get`] returns the last
+    /// value for a duplicate key.
     pub fn entry_spans(&self) -> DictEntrySpans<'a> {
         DictEntrySpans::new(self.data(), self.ctx().in_content_stream())
     }
@@ -363,7 +360,6 @@ object!(Dict<'a>, Dict);
 pub struct DictEntrySpans<'a> {
     reader: Reader<'a>,
     end_tag: &'static [u8],
-    // Proper dictionaries skip garbage between entries, as `parse_dict_with` does.
     lenient: bool,
     in_content_stream: bool,
     done: bool,
@@ -372,7 +368,6 @@ pub struct DictEntrySpans<'a> {
 impl<'a> DictEntrySpans<'a> {
     fn new(data: &'a [u8], in_content_stream: bool) -> Self {
         let mut reader = Reader::new(data);
-        // Inline image dictionaries don't start with '<<'.
         let lenient = reader.forward_tag(b"<<").is_some();
 
         Self {
@@ -385,7 +380,7 @@ impl<'a> DictEntrySpans<'a> {
     }
 
     fn skip_value(&mut self) -> Option<()> {
-        // The depth matches that of the entries in `parse_dict_with`.
+        // Match `parse_dict_with`: inline image dictionaries add no nesting level.
         let depth = usize::from(self.lenient);
         if self.in_content_stream {
             self.reader.skip_with_depth::<Object<'_>>(true, depth)?;
@@ -1355,8 +1350,6 @@ mod tests {
     #[test]
     fn entry_spans_match_dict_nesting_bound() {
         for inline in [false, true] {
-            // A proper dictionary contributes one level; an inline image dictionary
-            // has no enclosing `<< >>` and contributes none.
             let depth = crate::object::MAX_OBJECT_NESTING_DEPTH - usize::from(!inline);
             let value = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
             let body = format!("/W 1 /Custom {value} /H 1");
