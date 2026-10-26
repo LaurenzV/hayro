@@ -107,8 +107,6 @@ impl<T: Default, const C: usize> ArgumentsStack<T, C> {
     #[inline]
     fn push(&mut self, n: T) -> Option<()> {
         if self.len == C {
-            error!("overflowed post script argument stack");
-
             None
         } else {
             self.stack[self.len] = n;
@@ -139,8 +137,6 @@ impl<T: Default, const C: usize> ArgumentsStack<T, C> {
     #[inline]
     fn pop(&mut self) -> Option<T> {
         if self.is_empty() {
-            error!("underflowed post script argument stack");
-
             None
         } else {
             self.len -= 1;
@@ -546,8 +542,6 @@ impl PostScriptOp {
                 b"pop" => Self::Pop,
                 b"roll" => Self::Roll,
                 _ => {
-                    error!("encountered unknown postscript operator {op:?}");
-
                     return None;
                 }
             }

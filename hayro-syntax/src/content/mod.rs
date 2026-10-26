@@ -182,8 +182,6 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
             _ => {
                 *r = cur;
                 let Some(operator) = r.read_without_context::<Operator<'a>>() else {
-                    warn!("failed to read operator in content stream");
-
                     r.jump_to_end();
                     return None;
                 };
@@ -617,8 +615,6 @@ impl<'b, 'a> Iterator for OperandIterator<'b, 'a> {
 }
 
 pub(crate) trait OperatorTrait<'b, 'a>: Sized {
-    const OPERATOR: &'static str;
-
     fn from_stack(stack: &'b Stack<'a>) -> Option<Self>;
 }
 
@@ -669,15 +665,9 @@ mod macros {
     macro_rules! op_impl {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr, $n:expr, |$stack:ident : $stack_ty:ty| $body:block) => {
             impl<'b, 'a> OperatorTrait<'b, 'a> for $t$(<$($l),+>)? {
-                const OPERATOR: &'static str = $e;
-
                 #[inline(always)]
                 fn from_stack($stack: $stack_ty) -> Option<Self> {
-                    $body.or_else(|| {
-                        warn!("failed to convert operands for operator {}", Self::OPERATOR);
-
-                        None
-                    })
+                    $body
                 }
             }
 

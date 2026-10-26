@@ -130,7 +130,6 @@ fn resolve_segments(
     let precincts = &mut storage.precincts[sub_band.precincts.clone()];
     let Some(precinct) = precincts.get_mut(progression_data.precinct as usize) else {
         // An invalid file could trigger this code path.
-        warn!("progression data yielded invalid precinct index");
 
         return None;
     };
@@ -166,8 +165,6 @@ fn resolve_segments(
             )? <= progression_data.layer_num as u32
         };
 
-        trace!("code-block inclusion: {}", is_included);
-
         if !is_included {
             continue;
         }
@@ -196,10 +193,6 @@ fn resolve_segments(
                 u32::MAX,
                 &mut storage.tag_tree_nodes,
             )? as u8;
-            trace!(
-                "zero bit-plane information: {}",
-                code_block.missing_bit_planes
-            );
         }
 
         code_block.has_been_included |= is_included;
@@ -232,8 +225,6 @@ fn resolve_segments(
         } else {
             return None;
         } as u8;
-
-        trace!("number of coding passes: {}", added_coding_passes);
 
         let mut k = 0;
 
@@ -296,8 +287,6 @@ fn resolve_segments(
                 // Will be set later.
                 data: &[],
             });
-
-            trace!("length({segment}) {}", length);
 
             Some(())
         };

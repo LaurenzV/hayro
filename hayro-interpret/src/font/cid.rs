@@ -78,12 +78,6 @@ impl Type0Font {
                         let mut query = FallbackFontQuery::new(dict);
                         query.character_collection = character_collection.clone();
 
-                        warn!(
-                            "unable to load CID font {} ({:?}), attempting fallback",
-                            query.post_script_name.as_deref().unwrap_or("(no name)"),
-                            dict.obj_id()
-                        );
-
                         (FontQuery::Fallback(query), false)
                     };
 

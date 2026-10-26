@@ -1079,8 +1079,6 @@ fn read_function(dict: &Dict<'_>, color_space: &ColorSpace) -> Option<ShadingFun
         let arr = arr?;
 
         if arr.len() != color_space.num_components() as usize {
-            warn!("function array of shading has wrong size");
-
             return None;
         }
 

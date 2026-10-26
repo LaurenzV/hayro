@@ -123,11 +123,10 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn bbox(&self) -> Rect {
-        self.bbox.last().copied().unwrap_or_else(|| {
-            warn!("failed to get a bbox");
-
-            Rect::new(0.0, 0.0, 1.0, 1.0)
-        })
+        self.bbox
+            .last()
+            .copied()
+            .unwrap_or_else(|| Rect::new(0.0, 0.0, 1.0, 1.0))
     }
 
     fn push_bbox(&mut self, bbox: Rect) {
@@ -372,8 +371,6 @@ impl<'a> Context<'a> {
 
     pub(crate) fn begin_nested_interpretation(&mut self) -> bool {
         if self.nesting_depth >= MAX_NESTED_INTERPRETATION_DEPTH {
-            warn!("interpreter nesting depth exceeded");
-
             return false;
         }
 

@@ -569,7 +569,6 @@ dependencies = [
  "hayro-interpret",
  "image",
  "kurbo",
- "log",
  "pic-scale",
  "rustc-hash",
  "vello_cpu",
@@ -609,10 +608,8 @@ dependencies = [
  "console_error_panic_hook",
  "hayro",
  "js-sys",
- "log",
  "vello_cpu",
  "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
@@ -635,7 +632,6 @@ dependencies = [
  "hayro-syntax",
  "image",
  "kurbo",
- "log",
  "moxcms",
  "phf",
  "rustc-hash",
@@ -660,7 +656,6 @@ version = "0.4.1"
 dependencies = [
  "fearless_simd 1.0.0",
  "image",
- "log",
  "moxcms",
  "png",
 ]
@@ -677,7 +672,6 @@ dependencies = [
  "hayro-interpret",
  "image",
  "kurbo",
- "log",
  "rustc-hash",
  "siphasher",
  "xmlwriter",
@@ -693,7 +687,6 @@ dependencies = [
  "hayro-ccitt",
  "hayro-jbig2",
  "hayro-jpeg2000",
- "log",
  "md5",
  "memchr",
  "rustc-hash",
@@ -731,7 +724,6 @@ version = "0.8.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
- "log",
  "pdf-writer",
  "rustc-hash",
 ]

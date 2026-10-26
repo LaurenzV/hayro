@@ -15,7 +15,7 @@ use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
-    BBOX, EXT_G_STATE, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
+    BBOX, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
 };
 use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::page::Resources;
@@ -105,10 +105,6 @@ impl ShadingPattern {
             .get::<[f64; 6]>(MATRIX)
             .map(Affine::new)
             .unwrap_or_default();
-
-        if dict.contains_key(EXT_G_STATE) {
-            warn!("shading patterns with ext_g_state are not supported yet");
-        }
 
         Some(Self {
             shading: Arc::new(shading),

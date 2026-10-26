@@ -82,8 +82,6 @@ use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 
 pub mod error;
-#[macro_use]
-pub(crate) mod log;
 pub(crate) mod math;
 
 use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};

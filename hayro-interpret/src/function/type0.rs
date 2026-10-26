@@ -25,8 +25,6 @@ impl Type0 {
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
         if !matches!(bits_per_sample, 1 | 2 | 4 | 8 | 16 | 24 | 32) {
-            error!("invalid bits per sample: {bits_per_sample}");
-
             return None;
         }
 
@@ -34,8 +32,6 @@ impl Type0 {
         let range = clamper.range.clone()?;
 
         if range.is_empty() {
-            warn!("encountered Type0 function with invalid range length 0.");
-
             return None;
         }
 
@@ -71,7 +67,6 @@ impl Type0 {
         let num_expected_entries = stride;
 
         if data.len() != num_expected_entries {
-            warn!("Type0 function didn't have the expected number of sample entries.");
             data.truncate(num_expected_entries);
         }
 
@@ -90,8 +85,6 @@ impl Type0 {
     /// Evaluate a type 0 function with the given input.
     pub(crate) fn eval(&self, mut input: Values) -> Option<Values> {
         if input.len() != self.sizes.len() {
-            warn!("wrong number of arguments for sampled function");
-
             return None;
         }
 

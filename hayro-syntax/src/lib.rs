@@ -79,9 +79,6 @@ The supported features include:
 
 extern crate alloc;
 
-#[macro_use]
-mod log;
-
 pub(crate) mod math;
 pub(crate) mod sync;
 

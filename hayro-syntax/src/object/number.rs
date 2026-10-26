@@ -1,6 +1,6 @@
 //! Numbers.
 
-use crate::math::{powi_f64, trunc_f64};
+use crate::math::powi_f64;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -43,15 +43,7 @@ impl Number {
     /// Returns the number as an i64.
     pub fn as_i64(&self) -> i64 {
         match self.0 {
-            InternalNumber::Real(r) => {
-                let res = r as i64;
-
-                if !(trunc_f64(r) == r) {
-                    debug!("float {r} was truncated to {res}");
-                }
-
-                res
-            }
+            InternalNumber::Real(r) => r as i64,
             InternalNumber::Integer(i) => i,
         }
     }

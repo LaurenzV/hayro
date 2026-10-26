@@ -32,14 +32,6 @@ impl Type1Font {
             let fallback_query = FallbackFontQuery::new(dict);
             let standard_font = fallback_query.pick_standard_font();
 
-            warn!(
-                "unable to load font {}, falling back to {}",
-                fallback_query
-                    .post_script_name
-                    .unwrap_or("(no name)".to_string()),
-                standard_font.as_str()
-            );
-
             Some(Self(
                 cache_key,
                 Kind::Standard(StandardKind::new_with_standard(

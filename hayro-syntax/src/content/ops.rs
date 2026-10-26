@@ -30,8 +30,6 @@ fn parse_named_color<'b, 'a>(
             Object::Number(n) => nums.push(*n),
             Object::Name(n) => name = Some(n),
             _ => {
-                warn!("encountered unknown object {o:?} when parsing scn/SCN");
-
                 return None;
             }
         }
