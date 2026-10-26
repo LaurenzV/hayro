@@ -415,6 +415,7 @@ impl BinaryTracker {
 #[derive(Clone)]
 pub struct TypedIter<'a> {
     untyped: UntypedIter<'a>,
+    stopped_on_invalid_path: bool,
 }
 
 impl<'a> TypedIter<'a> {
@@ -422,22 +423,32 @@ impl<'a> TypedIter<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         Self {
             untyped: UntypedIter::new(data),
+            stopped_on_invalid_path: false,
         }
     }
 
     pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> Self {
-        Self { untyped }
+        Self {
+            untyped,
+            stopped_on_invalid_path: false,
+        }
     }
 
     /// Return whether the iterator stopped before the end of the data because the
-    /// rest of it could not be read. See [`UntypedIter::stopped_before_end`].
+    /// rest of it could not be read, including an invalid path instruction that
+    /// prevents interpreting the remaining data. See [`UntypedIter::stopped_before_end`].
     pub fn stopped_before_end(&self) -> bool {
         self.untyped.stopped_before_end()
+            || (self.stopped_on_invalid_path && !self.untyped.reader.at_end())
     }
 
     /// Return the next typed instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
+        if self.stopped_on_invalid_path {
+            return None;
+        }
+
         let op = self.untyped.next()?;
         // TODO: Explore whether dispatching can be made more efficient.
         match TypedInstruction::dispatch(&op) {
@@ -458,6 +469,7 @@ impl<'a> TypedIter<'a> {
                 ]
                 .contains(&op.operator.0.deref())
                 {
+                    self.stopped_on_invalid_path = true;
                     None
                 } else {
                     Some(TypedInstruction::Fallback(op.operator))
@@ -803,7 +815,7 @@ mod macros {
 
 #[cfg(test)]
 mod tests {
-    use super::UntypedIter;
+    use super::{TypedIter, UntypedIter};
 
     /// A `TJ` instruction whose operand is `depth` arrays nested in each other, between
     /// a `q` and a `Q`.
@@ -820,6 +832,40 @@ mod tests {
         }
 
         (operators, iter.stopped_before_end())
+    }
+
+    #[test]
+    fn invalid_path_operands_stop_before_end() {
+        for path in ["1 m", "1 l", "1 c", "1 v", "1 y", "1 re"] {
+            let content = format!("q {path} 0 0 10 10 re f Q");
+            let mut iter = TypedIter::new(content.as_bytes());
+            assert!(iter.next().is_some());
+            assert!(!iter.stopped_before_end());
+            assert!(iter.next().is_none(), "{path}");
+            assert!(iter.stopped_before_end(), "{path}");
+            // Once the path is invalid, subsequent calls must not resume drawing it.
+            assert!(iter.next().is_none());
+            assert!(iter.stopped_before_end());
+        }
+    }
+
+    #[test]
+    fn invalid_path_at_end_does_not_report_unread_data() {
+        let mut iter = TypedIter::new(b"1 m");
+        assert!(iter.next().is_none());
+        assert!(!iter.stopped_before_end());
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn invalid_non_path_operands_do_not_stop() {
+        let mut iter = TypedIter::new(b"1 cm 0 0 10 10 re f");
+        let mut count = 0;
+        while iter.next().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 3);
+        assert!(!iter.stopped_before_end());
     }
 
     #[test]

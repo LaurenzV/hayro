@@ -832,6 +832,15 @@ mod tests {
     }
 
     #[test]
+    fn invalid_path_operands_are_reported() {
+        let warnings = warnings(b"q 1 m 0 0 10 10 re f Q");
+        assert!(matches!(
+            warnings.as_slice(),
+            [InterpreterWarning::TruncatedContentStream]
+        ));
+    }
+
+    #[test]
     fn deeply_nested_operand_is_reported() {
         let content = format!("q {}0{} TJ Q", "[".repeat(300_000), "]".repeat(300_000));
         let warnings = warnings(content.as_bytes());
