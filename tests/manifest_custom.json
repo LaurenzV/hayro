@@ -876,6 +876,10 @@
     "file": "pdfs/custom/pattern_tiling_cache_key.pdf"
   },
   {
+    "id": "pattern_tiling_huge_x_step",
+    "file": "pdfs/custom/pattern_tiling_huge_x_step.pdf"
+  },
+  {
     "id": "pattern_tiling_inner_transform",
     "file": "pdfs/custom/pattern_tiling_inner_transform.pdf"
   },
@@ -888,9 +892,25 @@
     "file": "pdfs/custom/pattern_tiling_lines.pdf"
   },
   {
+    "id": "pattern_tiling_negative_step",
+    "file": "pdfs/custom/pattern_tiling_negative_step.pdf"
+  },
+  {
     "id": "pattern_tiling_nested",
     "svg": true,
     "file": "pdfs/custom/pattern_tiling_nested.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap",
+    "file": "pdfs/custom/pattern_tiling_overlap.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap_rotated",
+    "file": "pdfs/custom/pattern_tiling_overlap_rotated.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap_transparent",
+    "file": "pdfs/custom/pattern_tiling_overlap_transparent.pdf"
   },
   {
     "id": "pattern_tiling_rotated",
