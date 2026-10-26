@@ -1,11 +1,11 @@
 use crate::Renderer;
 use hayro_interpret::pattern::TilingPattern;
 use hayro_interpret::util::x_y_advances;
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Rect};
 use std::ops::{Range, RangeInclusive};
 use std::sync::Arc;
 use vello_cpu::peniko::{ImageQuality, ImageSampler};
-use vello_cpu::{Image, ImageSource, Pixmap, RenderContext, peniko};
+use vello_cpu::{Image, ImageSource, Pixmap, peniko};
 
 impl Renderer<'_> {
     pub(crate) fn tiling_paint(
@@ -54,72 +54,31 @@ impl Renderer<'_> {
     ) -> Pixmap {
         let to_texture =
             Affine::scale_non_uniform(x.scale, y.scale) * Affine::translate((-x.start, -y.start));
-        let copies = x.copies.clone().count() * y.copies.clone().count();
         let mut ctx = self.child_context(x.size, y.size);
-
-        if copies <= 1 || copies > MAX_COPIES {
-            let offset = Affine::translate((
-                f64::from(*x.copies.start()) * x.step,
-                f64::from(*y.copies.start()) * y.step,
-            ));
-            self.render_cell(&mut ctx, t, to_texture * offset, is_stroke);
+        let copies = x.copies.clone().count() * y.copies.clone().count();
+        let (x_copies, y_copies) = if copies > MAX_COPIES {
+            let (x0, y0) = (*x.copies.start(), *y.copies.start());
+            (x0..=x0, y0..=y0)
         } else {
-            let cell = Arc::new({
-                let width = (t.bbox.width() * x.scale).ceil().max(1.0) as u16;
-                let height = (t.bbox.height() * y.scale).ceil().max(1.0) as u16;
-                let mut ctx = self.child_context(width, height);
-                let to_cell = Affine::scale_non_uniform(x.scale, y.scale)
-                    * Affine::translate((-t.bbox.x0, -t.bbox.y0));
-                self.render_cell(&mut ctx, t, to_cell, is_stroke);
-                finish(ctx)
-            });
-            let cell_rect = Rect::new(0.0, 0.0, cell.width() as f64, cell.height() as f64);
+            (x.copies.clone(), y.copies.clone())
+        };
 
-            ctx.set_paint(Image {
-                image: ImageSource::Pixmap(cell),
-                sampler: ImageSampler {
-                    x_extend: peniko::Extend::Pad,
-                    y_extend: peniko::Extend::Pad,
-                    quality: ImageQuality::Low,
-                    alpha: 1.0,
-                },
-            });
+        let mut renderer = Renderer::new(&mut ctx, self.global);
+        renderer.inside_pattern = true;
 
-            for j in y.copies.clone() {
-                for i in x.copies.clone() {
-                    let origin = to_texture
-                        * Point::new(
-                            t.bbox.x0 + f64::from(i) * x.step,
-                            t.bbox.y0 + f64::from(j) * y.step,
-                        );
-                    ctx.set_transform(Affine::translate((origin.x.round(), origin.y.round())));
-                    ctx.fill_rect(&cell_rect);
-                }
+        for j in y_copies {
+            for i in x_copies.clone() {
+                let offset = Affine::translate((f64::from(i) * x.step, f64::from(j) * y.step));
+                t.interpret(&mut renderer, to_texture * offset, is_stroke);
             }
         }
 
-        finish(ctx)
+        let mut pixmap = Pixmap::new(x.size, y.size);
+        ctx.flush();
+        ctx.render(&mut pixmap, &mut vello_cpu::Resources::default());
+
+        pixmap
     }
-
-    fn render_cell(
-        &self,
-        ctx: &mut RenderContext,
-        t: &TilingPattern<'_>,
-        transform: Affine,
-        is_stroke: bool,
-    ) {
-        let mut renderer = Renderer::new(ctx, self.global);
-        renderer.inside_pattern = true;
-        t.interpret(&mut renderer, transform, is_stroke);
-    }
-}
-
-fn finish(mut ctx: RenderContext) -> Pixmap {
-    let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
-    ctx.flush();
-    ctx.render(&mut pixmap, &mut vello_cpu::Resources::default());
-
-    pixmap
 }
 
 const MAX_TEXTURE_SIZE: f64 = 8192.0;
