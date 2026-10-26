@@ -64,22 +64,6 @@ fn build_decompositions(
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-            trace!(
-                "r {} making sub-band {} for component {}",
-                resolution_tile.resolution, sub_band_type as u8, component_idx
-            );
-            trace!(
-                "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                sub_band_rect.x0,
-                sub_band_rect.y0,
-                sub_band_rect.width(),
-                sub_band_rect.height(),
-                resolution_tile.rect.x0,
-                resolution_tile.rect.y0,
-                resolution_tile.rect.width(),
-                resolution_tile.rect.height(),
-            );
-
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
             // No need to allocate coefficients for skipped resolution levels.
@@ -177,16 +161,6 @@ fn build_precincts(
             code_block_area.height() / cb_height
         };
 
-        trace!(
-            "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-            precinct_rect.x0,
-            precinct_rect.y0,
-            precinct_rect.width(),
-            precinct_rect.height(),
-            code_blocks_x,
-            code_blocks_y
-        );
-
         let blocks = build_code_blocks(
             code_block_area,
             sub_band_rect,
@@ -240,14 +214,6 @@ fn build_code_blocks(
             // described in Annex D."
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
-
-            trace!(
-                "Codeblock rect: [{},{} {}x{}]",
-                area.x0,
-                area.y0,
-                area.width(),
-                area.height(),
-            );
 
             let start = storage.layers.len();
             storage.layers.extend(iter::repeat_n(

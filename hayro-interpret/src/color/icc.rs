@@ -50,8 +50,6 @@ impl ICCProfile {
             3 => Layout::Rgb,
             4 => Layout::Rgba,
             _ => {
-                warn!("unsupported number of components {number_components} for ICC profile");
-
                 return None;
             }
         };

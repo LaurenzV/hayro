@@ -1,8 +1,7 @@
 use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
-use crate::function::Function;
+use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
-use smallvec::smallvec;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Separation {
@@ -33,16 +32,25 @@ impl Separation {
     }
 
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
-        let evaluated = input
-            .iter()
-            .flat_map(|n| {
-                let values = self
-                    .tint_transform
-                    .eval(smallvec![*n as f32 / 255.0])
-                    .unwrap_or(self.alternate_space.initial_color());
-                self.alternate_space.encode_values(&values)
-            })
-            .collect::<Vec<u8>>();
+        let mut values = [0.0; MAX_COMPONENTS];
+        let values = &mut values[..self.tint_transform.num_outputs()];
+        let mut evaluated = Vec::with_capacity(input.len() * values.len());
+
+        for n in input {
+            if self
+                .tint_transform
+                .eval(&[*n as f32 * (1.0 / 255.0)], values)
+                .is_some()
+            {
+                evaluated.extend(self.alternate_space.encode_values(values));
+            } else {
+                evaluated.extend(
+                    self.alternate_space
+                        .encode_values(&self.alternate_space.initial_color()),
+                );
+            }
+        }
+
         self.alternate_space.convert(&evaluated, output)
     }
 

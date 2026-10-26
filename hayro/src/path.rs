@@ -1,6 +1,7 @@
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
+use std::f64::consts::SQRT_2;
 
 impl Renderer<'_> {
     pub(super) fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
@@ -53,6 +54,13 @@ impl Renderer<'_> {
     ) {
         self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
+
+        let stroke = self.ctx.stroke();
+        let extent = stroke.width / 2.0 * stroke.miter_limit.max(SQRT_2);
+        let bbox = path.control_box().inflate(extent, extent);
+        if self.misses_target(props.transform.transform_rect_bbox(bbox)) {
+            return;
+        }
 
         let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
         if let Some(clip_path) = clip_path.as_ref() {

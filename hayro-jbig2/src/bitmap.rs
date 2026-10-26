@@ -54,6 +54,23 @@ impl Bitmap {
         Self::new_with(width, height, 0, 0, false)
     }
 
+    pub(crate) fn new_wide(width: u32, height: u32) -> Result<Self> {
+        if u64::from(width) * u64::from(height) > u64::from(MAX_DIMENSION).pow(2) {
+            bail!(OverflowError::BitmapDimension);
+        }
+
+        let stride = width.div_ceil(WORD_BITS);
+
+        Ok(Self {
+            width,
+            height,
+            stride,
+            data: vec![0; stride as usize * height as usize],
+            x_location: 0,
+            y_location: 0,
+        })
+    }
+
     /// Create a new bitmap with full configuration.
     pub(crate) fn new_with(
         width: u32,

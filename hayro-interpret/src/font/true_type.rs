@@ -5,7 +5,6 @@ use crate::font::{
     Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
     strip_subset_prefix, unicode_from_name,
 };
-use crate::util::OptionLog;
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Array;
@@ -57,14 +56,6 @@ impl TrueTypeFont {
         let fallback = || {
             let fallback_query = FallbackFontQuery::new(dict);
             let standard_font = fallback_query.pick_standard_font();
-
-            warn!(
-                "unable to load TrueType font {}, falling back to {}",
-                fallback_query
-                    .post_script_name
-                    .unwrap_or("(no name)".to_string()),
-                standard_font.as_str()
-            );
 
             Some(Self {
                 cache_key,
@@ -198,8 +189,8 @@ impl TrueTypeFont {
 
         // TODO: The test PDFs below fail (but mutool can render them correctly).
         // There is likely some other strategy that requires processing the font tables
-        // hayro-tests/pdfs/custom/font_truetype_7.pdf
-        // hayro-tests/pdfs/custom/font_truetype_6.pdf
+        // tests/pdfs/custom/font_truetype_7.pdf
+        // tests/pdfs/custom/font_truetype_6.pdf
     }
 }
 
@@ -383,7 +374,6 @@ impl EmbeddedKind {
                 .base_font
                 .glyph_metrics()
                 .advance_width(self.map_code(code))
-                .warn_none(&format!("failed to find advance width for code {code}"))
                 .unwrap_or(0.0),
         }
     }
@@ -444,11 +434,7 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, FxHashMap<u8, String>
                 MAC_ROMAN_ENCODING => Encoding::MacRoman,
                 MAC_EXPERT_ENCODING => Encoding::MacExpert,
                 STANDARD_ENCODING => Encoding::Standard,
-                _ => {
-                    warn!("Unknown font encoding {}", name.as_str());
-
-                    Encoding::BuiltIn
-                }
+                _ => Encoding::BuiltIn,
             },
             None => Encoding::BuiltIn,
         }

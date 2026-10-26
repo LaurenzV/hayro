@@ -86,25 +86,6 @@ impl StandardFont {
         }
     }
 
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            Self::Helvetica => "Helvetica",
-            Self::HelveticaBold => "Helvetica Bold",
-            Self::HelveticaOblique => "Helvetica Oblique",
-            Self::HelveticaBoldOblique => "Helvetica Bold Oblique",
-            Self::Courier => "Courier",
-            Self::CourierBold => "Courier Bold",
-            Self::CourierOblique => "Courier Oblique",
-            Self::CourierBoldOblique => "Courier Bold Oblique",
-            Self::TimesRoman => "Times Roman",
-            Self::TimesBold => "Times Bold",
-            Self::TimesItalic => "Times Italic",
-            Self::TimesBoldItalic => "Times Bold Italic",
-            Self::ZapfDingBats => "Zapf Dingbats",
-            Self::Symbol => "Symbol",
-        }
-    }
-
     /// Return the postscrit name of the font.
     pub fn postscript_name(&self) -> &'static str {
         match self {

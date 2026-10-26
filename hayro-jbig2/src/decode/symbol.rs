@@ -22,7 +22,7 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
-const MAX_SYMBOLS: u32 = u16::MAX as u32;
+pub(crate) const MAX_SYMBOLS: u32 = 1 << 20;
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
@@ -615,7 +615,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         // each byte. Rows are padded to the byte boundary.
         let row_bytes = ctx.total_width.div_ceil(8);
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
+        let mut bitmap = Bitmap::new_wide(ctx.total_width, ctx.height_class_height)?;
         for y in 0..ctx.height_class_height {
             for byte_x in 0..row_bytes {
                 let byte = ctx
@@ -641,7 +641,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .read_bytes(bitmap_size as usize)
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
+        let mut bitmap = Bitmap::new_wide(ctx.total_width, ctx.height_class_height)?;
         decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict)?;
         bitmap
     };
@@ -845,7 +845,7 @@ pub(crate) fn parse<'a>(
     let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
-    if num_exported_symbols.saturating_add(num_new_symbols) > MAX_SYMBOLS {
+    if num_exported_symbols > MAX_SYMBOLS || num_new_symbols > MAX_SYMBOLS {
         bail!(OverflowError::SymbolCount)
     }
 

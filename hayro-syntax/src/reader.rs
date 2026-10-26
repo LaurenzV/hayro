@@ -2,7 +2,7 @@
 
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
-use crate::trivia::{Comment, is_eol_character, is_white_space_character};
+use crate::trivia::{Comment, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
@@ -21,7 +21,7 @@ pub trait ReaderExt<'a> {
     ) -> Option<&'a [u8]>;
     fn skip_white_spaces(&mut self);
     fn read_white_space(&mut self) -> Option<()>;
-    fn skip_eol_characters(&mut self);
+    fn read_eol(&mut self) -> Option<()>;
     fn skip_white_spaces_and_comments(&mut self);
 }
 
@@ -103,14 +103,17 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn skip_eol_characters(&mut self) {
-        while let Some(b) = self.peek_byte() {
-            if is_eol_character(b) {
+    fn read_eol(&mut self) -> Option<()> {
+        match self.peek_byte()? {
+            b'\n' => self.forward(),
+            b'\r' => {
                 self.forward();
-            } else {
-                return;
+                let _ = self.forward_if(|b| b == b'\n');
             }
+            _ => return None,
         }
+
+        Some(())
     }
 
     #[inline]
