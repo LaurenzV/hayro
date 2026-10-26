@@ -62,11 +62,7 @@ impl Filter {
         }
     }
 
-    /// Apply the filter, failing with [`DecodeFailure::LimitExceeded`] if it
-    /// outputs more than `limit` bytes.
-    ///
-    /// The non-image filters stop shortly after their output passes `limit`;
-    /// the image filters decode in full before their output is checked.
+    /// Apply the filter, returning [`DecodeFailure::LimitExceeded`] above `limit` bytes.
     pub(crate) fn apply(
         &self,
         data: &[u8],

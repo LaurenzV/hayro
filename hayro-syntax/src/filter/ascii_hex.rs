@@ -8,8 +8,7 @@ pub(crate) fn decode(data: &[u8], limit: usize) -> Option<Vec<u8>> {
     decode_into(data, limit)
 }
 
-/// Decode at most `limit + 1` bytes, so that the caller can tell whether the
-/// data decodes to more than `limit` bytes.
+/// Decode at most `limit + 1` bytes.
 pub(crate) fn decode_into<B: ByteBuf>(data: &[u8], limit: usize) -> Option<B> {
     // Find end (at `>` or end of data) and check for whitespace.
     let mut has_whitespace = false;

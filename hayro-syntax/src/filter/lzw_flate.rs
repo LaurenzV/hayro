@@ -11,8 +11,7 @@ pub(crate) mod flate {
     use crate::filter::lzw_flate::{PredictorParams, predict_within};
     use crate::object::Dict;
 
-    /// Decode a Flate-encoded stream until the output holds more than `limit`
-    /// bytes, so that the caller can tell whether it decodes to more.
+    /// Stop decoding after the output exceeds `limit`.
     #[cfg(feature = "unsafe")]
     pub(crate) fn decode(
         data: &[u8],
@@ -44,8 +43,7 @@ pub(crate) mod flate {
         predict_within(decoded, &params, limit)
     }
 
-    /// Decode a Flate-encoded stream until the output holds more than `limit`
-    /// bytes, so that the caller can tell whether it decodes to more.
+    /// Stop decoding after the output exceeds `limit`.
     #[cfg(not(feature = "unsafe"))]
     pub(crate) fn decode(
         data: &[u8],
@@ -91,7 +89,6 @@ pub(crate) mod flate {
             code_buf: u32,
             code_size: u8,
             output: Vec<u8>,
-            /// Decoding stops once `output` holds more than this many bytes.
             limit: usize,
             eof: bool,
         }
@@ -576,8 +573,7 @@ pub(crate) mod lzw {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    /// Decode a LZW-encoded stream until the output holds more than `limit`
-    /// bytes, so that the caller can tell whether it decodes to more.
+    /// Stop decoding after the output exceeds `limit`.
     pub(crate) fn decode(
         data: &[u8],
         params: &Dict<'_>,
@@ -765,10 +761,8 @@ impl PredictorParams {
     }
 }
 
-/// Apply the predictor unless `data` already holds more than `limit` bytes.
-///
-/// A predictor never makes its input longer, but its previous-row buffer is sized
-/// by the stream's parameters, even when the input contains no complete row.
+// Skip prediction after exceeding the limit; otherwise bound the row buffer,
+// even when the input contains no complete rows.
 fn predict_within(
     data: Vec<u8>,
     params: &PredictorParams,

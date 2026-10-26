@@ -4,8 +4,7 @@ use crate::reader::Reader;
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 
-/// Decode until the output holds more than `limit` bytes, so that the caller
-/// can tell whether the data decodes to more than `limit` bytes.
+/// Stop after the output exceeds `limit`.
 pub(crate) fn decode(data: &[u8], limit: usize) -> Option<Vec<u8>> {
     const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
 
@@ -107,7 +106,6 @@ mod tests {
 
     #[test]
     fn decode_stops_past_limit() {
-        // Each `z` stands for four zeros.
         let input = b"z".repeat(1000);
         assert_eq!(decode(&input, 5).unwrap(), vec![0; 8]);
     }
