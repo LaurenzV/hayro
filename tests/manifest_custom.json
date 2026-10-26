@@ -267,6 +267,10 @@
     "file": "pdfs/custom/function_type0_12_bit.pdf"
   },
   {
+    "id": "function_type3_intervals",
+    "file": "pdfs/custom/function_type3_intervals.pdf"
+  },
+  {
     "id": "image_1_bit_per_component",
     "file": "pdfs/custom/image_1_bit_per_component.pdf"
   },

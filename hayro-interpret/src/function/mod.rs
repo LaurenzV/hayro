@@ -31,6 +31,10 @@ impl Interval {
     }
 
     pub(crate) fn map(self, x: f32, to: Self) -> f32 {
+        if self.min == self.max {
+            return to.min;
+        }
+
         interpolate(x, self.min, self.max, to.min, to.max)
     }
 }

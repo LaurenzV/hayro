@@ -40,10 +40,9 @@ impl Type3 {
             return None;
         }
 
-        let mut bounds = vec![domain.min - 0.0001];
+        let mut bounds = vec![domain.min];
         bounds.extend(inner_bounds);
-        // Add a small delta so that the interval is considered to be closed on the right.
-        bounds.push(domain.max + 0.0001);
+        bounds.push(domain.max);
 
         Some(Self {
             functions,
@@ -58,13 +57,23 @@ impl Type3 {
 
     /// Evaluate the function with the given input.
     pub(crate) fn eval(&self, input: f32, output: &mut [f32]) -> Option<()> {
-        let index = find_interval(&self.bounds, input)?;
+        let index = self.find_interval(input);
         let interval = Interval {
             min: self.bounds[index],
             max: self.bounds[index + 1],
         };
 
         self.functions[index].eval(&[interval.map(input, self.encode[index])], output)
+    }
+
+    fn find_interval(&self, x: f32) -> usize {
+        let inner = &self.bounds[1..self.bounds.len() - 1];
+
+        if inner.first() == Some(&self.bounds[0]) && x == self.bounds[0] {
+            return 0;
+        }
+
+        inner.partition_point(|bound| *bound <= x)
     }
 
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
@@ -101,23 +110,6 @@ impl Type3 {
         stitching_bounds.dedup_by(|a, b| (*a - *b).abs() <= f32::EPSILON);
 
         stitching_bounds
-    }
-}
-
-fn find_interval(bounds: &[f32], x: f32) -> Option<usize> {
-    if x < *bounds.first()? || x >= *bounds.last()? {
-        return None;
-    }
-
-    match bounds.binary_search_by(|val| {
-        if *val <= x {
-            std::cmp::Ordering::Less
-        } else {
-            std::cmp::Ordering::Greater
-        }
-    }) {
-        Ok(i) => Some(i - 1),
-        Err(i) => Some(i - 1),
     }
 }
 
