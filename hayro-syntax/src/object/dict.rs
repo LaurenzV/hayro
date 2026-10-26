@@ -386,11 +386,12 @@ impl<'a> DictEntrySpans<'a> {
 
     fn skip_value(&mut self) -> Option<()> {
         // The depth matches that of the entries in `parse_dict_with`.
+        let depth = usize::from(self.lenient);
         if self.in_content_stream {
-            self.reader.skip_with_depth::<Object<'_>>(true, 1)?;
+            self.reader.skip_with_depth::<Object<'_>>(true, depth)?;
         } else {
             self.reader
-                .skip_with_depth::<MaybeRef<Object<'_>>>(false, 1)?;
+                .skip_with_depth::<MaybeRef<Object<'_>>>(false, depth)?;
         }
 
         Some(())
@@ -1349,6 +1350,41 @@ mod tests {
     fn entry_spans_of_empty_dicts() {
         assert_eq!(Dict::empty().entry_spans().count(), 0);
         assert_eq!(Dict::from_bytes(b"<< >>").unwrap().entry_spans().count(), 0);
+    }
+
+    #[test]
+    fn entry_spans_match_dict_nesting_bound() {
+        for inline in [false, true] {
+            // A proper dictionary contributes one level; an inline image dictionary
+            // has no enclosing `<< >>` and contributes none.
+            let depth = crate::object::MAX_OBJECT_NESTING_DEPTH - usize::from(!inline);
+            let value = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
+            let body = format!("/W 1 /Custom {value} /H 1");
+            let data = if inline {
+                format!("{body} ID")
+            } else {
+                format!("<<{body}>>")
+            };
+            let dict = if inline {
+                Reader::new(data.as_bytes())
+                    .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
+                    .unwrap()
+                    .get_dict()
+                    .clone()
+            } else {
+                Dict::from_bytes(data.as_bytes()).unwrap()
+            };
+            assert!(dict.contains_key(b"Custom"));
+            assert_eq!(
+                spans_of(&dict),
+                vec![
+                    (b"W".to_vec(), b"/W".to_vec(), b"1".to_vec()),
+                    (b"Custom".to_vec(), b"/Custom".to_vec(), value.into_bytes()),
+                    (b"H".to_vec(), b"/H".to_vec(), b"1".to_vec()),
+                ],
+                "inline: {inline}"
+            );
+        }
     }
 
     #[test]
