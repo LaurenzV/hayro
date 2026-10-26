@@ -5,7 +5,7 @@
 use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
-use crate::function::{Function, StitchingBounds, Values, interpolate};
+use crate::function::{Function, interpolate};
 use crate::util::{Float32Ext, PointExt, RectExt};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
@@ -26,31 +26,41 @@ use std::sync::Arc;
 pub enum ShadingFunction {
     /// A single function, which should be used to evaluate all components of the shading.
     Single(Function),
-    /// Multiple functions, one for each color component.
-    Multiple(SmallVec<[Function; 4]>),
+    /// Multiple 1-in, 1-out functions, one for each color component.
+    Multiple(Vec<Function>),
 }
 
 impl ShadingFunction {
-    /// Evaluate the shading function.
-    pub fn eval(&self, input: &Values) -> Option<Values> {
+    /// The number of output values of the shading function.
+    pub fn num_outputs(&self) -> usize {
         match self {
-            Self::Single(s) => s.eval(input.clone()),
-            Self::Multiple(m) => {
-                // 1-in, 1-out function for each color component.
+            Self::Single(function) => function.num_outputs(),
+            Self::Multiple(functions) => functions.len(),
+        }
+    }
 
-                let mut out = smallvec![];
-
-                for func in m {
-                    out.push(*func.eval(input.clone())?.first()?);
+    /// Evaluate the shading function for a single sample.
+    ///
+    /// `output` needs to have space for [`Self::num_outputs`] values.
+    pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
+        match self {
+            Self::Single(function) => function.eval(input, output),
+            Self::Multiple(functions) => {
+                if functions.len() != output.len() {
+                    return None;
                 }
 
-                Some(out)
+                for (function, output) in functions.iter().zip(output.iter_mut()) {
+                    function.eval(input, std::slice::from_mut(output))?;
+                }
+
+                Some(())
             }
         }
     }
 
-    pub(crate) fn stitching_bounds(&self) -> StitchingBounds {
-        let mut bounds = StitchingBounds::new();
+    pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
+        let mut bounds = vec![];
 
         match self {
             Self::Single(function) => bounds.extend(function.stitching_bounds()),
@@ -1072,13 +1082,16 @@ fn read_tensor_product_patch_mesh(
 
 fn read_function(dict: &Dict<'_>, color_space: &ColorSpace) -> Option<ShadingFunction> {
     if let Some(arr) = dict.get::<Array<'_>>(FUNCTION) {
-        let arr: Option<SmallVec<_>> = arr
+        let arr = arr
             .iter::<Object<'_>>()
             .map(|o| Function::new(&o))
-            .collect();
-        let arr = arr?;
+            .collect::<Option<Vec<_>>>()?;
 
         if arr.len() != color_space.num_components() as usize {
+            return None;
+        }
+
+        if arr.iter().any(|f| f.num_outputs() != 1) {
             return None;
         }
 

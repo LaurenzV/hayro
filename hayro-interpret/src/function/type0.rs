@@ -1,4 +1,4 @@
-use crate::function::{Clamper, TupleVec, Values, interpolate};
+use crate::function::{Interval, interpolate};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
@@ -11,8 +11,8 @@ pub(crate) struct Type0 {
     sizes: IntVec,
     strides: Vec<usize>,
     table: Vec<u32>,
-    clamper: Clamper,
-    range: TupleVec,
+    domain: Vec<Interval>,
+    num_outputs: usize,
     bits_per_sample: u8,
     encode: TupleVec,
     decode: TupleVec,
@@ -20,16 +20,17 @@ pub(crate) struct Type0 {
 
 impl Type0 {
     /// Create a new type 0 function.
-    pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
+    pub(crate) fn new(
+        stream: &Stream<'_>,
+        domain: &[Interval],
+        range: &[Interval],
+    ) -> Option<Self> {
         let dict = stream.dict();
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
         if !matches!(bits_per_sample, 1 | 2 | 4 | 8 | 16 | 24 | 32) {
             return None;
         }
-
-        let clamper = Clamper::new(dict)?;
-        let range = clamper.range.clone()?;
 
         if range.is_empty() {
             return None;
@@ -44,7 +45,9 @@ impl Type0 {
             .get::<TupleVec>(ENCODE)
             .unwrap_or(sizes.iter().map(|s| (0.0, (*s - 1) as f32)).collect());
 
-        let decode = dict.get::<TupleVec>(DECODE).unwrap_or(range.clone());
+        let decode = dict
+            .get::<TupleVec>(DECODE)
+            .unwrap_or(range.iter().map(|r| (r.min, r.max)).collect());
 
         let mut data = {
             let decoded = stream.decoded().ok()?;
@@ -73,8 +76,8 @@ impl Type0 {
         Some(Self {
             sizes,
             strides,
-            clamper,
-            range,
+            domain: domain.to_vec(),
+            num_outputs: range.len(),
             bits_per_sample,
             table: data,
             encode,
@@ -83,22 +86,20 @@ impl Type0 {
     }
 
     /// Evaluate a type 0 function with the given input.
-    pub(crate) fn eval(&self, mut input: Values) -> Option<Values> {
+    pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
         if input.len() != self.sizes.len() {
             return None;
         }
 
-        self.clamper.clamp_input(&mut input);
-
-        let mut key = input;
+        let mut key = Values::from_slice(input);
 
         for (((x, domain), encode), size) in key
             .iter_mut()
-            .zip(self.clamper.domain.iter())
+            .zip(self.domain.iter())
             .zip(self.encode.iter())
             .zip(self.sizes.iter())
         {
-            *x = interpolate(*x, domain.0, domain.1, encode.0, encode.1);
+            *x = interpolate(*x, domain.min, domain.max, encode.0, encode.1);
             *x = x.max(0.0).min(*size as f32 - 1.0);
         }
 
@@ -106,30 +107,26 @@ impl Type0 {
         let in_next = key.iter().map(|v| v.ceil() as u32).collect::<IntVec>();
 
         let interpolator =
-            Interpolator::new(&key, in_prev, in_next, &self.strides, self.range.len());
+            Interpolator::new(&key, in_prev, in_next, &self.strides, self.num_outputs);
 
         let interpolated = interpolator.interpolate(&self.table)?;
 
-        let mut out = interpolated
-            .iter()
-            .zip(self.decode.iter())
-            .map(|(x, decode)| {
-                interpolate(
-                    *x,
-                    0.0,
-                    (2_u32.pow(self.bits_per_sample as u32) - 1) as f32,
-                    decode.0,
-                    decode.1,
-                )
-            })
-            .collect::<SmallVec<_>>();
+        for ((output, x), decode) in output.iter_mut().zip(&interpolated).zip(&self.decode) {
+            *output = interpolate(
+                *x,
+                0.0,
+                (2_u32.pow(self.bits_per_sample as u32) - 1) as f32,
+                decode.0,
+                decode.1,
+            );
+        }
 
-        self.clamper.clamp_output(&mut out);
-
-        Some(out)
+        Some(())
     }
 }
 
+type Values = SmallVec<[f32; 4]>;
+type TupleVec = SmallVec<[(f32, f32); 4]>;
 type FloatVec = SmallVec<[f32; 4]>;
 type IntVec = SmallVec<[u32; 4]>;
 
