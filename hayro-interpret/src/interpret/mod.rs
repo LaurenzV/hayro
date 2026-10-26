@@ -146,9 +146,7 @@ pub enum InterpreterWarning {
     /// An annotation has an `AP` dictionary, but its normal appearance could not
     /// be selected or loaded, so the annotation was not drawn.
     UnresolvedAnnotationAppearance,
-    /// A content stream could not be read to its end, for example because an operand
-    /// is nested more deeply than hayro reads, so the operators after that point were
-    /// not interpreted.
+    /// A content stream stopped before its end, leaving some operators uninterpreted.
     TruncatedContentStream,
 }
 
@@ -791,7 +789,6 @@ mod tests {
     use kurbo::{Affine, Rect};
     use std::sync::{Arc, Mutex};
 
-    /// Interpret a one-page document with the given content and return the warnings.
     fn warnings(content: &[u8]) -> Vec<InterpreterWarning> {
         let mut data = format!(
             "%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\

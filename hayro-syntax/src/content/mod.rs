@@ -135,8 +135,7 @@ impl<'a> UntypedIter<'a> {
         }
     }
 
-    /// Return whether the iterator stopped before the end of the data because the
-    /// rest of it could not be read. The instructions after that point are left out.
+    /// Return whether unread data remained when the iterator stopped.
     pub fn stopped_before_end(&self) -> bool {
         self.stopped_before_end
     }
@@ -148,9 +147,6 @@ impl<'a> UntypedIter<'a> {
 
         let Some(operator) = read_instruction(&mut self.reader, &mut self.stack) else {
             if !self.reader.at_end() {
-                // The rest of the data could not be read, for example because an operand
-                // is nested more deeply than `MAX_OBJECT_NESTING_DEPTH` or because there
-                // are too many operands.
                 self.stopped_before_end = true;
                 self.reader.jump_to_end();
             }
@@ -434,9 +430,8 @@ impl<'a> TypedIter<'a> {
         }
     }
 
-    /// Return whether the iterator stopped before the end of the data because the
-    /// rest of it could not be read, including an invalid path instruction that
-    /// prevents interpreting the remaining data. See [`UntypedIter::stopped_before_end`].
+    /// Return whether parsing or an invalid path instruction stopped the iterator
+    /// with unread data.
     pub fn stopped_before_end(&self) -> bool {
         self.untyped.stopped_before_end()
             || (self.stopped_on_invalid_path && !self.untyped.reader.at_end())
@@ -817,8 +812,6 @@ mod macros {
 mod tests {
     use super::{TypedIter, UntypedIter};
 
-    /// A `TJ` instruction whose operand is `depth` arrays nested in each other, between
-    /// a `q` and a `Q`.
     fn nested_operand(depth: usize) -> Vec<u8> {
         format!("q {}(X){} TJ Q", "[".repeat(depth), "]".repeat(depth)).into_bytes()
     }
@@ -843,7 +836,6 @@ mod tests {
             assert!(!iter.stopped_before_end());
             assert!(iter.next().is_none(), "{path}");
             assert!(iter.stopped_before_end(), "{path}");
-            // Once the path is invalid, subsequent calls must not resume drawing it.
             assert!(iter.next().is_none());
             assert!(iter.stopped_before_end());
         }
@@ -877,7 +869,6 @@ mod tests {
 
     #[test]
     fn nested_operand_up_to_bound() {
-        // `MAX_OBJECT_NESTING_DEPTH` is 512.
         let (operators, stopped) = read_operators(&nested_operand(512));
         assert_eq!(operators, [&b"q"[..], b"TJ", b"Q"]);
         assert!(!stopped);
