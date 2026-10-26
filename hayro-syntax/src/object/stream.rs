@@ -172,8 +172,10 @@ impl<'a> Stream<'a> {
     /// the last one, so a small stream that decodes to a huge output fails
     /// without allocating it: the `ASCIIHexDecode`, `ASCII85Decode`,
     /// `LZWDecode`, `FlateDecode` and `RunLengthDecode` filters and their
-    /// predictors stop shortly after their output passes the limit. The image filters decode in full before
-    /// their output is checked.
+    /// predictors stop shortly after their output passes the limit. A predictor's
+    /// row size is also bounded by `limit` before allocating its working buffer,
+    /// even if the input contains no complete rows. The image filters decode in
+    /// full before their output is checked.
     ///
     /// Note that the result of this method will not be cached, so calling it multiple
     /// times is expensive.
@@ -494,6 +496,48 @@ mod tests {
         assert_eq!(stream.decoded().unwrap().as_ref(), &[1, 2, 3, 2, 3, 4]);
         assert!(matches!(
             stream.decoded_with_limit(7),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn decoded_with_limit_bounds_predictor_rows() {
+        let flate = stored_deflate(&[]);
+        let lzw = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
+        for (filter, data) in [("FlateDecode", flate.as_slice()), ("LZWDecode", &lzw[..])] {
+            for predictor in [2, 12] {
+                // One bit per column still requests a 16 MiB predictor row,
+                // even though the decompressed input is empty or only ten bytes.
+                let bytes = stream_bytes(
+                    &format!(
+                        "/Filter /{filter} /DecodeParms << /Predictor {predictor} \
+                         /BitsPerComponent 1 /Colors 1 /Columns 134217728 >>"
+                    ),
+                    data,
+                );
+                assert!(matches!(
+                    read_stream(&bytes).decoded_with_limit(1024),
+                    Err(DecodeFailure::LimitExceeded)
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn decoded_with_limit_with_tiff_predictor() {
+        // Eight one-bit samples: horizontal differencing is addition modulo two.
+        let bytes = stream_bytes(
+            "/Filter /FlateDecode /DecodeParms << /Predictor 2 \
+             /BitsPerComponent 1 /Colors 1 /Columns 8 >>",
+            &stored_deflate(&[0b1111_0000]),
+        );
+        let stream = read_stream(&bytes);
+        assert_eq!(
+            stream.decoded_with_limit(1).unwrap().as_ref(),
+            &[0b1010_0000]
+        );
+        assert!(matches!(
+            stream.decoded_with_limit(0),
             Err(DecodeFailure::LimitExceeded)
         ));
     }

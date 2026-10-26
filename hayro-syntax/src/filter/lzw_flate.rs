@@ -2,6 +2,7 @@ use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitWriter, bit_mask};
 use crate::filter::png::{self, BytesPerPixel, RowFilter};
 use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
+use crate::object::stream::DecodeFailure;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -13,7 +14,11 @@ pub(crate) mod flate {
     /// Decode a Flate-encoded stream until the output holds more than `limit`
     /// bytes, so that the caller can tell whether it decodes to more.
     #[cfg(feature = "unsafe")]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, limit: usize) -> Option<Vec<u8>> {
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        limit: usize,
+    ) -> Result<Vec<u8>, DecodeFailure> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
@@ -33,7 +38,8 @@ pub(crate) mod flate {
 
         let decoded = zlib_stream()
             .or_else(deflate_stream)
-            .or_else(|| fallback::decode(data, limit))?;
+            .or_else(|| fallback::decode(data, limit))
+            .ok_or(DecodeFailure::StreamDecode)?;
         let params = PredictorParams::from_params(params);
         predict_within(decoded, &params, limit)
     }
@@ -41,8 +47,12 @@ pub(crate) mod flate {
     /// Decode a Flate-encoded stream until the output holds more than `limit`
     /// bytes, so that the caller can tell whether it decodes to more.
     #[cfg(not(feature = "unsafe"))]
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, limit: usize) -> Option<Vec<u8>> {
-        let decoded = fallback::decode(data, limit)?;
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        limit: usize,
+    ) -> Result<Vec<u8>, DecodeFailure> {
+        let decoded = fallback::decode(data, limit).ok_or(DecodeFailure::StreamDecode)?;
         let params = PredictorParams::from_params(params);
         predict_within(decoded, &params, limit)
     }
@@ -562,15 +572,21 @@ pub(crate) mod lzw {
     use crate::bit_reader::BitReader;
     use crate::filter::lzw_flate::{PredictorParams, predict_within};
     use crate::object::Dict;
+    use crate::object::stream::DecodeFailure;
     use alloc::vec;
     use alloc::vec::Vec;
 
     /// Decode a LZW-encoded stream until the output holds more than `limit`
     /// bytes, so that the caller can tell whether it decodes to more.
-    pub(crate) fn decode(data: &[u8], params: &Dict<'_>, limit: usize) -> Option<Vec<u8>> {
+    pub(crate) fn decode(
+        data: &[u8],
+        params: &Dict<'_>,
+        limit: usize,
+    ) -> Result<Vec<u8>, DecodeFailure> {
         let params = PredictorParams::from_params(params);
 
-        let decoded = decode_impl(data, params.early_change, limit)?;
+        let decoded =
+            decode_impl(data, params.early_change, limit).ok_or(DecodeFailure::StreamDecode)?;
 
         predict_within(decoded, &params, limit)
     }
@@ -713,12 +729,15 @@ struct PredictorParams {
 }
 
 impl PredictorParams {
-    fn bits_per_pixel(&self) -> u8 {
-        self.bits_per_component * self.colors
+    fn bits_per_pixel(&self) -> usize {
+        usize::from(self.bits_per_component) * usize::from(self.colors)
     }
 
-    fn row_length_in_bytes(&self) -> usize {
-        (self.columns * self.bits_per_pixel() as usize).div_ceil(8)
+    fn row_length_in_bytes(&self) -> Option<usize> {
+        self.columns
+            .checked_mul(self.bits_per_pixel())
+            .map(|bits| bits.div_ceil(8))
+            .filter(|bytes| *bytes > 0)
     }
 }
 
@@ -748,13 +767,27 @@ impl PredictorParams {
 
 /// Apply the predictor unless `data` already holds more than `limit` bytes.
 ///
-/// A predictor never makes its input longer, so only its input can pass the limit.
-fn predict_within(data: Vec<u8>, params: &PredictorParams, limit: usize) -> Option<Vec<u8>> {
+/// A predictor never makes its input longer, but its previous-row buffer is sized
+/// by the stream's parameters, even when the input contains no complete row.
+fn predict_within(
+    data: Vec<u8>,
+    params: &PredictorParams,
+    limit: usize,
+) -> Result<Vec<u8>, DecodeFailure> {
     if data.len() > limit {
-        Some(data)
-    } else {
-        apply_predictor(data, params)
+        return Ok(data);
     }
+
+    if params.predictor != 1 {
+        let row_len = params
+            .row_length_in_bytes()
+            .ok_or(DecodeFailure::StreamDecode)?;
+        if row_len > limit {
+            return Err(DecodeFailure::LimitExceeded);
+        }
+    }
+
+    apply_predictor(data, params).ok_or(DecodeFailure::StreamDecode)
 }
 
 fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
@@ -763,11 +796,11 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
         i => {
             let is_png_predictor = i >= 10;
 
-            let row_len = params.row_length_in_bytes();
+            let row_len = params.row_length_in_bytes()?;
 
             let total_row_len = if is_png_predictor {
                 // + 1 Because each row must start with the predictor that is used for PNG predictors.
-                row_len + 1
+                row_len.checked_add(1)?
             } else {
                 row_len
             };
@@ -779,10 +812,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
             }
 
             let (bit_size, chunk_len) = if is_png_predictor {
-                (
-                    8,
-                    (params.colors * params.bits_per_component).div_ceil(8) as usize,
-                )
+                (8, params.bits_per_pixel().div_ceil(8))
             } else {
                 (params.bits_per_component, params.colors as usize)
             };
@@ -1028,8 +1058,23 @@ impl Predictor for Paeth {
 #[cfg(test)]
 #[rustfmt::skip]
 mod tests {
-    use crate::filter::lzw_flate::{PredictorParams, apply_predictor, flate, lzw};
+    use crate::filter::lzw_flate::{PredictorParams, apply_predictor, flate, lzw, predict_within};
     use crate::object::Dict;
+
+    #[test]
+    fn predictor_rejects_invalid_dimensions() {
+        for predictor in [2, 12] {
+            for columns in [0, usize::MAX] {
+                let params = PredictorParams {
+                    predictor,
+                    columns,
+                    bits_per_component: 16,
+                    ..Default::default()
+                };
+                assert!(predict_within(vec![], &params, 1024).is_err());
+            }
+        }
+    }
 
     #[test]
     fn decode_lzw() {
