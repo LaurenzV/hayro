@@ -3,6 +3,7 @@ use crate::device::Device;
 use crate::font::{Glyph, GlyphRun, PositionedGlyph, UNITS_PER_EM};
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
+use hayro_cmap::WritingMode;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath};
@@ -28,8 +29,6 @@ pub(crate) fn append_text_string<'a>(
     text: &object::String<'_>,
 ) {
     let Some(font) = ctx.text_state().font.clone() else {
-        warn!("tried to show text without active font");
-
         return;
     };
 
@@ -80,9 +79,16 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
     let fill_props = ctx.draw_props(false);
     let stroke_draw_props = ctx.draw_props(true);
 
+    let writing_mode = if ctx.text_state().font_horizontal() {
+        WritingMode::Horizontal
+    } else {
+        WritingMode::Vertical
+    };
+
     let clip_path = {
         let run = GlyphRun {
             glyphs: &ctx.glyph_scratch,
+            writing_mode,
         };
 
         let clip_path = if matches!(
@@ -150,9 +156,7 @@ fn clip_glyph(clip_path: &mut BezPath, glyph: &PositionedGlyph<'_>) {
                 clip_path.extend(outline);
             }
         }
-        Glyph::Type3(_) => {
-            warn!("text rendering mode clip not implemented for shape glyphs");
-        }
+        Glyph::Type3(_) => {}
     }
 }
 

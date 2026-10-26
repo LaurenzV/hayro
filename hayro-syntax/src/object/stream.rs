@@ -11,7 +11,7 @@ use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::{OptionLog, find_needle};
+use crate::util::find_needle;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
@@ -211,7 +211,6 @@ impl Display for Stream<'_> {
 impl Skippable for Stream<'_> {
     fn skip(_: &mut Reader<'_>, _: bool) -> Option<()> {
         // A stream can never appear in a dict/array, so it should never be skipped.
-        warn!("attempted to skip a stream object");
 
         None
     }
@@ -222,20 +221,14 @@ impl<'a> Readable<'a> for Stream<'a> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 
         if dict.contains_key(F) {
-            warn!("encountered stream referencing external file, which is unsupported");
-
             return None;
         }
 
         let offset = r.offset();
-        parse_proper(r, &dict)
-            .or_else(|| {
-                warn!("failed to parse stream, trying to parse it manually");
-
-                r.jump(offset);
-                parse_fallback(r, &dict)
-            })
-            .error_none("was unable to manually parse the stream")
+        parse_proper(r, &dict).or_else(|| {
+            r.jump(offset);
+            parse_fallback(r, &dict)
+        })
     }
 }
 
@@ -312,8 +305,7 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let stream_offset = find_needle(r.tail()?, b"stream")?;
-    r.read_bytes(stream_offset)?;
+    r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
 
     r.forward_tag(b"\n")
@@ -321,6 +313,8 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
+    // TODO: This search can take quadratic time in total when many streams with a wrong length
+    // have no `endstream` after them, or only a distant one.
     let tail = r.tail()?;
     let endstream_offset = find_needle(tail, b"endstream")?;
     let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);

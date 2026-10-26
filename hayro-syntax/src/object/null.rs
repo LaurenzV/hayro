@@ -4,6 +4,7 @@ use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, Skippable};
+use crate::trivia::is_regular_character;
 use core::fmt::{Display, Formatter};
 
 /// The null object.
@@ -20,7 +21,9 @@ object!(Null, Null);
 
 impl Skippable for Null {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.forward_tag(b"null")
+        r.forward_tag(b"null")?;
+
+        (!r.peek_byte().is_some_and(is_regular_character)).then_some(())
     }
 }
 
@@ -55,11 +58,10 @@ mod tests {
 
     #[test]
     fn null_trailing() {
-        assert_eq!(
+        assert!(
             Reader::new("nullabs".as_bytes())
                 .read_without_context::<Null>()
-                .unwrap(),
-            Null
+                .is_none()
         );
     }
 }

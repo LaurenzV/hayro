@@ -5,37 +5,6 @@ use vello_cpu::color::palette::css::WHITE;
 use vello_cpu::peniko::ImageAlphaType;
 use wasm_bindgen::prelude::*;
 
-struct ConsoleLogger;
-
-impl log::Log for ConsoleLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= log::LevelFilter::Warn
-    }
-
-    fn log(&self, record: &log::Record) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
-        let message = format!(
-            "[{}:{}] {}",
-            record.target(),
-            record.line().unwrap_or(0),
-            record.args()
-        );
-
-        match record.level() {
-            log::Level::Error => web_sys::console::error_1(&message.into()),
-            log::Level::Warn => web_sys::console::warn_1(&message.into()),
-            _ => web_sys::console::log_1(&message.into()),
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-static LOGGER: ConsoleLogger = ConsoleLogger;
-
 /// A loaded PDF document that renders its pages on request.
 #[wasm_bindgen]
 pub struct PdfViewer {
@@ -48,10 +17,6 @@ impl PdfViewer {
     #[wasm_bindgen(constructor)]
     pub fn new(data: &[u8]) -> Result<Self, JsValue> {
         console_error_panic_hook::set_once();
-
-        if log::set_logger(&LOGGER).is_ok() {
-            log::set_max_level(log::LevelFilter::Warn);
-        }
 
         let pdf = Pdf::new(data.to_vec()).map_err(|_| JsValue::from_str("Failed to parse PDF"))?;
 

@@ -82,8 +82,6 @@ use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 
 pub mod error;
-#[macro_use]
-pub(crate) mod log;
 pub(crate) mod math;
 
 use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
@@ -412,81 +410,108 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
 
     let mut output_iter = buf.iter_mut();
 
-    if all_same_bit_depth == Some(8) && num_components <= 4 {
-        // Fast path for the common case.
+    fn to_u8_scale(bit_depth: u8) -> f32 {
+        255.0 / ((1_u32 << bit_depth) - 1) as f32
+    }
+
+    if let Some(bit_depth) = all_same_bit_depth
+        && num_components <= 4
+    {
+        let scale = to_u8_scale(bit_depth);
+        let plane = |c: usize| &components[c].container[..max_len];
+
         match num_components {
             // Gray-scale.
-            1 => {
-                for (output, input) in output_iter.zip(
-                    components[0]
-                        .container
-                        .iter()
-                        .map(|v| math::round_to_u8(*v)),
-                ) {
-                    *output = input;
-                }
-            }
+            1 => interleave_to_u8([plane(0)], scale, buf),
             // Gray-scale with alpha.
-            2 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
-                }
-            }
+            2 => interleave_to_u8([plane(0), plane(1)], scale, buf),
             // RGB
-            3 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
-                }
-            }
+            3 => interleave_to_u8([plane(0), plane(1), plane(2)], scale, buf),
             // RGBA or CMYK.
-            4 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-                let c3 = &components[3];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-                let c3 = &c3.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_to_u8(c0[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c1[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c2[i]);
-                    *output_iter.next().unwrap() = math::round_to_u8(c3[i]);
-                }
-            }
+            4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], scale, buf),
             _ => unreachable!(),
         }
     } else {
-        // Slow path that also requires us to scale to 8 bit.
-        let mul_factor = ((1 << 8) - 1) as f32;
+        let scales = components
+            .iter()
+            .map(|c| to_u8_scale(c.bit_depth))
+            .collect::<Vec<_>>();
 
         for sample in 0..max_len {
-            for channel in components.iter() {
-                *output_iter.next().unwrap() = math::round_to_u8(
-                    (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
-                        * mul_factor,
-                );
+            for (channel, scale) in components.iter().zip(&scales) {
+                *output_iter.next().unwrap() = math::round_to_u8(channel.container[sample] * scale);
             }
+        }
+    }
+}
+
+fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], scale: f32, out: &mut [u8]) {
+    dispatch!(Level::new(), simd => interleave_to_u8_impl(simd, planes, scale, out));
+}
+
+#[inline(always)]
+fn interleave_to_u8_impl<S: Simd, const N: usize>(
+    simd: S,
+    planes: [&[f32]; N],
+    scale: f32,
+    out: &mut [u8],
+) {
+    let pixels = planes
+        .iter()
+        .map(|plane| plane.len())
+        .fold(out.len() / N, usize::min);
+    let blocks = pixels / 16 * 16;
+    let (out, tail) = out[..pixels * N].split_at_mut(blocks * N);
+    let plane = |c: usize| planes[c][..blocks].as_chunks::<16>().0;
+
+    match N {
+        1 => {
+            for (out, c0) in out.as_chunks_mut::<16>().0.iter_mut().zip(plane(0)) {
+                math::round_and_interleave(simd, [c0], scale, out);
+            }
+        }
+        2 => {
+            for ((out, c0), c1) in out
+                .as_chunks_mut::<32>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+            {
+                math::round_and_interleave(simd, [c0, c1], scale, out);
+            }
+        }
+        3 => {
+            for (((out, c0), c1), c2) in out
+                .as_chunks_mut::<48>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+                .zip(plane(2))
+            {
+                math::round_and_interleave(simd, [c0, c1, c2], scale, out);
+            }
+        }
+        4 => {
+            for ((((out, c0), c1), c2), c3) in out
+                .as_chunks_mut::<64>()
+                .0
+                .iter_mut()
+                .zip(plane(0))
+                .zip(plane(1))
+                .zip(plane(2))
+                .zip(plane(3))
+            {
+                math::round_and_interleave(simd, [c0, c1, c2, c3], scale, out);
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    for (i, pixel) in tail.as_chunks_mut::<N>().0.iter_mut().enumerate() {
+        for (value, plane) in pixel.iter_mut().zip(planes) {
+            *value = math::round_to_u8(plane[blocks + i] * scale);
         }
     }
 }

@@ -15,8 +15,6 @@ use crate::reader::BitReader;
 /// A single tile in the image.
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    /// The index of the tile, in row-major order.
-    pub(crate) idx: u32,
     /// The concatenated tile parts that contain all the information for all
     /// constituent codeblocks.
     pub(crate) tile_parts: Vec<TilePart<'a>>,
@@ -113,7 +111,6 @@ impl<'a> Tile<'a> {
         };
 
         Tile {
-            idx,
             // Will be filled once we start parsing.
             tile_parts: vec![],
             rect,

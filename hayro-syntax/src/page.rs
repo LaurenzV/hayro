@@ -264,7 +264,10 @@ impl<'a> Page<'a> {
                 if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
                     convert_single(stream)
                 } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
-                    let streams = array.iter::<Stream<'_>>().flat_map(convert_single);
+                    let streams = array
+                        .raw_iter()
+                        .filter_map(|item| item.resolve(&self.ctx)?.into_stream())
+                        .flat_map(convert_single);
 
                     let mut collected = vec![];
 
@@ -276,8 +279,6 @@ impl<'a> Page<'a> {
 
                     Some(collected)
                 } else {
-                    warn!("contents entry of page was neither stream nor array of streams");
-
                     None
                 }
             })

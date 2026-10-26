@@ -30,6 +30,8 @@ pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple interpreter invocations on the same document.
+// TODO: Cache keys are only unique within a document (streams, for example, are keyed by
+// their object identifier), so a cache shared across documents can mix up their objects.
 #[derive(Clone)]
 pub struct InterpreterCache<'a> {
     pub(crate) font_cache: Rc<RefCell<FxHashMap<u128, Option<Font<'a>>>>>,
@@ -121,11 +123,10 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn bbox(&self) -> Rect {
-        self.bbox.last().copied().unwrap_or_else(|| {
-            warn!("failed to get a bbox");
-
-            Rect::new(0.0, 0.0, 1.0, 1.0)
-        })
+        self.bbox
+            .last()
+            .copied()
+            .unwrap_or_else(|| Rect::new(0.0, 0.0, 1.0, 1.0))
     }
 
     fn push_bbox(&mut self, bbox: Rect) {
@@ -234,6 +235,8 @@ impl<'a> Context<'a> {
 
         if data.color_space.is_pattern() || data.pattern.is_some() {
             if let Some(mut pattern) = data.pattern {
+                pattern.set_opacity(data.alpha);
+
                 if let Some(tf) = &data.transfer_function {
                     pattern.set_transfer_function(tf.clone());
                 }
@@ -368,8 +371,6 @@ impl<'a> Context<'a> {
 
     pub(crate) fn begin_nested_interpretation(&mut self) -> bool {
         if self.nesting_depth >= MAX_NESTED_INTERPRETATION_DEPTH {
-            warn!("interpreter nesting depth exceeded");
-
             return false;
         }
 

@@ -66,7 +66,7 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
 }
 
 use crate::util::hash128;
-use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection};
+use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection, WritingMode};
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 
@@ -144,12 +144,18 @@ impl<'a> Deref for PositionedGlyph<'a> {
 /// A fully materialized run of positioned glyphs.
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
+    pub(crate) writing_mode: WritingMode,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
     /// Return the glyphs in the run.
     pub fn glyphs(&self) -> &'run [PositionedGlyph<'a>] {
         self.glyphs
+    }
+
+    /// Return the writing mode of the font the run was shown with.
+    pub fn writing_mode(&self) -> WritingMode {
+        self.writing_mode
     }
 }
 
@@ -302,14 +308,7 @@ impl<'a> Font<'a> {
             )?)),
             TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, font_resolver, cmap_resolver)?)),
             TYPE3 => FontType::Type3(Rc::new(Type3::new(dict, cmap_resolver)?)),
-            f => {
-                warn!(
-                    "unimplemented font type {:?}",
-                    std::str::from_utf8(f).unwrap_or("unknown type")
-                );
-
-                return None;
-            }
+            _ => return None,
         };
 
         let cache_key = dict.cache_key();
@@ -695,11 +694,7 @@ pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Optio
         }
     }
 
-    bf_string_from_str(&out).or_else(|| {
-        warn!("failed to map glyph name {} to unicode", name);
-
-        None
-    })
+    bf_string_from_str(&out)
 }
 
 fn uni_component(component: &str) -> Option<String> {

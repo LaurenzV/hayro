@@ -16,7 +16,7 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
-    resources: Option<Resources<'a>>,
+    pub(crate) resources: Option<Resources<'a>>,
 }
 
 impl<'a> FormXObject<'a> {

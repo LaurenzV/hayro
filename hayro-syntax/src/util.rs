@@ -4,20 +4,6 @@ use alloc::vec::Vec;
 use core::ops::Sub;
 use smallvec::{Array, SmallVec};
 
-pub(crate) trait OptionLog {
-    fn error_none(self, f: &str) -> Self;
-}
-
-impl<T> OptionLog for Option<T> {
-    fn error_none(self, _f: &str) -> Self {
-        self.or_else(|| {
-            error!("{_f}");
-
-            None
-        })
-    }
-}
-
 const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
 
 /// A number of useful methods for f32 numbers.

@@ -2,7 +2,7 @@ use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
-use crate::device::{Device, MarkedContentProperties};
+use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
@@ -11,8 +11,9 @@ use crate::interpret::state::{TextStateFont, handle_gs};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
-use crate::util::{OptionLog, RectExt};
+use crate::util::RectExt;
 use crate::x_object::{FormXObject, ImageXObject, XObject};
+use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
@@ -99,11 +100,8 @@ pub struct InterpreterSettings {
     /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
     /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
     pub warning_sink: WarningSinkFn,
-    /// Whether annotations should be rendered as well.
-    ///
-    /// Note that this feature is currently not fully implemented yet, so some
-    /// annotations might be missing.
-    pub render_annotations: bool,
+    /// Which parts of a page should be rendered.
+    pub render_content: RenderContent,
 }
 
 impl Default for InterpreterSettings {
@@ -121,8 +119,19 @@ impl Default for InterpreterSettings {
             #[cfg(not(feature = "embed-cmaps"))]
             cmap_resolver: Arc::new(|_| None),
             warning_sink: Arc::new(|_| {}),
-            render_annotations: true,
+            render_content: RenderContent::all(),
         }
+    }
+}
+
+bitflags! {
+    /// The parts of a page that should be rendered.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct RenderContent: u8 {
+        /// The content stream of the page.
+        const PAGE = 1 << 0;
+        /// The annotations of the page.
+        const ANNOTATIONS = 1 << 1;
     }
 }
 
@@ -146,76 +155,89 @@ pub fn interpret_page<'a>(
     device: &mut impl Device<'a>,
 ) {
     let resources = page.resources();
-    interpret(page.typed_operations(), resources, context, device);
+    let render_content = context.settings.render_content;
 
-    if context.settings.render_annotations
+    if render_content.contains(RenderContent::PAGE) {
+        interpret(page.typed_operations(), resources, context, device);
+    }
+
+    if render_content.contains(RenderContent::ANNOTATIONS)
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
         for annot in annot_arr.iter::<Dict<'_>>() {
-            let flags = annot.get::<u32>(F).unwrap_or(0);
-
-            if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
-                continue;
-            }
-
-            if let Some(apx) = appearance_stream(&annot).and_then(|o| FormXObject::new(&o)) {
-                let Some(rect) = annot.get::<Rect>(RECT) else {
-                    continue;
-                };
-
-                let annot_rect = rect.to_kurbo();
-                // 12.5.5. Appearance streams
-                // "The algorithm outlined in this subclause shall be used
-                // to map from the coordinate system of the appearance XObject."
-
-                // 1) The appearance’s bounding box (specified by its BBox entry)
-                // shall be transformed, using Matrix, to produce a
-                // quadrilateral with arbitrary orientation. The transformed
-                // appearance box is the smallest upright rectangle that
-                // encompasses this quadrilateral.
-                let transformed_rect = (apx.matrix
-                    * kurbo::Rect::new(
-                        apx.bbox[0] as f64,
-                        apx.bbox[1] as f64,
-                        apx.bbox[2] as f64,
-                        apx.bbox[3] as f64,
-                    )
-                    .to_path(0.1))
-                .bounding_box();
-
-                // 2) A matrix A shall be computed that scales and translates
-                // the transformed appearance box to align with the edges
-                // of the annotation’s rectangle (specified by the Rect entry).
-                // A maps the lower-left corner (the corner with the smallest
-                // x and y coordinates) and the upper-right corner (the
-                // corner with the greatest x and y coordinates) of the
-                // transformed appearance box to the corresponding corners
-                // of the annotation’s rectangle.
-                let sx = annot_rect.width() / transformed_rect.width();
-                let sy = annot_rect.height() / transformed_rect.height();
-                let affine = Affine::new([
-                    sx,
-                    0.0,
-                    0.0,
-                    sy,
-                    annot_rect.x0 - sx * transformed_rect.x0,
-                    annot_rect.y0 - sy * transformed_rect.y0,
-                ]);
-
-                // 3) Matrix shall be concatenated with A to form a matrix
-                // AA that maps from the appearance’s coordinate system to
-                // the annotation’s rectangle in default user space.
-                context.save_state();
-                context.pre_concat_affine(affine);
-                context.push_root_transform();
-
-                apx.draw(resources, context, device);
-                context.pop_root_transform();
-                context.restore_state(device);
-            } else if annot.get::<Dict<'_>>(AP).is_some() {
-                (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
-            }
+            interpret_annotation(&annot, resources, context, device);
         }
+    }
+}
+
+fn interpret_annotation<'a>(
+    annot: &Dict<'a>,
+    resources: &Resources<'a>,
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+) {
+    let flags = annot.get::<u32>(F).unwrap_or(0);
+
+    if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
+        return;
+    }
+
+    if let Some(apx) = appearance_stream(annot).and_then(|o| FormXObject::new(&o)) {
+        let Some(rect) = annot.get::<Rect>(RECT) else {
+            return;
+        };
+
+        let annot_rect = rect.to_kurbo();
+        // 12.5.5. Appearance streams
+        // "The algorithm outlined in this subclause shall be used
+        // to map from the coordinate system of the appearance XObject."
+
+        // 1) The appearance’s bounding box (specified by its BBox entry)
+        // shall be transformed, using Matrix, to produce a
+        // quadrilateral with arbitrary orientation. The transformed
+        // appearance box is the smallest upright rectangle that
+        // encompasses this quadrilateral.
+        let transformed_rect = (apx.matrix
+            * kurbo::Rect::new(
+                apx.bbox[0] as f64,
+                apx.bbox[1] as f64,
+                apx.bbox[2] as f64,
+                apx.bbox[3] as f64,
+            )
+            .to_path(0.1))
+        .bounding_box();
+
+        // 2) A matrix A shall be computed that scales and translates
+        // the transformed appearance box to align with the edges
+        // of the annotation’s rectangle (specified by the Rect entry).
+        // A maps the lower-left corner (the corner with the smallest
+        // x and y coordinates) and the upper-right corner (the
+        // corner with the greatest x and y coordinates) of the
+        // transformed appearance box to the corresponding corners
+        // of the annotation’s rectangle.
+        let sx = annot_rect.width() / transformed_rect.width();
+        let sy = annot_rect.height() / transformed_rect.height();
+        let affine = Affine::new([
+            sx,
+            0.0,
+            0.0,
+            sy,
+            annot_rect.x0 - sx * transformed_rect.x0,
+            annot_rect.y0 - sy * transformed_rect.y0,
+        ]);
+
+        // 3) Matrix shall be concatenated with A to form a matrix
+        // AA that maps from the appearance’s coordinate system to
+        // the annotation’s rectangle in default user space.
+        context.save_state();
+        context.pre_concat_affine(affine);
+        context.push_root_transform();
+
+        apx.draw(resources, context, device);
+        context.pop_root_transform();
+        context.restore_state(device);
+    } else if annot.get::<Dict<'_>>(AP).is_some() {
+        (context.settings.warning_sink)(InterpreterWarning::UnresolvedAnnotationAppearance);
     }
 }
 
@@ -390,10 +412,7 @@ pub fn interpret<'a>(
                 close_path(context);
             }
             TypedInstruction::SetGraphicsState(gs) => {
-                if let Some(gs) = resources
-                    .get_ext_g_state(gs.0)
-                    .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
-                {
+                if let Some(gs) = resources.get_ext_g_state(gs.0) {
                     handle_gs(&gs, context, resources);
                 }
             }
@@ -515,7 +534,7 @@ pub fn interpret<'a>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content(bdc.0, &MarkedContentProperties::new(properties));
+                device.begin_marked_content(bdc.0, properties.as_ref());
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -525,7 +544,7 @@ pub fn interpret<'a>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(bmc.0, &MarkedContentProperties::default());
+                device.begin_marked_content(bmc.0, None);
             }
             TypedInstruction::BeginText(_) => {
                 context.text_state_mut().text_matrix = Affine::IDENTITY;
@@ -647,11 +666,7 @@ pub fn interpret<'a>(
                     5 => TextRenderingMode::StrokeAndClip,
                     6 => TextRenderingMode::FillAndStrokeAndClip,
                     7 => TextRenderingMode::Clip,
-                    _ => {
-                        warn!("unknown text rendering mode {}", r.0.as_i64());
-
-                        TextRenderingMode::Fill
-                    }
+                    _ => TextRenderingMode::Fill,
                 };
 
                 context.text_state_mut().render_mode = mode;
@@ -702,35 +717,38 @@ pub fn interpret<'a>(
 
                 let transfer_function = context.compositing().transfer_function.clone();
 
-                if let Some(sp) = resources
-                    .get_shading(s.0)
-                    .and_then(|o| {
-                        let (dict, stream) = dict_or_stream(&o)?;
-                        Shading::new(dict, stream, &context.interpreter_cache.object_cache)
-                    })
-                    .map(|s| {
-                        Pattern::Shading(ShadingPattern {
-                            shading: Arc::new(s),
-                            matrix: Affine::IDENTITY,
-                            opacity: context.fill_paint().alpha,
-                            transfer_function: transfer_function.clone(),
-                        })
-                    })
-                {
+                if let Some(mut shading) = resources.get_shading(s.0).and_then(|o| {
+                    let (dict, stream) = dict_or_stream(&o)?;
+                    Shading::new(dict, stream, &context.interpreter_cache.object_cache)
+                }) {
+                    // The background only applies to shading patterns, not to `sh`.
+                    shading.background = None;
+
+                    let mut bbox = context.bbox();
+                    if let Some(bounds) = shading.mesh_bounds {
+                        // Snapped outwards to whole pixels, so that the sampled texture stays
+                        // aligned with the device pixels.
+                        let bounds = context.ctm().transform_rect_bbox(bounds);
+                        bbox = bbox.intersect(bounds.expand().inflate(1.0, 1.0));
+                    }
+
                     context.save_state();
                     context.push_root_transform();
                     let paint = context.fill_paint_mut();
-                    paint.pattern = Some(sp);
+                    paint.pattern = Some(Pattern::Shading(ShadingPattern {
+                        shading: Arc::new(shading),
+                        matrix: Affine::IDENTITY,
+                        opacity: 1.0,
+                        transfer_function: transfer_function.clone(),
+                    }));
                     paint.color_space = ColorSpace::pattern();
 
-                    let bbox = context.bbox().to_path(0.1);
+                    let bbox = bbox.to_path(0.1);
                     let inverted_bbox = context.ctm().inverse() * bbox;
                     fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));
 
                     context.pop_root_transform();
                     context.restore_state(device);
-                } else {
-                    warn!("failed to process shading");
                 }
             }
             TypedInstruction::BeginCompatibility(_) => {}
@@ -742,9 +760,7 @@ pub fn interpret<'a>(
                 text::next_line(context, 0.0, -context.text_state().leading as f64);
                 text::show_text_string(context, device, resources, t.2);
             }
-            _ => {
-                warn!("failed to read an operator");
-            }
+            _ => {}
         }
     }
 

@@ -158,6 +158,94 @@ mod inner {
             self.inner = self.inner / rhs;
         }
     }
+
+    #[inline(always)]
+    pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
+        simd: S,
+        channels: [&[f32; 16]; N],
+        scale: f32,
+        out: &mut [u8],
+    ) {
+        // TODO: This can be optimized on ARM by specializing it.
+        match N {
+            1 => to_u8(simd, channels[0], scale).store_slice(out),
+            2 => {
+                let (low, high) = simd.interleave_u8x16(
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                );
+                let (out_low, out_high) = out.split_at_mut(16);
+                low.store_slice(out_low);
+                high.store_slice(out_high);
+            }
+            3 => {
+                let (c0, c1, c2) = (
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
+                );
+                for (out, [i0, i1, i2]) in out.as_chunks_mut::<16>().0.iter_mut().zip(THREE_WAY) {
+                    let interleaved = c0.swizzle_dyn_precise(i0)
+                        | c1.swizzle_dyn_precise(i1)
+                        | c2.swizzle_dyn_precise(i2);
+                    interleaved.store_slice(out);
+                }
+            }
+            4 => {
+                let channels = [
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
+                    to_u8(simd, channels[3], scale),
+                ];
+                simd.store_four_interleaved_u8x16(channels, out.try_into().unwrap());
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline(always)]
+    fn to_u8<S: Simd>(simd: S, values: &[f32; 16], scale: f32) -> fearless_simd::u8x16<S> {
+        let scale = fearless_simd::f32x8::splat(simd, scale);
+        let half = fearless_simd::f32x8::splat(simd, 0.5);
+        let convert = |i: usize| {
+            let v = fearless_simd::f32x8::from_slice(simd, &values[i..i + 8]) * scale + half;
+
+            // On NEON, the unsigned conversion and the narrowing saturate by themselves,
+            // which saves the explicit clamping.
+            #[cfg(target_arch = "aarch64")]
+            {
+                let (a, b) = simd.split_u32x8(simd.cvt_u32_precise_f32x8(v));
+                simd.saturating_narrow_u32x4(a, b)
+            }
+
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                use fearless_simd::Bytes;
+
+                let zero = fearless_simd::f32x8::splat(simd, 0.0);
+                let max = fearless_simd::f32x8::splat(simd, 255.0);
+                let (a, b) = simd
+                    .split_i32x8(simd.cvt_i32_f32x8(simd.min_f32x8(simd.max_f32x8(v, zero), max)));
+                simd.relaxed_narrow_i32x4(a, b).bitcast()
+            }
+        };
+        // A relaxed narrow here makes LLVM fuse both steps into a 32-to-8-bit truncation,
+        // which it scalarizes on wasm.
+        simd.saturating_narrow_u16x8(convert(0), convert(8))
+    }
+
+    const THREE_WAY: [[[u8; 16]; 3]; 3] = three_way_indices();
+
+    const fn three_way_indices() -> [[[u8; 16]; 3]; 3] {
+        let mut indices = [[[0x80; 16]; 3]; 3];
+        let mut i = 0;
+        while i < 48 {
+            indices[i / 16][i % 3][i % 16] = (i / 3) as u8;
+            i += 1;
+        }
+        indices
+    }
 }
 
 #[cfg(not(feature = "simd"))]
@@ -376,6 +464,20 @@ mod inner {
         fn div_assign(&mut self, rhs: f32) {
             for i in 0..SIMD_WIDTH {
                 self.val[i] /= rhs;
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
+        _simd: S,
+        channels: [&[f32; 16]; N],
+        scale: f32,
+        out: &mut [u8],
+    ) {
+        for (i, pixel) in out.as_chunks_mut::<N>().0.iter_mut().enumerate() {
+            for (value, channel) in pixel.iter_mut().zip(channels) {
+                *value = super::round_to_u8(channel[i] * scale);
             }
         }
     }

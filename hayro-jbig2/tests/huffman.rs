@@ -13,7 +13,6 @@ fn custom_aggregate_count() {
 }
 
 #[test]
-#[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
 fn many_symbols() {
     check("huffman_many_symbols", "honeycomb");
 }

@@ -108,7 +108,6 @@ fn global() {
 }
 
 #[test]
-#[ignore = "hayro limits symbol dictionaries to 65535 symbols"]
 fn many_symbols() {
     check("symbol_many_symbols", "honeycomb");
 }

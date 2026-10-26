@@ -47,6 +47,13 @@ impl<'a, 'b> StencilImage<'a, 'b> {
         }
     }
 
+    /// Return the underlying stream object.
+    ///
+    /// This allows you to get access to the raw encoded image data, without doing any decoding.
+    pub fn stream(&self) -> &Stream<'b> {
+        self.image_xobject.stream()
+    }
+
     // These are hidden since clients are supposed to call get the
     // width/height from `LumaData` instead.
     #[doc(hidden)]

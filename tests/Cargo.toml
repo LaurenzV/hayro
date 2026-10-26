@@ -1,0 +1,48 @@
+[package]
+name = "hayro-tests"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[[bin]]
+name = "experiment"
+path = "src/experiment.rs"
+test = false
+
+[[test]]
+name = "tests"
+path = "tests/main.rs"
+harness = false
+
+[dependencies]
+hayro = { workspace = true, features = ["embed-cmaps"] }
+hayro-cmap = { workspace = true }
+hayro-write = { workspace = true }
+hayro-svg = { workspace = true }
+hayro-syntax = { workspace = true, features = ["std", "unsafe"] }
+hayro-jbig2 = { workspace = true }
+hayro-jpeg2000 = { workspace = true, features = ["image"] }
+pdf-writer = { workspace = true }
+image = { workspace = true, default-features = false}
+resvg = { workspace = true }
+walkdir = "2"
+rayon = "1.11"
+memchr = { version = "2.7.6"}
+
+
+[dev-dependencies]
+hayro-syntax = { workspace = true }
+image = {  workspace = true }
+console = "0.16"
+serde_json = "1"
+sha2 = "0.10"
+ureq = "3"
+
+[target.'cfg(target_arch = "aarch64")'.dev-dependencies]
+sha2 = { version = "0.10", features = ["asm"] }

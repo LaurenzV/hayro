@@ -1,7 +1,10 @@
 use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
-use crate::function::Function;
+use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
+use rustc_hash::FxHashMap;
+
+const MAX_CACHED_COLORS: usize = 1 << 18;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceN {
@@ -27,7 +30,7 @@ impl DeviceN {
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
-        if num_components == 0 {
+        if num_components == 0 || num_components as usize > MAX_COMPONENTS {
             return None;
         }
 
@@ -41,17 +44,68 @@ impl DeviceN {
     }
 
     fn evaluate(&self, input: &[u8]) -> Vec<u8> {
-        input
-            .chunks_exact(self.num_components as usize)
-            .flat_map(|n| {
-                let input = n.iter().map(|value| *value as f32 / 255.0).collect();
-                let values = self
-                    .tint_transform
-                    .eval(input)
-                    .unwrap_or(self.alternate_space.initial_color());
-                self.alternate_space.encode_values(&values)
-            })
-            .collect()
+        let num_components = self.num_components as usize;
+        let num_encoded = self.alternate_space.num_components() as usize;
+        let mut components = [0.0; MAX_COMPONENTS];
+        let components = &mut components[..num_components];
+        let mut values = [0.0; MAX_COMPONENTS];
+        let values = &mut values[..self.tint_transform.num_outputs()];
+        let mut evaluate_pixel = |pixel: &[u8]| {
+            for (component, value) in components.iter_mut().zip(pixel) {
+                *component = *value as f32 * (1.0 / 255.0);
+            }
+
+            if self.tint_transform.eval(components, values).is_some() {
+                self.alternate_space.encode_values(values)
+            } else {
+                self.alternate_space
+                    .encode_values(&self.alternate_space.initial_color())
+            }
+        };
+        let mut evaluated = Vec::with_capacity(input.len() / num_components * num_encoded);
+
+        if num_components > 8 {
+            for pixel in input.chunks_exact(num_components) {
+                evaluated.extend(evaluate_pixel(pixel));
+            }
+
+            return evaluated;
+        }
+
+        let mut cached = Vec::new();
+        let mut offsets = FxHashMap::default();
+        let mut previous = None;
+
+        for pixel in input.chunks_exact(num_components) {
+            let key = pixel
+                .iter()
+                .fold(0_u64, |key, value| (key << 8) | u64::from(*value));
+
+            let offset = match previous {
+                Some((previous_key, offset)) if previous_key == key => Some(offset),
+                _ => match offsets.get(&key) {
+                    Some(&offset) => Some(offset),
+                    None if offsets.len() < MAX_CACHED_COLORS => {
+                        let offset = cached.len();
+                        cached.extend(evaluate_pixel(pixel));
+                        offsets.insert(key, offset);
+
+                        Some(offset)
+                    }
+                    None => None,
+                },
+            };
+
+            match offset {
+                Some(offset) => {
+                    evaluated.extend_from_slice(&cached[offset..offset + num_encoded]);
+                    previous = Some((key, offset));
+                }
+                None => evaluated.extend(evaluate_pixel(pixel)),
+            }
+        }
+
+        evaluated
     }
 
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {

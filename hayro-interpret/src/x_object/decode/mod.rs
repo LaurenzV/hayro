@@ -205,10 +205,7 @@ fn decode_u8_samples(
                 })
                 .collect::<Option<Vec<_>>>()?,
         ),
-        _ => {
-            warn!("unsupported bits per component: {bits_per_component}");
-            None
-        }
+        _ => None,
     }
 }
 
@@ -246,10 +243,7 @@ fn unpack_samples(
                 .map(|value| u16::from_be_bytes([value[0], value[1]]))
                 .collect(),
         ),
-        _ => {
-            warn!("unsupported bits per component: {bits_per_component}");
-            None
-        }
+        _ => None,
     }
 }
 

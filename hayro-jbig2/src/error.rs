@@ -139,7 +139,7 @@ pub enum OverflowError {
     ReferenceOffset,
     /// Index computation overflowed.
     Index,
-    /// A symbol dictionary has too many symbols.
+    /// A symbol dictionary or region has too many symbols.
     SymbolCount,
 }
 
@@ -167,7 +167,7 @@ impl fmt::Display for OverflowError {
             Self::ReferenceOffset => write!(f, "overflow in reference offset computation"),
             Self::Index => write!(f, "overflow in index computation"),
             Self::GridDimension => write!(f, "overflow in grid dimension computation"),
-            Self::SymbolCount => write!(f, "a symbol dictionary has too many symbols"),
+            Self::SymbolCount => write!(f, "too many symbols"),
         }
     }
 }
