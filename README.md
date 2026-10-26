@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/hayro.svg)](https://crates.io/crates/hayro)
 [![Documentation](https://docs.rs/hayro/badge.svg)](https://docs.rs/hayro)
 
-A set of crates for reading, interpreting and rendering PDF files.
+A set of Rust crates for parsing, interpreting and rendering PDF files.
 
 ## Motivation
 
