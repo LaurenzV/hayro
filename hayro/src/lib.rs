@@ -67,6 +67,7 @@ mod image;
 mod mask;
 mod paint;
 mod path;
+mod tiling;
 
 pub(crate) struct GlobalState {
     level: Level,
