@@ -1,13 +1,13 @@
 //! Encoding shading patterns for easy sampling.
 
 use crate::color::{AlphaColor, ColorComponents, ColorSpace};
+use crate::function::MAX_COMPONENTS;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
 use crate::util::x_y_advances;
 use kurbo::{Affine, Point, Rect};
 use rustc_hash::FxHashMap;
-use smallvec::{ToSmallVec, smallvec};
 use std::sync::Arc;
 
 /// A shading pattern that was encoded so it can be sampled.
@@ -398,9 +398,11 @@ impl EncodedShadingType {
                 if !domain.contains(pos) {
                     Some(bg_color)
                 } else {
-                    let out = function.eval(&smallvec![pos.x as f32, pos.y as f32])?;
+                    let mut out = [0.0; MAX_COMPONENTS];
+                    let out = &mut out[..function.num_outputs()];
+                    function.eval(&[pos.x as f32, pos.y as f32], out)?;
                     // TODO: Clamp out-of-range values.
-                    Some(color_space.to_rgba(&out, 1.0))
+                    Some(color_space.to_rgba(out, 1.0))
                 }
             }
             Self::RadialAxial(EncodedRadialAxialShading {
@@ -438,17 +440,21 @@ impl EncodedShadingType {
 
                 let t = t0 + (t1 - t0) * t;
 
-                let val = function.eval(&smallvec![t])?;
+                let mut val = [0.0; MAX_COMPONENTS];
+                let val = &mut val[..function.num_outputs()];
+                function.eval(&[t], val)?;
 
-                Some(color_space.to_rgba(&val, 1.0))
+                Some(color_space.to_rgba(val, 1.0))
             }
             Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
                 if let Some(color) = samples.get(&sample_point) {
                     if let Some(function) = function {
-                        let val = function.eval(&color.to_smallvec())?;
-                        Some(color_space.to_rgba(&val, 1.0))
+                        let mut val = [0.0; MAX_COMPONENTS];
+                        let val = &mut val[..function.num_outputs()];
+                        function.eval(color, val)?;
+                        Some(color_space.to_rgba(val, 1.0))
                     } else {
                         Some(color_space.to_rgba(color, 1.0))
                     }

@@ -1,84 +1,81 @@
-use crate::function::{Clamper, Function, StitchingBounds, TupleVec, Values, interpolate};
+use crate::function::{Function, Interval, interpolate, read_intervals};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{BOUNDS, ENCODE, FUNCTIONS};
-use smallvec::smallvec;
 
 /// A type 3 function (stitching function).
 #[derive(Debug)]
 pub(crate) struct Type3 {
     functions: Vec<Function>,
     bounds: Vec<f32>,
-    encode: TupleVec,
-    clamper: Clamper,
+    encode: Vec<Interval>,
 }
 
 impl Type3 {
     /// Create a new type 3 function.
-    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
-        let clamper = Clamper::new(dict)?;
-
+    pub(crate) fn new(dict: &Dict<'_>, domain: Interval) -> Option<Self> {
         let functions = dict
-            .get::<Array<'_>>(FUNCTIONS)
-            .and_then(|d| d.iter::<Object<'_>>().map(|o| Function::new(&o)).collect())?;
-        let domain = *clamper.domain.first()?;
-        let mut bounds = vec![domain.0 - 0.0001];
-        if let Some(a) = dict.get::<Array<'_>>(BOUNDS) {
-            bounds.extend(a.iter::<f32>());
-        }
-        // Add a small delta so that the interval is considered to be closed on the right.
-        bounds.push(domain.1 + 0.0001);
+            .get::<Array<'_>>(FUNCTIONS)?
+            .iter::<Object<'_>>()
+            .map(|o| Function::new(&o))
+            .collect::<Option<Vec<_>>>()?;
 
-        let encode = dict.get::<TupleVec>(ENCODE)?;
+        let num_outputs = functions.first().map(Function::num_outputs)?;
+
+        if functions
+            .iter()
+            .any(|f| f.num_inputs() != 1 || f.num_outputs() != num_outputs)
+        {
+            return None;
+        }
+
+        let inner_bounds = dict
+            .get::<Array<'_>>(BOUNDS)
+            .map(|a| a.iter::<f32>().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let encode = read_intervals(dict, ENCODE)?;
+
+        if inner_bounds.len() != functions.len() - 1 || encode.len() != functions.len() {
+            return None;
+        }
+
+        let mut bounds = vec![domain.min - 0.0001];
+        bounds.extend(inner_bounds);
+        // Add a small delta so that the interval is considered to be closed on the right.
+        bounds.push(domain.max + 0.0001);
 
         Some(Self {
             functions,
-            clamper,
             bounds,
             encode,
         })
     }
 
-    /// Evaluate the function with the given input.
-    pub(crate) fn eval(&self, input: f32) -> Option<Values> {
-        let mut input = [input];
-        self.clamper.clamp_input(&mut input);
-
-        let index = find_interval(&self.bounds, input[0])?;
-
-        let bounds_i = *self.bounds.get(index + 1)?;
-        let bounds_i_minus_1 = *self.bounds.get(index)?;
-
-        // - 1 because we inserted a dummy bound in the constructor.
-        let encoding = self.encode.get(index)?;
-        let function = self.functions.get(index)?;
-        let encoded = interpolate(input[0], bounds_i_minus_1, bounds_i, encoding.0, encoding.1);
-
-        let mut evaluated = function.eval(smallvec![encoded])?;
-
-        self.clamper.clamp_output(&mut evaluated);
-
-        Some(evaluated)
+    pub(crate) fn num_outputs(&self) -> usize {
+        self.functions[0].num_outputs()
     }
 
-    pub(crate) fn stitching_bounds(&self) -> StitchingBounds {
-        let mut stitching_bounds = StitchingBounds::new();
-        if self.bounds.len() > 2 {
-            stitching_bounds.extend_from_slice(&self.bounds[1..self.bounds.len() - 1]);
-        }
+    /// Evaluate the function with the given input.
+    pub(crate) fn eval(&self, input: f32, output: &mut [f32]) -> Option<()> {
+        let index = find_interval(&self.bounds, input)?;
+        let interval = Interval {
+            min: self.bounds[index],
+            max: self.bounds[index + 1],
+        };
+
+        self.functions[index].eval(&[interval.map(input, self.encode[index])], output)
+    }
+
+    pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
+        let mut stitching_bounds = self.bounds[1..self.bounds.len() - 1].to_vec();
 
         for (index, function) in self.functions.iter().enumerate() {
-            let Some(bounds_i_minus_1) = self.bounds.get(index).copied() else {
-                continue;
-            };
-            let Some(bounds_i) = self.bounds.get(index + 1).copied() else {
-                continue;
-            };
-
-            let Some((encode_min, encode_max)) = self.encode.get(index).copied() else {
-                continue;
-            };
+            let (bounds_i_minus_1, bounds_i) = (self.bounds[index], self.bounds[index + 1]);
+            let Interval {
+                min: encode_min,
+                max: encode_max,
+            } = self.encode[index];
 
             if (encode_max - encode_min).abs() <= f32::EPSILON {
                 continue;
@@ -156,23 +153,23 @@ mod tests {
         let function = Function::new(&dict).unwrap();
 
         assert_eq!(
-            function.eval(smallvec![-7.0]).unwrap().as_slice(),
+            function.eval_one(&[-7.0]).unwrap().as_slice(),
             &[0.5, 0.5, 0.5]
         );
         assert_eq!(
-            function.eval(smallvec![-3.0]).unwrap().as_slice(),
+            function.eval_one(&[-3.0]).unwrap().as_slice(),
             &[0.5, 0.5, 0.5]
         );
         assert_eq!(
-            function.eval(smallvec![-0.5]).unwrap().as_slice(),
+            function.eval_one(&[-0.5]).unwrap().as_slice(),
             &[0.5, 0.5, 0.5]
         );
         assert_eq!(
-            function.eval(smallvec![0.0]).unwrap().as_slice(),
+            function.eval_one(&[0.0]).unwrap().as_slice(),
             &[0.7, 0.7, 0.7]
         );
         assert_eq!(
-            function.eval(smallvec![7.0]).unwrap().as_slice(),
+            function.eval_one(&[7.0]).unwrap().as_slice(),
             &[0.7, 0.7, 0.7]
         );
     }

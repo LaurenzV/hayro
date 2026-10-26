@@ -1,6 +1,6 @@
 use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
-use crate::function::Function;
+use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ impl DeviceN {
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
-        if num_components == 0 {
+        if num_components == 0 || num_components as usize > MAX_COMPONENTS {
             return None;
         }
 
@@ -41,17 +41,31 @@ impl DeviceN {
     }
 
     fn evaluate(&self, input: &[u8]) -> Vec<u8> {
-        input
-            .chunks_exact(self.num_components as usize)
-            .flat_map(|n| {
-                let input = n.iter().map(|value| *value as f32 / 255.0).collect();
-                let values = self
-                    .tint_transform
-                    .eval(input)
-                    .unwrap_or(self.alternate_space.initial_color());
-                self.alternate_space.encode_values(&values)
-            })
-            .collect()
+        let num_components = self.num_components as usize;
+        let mut components = [0.0; MAX_COMPONENTS];
+        let components = &mut components[..num_components];
+        let mut values = [0.0; MAX_COMPONENTS];
+        let values = &mut values[..self.tint_transform.num_outputs()];
+        let mut evaluated = Vec::with_capacity(
+            input.len() / num_components * self.alternate_space.num_components() as usize,
+        );
+
+        for pixel in input.chunks_exact(num_components) {
+            for (component, value) in components.iter_mut().zip(pixel) {
+                *component = *value as f32 * (1.0 / 255.0);
+            }
+
+            if self.tint_transform.eval(components, values).is_some() {
+                evaluated.extend(self.alternate_space.encode_values(values));
+            } else {
+                evaluated.extend(
+                    self.alternate_space
+                        .encode_values(&self.alternate_space.initial_color()),
+                );
+            }
+        }
+
+        evaluated
     }
 
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {

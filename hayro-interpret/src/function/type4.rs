@@ -1,10 +1,8 @@
-use crate::function::{Clamper, Values};
 use hayro_syntax::content;
 use hayro_syntax::object::Number;
 use hayro_syntax::object::Stream;
 use hayro_syntax::reader::Reader;
 use hayro_syntax::reader::{ReaderContext, ReaderExt};
-use smallvec::SmallVec;
 use std::array;
 use std::ops::Rem;
 
@@ -12,38 +10,38 @@ use std::ops::Rem;
 #[derive(Debug)]
 pub(crate) struct Type4 {
     program: Vec<PostScriptOp>,
-    clamper: Clamper,
 }
 
 impl Type4 {
     /// Create a new type 4 function.
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
-        let dict = stream.dict().clone();
-        let clamper = Clamper::new(&dict)?;
-
         Some(Self {
-            clamper,
             program: parse_procedure(&stream.decoded().ok()?)?,
         })
     }
 
     /// Evaluate the function with the given input.
-    pub(crate) fn eval(&self, mut input: Values) -> Option<Values> {
-        self.clamper.clamp_input(&mut input);
+    pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
+        let stack = self.run(input)?;
+        let values = stack.items().get(..output.len())?;
 
-        let mut arg_stack = InterpreterStack::new();
-
-        for input in input {
-            arg_stack.push(Argument::Float(input));
+        for (output, value) in output.iter_mut().zip(values) {
+            *output = value.as_f32();
         }
 
-        eval_inner(&self.program, &mut arg_stack)?;
+        Some(())
+    }
 
-        let mut out: SmallVec<_> = arg_stack.items().iter().map(|i| i.as_f32()).collect();
+    fn run(&self, input: &[f32]) -> Option<InterpreterStack> {
+        let mut stack = InterpreterStack::new();
 
-        self.clamper.clamp_output(&mut out);
+        for input in input {
+            stack.push(Argument::Float(*input))?;
+        }
 
-        Some(out)
+        eval_inner(&self.program, &mut stack)?;
+
+        Some(stack)
     }
 }
 
@@ -554,12 +552,11 @@ impl PostScriptOp {
 #[cfg(test)]
 mod tests {
     use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
-    use crate::function::{Clamper, Function, FunctionType, TupleVec, Values};
+    use crate::function::{Function, FunctionType, Interval, Repr};
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
     use hayro_syntax::object::Number;
-    use smallvec::smallvec;
 
     #[test]
     fn lex_1() {
@@ -599,15 +596,9 @@ mod tests {
         let procedure = format!("{{{prog}}}");
         let procedure = parse_procedure(procedure.as_bytes()).unwrap();
 
-        let type4 = Type4 {
-            program: procedure,
-            clamper: Clamper {
-                domain: TupleVec::default(),
-                range: None,
-            },
-        };
-
-        let res = type4.eval(Values::new()).unwrap();
+        let type4 = Type4 { program: procedure };
+        let stack = type4.run(&[]).unwrap();
+        let res = stack.items().iter().map(|i| i.as_f32()).collect::<Vec<_>>();
 
         assert_eq!(res.as_slice(), out);
     }
@@ -888,16 +879,20 @@ mod tests {
     fn domain() {
         let procedure = parse_procedure(b"{  }").unwrap();
 
-        let type4 = Function(Arc::new(FunctionType::Type4(Type4 {
-            program: procedure,
-            clamper: Clamper {
-                domain: smallvec![(-5.0, 5.0), (-5.0, 5.0), (-5.0, 5.0)],
-                range: None,
-            },
-        })));
+        let type4 = Function(Arc::new(Repr {
+            domain: vec![
+                Interval {
+                    min: -5.0,
+                    max: 5.0
+                };
+                3
+            ],
+            range: None,
+            num_outputs: 3,
+            function_type: FunctionType::Type4(Type4 { program: procedure }),
+        }));
 
-        let input = smallvec![-10.0, -2.0, 6.0];
-        let res = type4.eval(input).unwrap();
+        let res = type4.eval_one(&[-10.0, -2.0, 6.0]).unwrap();
 
         assert_eq!(res.as_slice(), &[-5.0, -2.0, 5.0]);
     }
