@@ -1,21 +1,24 @@
-use crate::function::{Interval, interpolate};
+use crate::function::{Interval, MAX_COMPONENTS, read_intervals};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
-use smallvec::{SmallVec, smallvec};
 
 /// A type 0 function (sampled function).
 #[derive(Debug)]
 pub(crate) struct Type0 {
-    sizes: IntVec,
-    strides: Vec<usize>,
-    table: Vec<u32>,
-    domain: Vec<Interval>,
-    num_outputs: usize,
-    bits_per_sample: u8,
-    encode: TupleVec,
-    decode: TupleVec,
+    inputs: Vec<SampledInput>,
+    decode: Vec<Interval>,
+    sample_range: Interval,
+    samples: Vec<f32>,
+}
+
+#[derive(Debug)]
+struct SampledInput {
+    domain: Interval,
+    encode: Interval,
+    size: u32,
+    stride: usize,
 }
 
 impl Type0 {
@@ -28,184 +31,115 @@ impl Type0 {
         let dict = stream.dict();
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
-        if !matches!(bits_per_sample, 1 | 2 | 4 | 8 | 16 | 24 | 32) {
-            return None;
-        }
-
-        if range.is_empty() {
+        if !matches!(bits_per_sample, 1 | 2 | 4 | 8 | 12 | 16 | 24 | 32) {
             return None;
         }
 
         let sizes = dict
             .get::<Array<'_>>(SIZE)?
             .iter::<u32>()
-            .collect::<IntVec>();
+            .collect::<Vec<_>>();
 
-        let encode = dict
-            .get::<TupleVec>(ENCODE)
-            .unwrap_or(sizes.iter().map(|s| (0.0, (*s - 1) as f32)).collect());
+        if sizes.len() != domain.len() || sizes.contains(&0) {
+            return None;
+        }
 
-        let decode = dict
-            .get::<TupleVec>(DECODE)
-            .unwrap_or(range.iter().map(|r| (r.min, r.max)).collect());
+        let encode = read_intervals(dict, ENCODE).unwrap_or_else(|| {
+            sizes
+                .iter()
+                .map(|size| Interval {
+                    min: 0.0,
+                    max: (size - 1) as f32,
+                })
+                .collect()
+        });
+        let decode = read_intervals(dict, DECODE).unwrap_or_else(|| range.to_vec());
 
-        let mut data = {
-            let decoded = stream.decoded().ok()?;
-            let mut buf = vec![];
-            let mut reader = BitReader::new(&decoded);
-
-            while let Some(data) = reader.read(bits_per_sample) {
-                buf.push(data);
-            }
-
-            buf
-        };
+        if encode.len() != sizes.len() || decode.len() != range.len() {
+            return None;
+        }
 
         let mut stride = range.len();
-        let mut strides = Vec::with_capacity(sizes.len());
-        for size in &sizes {
-            strides.push(stride);
-            stride = stride.checked_mul(*size as usize)?;
-        }
-        let num_expected_entries = stride;
+        let mut inputs = Vec::with_capacity(sizes.len());
 
-        if data.len() != num_expected_entries {
-            data.truncate(num_expected_entries);
+        for ((domain, encode), size) in domain.iter().zip(encode).zip(sizes) {
+            inputs.push(SampledInput {
+                domain: *domain,
+                encode,
+                size,
+                stride,
+            });
+            stride = stride.checked_mul(size as usize)?;
         }
+
+        let decoded = stream.decoded().ok()?;
+
+        if decoded.len() * 8 / usize::from(bits_per_sample) < stride {
+            return None;
+        }
+
+        let mut reader = BitReader::new(&decoded);
+        let samples = (0..stride)
+            .map(|_| reader.read(bits_per_sample).map(|sample| sample as f32))
+            .collect::<Option<Vec<_>>>()?;
 
         Some(Self {
-            sizes,
-            strides,
-            domain: domain.to_vec(),
-            num_outputs: range.len(),
-            bits_per_sample,
-            table: data,
-            encode,
+            inputs,
             decode,
+            sample_range: Interval {
+                min: 0.0,
+                max: ((1_u64 << bits_per_sample) - 1) as f32,
+            },
+            samples,
         })
     }
 
     /// Evaluate a type 0 function with the given input.
-    pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
-        if input.len() != self.sizes.len() {
-            return None;
-        }
+    pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) {
+        let mut offset = 0;
+        let mut fractions = [(0, 0.0); MAX_COMPONENTS];
+        let mut num_fractions = 0;
 
-        let mut key = Values::from_slice(input);
+        for (x, input) in input.iter().zip(&self.inputs) {
+            let position = input
+                .domain
+                .map(*x, input.encode)
+                .max(0.0)
+                .min(input.size as f32 - 1.0);
+            let index = position.floor();
+            offset += index as usize * input.stride;
 
-        for (((x, domain), encode), size) in key
-            .iter_mut()
-            .zip(self.domain.iter())
-            .zip(self.encode.iter())
-            .zip(self.sizes.iter())
-        {
-            *x = interpolate(*x, domain.min, domain.max, encode.0, encode.1);
-            *x = x.max(0.0).min(*size as f32 - 1.0);
-        }
-
-        let in_prev = key.iter().map(|v| v.floor() as u32).collect::<IntVec>();
-        let in_next = key.iter().map(|v| v.ceil() as u32).collect::<IntVec>();
-
-        let interpolator =
-            Interpolator::new(&key, in_prev, in_next, &self.strides, self.num_outputs);
-
-        let interpolated = interpolator.interpolate(&self.table)?;
-
-        for ((output, x), decode) in output.iter_mut().zip(&interpolated).zip(&self.decode) {
-            *output = interpolate(
-                *x,
-                0.0,
-                (2_u32.pow(self.bits_per_sample as u32) - 1) as f32,
-                decode.0,
-                decode.1,
-            );
-        }
-
-        Some(())
-    }
-}
-
-type Values = SmallVec<[f32; 4]>;
-type TupleVec = SmallVec<[(f32, f32); 4]>;
-type FloatVec = SmallVec<[f32; 4]>;
-type IntVec = SmallVec<[u32; 4]>;
-
-// See <https://github.com/apache/pdfbox/blob/bb778d4784f354c36ce032e91a0cee2169a4c598/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/common/function/PDFunctionType0.java#L252>
-struct Interpolator<'a> {
-    input: &'a [f32],
-    strides: &'a [usize],
-    in_prev: IntVec,
-    in_next: IntVec,
-    out_len: usize,
-}
-
-impl<'a> Interpolator<'a> {
-    fn new(
-        input: &'a [f32],
-        in_prev: IntVec,
-        in_next: IntVec,
-        strides: &'a [usize],
-        out_len: usize,
-    ) -> Self {
-        Self {
-            input,
-            in_prev,
-            in_next,
-            strides,
-            out_len,
-        }
-    }
-
-    fn interpolate(&self, table: &[u32]) -> Option<FloatVec> {
-        let mut out = smallvec![0.0; self.out_len];
-        self.interpolate_inner(0, 0, 1.0, table, &mut out)?;
-        Some(out)
-    }
-
-    fn interpolate_inner(
-        &self,
-        step: usize,
-        offset: usize,
-        weight: f32,
-        table: &[u32],
-        out: &mut [f32],
-    ) -> Option<()> {
-        if step == self.input.len() {
-            let sample = table.get(offset..offset + self.out_len)?;
-            for (out, sample) in out.iter_mut().zip(sample) {
-                *out += weight * *sample as f32;
+            if position != index {
+                fractions[num_fractions] = (input.stride, position - index);
+                num_fractions += 1;
             }
-            return Some(());
         }
 
-        let prev = self.in_prev[step];
-        let next = self.in_next[step];
-        let stride = self.strides[step];
+        let fractions = &fractions[..num_fractions];
+        output.fill(0.0);
 
-        if prev == next {
-            self.interpolate_inner(
-                step + 1,
-                offset + prev as usize * stride,
-                weight,
-                table,
-                out,
-            )
-        } else {
-            let next_weight = self.input[step] - prev as f32;
-            self.interpolate_inner(
-                step + 1,
-                offset + prev as usize * stride,
-                weight * (1.0 - next_weight),
-                table,
-                out,
-            )?;
-            self.interpolate_inner(
-                step + 1,
-                offset + next as usize * stride,
-                weight * next_weight,
-                table,
-                out,
-            )
+        for corner in 0..1_usize << fractions.len() {
+            let mut weight = 1.0;
+            let mut corner_offset = offset;
+
+            for (i, (stride, fraction)) in fractions.iter().enumerate() {
+                if corner >> (fractions.len() - 1 - i) & 1 == 1 {
+                    weight *= fraction;
+                    corner_offset += stride;
+                } else {
+                    weight *= 1.0 - fraction;
+                }
+            }
+
+            let samples = &self.samples[corner_offset..corner_offset + output.len()];
+
+            for (output, sample) in output.iter_mut().zip(samples) {
+                *output += weight * *sample;
+            }
+        }
+
+        for (output, decode) in output.iter_mut().zip(&self.decode) {
+            *output = self.sample_range.map(*output, *decode);
         }
     }
 }

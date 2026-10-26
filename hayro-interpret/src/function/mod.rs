@@ -158,7 +158,7 @@ impl Function {
             }
 
             match &repr.function_type {
-                FunctionType::Type0(f) => f.eval(clamped, output)?,
+                FunctionType::Type0(f) => f.eval(clamped, output),
                 FunctionType::Type2(f) => f.eval(clamped[0], output),
                 FunctionType::Type3(f) => f.eval(clamped[0], output)?,
                 FunctionType::Type4(f) => f.eval(clamped, output)?,
