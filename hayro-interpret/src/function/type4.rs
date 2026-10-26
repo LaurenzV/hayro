@@ -23,7 +23,8 @@ impl Type4 {
     /// Evaluate the function with the given input.
     pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
         let stack = self.run(input)?;
-        let values = stack.items().get(..output.len())?;
+        let items = stack.items();
+        let values = &items[items.len().checked_sub(output.len())?..];
 
         for (output, value) in output.iter_mut().zip(values) {
             *output = value.as_f32();
@@ -153,7 +154,7 @@ impl<T: Default, const C: usize> ArgumentsStack<T, C> {
     }
 }
 
-type InterpreterStack = ArgumentsStack<Argument, 64>;
+type InterpreterStack = ArgumentsStack<Argument, 100>;
 type ParseStack = ArgumentsStack<Vec<PostScriptOp>, 2>;
 
 fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> Option<()> {
