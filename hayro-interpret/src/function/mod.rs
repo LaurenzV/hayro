@@ -19,10 +19,7 @@ use std::sync::{Arc, OnceLock};
 
 pub(crate) const MAX_COMPONENTS: usize = 32;
 
-/// The maximum number of functions that may be nested in each other through the
-/// `/Functions` of stitching functions. Real documents nest at most a few levels;
-/// deeper chains would otherwise overflow the stack when building, evaluating or
-/// dropping the function.
+// Bound recursive function construction, evaluation and drop.
 const MAX_FUNCTION_DEPTH: u8 = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,7 +79,6 @@ impl Function {
         Self::new_nested(obj, 0)
     }
 
-    /// Create a new function that is nested `depth` levels deep in another one.
     fn new_nested(obj: &Object<'_>, depth: u8) -> Option<Self> {
         if depth >= MAX_FUNCTION_DEPTH {
             return None;
@@ -270,9 +266,6 @@ mod tests {
     use hayro_syntax::Pdf;
     use hayro_syntax::object::{Object, ObjectIdentifier};
 
-    /// Build a document whose objects 10 to `10 + len - 1` are stitching functions that
-    /// each name the next one as their only function, and whose last object is a type 2
-    /// function.
     fn stitching_chain(len: usize) -> Pdf {
         let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
 2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
@@ -316,7 +309,6 @@ mod tests {
 
     #[test]
     fn deep_function_chain_fails() {
-        // Without a bound, building this chain recurses 20,000 times and overflows the stack.
         assert!(function_of_chain(20_000).is_none());
     }
 }

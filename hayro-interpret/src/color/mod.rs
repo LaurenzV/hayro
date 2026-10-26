@@ -156,10 +156,7 @@ pub(crate) enum ColorSpaceType {
     DeviceN(DeviceN),
 }
 
-/// The maximum number of color spaces that may be nested in each other, for example
-/// through the base of an `Indexed` space or the alternate of a `Separation` space.
-/// Real documents nest at most a few levels; deeper chains would otherwise overflow
-/// the stack.
+// Bound recursive color-space construction.
 const MAX_COLOR_SPACE_DEPTH: u8 = 32;
 
 impl ColorSpaceType {
@@ -280,7 +277,6 @@ impl ColorSpace {
         Self::new_nested(object, cache, 0)
     }
 
-    /// Create a new color space that is nested `depth` levels deep in another one.
     pub(super) fn new_nested(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         Some(Self(Arc::new(ColorSpaceType::new(object, cache, depth)?)))
     }
@@ -661,8 +657,6 @@ mod tests {
     use hayro_syntax::Pdf;
     use hayro_syntax::object::{Object, ObjectIdentifier};
 
-    /// Build a document whose objects 10 to `10 + len - 1` are `Indexed` color spaces that
-    /// each name the next one as their base, and whose last object is `DeviceGray`.
     fn indexed_chain(len: usize) -> Pdf {
         let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
 2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
@@ -701,7 +695,6 @@ mod tests {
 
     #[test]
     fn deep_color_space_chain_fails() {
-        // Without a bound, building this chain recurses 20,000 times and overflows the stack.
         assert!(color_space_of_chain(20_000).is_none());
     }
 }
