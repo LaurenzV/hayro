@@ -7,7 +7,6 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::{Debug, Display, Formatter};
 
-// The powers of ten that an `f64` represents exactly.
 #[rustfmt::skip]
 static POWERS_OF_10: [f64; 23] = [
     1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
@@ -15,7 +14,6 @@ static POWERS_OF_10: [f64; 23] = [
     1e20, 1e21, 1e22,
 ];
 
-// The largest mantissa below which every integer converts to `f64` exactly.
 const MAX_EXACT_MANTISSA: u64 = 1 << 53;
 
 /// A number.
@@ -166,7 +164,6 @@ impl Number {
         Self::from_parts(negative, mantissa, decimal_shift)
     }
 
-    /// Returns `None` for a real that the fast path can't read exactly.
     #[inline(always)]
     fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Option<Self> {
         match decimal_shift {
@@ -179,9 +176,7 @@ impl Number {
                 })))
             }
             Some(shift) => {
-                // Clinger's fast path: when both the mantissa and the power of
-                // ten are exact, the one division rounds once, so the result is
-                // the correctly rounded `f64`.
+                // Clinger's fast path rounds once when the mantissa and divisor are exact.
                 if mantissa > MAX_EXACT_MANTISSA {
                     return None;
                 }
@@ -277,8 +272,6 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
         return Some(number);
     }
 
-    // The number is too long for the fast path, so read it through the
-    // standard library, which rounds correctly.
     let end_offset = number_end.unwrap_or_else(|| r.offset());
     let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
 
@@ -713,17 +706,11 @@ mod tests {
         }
     }
 
-    // Each value is written with Rust's `{}`, the shortest decimal that a
-    // correctly rounded parser reads back to the same `f64`.
     #[test]
     fn reals_round_correctly() {
         for value in [
-            // A mantissa above 2^53: rounding it to `f64` and then dividing
-            // rounds twice.
             519_188.221_071_372_04,
-            // A power of ten above 10^22 isn't exact.
             1e-25,
-            // The smallest normal and subnormal numbers.
             f64::MIN_POSITIVE,
             f64::from_bits(1),
             0.1,
@@ -744,11 +731,8 @@ mod tests {
 
     #[test]
     fn real_at_fast_path_limits() {
-        // 2^53 with a fraction: the largest mantissa that the fast path takes.
         assert_eq!(read_f64("900719925474099.2"), 900_719_925_474_099.2);
-        // 2^53 + 1 doesn't fit and goes through the exact parser.
         assert_eq!(read_f64("900719925474099.3"), 900_719_925_474_099.3);
-        // 10^22 is the largest exact power of ten; 10^23 isn't.
         assert_eq!(read_f64("0.0000000000000000000001"), 1e-22);
         assert_eq!(read_f64("0.00000000000000000000001"), 1e-23);
     }
