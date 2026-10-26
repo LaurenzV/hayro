@@ -2,8 +2,7 @@ use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// Decode until the output holds more than `limit` bytes, so that the caller
-/// can tell whether the data decodes to more than `limit` bytes.
+/// Stop after the output exceeds `limit`.
 pub(crate) fn decode(data: &[u8], limit: usize) -> Option<Vec<u8>> {
     let mut reader = Reader::new(data);
     let mut decoded = vec![];
@@ -46,7 +45,6 @@ mod tests {
 
     #[test]
     fn run_length_stops_past_limit() {
-        // Each pair repeats a zero 128 times.
         let input = [129, 0].repeat(1000);
         let decoded = decode(&input, 10).unwrap();
         assert_eq!(decoded, vec![0; 128]);

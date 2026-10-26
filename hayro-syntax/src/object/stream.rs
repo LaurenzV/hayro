@@ -165,20 +165,16 @@ impl<'a> Stream<'a> {
             .map(|r| r.data)
     }
 
-    /// Return the decoded data of the stream, failing with
-    /// [`DecodeFailure::LimitExceeded`] if it holds more than `limit` bytes.
+    /// Return the decoded stream data, or [`DecodeFailure::LimitExceeded`] if any
+    /// filter output exceeds `limit`, including data before prediction.
     ///
-    /// The limit holds for the output of every filter in the chain, not only
-    /// the last one, so a small stream that decodes to a huge output fails
-    /// without allocating it: the `ASCIIHexDecode`, `ASCII85Decode`,
-    /// `LZWDecode`, `FlateDecode` and `RunLengthDecode` filters and their
-    /// predictors stop shortly after their output passes the limit. A predictor's
-    /// row size is also bounded by `limit` before allocating its working buffer,
-    /// even if the input contains no complete rows. The image filters decode in
-    /// full before their output is checked.
+    /// `ASCIIHexDecode`, `ASCII85Decode`, `LZWDecode`, `FlateDecode` and
+    /// `RunLengthDecode` stop shortly after exceeding the limit. Predictor row
+    /// buffers are bounded by `limit`, even with no complete input rows. Image
+    /// filters decode fully before checking their output. Unfiltered streams are
+    /// checked against their raw length.
     ///
-    /// Note that the result of this method will not be cached, so calling it multiple
-    /// times is expensive.
+    /// The result is not cached.
     pub fn decoded_with_limit(&self, limit: usize) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         self.decode(&ImageDecodeParams::default(), limit)
             .map(|r| r.data)
@@ -465,8 +461,7 @@ mod tests {
 
     #[test]
     fn decoded_with_limit_applies_to_every_filter() {
-        // Hex digits of "abcd" behind a stored deflate block: the flate output
-        // has 8 bytes and the hex output 4.
+        // The intermediate output has eight bytes; the final output has four.
         let bytes = stream_bytes(
             "/Filter [/FlateDecode /ASCIIHexDecode]",
             &stored_deflate(b"61626364"),
@@ -482,7 +477,6 @@ mod tests {
 
     #[test]
     fn decoded_with_limit_with_png_predictor() {
-        // Two rows of three bytes, each behind the PNG "Up" filter byte.
         let bytes = stream_bytes(
             "/Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 3 >>",
             &stored_deflate(&[2, 1, 2, 3, 2, 1, 1, 1]),
@@ -506,8 +500,7 @@ mod tests {
         let lzw = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
         for (filter, data) in [("FlateDecode", flate.as_slice()), ("LZWDecode", &lzw[..])] {
             for predictor in [2, 12] {
-                // One bit per column still requests a 16 MiB predictor row,
-                // even though the decompressed input is empty or only ten bytes.
+                // The row buffer needs 16 MiB even with empty input.
                 let bytes = stream_bytes(
                     &format!(
                         "/Filter /{filter} /DecodeParms << /Predictor {predictor} \
@@ -547,12 +540,11 @@ mod tests {
         let bytes = stream_bytes("/Filter [/FlateDecode /FlateDecode]", FLATE_BOMB);
         let stream = read_stream(&bytes);
 
-        // The first filter's output, about 1 MiB, passes the limit.
+        // Exceed the limit in the first filter, then in the second.
         assert!(matches!(
             stream.decoded_with_limit(64 * 1024),
             Err(DecodeFailure::LimitExceeded)
         ));
-        // The second filter's output, 1 GiB, passes the limit.
         assert!(matches!(
             stream.decoded_with_limit(4 * 1024 * 1024),
             Err(DecodeFailure::LimitExceeded)
