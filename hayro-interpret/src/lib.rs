@@ -28,9 +28,6 @@ This crate has one optional feature:
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-#[macro_use]
-mod log;
-
 mod cache;
 mod context;
 mod convert;

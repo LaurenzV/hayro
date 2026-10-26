@@ -8,9 +8,6 @@ well-documented.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-#[macro_use]
-mod log;
-
 mod primitive;
 
 use crate::primitive::{WriteDirect, WriteIndirect};
@@ -194,8 +191,6 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext<'_>) {
             ctx.chunks.push(chunk);
 
             ctx.visited_objects.insert(ref_);
-        } else {
-            warn!("failed to extract object with ref: {ref_:?}");
         }
     }
 }

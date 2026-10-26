@@ -279,8 +279,6 @@ impl<'a> Page<'a> {
 
                     Some(collected)
                 } else {
-                    warn!("contents entry of page was neither stream nor array of streams");
-
                     None
                 }
             })

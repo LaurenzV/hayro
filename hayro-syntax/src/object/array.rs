@@ -229,8 +229,6 @@ impl<'a, T: ObjectLike<'a> + Copy + Default, const C: usize> TryFrom<Array<'a>> 
         }
 
         if iter.next().is_some() {
-            warn!("found excess elements in array");
-
             return Err(());
         }
 

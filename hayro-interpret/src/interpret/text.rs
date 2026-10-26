@@ -29,8 +29,6 @@ pub(crate) fn append_text_string<'a>(
     text: &object::String<'_>,
 ) {
     let Some(font) = ctx.text_state().font.clone() else {
-        warn!("tried to show text without active font");
-
         return;
     };
 
@@ -158,9 +156,7 @@ fn clip_glyph(clip_path: &mut BezPath, glyph: &PositionedGlyph<'_>) {
                 clip_path.extend(outline);
             }
         }
-        Glyph::Type3(_) => {
-            warn!("text rendering mode clip not implemented for shape glyphs");
-        }
+        Glyph::Type3(_) => {}
     }
 }
 

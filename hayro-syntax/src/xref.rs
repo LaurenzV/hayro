@@ -56,16 +56,11 @@ pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefErro
 
 /// Try to manually parse the PDF to build an xref table and trailer dictionary.
 pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
-    warn!("xref table was invalid, trying to manually build xref table");
     let (xref_map, xref_input) = fallback_xref_map(&data, password);
 
     if let Some(xref_input) = xref_input {
-        warn!("rebuild xref table with {} entries", xref_map.len());
-
         XRef::new(data.clone(), xref_map, xref_input, true, password).ok()
     } else {
-        warn!("couldn't find trailer dictionary, failed to rebuild xref table");
-
         None
     }
 }
@@ -577,8 +572,6 @@ impl XRef {
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
 
                 if obj_stream_id == id || ctx.parent_chain_contains(&id) {
-                    warn!("cycle detected in object stream");
-
                     return None;
                 }
 
@@ -588,8 +581,6 @@ impl XRef {
                     repr.map.get().xref_map.get(&obj_stream_id),
                     Some(EntryType::Normal(_))
                 ) {
-                    warn!("object stream {obj_stream_id:?} is not a top-level object");
-
                     return None;
                 }
 
@@ -617,12 +608,8 @@ impl XRef {
     {
         // The xref table is broken, try to repair if not already repaired.
         if was_repaired {
-            error!("attempt was made at repairing xref, but object {id:?} still couldn't be read");
-
             None
         } else {
-            warn!("broken xref, attempting to repair");
-
             self.repair();
 
             // Now try reading again.
@@ -767,17 +754,10 @@ fn populate_xref_impl_inner<'a>(
     visited: &mut BTreeSet<usize>,
 ) -> Option<&'a [u8]> {
     if !visited.insert(pos) {
-        warn!("circular xref PREV chain detected at offset {}", pos);
-
         return None;
     }
 
     if visited.len() > MAX_XREF_CHAIN_DEPTH {
-        warn!(
-            "xref PREV chain exceeds maximum depth of {}",
-            MAX_XREF_CHAIN_DEPTH
-        );
-
         return None;
     }
 
@@ -889,14 +869,7 @@ fn populate_from_xref_stream<'a>(
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
 
     if f2_len > size_of::<u64>() as u8 {
-        error!("xref offset length is larger than the allowed limit");
-
         return None;
-    }
-
-    // Do such files exist?
-    if f1_len != 1 {
-        warn!("first field in xref stream was longer than 1");
     }
 
     let xref_data = stream.decoded().ok()?;
@@ -942,14 +915,10 @@ fn xref_stream_num(data: &[u8]) -> Option<u32> {
             if let Ok(num) = u32::try_from(u64::from_be_bytes(data[0..8].try_into().ok()?)) {
                 return Some(num);
             } else {
-                warn!("xref stream number is too large");
-
                 return None;
             }
         }
         _n => {
-            warn!("invalid xref stream number {_n}");
-
             return None;
         }
     })
@@ -1018,8 +987,6 @@ fn xref_stream_subsection<'a>(
                 );
             }
             _ => {
-                warn!("xref has unknown field type {f_type}");
-
                 return None;
             }
         }
@@ -1100,7 +1067,6 @@ impl ObjectStream {
             // The start of the previous member excludes the white space before it, so that
             // offsets into that white space can't share it either.
             if offset >= data.len() || last_offset.is_some_and(|last| offset <= last) {
-                warn!("object {obj_num} has an invalid offset in object stream");
                 offsets.push((obj_num, None));
             } else {
                 let mut member = Reader::new(data);

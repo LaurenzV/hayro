@@ -11,7 +11,7 @@ use crate::interpret::state::{TextStateFont, handle_gs};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
-use crate::util::{OptionLog, RectExt};
+use crate::util::RectExt;
 use crate::x_object::{FormXObject, ImageXObject, XObject};
 use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
@@ -412,10 +412,7 @@ pub fn interpret<'a>(
                 close_path(context);
             }
             TypedInstruction::SetGraphicsState(gs) => {
-                if let Some(gs) = resources
-                    .get_ext_g_state(gs.0)
-                    .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
-                {
+                if let Some(gs) = resources.get_ext_g_state(gs.0) {
                     handle_gs(&gs, context, resources);
                 }
             }
@@ -669,11 +666,7 @@ pub fn interpret<'a>(
                     5 => TextRenderingMode::StrokeAndClip,
                     6 => TextRenderingMode::FillAndStrokeAndClip,
                     7 => TextRenderingMode::Clip,
-                    _ => {
-                        warn!("unknown text rendering mode {}", r.0.as_i64());
-
-                        TextRenderingMode::Fill
-                    }
+                    _ => TextRenderingMode::Fill,
                 };
 
                 context.text_state_mut().render_mode = mode;
@@ -756,8 +749,6 @@ pub fn interpret<'a>(
 
                     context.pop_root_transform();
                     context.restore_state(device);
-                } else {
-                    warn!("failed to process shading");
                 }
             }
             TypedInstruction::BeginCompatibility(_) => {}
@@ -769,9 +760,7 @@ pub fn interpret<'a>(
                 text::next_line(context, 0.0, -context.text_state().leading as f64);
                 text::show_text_string(context, device, resources, t.2);
             }
-            _ => {
-                warn!("failed to read an operator");
-            }
+            _ => {}
         }
     }
 

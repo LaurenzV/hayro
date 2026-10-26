@@ -2,18 +2,6 @@
 // for the vast majority of cases.
 
 #[inline(always)]
-pub(crate) fn trunc_f64(x: f64) -> f64 {
-    #[cfg(feature = "std")]
-    {
-        x.trunc()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        x as i64 as f64
-    }
-}
-
-#[inline(always)]
 pub(crate) fn powi_f64(x: f64, n: u32) -> f64 {
     #[cfg(feature = "std")]
     {

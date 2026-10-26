@@ -29,11 +29,7 @@ pub(crate) mod flate {
 
         let decoded = zlib_stream(data)
             .or_else(|| deflate_stream(data))
-            .or_else(|| {
-                warn!("flate stream is broken, decoding with fallback");
-
-                fallback::decode(data)
-            })?;
+            .or_else(|| fallback::decode(data))?;
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
@@ -174,7 +170,6 @@ pub(crate) mod flate {
                 let hdr = match self.get_bits(3) {
                     Some(h) => h,
                     None => {
-                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -191,7 +186,6 @@ pub(crate) mod flate {
                     1 => self.read_compressed_block(true),
                     2 => self.read_compressed_block(false),
                     _ => {
-                        warn!("unknown block type in flate stream");
                         self.eof = true;
                     }
                 }
@@ -205,7 +199,6 @@ pub(crate) mod flate {
                 let len_low = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -214,7 +207,6 @@ pub(crate) mod flate {
                 let len_high = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -225,7 +217,6 @@ pub(crate) mod flate {
                 let nlen_low = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -234,7 +225,6 @@ pub(crate) mod flate {
                 let nlen_high = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -244,7 +234,6 @@ pub(crate) mod flate {
 
                 if check != !block_len && (block_len != 0 || check != 0) {
                     // Ignoring error for bad "empty" block
-                    warn!("bad uncompressed block length in flate stream");
                 }
 
                 if block_len == 0 {
@@ -312,8 +301,6 @@ pub(crate) mod flate {
                         let dist_info = match DIST_DECODE.get(dist_code as usize) {
                             Some(&info) => info,
                             None => {
-                                warn!("invalid distance code {} in flate stream", dist_code);
-
                                 self.eof = true;
                                 return;
                             }
@@ -594,7 +581,6 @@ pub(crate) mod lzw {
             let next = match reader.read(bit_size) {
                 Some(code) => code as usize,
                 None => {
-                    warn!("premature EOF in LZW stream, EOD code missing");
                     return Some(decoded);
                 }
             };
@@ -608,7 +594,6 @@ pub(crate) mod lzw {
                 EOD => return Some(decoded),
                 new => {
                     if new > table.size() {
-                        warn!("invalid LZW code: {} (table size: {})", new, table.size());
                         return None;
                     }
 
@@ -628,7 +613,6 @@ pub(crate) mod lzw {
                         let new_entry = table.register(prev_code, first_byte)?;
                         decoded.extend_from_slice(new_entry);
                     } else {
-                        warn!("LZW decode error: code {new} not found and prev is None");
                         return None;
                     }
 
@@ -768,8 +752,6 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
             let num_rows = data.len() / total_row_len;
 
             if !matches!(params.bits_per_component, 1 | 2 | 4 | 8 | 16) {
-                warn!("invalid bits per component {}", params.bits_per_component);
-
                 return None;
             }
 
@@ -865,8 +847,6 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                         bit_size,
                     );
                 } else {
-                    warn!("unknown predictor {i}");
-
                     return None;
                 }
 
@@ -924,8 +904,6 @@ fn apply_predictor_8bit_png(
             let row = &mut rest[..row_len];
             png::unfilter(RowFilter::Sub, tbpp, prev_row, row);
         } else {
-            warn!("unknown predictor {predictor}");
-
             return None;
         }
     }

@@ -129,10 +129,6 @@ impl Clamper {
     }
 
     fn clamp_input(&self, input: &mut [f32]) {
-        if input.len() != self.domain.len() {
-            warn!("the domain of the function didn't match the input arguments");
-        }
-
         for ((min, max), val) in self.domain.iter().zip(input.iter_mut()) {
             *val = val.min(*max).max(*min);
         }
@@ -140,10 +136,6 @@ impl Clamper {
 
     fn clamp_output(&self, output: &mut [f32]) {
         if let Some(range) = &self.range {
-            if range.len() != output.len() {
-                warn!("the range of the function didn't match the output arguments");
-            }
-
             for ((min, max), val) in range.iter().zip(output.iter_mut()) {
                 *val = val.min(*max).max(*min);
             }

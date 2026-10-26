@@ -257,8 +257,6 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
 
                     if let Ok(num) = u8::from_str_radix(str, 8) {
                         result.push(num);
-                    } else {
-                        warn!("overflow occurred while parsing octal literal string");
                     }
                 } else {
                     match next {

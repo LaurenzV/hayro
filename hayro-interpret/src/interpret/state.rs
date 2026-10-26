@@ -7,7 +7,6 @@ use crate::function::{Function, TransferFunction};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::types::BlendMode;
-use crate::util::OptionLog;
 use crate::x_object::soft_mask::SoftMask;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
@@ -280,10 +279,7 @@ pub(crate) fn handle_gs<'a>(
     parent_resources: &Resources<'a>,
 ) {
     for key in dict.keys() {
-        handle_gs_single(dict, key.clone(), context, parent_resources).warn_none(&format!(
-            "invalid value in graphics state for {}",
-            key.as_str()
-        ));
+        handle_gs_single(dict, key.clone(), context, parent_resources);
     }
 }
 
@@ -360,7 +356,6 @@ pub(crate) fn handle_gs_single<'a>(
                 }
             }
 
-            warn!("unknown blend mode, defaulting to Normal");
             context.compositing_mut().blend_mode = BlendMode::Normal;
         }
         "Font" => {

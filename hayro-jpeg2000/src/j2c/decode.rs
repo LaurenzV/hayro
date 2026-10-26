@@ -36,15 +36,6 @@ pub(crate) fn decode<'a>(
     ctx.reset(header, &tiles[0])?;
 
     for tile in &tiles {
-        trace!(
-            "tile {} rect [{},{} {}x{}]",
-            tile.idx,
-            tile.rect.x0,
-            tile.rect.y0,
-            tile.rect.width(),
-            tile.rect.height(),
-        );
-
         let progression_iterator = progression_iterator(tile, header)?;
 
         decode_tile(

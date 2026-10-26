@@ -236,7 +236,6 @@ impl ColorSpaceType {
                     return Some(Self::Pattern(Pattern::new(cs)));
                 }
                 _ => {
-                    warn!("unsupported color space: {}", name.as_str());
                     return None;
                 }
             }

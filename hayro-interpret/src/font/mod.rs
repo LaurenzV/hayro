@@ -308,14 +308,7 @@ impl<'a> Font<'a> {
             )?)),
             TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, font_resolver, cmap_resolver)?)),
             TYPE3 => FontType::Type3(Rc::new(Type3::new(dict, cmap_resolver)?)),
-            f => {
-                warn!(
-                    "unimplemented font type {:?}",
-                    std::str::from_utf8(f).unwrap_or("unknown type")
-                );
-
-                return None;
-            }
+            _ => return None,
         };
 
         let cache_key = dict.cache_key();
@@ -701,11 +694,7 @@ pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Optio
         }
     }
 
-    bf_string_from_str(&out).or_else(|| {
-        warn!("failed to map glyph name {} to unicode", name);
-
-        None
-    })
+    bf_string_from_str(&out)
 }
 
 fn uni_component(component: &str) -> Option<String> {
