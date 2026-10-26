@@ -320,8 +320,6 @@ fn rasterize_svg(svg: &str, transform: Transform, size: (f32, f32)) -> Pixmap {
     pixmap
 }
 
-// Converting with a transform should look the same as transforming the SVG
-// that `convert` produces.
 fn check_convert_with_transform(file_path: &str) {
     let pdf = load_pdf(file_path);
     let page = &pdf.pages()[0];

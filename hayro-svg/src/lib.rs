@@ -85,14 +85,10 @@ pub fn convert<'a>(
 /// Convert the given page into an SVG string with the given transform and
 /// viewport size.
 ///
-/// The transform maps the user space of the page to the coordinate system of
-/// the SVG, whose viewport spans from `(0, 0)` to `size`. Content outside of the
-/// viewport is not visible.
+/// The transform maps page user space to SVG coordinates. The viewport spans
+/// from `(0, 0)` to `size` and clips content outside it.
 ///
-/// [`convert`] is the same as passing `page.initial_transform(true)` as the
-/// transform and `page.render_dimensions()` as the size. For example, prepending
-/// `Affine::scale(2.0)` to that transform and doubling the size produces an
-/// SVG that is twice as large.
+/// [`convert`] uses `page.initial_transform(true)` and `page.render_dimensions()`.
 pub fn convert_with_transform<'a>(
     page: &'a Page<'a>,
     cache: &RenderCache<'a>,
