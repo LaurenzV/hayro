@@ -5,7 +5,6 @@
 //! determines in which order the data appears in the codestream.
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -149,30 +148,95 @@ pub(crate) fn progression_iterator<'a>(
 
     let clamp = |value: u16| u8::try_from(value).unwrap_or(u8::MAX);
 
-    let iterators = progression_changes
+    // A change's iterator is built once the previous one is used up: one in a
+    // position order holds every precinct it covers, and changes may overlap.
+    // Precincts that can't be laid out end the packets, but they already fail
+    // the tile when its precincts are built.
+    let mut changes = progression_changes.clone().into_iter();
+    let mut current: Option<(Box<dyn Iterator<Item = ProgressionData> + 'a>, ChangeBounds)> = None;
+
+    // Each change starts at layer 0 and covers every precinct of its
+    // resolutions and components, so the packets that the used-up changes
+    // included are those below a number of layers for each component and
+    // resolution. Packets that were already included must not be included
+    // again, and a change that has none left is skipped without building its
+    // iterator.
+    let mut included_layers = tile
+        .component_infos
         .iter()
-        .map(|change| {
+        .map(|c| vec![0_u8; usize::from(c.num_resolution_levels())])
+        .collect::<Vec<_>>();
+
+    Ok(Box::new(iter::from_fn(move || {
+        loop {
+            if let Some((iterator, bounds)) = &mut current {
+                if let Some(data) = iterator.find(|data| {
+                    data.layer_num
+                        >= included_layers[usize::from(data.component)]
+                            [usize::from(data.resolution)]
+                }) {
+                    return Some(data);
+                }
+
+                for (component, resolution) in bounds.iter(tile) {
+                    let layers = &mut included_layers[component][resolution];
+                    *layers = (*layers).max(bounds.layers);
+                }
+
+                current = None;
+            }
+
+            let change = changes.next()?;
             let input = IteratorInput::new_with_custom_bounds(
                 tile,
                 (change.resolution_start, change.resolution_end),
                 (0, clamp(change.layer_end)),
                 (clamp(change.component_start), clamp(change.component_end)),
             );
+            let bounds = ChangeBounds::new(&input);
 
-            progression_order_iterator(input, change.progression_order)
+            if bounds.iter(tile).all(|(component, resolution)| {
+                included_layers[component][resolution] >= bounds.layers
+            }) {
+                continue;
+            }
+
+            current = Some((
+                progression_order_iterator(input, change.progression_order).ok()?,
+                bounds,
+            ));
+        }
+    })))
+}
+
+/// The components and resolutions of a progression order change, and its
+/// number of layers.
+struct ChangeBounds {
+    resolutions: (u8, u8),
+    components: (u8, u8),
+    layers: u8,
+}
+
+impl ChangeBounds {
+    fn new(input: &IteratorInput<'_>) -> Self {
+        Self {
+            resolutions: (input.min_resolution(), input.total_max_resolution()),
+            components: (input.min_comp(), input.max_comp()),
+            layers: input.max_layer(),
+        }
+    }
+
+    fn iter<'a>(&self, tile: &'a Tile<'a>) -> impl Iterator<Item = (usize, usize)> + 'a {
+        let (min_resolution, max_resolution) = self.resolutions;
+
+        (self.components.0..self.components.1).flat_map(move |component| {
+            let max_resolution = max_resolution
+                .min(tile.component_infos[usize::from(component)].num_resolution_levels());
+
+            (min_resolution..max_resolution)
+                .map(move |resolution| (usize::from(component), usize::from(resolution)))
         })
-        .collect::<Result<Vec<_>>>()?;
-
-    // Each progression starts at layer 0, but packets that were already
-    // included by a previous progression must not be included again.
-    let mut included = BTreeSet::new();
-
-    Ok(Box::new(
-        iterators
-            .into_iter()
-            .flatten()
-            .filter(move |data| included.insert(*data)),
-    ))
+    }
 }
 
 fn progression_order_iterator<'a>(
