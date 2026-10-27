@@ -967,8 +967,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "pdf-writer"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e456864a7a304047bff84977dc6fb162bd956475d40ba50b2dcecaada7f753"
+source = "git+https://github.com/typst/pdf-writer?rev=12549ecf20d149bdeedcea565cbf29775f271136#12549ecf20d149bdeedcea565cbf29775f271136"
 dependencies = [
  "bitflags",
  "itoa",
