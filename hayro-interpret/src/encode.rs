@@ -94,8 +94,16 @@ impl EncodedShadingPattern {
     /// Sample the shading at the given position.
     #[inline]
     pub fn sample(&self, pos: Point) -> [f32; 4] {
-        self.shading_type
-            .eval(pos, self.background_color, &self.color_space)
+        self.finish(
+            self.shading_type
+                .eval(pos, self.background_color, &self.color_space),
+        )
+    }
+
+    /// Apply the pattern's opacity and transfer function to an evaluated color.
+    #[inline]
+    fn finish(&self, color: Option<AlphaColor>) -> [f32; 4] {
+        color
             .map(|v| {
                 let mut components = v.components();
                 components[3] *= self.opacity;
@@ -134,11 +142,23 @@ impl EncodedShadingPattern {
             * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
             * Point::new(bbox.x0, bbox.y0);
 
+        let mut lut = match &self.shading_type {
+            EncodedShadingType::RadialAxial(shading)
+                if width as usize * height as usize > GRADIENT_STEPS / 4 =>
+            {
+                Some(GradientLut::new(self, shading))
+            }
+            _ => None,
+        };
+
         for _ in 0..height {
             let mut point = start_point;
 
             for _ in 0..width {
-                f(self.sample(point));
+                f(match &mut lut {
+                    Some(lut) => lut.sample(point),
+                    None => self.sample(point),
+                });
 
                 point += x_advance;
             }
@@ -380,6 +400,84 @@ fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> Enc
     })
 }
 
+/// Axial and radial shadings drawn into a texture of more than a quarter this many pixels are
+/// evaluated at most at this many evenly spaced positions along them, each once, rather than at
+/// every pixel.
+const GRADIENT_STEPS: usize = 1 << 16;
+
+/// The colors of an axial or radial shading at evenly spaced positions along it, each
+/// evaluated the first time it's needed.
+struct GradientLut<'a> {
+    pattern: &'a EncodedShadingPattern,
+    shading: &'a EncodedRadialAxialShading,
+    /// NaN until evaluated.
+    colors: Vec<[f32; 4]>,
+    background: [f32; 4],
+}
+
+impl<'a> GradientLut<'a> {
+    fn new(pattern: &'a EncodedShadingPattern, shading: &'a EncodedRadialAxialShading) -> Self {
+        Self {
+            pattern,
+            shading,
+            colors: vec![[f32::NAN; 4]; GRADIENT_STEPS + 1],
+            background: pattern.finish(Some(pattern.background_color)),
+        }
+    }
+
+    #[inline]
+    fn sample(&mut self, pos: Point) -> [f32; 4] {
+        let Some(t) = self.shading.position(pos) else {
+            return self.background;
+        };
+
+        let i = (t * GRADIENT_STEPS as f32).round() as usize;
+        let color = &mut self.colors[i];
+        if color[3].is_nan() {
+            let t = i as f32 / GRADIENT_STEPS as f32;
+            *color = self
+                .pattern
+                .finish(self.shading.color_at(t, &self.pattern.color_space));
+        }
+
+        *color
+    }
+}
+
+impl EncodedRadialAxialShading {
+    /// Where a point falls along the shading, from 0 to 1, or `None` where the
+    /// background shows.
+    #[inline]
+    fn position(&self, pos: Point) -> Option<f32> {
+        let t = match &self.params {
+            RadialAxialParams::Axial => pos.x as f32,
+            RadialAxialParams::Radial { p1, r } => {
+                radial_pos(&pos, p1, *r, self.extend[0], self.extend[1])?
+            }
+        };
+
+        if t < 0.0 {
+            self.extend[0].then_some(0.0)
+        } else if t > 1.0 {
+            self.extend[1].then_some(1.0)
+        } else {
+            Some(t)
+        }
+    }
+
+    /// The color at a position along the shading, from 0 to 1.
+    fn color_at(&self, t: f32, color_space: &ColorSpace) -> Option<AlphaColor> {
+        let (t0, t1) = (self.domain[0], self.domain[1]);
+        let t = t0 + (t1 - t0) * t;
+
+        let mut val = [0.0; MAX_COMPONENTS];
+        let val = &mut val[..self.function.num_outputs()];
+        self.function.eval(&[t], val)?;
+
+        Some(color_space.to_rgba(val, 1.0))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum RadialAxialParams {
     Axial,
@@ -405,47 +503,10 @@ impl EncodedShadingType {
                     Some(color_space.to_rgba(out, 1.0))
                 }
             }
-            Self::RadialAxial(EncodedRadialAxialShading {
-                function,
-                params,
-                domain,
-                extend,
-            }) => {
-                let (t0, t1) = (domain[0], domain[1]);
-
-                let mut t = match params {
-                    RadialAxialParams::Axial => pos.x as f32,
-                    RadialAxialParams::Radial { p1, r } => {
-                        radial_pos(&pos, p1, *r, extend[0], extend[1]).unwrap_or(f32::MIN)
-                    }
-                };
-
-                if t == f32::MIN {
-                    return Some(bg_color);
-                }
-
-                if t < 0.0 {
-                    if extend[0] {
-                        t = 0.0;
-                    } else {
-                        return Some(bg_color);
-                    }
-                } else if t > 1.0 {
-                    if extend[1] {
-                        t = 1.0;
-                    } else {
-                        return Some(bg_color);
-                    }
-                }
-
-                let t = t0 + (t1 - t0) * t;
-
-                let mut val = [0.0; MAX_COMPONENTS];
-                let val = &mut val[..function.num_outputs()];
-                function.eval(&[t], val)?;
-
-                Some(color_space.to_rgba(val, 1.0))
-            }
+            Self::RadialAxial(shading) => match shading.position(pos) {
+                Some(t) => shading.color_at(t, color_space),
+                None => Some(bg_color),
+            },
             Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
