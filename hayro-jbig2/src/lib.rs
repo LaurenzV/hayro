@@ -393,8 +393,6 @@ impl PageSize {
             bail!(FormatError::EmptyPage);
         }
 
-        // The page bitmap can't be this large, so fail before a caller sizes an
-        // output buffer by these dimensions.
         if page_info.width > bitmap::MAX_DIMENSION || height > bitmap::MAX_DIMENSION {
             bail!(OverflowError::BitmapDimension);
         }
