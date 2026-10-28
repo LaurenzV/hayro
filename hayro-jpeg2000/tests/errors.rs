@@ -31,3 +31,24 @@ fn jp2_invalid_codestream() {
         "failed to parse COD marker",
     );
 }
+
+#[test]
+fn palette_empty_cmap() {
+    check_error(
+        "palette_empty_cmap",
+        DecodeSettings::default(),
+        "failed to resolve palette indices",
+    );
+}
+
+#[test]
+fn palette_column_too_deep() {
+    check_error(
+        "palette_column_too_deep",
+        DecodeSettings {
+            strict: true,
+            ..Default::default()
+        },
+        "invalid JP2 box",
+    );
+}
