@@ -51,7 +51,7 @@ impl Renderer<'_> {
                         const NATIVE_GRADIENT_TOLERANCE: f32 = 0.01;
 
                         clip_path = s.shading.clip_path.clone();
-                        let encoded = s.encode();
+                        let encoded = s.encode_within(bbox.inflate(1.0, 1.0));
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
                             && let Some(native) =
