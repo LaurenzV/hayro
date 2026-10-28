@@ -1,4 +1,3 @@
-use crate::StrokeProps;
 use crate::color::{AlphaColor, ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -7,7 +6,9 @@ use crate::function::{Function, TransferFunction};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::types::BlendMode;
+use crate::util::hash128;
 use crate::x_object::soft_mask::SoftMask;
+use crate::{CacheKey, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
 use hayro_syntax::object::{Array, Dict, Name, Number, Object};
@@ -23,6 +24,17 @@ pub enum ActiveTransferFunction {
     Single(TransferFunction),
     /// Four transfer functions, one for each component.
     Four([TransferFunction; 4]),
+}
+
+impl CacheKey for ActiveTransferFunction {
+    fn cache_key(&self) -> u128 {
+        match self {
+            Self::Single(function) => function.cache_key(),
+            Self::Four(functions) => {
+                hash128(&functions.each_ref().map(TransferFunction::cache_key))
+            }
+        }
+    }
 }
 
 impl ActiveTransferFunction {

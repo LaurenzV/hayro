@@ -684,7 +684,7 @@ pub fn interpret<'a>(
                 if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
                     XObject::new(
                         &s,
-                        |name| context.get_color_space(resources, name),
+                        |name| context.get_keyed_color_space(resources, name),
                         &warning_sink,
                         &cache,
                         transfer_function.clone(),
@@ -699,7 +699,7 @@ pub fn interpret<'a>(
                 let cache = context.interpreter_cache.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     i.0,
-                    |name| context.get_color_space(resources, name),
+                    |name| context.get_keyed_color_space(resources, name),
                     &warning_sink,
                     &cache,
                     transfer_function,

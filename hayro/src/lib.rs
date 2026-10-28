@@ -72,6 +72,7 @@ mod tiling;
 pub(crate) struct GlobalState {
     level: Level,
     outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    image_cache: Rc<RefCell<image::ImageCache>>,
     scaler: Scaler,
     force_image_interpolation: bool,
 }
@@ -81,6 +82,7 @@ impl GlobalState {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
+            image_cache: cache.image_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
         }
@@ -186,6 +188,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
     pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    pub(crate) image_cache: Rc<RefCell<image::ImageCache>>,
 }
 
 impl<'a> RenderCache<'a> {
@@ -194,6 +197,7 @@ impl<'a> RenderCache<'a> {
         Self {
             interpreter_cache: InterpreterCache::new(),
             outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            image_cache: Rc::new(RefCell::new(image::ImageCache::default())),
         }
     }
 }

@@ -27,7 +27,7 @@ pub(crate) enum XObject<'a> {
 impl<'a> XObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
-        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
+        resolve_cs: impl FnOnce(&Name<'_>) -> Option<(ColorSpace, u128)>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,

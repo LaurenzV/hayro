@@ -1,11 +1,13 @@
 use crate::Renderer;
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
+use hayro_interpret::CacheKey;
 use hayro_interpret::util::x_y_advances;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Rect};
 use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
 };
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{Image, ImageSource, Mask, PixelMetadata, Pixmap, peniko};
@@ -18,6 +20,118 @@ use vello_cpu::{Image, ImageSource, Mask, PixelMetadata, Pixmap, peniko};
 // to clamp, we instead use Hermite, which has similar quality but doesn't
 // have this problem.
 pub(super) const RESAMPLING_FUNCTION: ResamplingFunction = ResamplingFunction::Hermite;
+
+/// Images take up to this much memory in the cache, the least recently used going first.
+const MAX_CACHED_IMAGE_BYTES: usize = 256 << 20;
+
+/// Images as last drawn, decoded and resampled for the scale they were drawn at, so that
+/// drawing one again at that scale (another tile of the page, or the same image repeated)
+/// doesn't decode and resample it again.
+#[derive(Default)]
+pub(crate) struct ImageCache {
+    images: FxHashMap<ImageKey, CachedImage>,
+    bytes: usize,
+    uses: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ImageKey {
+    image: u128,
+    /// The resolution hinted to the decoder.
+    target: (u32, u32),
+    /// The lengths of the image's axes on the target, as `f32` bits.
+    scale: (u32, u32),
+    /// A stencil's color.
+    color: Option<[u8; 3]>,
+    force_interpolation: bool,
+    in_type3_glyph: bool,
+}
+
+/// How an image was drawn, to draw it again the same way.
+#[derive(Clone)]
+pub(crate) enum Drawn {
+    Pixmap {
+        pixmap: Arc<Pixmap>,
+        quality: ImageQuality,
+        /// From the pixmap to the image's space.
+        transform: Affine,
+    },
+    /// An image whose alpha comes from a mask of another size.
+    Masked { image: Box<Self>, mask: Box<Self> },
+}
+
+impl Drawn {
+    fn bytes(&self) -> usize {
+        match self {
+            Self::Pixmap { pixmap, .. } => pixmap.width() as usize * pixmap.height() as usize * 4,
+            Self::Masked { image, mask } => image.bytes() + mask.bytes(),
+        }
+    }
+
+    /// The same drawing, for an image space mapped by `transform`.
+    fn within(self, transform: Affine) -> Self {
+        match self {
+            Self::Pixmap {
+                pixmap,
+                quality,
+                transform: t,
+            } => Self::Pixmap {
+                pixmap,
+                quality,
+                transform: transform * t,
+            },
+            Self::Masked { image, mask } => Self::Masked {
+                image: Box::new(image.within(transform)),
+                mask: Box::new(mask.within(transform)),
+            },
+        }
+    }
+}
+
+struct CachedImage {
+    drawn: Drawn,
+    used: u64,
+}
+
+impl ImageCache {
+    fn get(&mut self, key: &ImageKey) -> Option<Drawn> {
+        self.uses += 1;
+        let uses = self.uses;
+        let image = self.images.get_mut(key)?;
+        image.used = uses;
+        Some(image.drawn.clone())
+    }
+
+    fn insert(&mut self, key: ImageKey, drawn: Drawn) {
+        let bytes = drawn.bytes();
+        if bytes > MAX_CACHED_IMAGE_BYTES / 4 {
+            return;
+        }
+
+        while self.bytes + bytes > MAX_CACHED_IMAGE_BYTES {
+            let Some(oldest) = self
+                .images
+                .iter()
+                .min_by_key(|(_, image)| image.used)
+                .map(|(key, _)| *key)
+            else {
+                break;
+            };
+            let evicted = self.images.remove(&oldest).unwrap();
+            self.bytes -= evicted.drawn.bytes();
+        }
+
+        self.uses += 1;
+        self.bytes += bytes;
+        let image = CachedImage {
+            drawn,
+            used: self.uses,
+        };
+        if let Some(replaced) = self.images.insert(key, image) {
+            self.bytes -= replaced.drawn.bytes();
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 enum ImagePixelFormat {
@@ -81,15 +195,45 @@ impl RenderImageData {
 }
 
 impl Renderer<'_> {
-    fn draw_image_with_alpha_mask(&mut self, image_data: RenderImageData, alpha_data: LumaData) {
+    /// Draw what was drawn before under a new transform.
+    fn redraw(&mut self, drawn: Drawn, transform: Affine) {
+        match drawn {
+            Drawn::Pixmap {
+                pixmap,
+                quality,
+                transform: drawn,
+            } => self.draw_pixmap(pixmap, quality, transform * drawn),
+            Drawn::Masked { image, mask } => {
+                self.ctx.push_layer(None, None, None, None, None);
+                self.redraw(*image, transform);
+                self.ctx.push_layer(
+                    None,
+                    Some(peniko::BlendMode::new(Mix::Normal, Compose::DestIn)),
+                    None,
+                    None,
+                    None,
+                );
+                self.redraw(*mask, transform);
+                self.ctx.pop_layer();
+                self.ctx.pop_layer();
+                self.ctx.set_transform(transform);
+            }
+        }
+    }
+
+    fn draw_image_with_alpha_mask(
+        &mut self,
+        image_data: RenderImageData,
+        alpha_data: LumaData,
+    ) -> Option<Drawn> {
         let img_width = image_data.width();
         let img_height = image_data.height();
         let image_transform = *self.ctx.transform();
-        let mask_transform = image_transform
-            * Affine::scale_non_uniform(
-                img_width as f64 / alpha_data.width as f64,
-                img_height as f64 / alpha_data.height as f64,
-            );
+        let mask_scale = Affine::scale_non_uniform(
+            img_width as f64 / alpha_data.width as f64,
+            img_height as f64 / alpha_data.height as f64,
+        );
+        let mask_transform = image_transform * mask_scale;
         let mask_image = SolidColorImage {
             color: [0; 3],
             width: alpha_data.width,
@@ -99,7 +243,7 @@ impl Renderer<'_> {
 
         self.ctx.push_layer(None, None, None, None, None);
         self.ctx.set_transform(image_transform);
-        self.draw_image(image_data, None);
+        let image = self.draw_image(image_data, None);
 
         self.ctx.push_layer(
             None,
@@ -113,13 +257,23 @@ impl Renderer<'_> {
         // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
         // values between alpha_data and rgb_data don't match. Here we use a
         // `SolidColorImage` so it doesn't affect it.
-        self.draw_image(RenderImageData::Solid(mask_image), Some(alpha_data));
+        let mask = self.draw_image(RenderImageData::Solid(mask_image), Some(alpha_data));
         self.ctx.pop_layer();
         self.ctx.pop_layer();
         self.ctx.set_transform(image_transform);
+
+        Some(Drawn::Masked {
+            image: Box::new(image?),
+            mask: Box::new(mask?.within(mask_scale)),
+        })
     }
 
-    fn draw_image(&mut self, image_data: impl Into<RenderImageData>, alpha_data: Option<LumaData>) {
+    /// Draw the image under the current transform, returning how, to draw it again.
+    fn draw_image(
+        &mut self,
+        image_data: impl Into<RenderImageData>,
+        alpha_data: Option<LumaData>,
+    ) -> Option<Drawn> {
         let image_data = image_data.into();
         let cur_transform = *self.ctx.transform();
         let mut additional_transform = Affine::IDENTITY;
@@ -403,11 +557,18 @@ impl Renderer<'_> {
             },
         );
 
+        let pixmap = Arc::new(pixmap);
         self.draw_pixmap(
-            Arc::new(pixmap),
+            pixmap.clone(),
             quality,
             cur_transform * additional_transform,
         );
+
+        Some(Drawn::Pixmap {
+            pixmap,
+            quality,
+            transform: additional_transform,
+        })
     }
 
     fn draw_pixmap(&mut self, pixmap: Arc<Pixmap>, quality: ImageQuality, transform: Affine) {
@@ -426,6 +587,57 @@ impl Renderer<'_> {
         self.ctx.set_paint(image);
         self.ctx
             .fill_rect(&Rect::new(0.0, 0.0, width as f64, height as f64));
+    }
+
+    fn image_key(
+        &self,
+        image: u128,
+        target: (u32, u32),
+        transform: &Affine,
+        color: Option<[u8; 3]>,
+    ) -> ImageKey {
+        let (x, y) = x_y_advances(transform);
+        ImageKey {
+            image,
+            target,
+            scale: ((x.length() as f32).to_bits(), (y.length() as f32).to_bits()),
+            color,
+            force_interpolation: self.global.force_image_interpolation,
+            in_type3_glyph: self.in_type3_glyph,
+        }
+    }
+
+    /// Draw a stencil filled with a color of the given alpha, in a layer if the alpha or the
+    /// blend mode need one.
+    fn stencil_layer<T>(
+        &mut self,
+        transform: Affine,
+        alpha: u8,
+        draw: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let blend_mode = self.ctx.blend_mode();
+        let push_layer = alpha != 255 || blend_mode != peniko::BlendMode::default();
+        self.ctx.set_transform(transform);
+        if push_layer {
+            self.ctx.push_layer(
+                None,
+                Some(blend_mode),
+                Some(alpha as f32 / 255.0),
+                None,
+                None,
+            );
+        }
+        let old_rule = *self.ctx.fill_rule();
+        self.ctx.set_fill_rule(Fill::NonZero);
+
+        let drawn = draw(self);
+
+        if push_layer {
+            self.ctx.pop_layer();
+        }
+
+        self.ctx.set_fill_rule(old_rule);
+        drawn
     }
 
     pub(super) fn draw_pdf_image<'a>(
@@ -449,49 +661,54 @@ impl Renderer<'_> {
 
         match image {
             hayro_interpret::Image::Stencil(s) => {
+                let color = match s.paint() {
+                    Paint::Color(c) => Some(c.to_rgba().to_rgba8()),
+                    Paint::Pattern(_) => None,
+                };
+                let key = color.map(|c| {
+                    self.image_key(
+                        s.cache_key(),
+                        (target_width, target_height),
+                        &transform,
+                        Some([c[0], c[1], c[2]]),
+                    )
+                });
+                let cached = key.and_then(|key| self.global.image_cache.borrow_mut().get(&key));
+                if let (Some(drawn), Some(color)) = (cached, color) {
+                    self.stencil_layer(transform, color[3], |r| r.redraw(drawn, transform));
+                    self.ctx.set_aliasing_threshold(None);
+                    return;
+                }
+
                 s.with_stencil(
                     |stencil, paint| {
-                        transform *= Affine::scale_non_uniform(
+                        let scale = Affine::scale_non_uniform(
                             stencil.scale_factors.0 as f64,
                             stencil.scale_factors.1 as f64,
                         );
+                        transform *= scale;
 
                         match paint {
                             Paint::Color(c) => {
                                 let color = c.to_rgba().to_rgba8();
-                                let alpha = color[3];
+                                let drawn = self.stencil_layer(transform, color[3], |r| {
+                                    r.draw_image(
+                                        RenderImageData::Solid(SolidColorImage {
+                                            color: [color[0], color[1], color[2]],
+                                            width: stencil.width,
+                                            height: stencil.height,
+                                            interpolate: stencil.interpolate,
+                                        }),
+                                        Some(stencil),
+                                    )
+                                });
 
-                                let blend_mode = self.ctx.blend_mode();
-                                let push_layer =
-                                    alpha != 255 || blend_mode != peniko::BlendMode::default();
-                                self.ctx.set_transform(transform);
-                                if push_layer {
-                                    self.ctx.push_layer(
-                                        None,
-                                        Some(blend_mode),
-                                        Some(alpha as f32 / 255.0),
-                                        None,
-                                        None,
-                                    );
+                                if let (Some(key), Some(drawn)) = (key, drawn) {
+                                    self.global
+                                        .image_cache
+                                        .borrow_mut()
+                                        .insert(key, drawn.within(scale));
                                 }
-                                let old_rule = *self.ctx.fill_rule();
-                                self.ctx.set_fill_rule(Fill::NonZero);
-
-                                self.draw_image(
-                                    RenderImageData::Solid(SolidColorImage {
-                                        color: [color[0], color[1], color[2]],
-                                        width: stencil.width,
-                                        height: stencil.height,
-                                        interpolate: stencil.interpolate,
-                                    }),
-                                    Some(stencil),
-                                );
-
-                                if push_layer {
-                                    self.ctx.pop_layer();
-                                }
-
-                                self.ctx.set_fill_rule(old_rule);
                             }
                             Paint::Pattern(_) => {
                                 let (width, height) = (self.ctx.width(), self.ctx.height());
@@ -551,15 +768,32 @@ impl Renderer<'_> {
                 );
             }
             hayro_interpret::Image::Raster(r) => {
-                r.with_rgba(
-                    |image, alpha| {
-                        let (sx, sy) = image.scale_factors();
-                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
-                        self.ctx.set_transform(transform);
-                        self.draw_image(image, alpha);
-                    },
-                    Some((target_width, target_height)),
+                let key = self.image_key(
+                    r.cache_key(),
+                    (target_width, target_height),
+                    &transform,
+                    None,
                 );
+                let cached = self.global.image_cache.borrow_mut().get(&key);
+                if let Some(drawn) = cached {
+                    self.redraw(drawn, transform);
+                } else {
+                    r.with_rgba(
+                        |image, alpha| {
+                            let (sx, sy) = image.scale_factors();
+                            let scale = Affine::scale_non_uniform(sx as f64, sy as f64);
+                            transform *= scale;
+                            self.ctx.set_transform(transform);
+                            if let Some(drawn) = self.draw_image(image, alpha) {
+                                self.global
+                                    .image_cache
+                                    .borrow_mut()
+                                    .insert(key, drawn.within(scale));
+                            }
+                        },
+                        Some((target_width, target_height)),
+                    );
+                }
             }
         }
 
