@@ -165,11 +165,34 @@ impl<'a> Stream<'a> {
             .map(|r| r.data)
     }
 
+    /// Return the decoded stream data, or [`DecodeFailure::LimitExceeded`] if any
+    /// filter output exceeds `limit`, including data before prediction.
+    ///
+    /// `ASCIIHexDecode`, `ASCII85Decode`, `LZWDecode`, `FlateDecode` and
+    /// `RunLengthDecode` stop shortly after exceeding the limit. Predictor row
+    /// buffers are bounded by `limit`, even with no complete input rows. Image
+    /// filters decode fully before checking their output. Unfiltered streams are
+    /// checked against their raw length.
+    ///
+    /// The result is not cached.
+    pub fn decoded_with_limit(&self, limit: usize) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.decode(&ImageDecodeParams::default(), limit)
+            .map(|r| r.data)
+    }
+
     /// Return the decoded data of the stream, and return image metadata
     /// if available.
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,
+    ) -> Result<FilterResult<'a>, DecodeFailure> {
+        self.decode(image_params, usize::MAX)
+    }
+
+    fn decode(
+        &self,
+        image_params: &ImageDecodeParams,
+        limit: usize,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
@@ -185,8 +208,13 @@ impl<'a> Stream<'a> {
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
                 image_params,
+                limit,
             )?;
             current = Some(new);
+        }
+
+        if current.is_none() && data.len() > limit {
+            return Err(DecodeFailure::LimitExceeded);
         }
 
         Ok(current.unwrap_or(FilterResult {
@@ -243,6 +271,8 @@ pub enum DecodeFailure {
     Decryption,
     /// An unknown failure occurred.
     Unknown,
+    /// The decoded data would hold more bytes than the given limit.
+    LimitExceeded,
 }
 
 /// An image color space.
@@ -365,8 +395,161 @@ impl<'a> ObjectRefLike<'a> for Stream<'a> {
 #[cfg(test)]
 mod tests {
     use crate::object::Stream;
+    use crate::object::stream::DecodeFailure;
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
+
+    /// 1 GiB of zeros, compressed twice with zlib, in 1,799 bytes:
+    ///
+    /// ```python
+    /// c = zlib.compressobj(9)
+    /// inner = b"".join(c.compress(bytes(1 << 20)) for _ in range(1024)) + c.flush()
+    /// outer = zlib.compress(inner, 9)
+    /// ```
+    const FLATE_BOMB: &[u8] = include_bytes!("../../assets/flate_bomb.bin");
+
+    fn stream_bytes(dict: &str, data: &[u8]) -> Vec<u8> {
+        let mut bytes = format!("<< /Length {} {dict} >> stream\n", data.len()).into_bytes();
+        bytes.extend_from_slice(data);
+        bytes.extend_from_slice(b"\nendstream");
+        bytes
+    }
+
+    fn read_stream(bytes: &[u8]) -> Stream<'_> {
+        Reader::new(bytes)
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap()
+    }
+
+    /// A raw deflate stream that stores `data` in one uncompressed block.
+    fn stored_deflate(data: &[u8]) -> Vec<u8> {
+        let len = u16::try_from(data.len()).unwrap();
+        let mut out = vec![0x01];
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&(!len).to_le_bytes());
+        out.extend_from_slice(data);
+        out
+    }
+
+    #[test]
+    fn decoded_with_limit() {
+        let bytes = stream_bytes("/Filter /ASCIIHexDecode", b"616263>");
+        let stream = read_stream(&bytes);
+
+        assert_eq!(stream.decoded_with_limit(3).unwrap().as_ref(), b"abc");
+        assert!(matches!(
+            stream.decoded_with_limit(2),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+        assert_eq!(stream.decoded().unwrap().as_ref(), b"abc");
+    }
+
+    #[test]
+    fn decoded_with_limit_without_filters() {
+        let bytes = stream_bytes("", b"abcdefghij");
+        let stream = read_stream(&bytes);
+
+        assert_eq!(
+            stream.decoded_with_limit(10).unwrap().as_ref(),
+            b"abcdefghij"
+        );
+        assert!(matches!(
+            stream.decoded_with_limit(9),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn decoded_with_limit_applies_to_every_filter() {
+        // The intermediate output has eight bytes; the final output has four.
+        let bytes = stream_bytes(
+            "/Filter [/FlateDecode /ASCIIHexDecode]",
+            &stored_deflate(b"61626364"),
+        );
+        let stream = read_stream(&bytes);
+
+        assert_eq!(stream.decoded_with_limit(8).unwrap().as_ref(), b"abcd");
+        assert!(matches!(
+            stream.decoded_with_limit(7),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn decoded_with_limit_with_png_predictor() {
+        let bytes = stream_bytes(
+            "/Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 3 >>",
+            &stored_deflate(&[2, 1, 2, 3, 2, 1, 1, 1]),
+        );
+        let stream = read_stream(&bytes);
+
+        assert_eq!(
+            stream.decoded_with_limit(8).unwrap().as_ref(),
+            &[1, 2, 3, 2, 3, 4]
+        );
+        assert_eq!(stream.decoded().unwrap().as_ref(), &[1, 2, 3, 2, 3, 4]);
+        assert!(matches!(
+            stream.decoded_with_limit(7),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn decoded_with_limit_bounds_predictor_rows() {
+        let flate = stored_deflate(&[]);
+        let lzw = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
+        for (filter, data) in [("FlateDecode", flate.as_slice()), ("LZWDecode", &lzw[..])] {
+            for predictor in [2, 12] {
+                // The row buffer needs 16 MiB even with empty input.
+                let bytes = stream_bytes(
+                    &format!(
+                        "/Filter /{filter} /DecodeParms << /Predictor {predictor} \
+                         /BitsPerComponent 1 /Colors 1 /Columns 134217728 >>"
+                    ),
+                    data,
+                );
+                assert!(matches!(
+                    read_stream(&bytes).decoded_with_limit(1024),
+                    Err(DecodeFailure::LimitExceeded)
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn decoded_with_limit_with_tiff_predictor() {
+        // Eight one-bit samples: horizontal differencing is addition modulo two.
+        let bytes = stream_bytes(
+            "/Filter /FlateDecode /DecodeParms << /Predictor 2 \
+             /BitsPerComponent 1 /Colors 1 /Columns 8 >>",
+            &stored_deflate(&[0b1111_0000]),
+        );
+        let stream = read_stream(&bytes);
+        assert_eq!(
+            stream.decoded_with_limit(1).unwrap().as_ref(),
+            &[0b1010_0000]
+        );
+        assert!(matches!(
+            stream.decoded_with_limit(0),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
+
+    #[test]
+    fn decoded_with_limit_stops_a_flate_bomb() {
+        let bytes = stream_bytes("/Filter [/FlateDecode /FlateDecode]", FLATE_BOMB);
+        let stream = read_stream(&bytes);
+
+        // Exceed the limit in the first filter, then in the second.
+        assert!(matches!(
+            stream.decoded_with_limit(64 * 1024),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+        assert!(matches!(
+            stream.decoded_with_limit(4 * 1024 * 1024),
+            Err(DecodeFailure::LimitExceeded)
+        ));
+    }
 
     #[test]
     fn display() {

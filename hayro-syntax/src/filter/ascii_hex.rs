@@ -4,11 +4,12 @@ use crate::trivia::is_white_space_character;
 use crate::util::ByteBuf;
 use alloc::vec::Vec;
 
-pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
-    decode_into(data)
+pub(crate) fn decode(data: &[u8], limit: usize) -> Option<Vec<u8>> {
+    decode_into(data, limit)
 }
 
-pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
+/// Decode at most `limit + 1` bytes.
+pub(crate) fn decode_into<B: ByteBuf>(data: &[u8], limit: usize) -> Option<B> {
     // Find end (at `>` or end of data) and check for whitespace.
     let mut has_whitespace = false;
     let mut end = data.len();
@@ -23,14 +24,19 @@ pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
     }
 
     let data = &data[..end];
-    let mut decoded = B::with_capacity(data.len().div_ceil(2));
+    let bound = limit.saturating_add(1);
+    let mut decoded = B::with_capacity(data.len().div_ceil(2).min(bound));
 
     if !has_whitespace {
         // Fast path, don't need to worry about white spaces.
         let (chunks, remainder) = data.as_chunks::<2>();
 
-        for &[hi, lo] in chunks {
+        for &[hi, lo] in chunks.iter().take(bound) {
             decoded.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
+        }
+
+        if chunks.len() >= bound {
+            return Some(decoded);
         }
 
         if let [hi] = remainder {
@@ -48,7 +54,7 @@ pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
             }
         };
 
-        loop {
+        for _ in 0..bound {
             match (read_byte(), read_byte()) {
                 (Some(hi), Some(lo)) => {
                     decoded.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
@@ -83,13 +89,19 @@ mod tests {
     #[test]
     fn decode_simple() {
         let input = b"AF3E2901>";
-        assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x01]);
+        assert_eq!(
+            decode(input, usize::MAX).unwrap(),
+            vec![0xaf, 0x3e, 0x29, 0x01]
+        );
     }
 
     #[test]
     fn decode_whitespaces() {
         let input = b"AF3   E2   901>";
-        assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x01]);
+        assert_eq!(
+            decode(input, usize::MAX).unwrap(),
+            vec![0xaf, 0x3e, 0x29, 0x01]
+        );
     }
 
     #[test]
@@ -97,12 +109,25 @@ mod tests {
     // but used by PDF hex strings as well.
     fn decode_without_gt() {
         let input = b"AF3E2901";
-        assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x01]);
+        assert_eq!(
+            decode(input, usize::MAX).unwrap(),
+            vec![0xaf, 0x3e, 0x29, 0x01]
+        );
     }
 
     #[test]
     fn decode_with_padding() {
         let input = b"AF3E291>";
-        assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x10]);
+        assert_eq!(
+            decode(input, usize::MAX).unwrap(),
+            vec![0xaf, 0x3e, 0x29, 0x10]
+        );
+    }
+
+    #[test]
+    fn decode_stops_past_limit() {
+        assert_eq!(decode(b"AF3E2901>", 2).unwrap(), vec![0xaf, 0x3e, 0x29]);
+        assert_eq!(decode(b"AF 3E 29 01>", 2).unwrap(), vec![0xaf, 0x3e, 0x29]);
+        assert_eq!(decode(b"AF3E2>", 2).unwrap(), vec![0xaf, 0x3e, 0x20]);
     }
 }

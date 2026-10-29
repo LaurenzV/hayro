@@ -4,7 +4,8 @@ use crate::reader::Reader;
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 
-pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
+/// Stop after the output exceeds `limit`.
+pub(crate) fn decode(data: &[u8], limit: usize) -> Option<Vec<u8>> {
     const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
 
     let mut reader = Reader::new(data);
@@ -55,10 +56,14 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
         Some(())
     };
 
-    let mut decoded = Vec::with_capacity(data.len() * 4 / 5);
+    let mut decoded = Vec::with_capacity((data.len() * 4 / 5).min(limit.saturating_add(1)));
     let mut group = Vec::with_capacity(5);
 
     loop {
+        if decoded.len() > limit {
+            return Some(decoded);
+        }
+
         let Some(b) = read_byte() else {
             // Be lenient and accept what we have (see PDFBOX-5910).
             flush_group(&mut group, &mut decoded)?;
@@ -87,5 +92,21 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
             }
             _ => return None, // Invalid character.
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::filter::ascii_85::decode;
+
+    #[test]
+    fn decode_simple() {
+        assert_eq!(decode(b"87cURDZ~>", usize::MAX).unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn decode_stops_past_limit() {
+        let input = b"z".repeat(1000);
+        assert_eq!(decode(&input, 5).unwrap(), vec![0; 8]);
     }
 }

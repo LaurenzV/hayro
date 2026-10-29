@@ -62,28 +62,30 @@ impl Filter {
         }
     }
 
+    /// Apply the filter, returning [`DecodeFailure::LimitExceeded`] above `limit` bytes.
     pub(crate) fn apply(
         &self,
         data: &[u8],
         params: &Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
+        limit: usize,
     ) -> Result<FilterResult<'static>, DecodeFailure> {
-        match self {
-            Self::AsciiHexDecode => ascii_hex::decode(data)
+        let result = match self {
+            Self::AsciiHexDecode => ascii_hex::decode(data, limit)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::Ascii85Decode => ascii_85::decode(data)
+            Self::Ascii85Decode => ascii_85::decode(data, limit)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::RunLengthDecode => run_length::decode(data)
+            Self::RunLengthDecode => run_length::decode(data, limit)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::LzwDecode => lzw_flate::lzw::decode(data, params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
-            Self::FlateDecode => lzw_flate::flate::decode(data, params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::StreamDecode),
+            Self::LzwDecode => {
+                lzw_flate::lzw::decode(data, params, limit).map(FilterResult::from_data)
+            }
+            Self::FlateDecode => {
+                lzw_flate::flate::decode(data, params, limit).map(FilterResult::from_data)
+            }
             #[cfg(feature = "images")]
             Self::DctDecode => {
                 dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
@@ -103,6 +105,12 @@ impl Filter {
                 Err(DecodeFailure::ImageDecode)
             }
             _ => Err(DecodeFailure::StreamDecode),
+        }?;
+
+        if result.data.len() > limit {
+            return Err(DecodeFailure::LimitExceeded);
         }
+
+        Ok(result)
     }
 }
