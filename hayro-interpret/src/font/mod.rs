@@ -279,6 +279,16 @@ impl<'a> Type3Glyph<'a> {
     pub fn char_code(&self) -> u32 {
         self.char_code
     }
+
+    /// Get the advance width for this glyph.
+    ///
+    /// The advance width is how far to move horizontally after drawing
+    /// this glyph before drawing the next one.
+    pub fn advance_width(&self) -> Option<f32> {
+        u8::try_from(self.char_code)
+            .ok()
+            .map(|code| self.font.glyph_width(code))
+    }
 }
 
 impl CacheKey for Type3Glyph<'_> {
