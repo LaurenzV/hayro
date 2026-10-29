@@ -214,12 +214,13 @@ impl<'a> Stream<'a> {
 
         let mut current: Option<FilterResult<'a>> = None;
 
-        for (filter, params) in filters_and_params
+        for (i, (filter, params)) in filters_and_params
             .filters
             .iter()
             .zip(filters_and_params.params.iter())
+            .enumerate()
         {
-            if *filter == Filter::Crypt {
+            if i == 0 && *filter == Filter::Crypt {
                 continue;
             }
 
