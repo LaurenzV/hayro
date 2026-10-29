@@ -1133,6 +1133,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn xref_stream_past_the_entry_limit() {
+        let data = vec![1; 8_388_608];
+        let mut xref_map = FxHashMap::default();
+        let result = xref_stream_subsection(
+            &mut Reader::new(&data),
+            0,
+            data.len() as u32,
+            1,
+            0,
+            0,
+            &mut xref_map,
+        );
+
+        assert!(result.is_none());
+    }
+
+    #[test]
     fn circular_prev_chain() {
         let mut pdf = b"%PDF-1.0\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".to_vec();
         let expected_xref_pos = pdf.len();
