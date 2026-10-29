@@ -747,9 +747,6 @@ fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) ->
 /// Maximum number of allowed xref `Prev` pointers before we abort.
 const MAX_XREF_CHAIN_DEPTH: usize = 256;
 
-/// Maximum number of xref entries, the limit on indirect objects in Annex C of ISO 32000-1.
-const MAX_XREF_ENTRIES: usize = 8_388_607;
-
 fn populate_xref_impl_inner<'a>(
     data: &'a [u8],
     pos: usize,
@@ -871,12 +868,7 @@ fn populate_from_xref_stream<'a>(
 
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
 
-    if f2_len > size_of::<u64>() as u8 {
-        return None;
-    }
-
-    // Entries that take no bytes would let `/Size` or `/Index` alone decide how many we insert.
-    if f1_len == 0 && f2_len == 0 && f3_len == 0 {
+    if f2_len == 0 || f2_len > size_of::<u64>() as u8 {
         return None;
     }
 
@@ -997,10 +989,6 @@ fn xref_stream_subsection<'a>(
             _ => {
                 return None;
             }
-        }
-
-        if insert_map.len() > MAX_XREF_ENTRIES {
-            return None;
         }
     }
 
@@ -1143,24 +1131,6 @@ fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn xref_stream_past_the_entry_limit() {
-        let data = vec![1; MAX_XREF_ENTRIES + 1];
-        let mut xref_map = FxHashMap::default();
-        assert!(
-            xref_stream_subsection(
-                &mut Reader::new(&data),
-                0,
-                data.len() as u32,
-                1,
-                0,
-                0,
-                &mut xref_map,
-            )
-            .is_none()
-        );
-    }
 
     #[test]
     fn circular_prev_chain() {
