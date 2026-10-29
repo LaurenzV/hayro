@@ -10,11 +10,11 @@ use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
-    CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
+    CF, CFM, ENCRYPT_META_DATA, FILTER, IDENTITY, LENGTH, O, OE, P, R, STD_CF, STM_F, STR_F, U, UE,
+    V,
 };
 use crate::object::{Dict, Name, ObjectIdentifier};
 use crate::sync::HashMap;
-use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp;
@@ -74,9 +74,12 @@ pub(crate) enum Decryptor {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DecryptionTarget {
+pub(crate) enum DecryptionTarget<'a> {
     String,
     Stream,
+    /// A stream whose `Crypt` filter names the crypt filter that decrypts it
+    /// instead of `StmF`.
+    Named(&'a [u8]),
 }
 
 impl Decryptor {
@@ -84,15 +87,26 @@ impl Decryptor {
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        target: DecryptionTarget,
+        target: DecryptionTarget<'_>,
     ) -> Option<Vec<u8>> {
+        // `Identity` passes the data through, whatever `CF` defines under that name.
+        if matches!(target, DecryptionTarget::Named(IDENTITY)) {
+            return Some(data.to_vec());
+        }
+
         match self {
             Self::None => Some(data.to_vec()),
-            Self::Rc4 { key } => decrypt_rc4(key, data, id),
+            Self::Rc4 { key } => match target {
+                // Without crypt filters, only the standard security handler's own
+                // one can be named, and it decrypts like the document.
+                DecryptionTarget::Named(name) if name != STD_CF => None,
+                _ => decrypt_rc4(key, data, id),
+            },
             Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
+                    DecryptionTarget::Named(name) => dict.named(name)?,
                 };
 
                 match crypt_dict.cfm {
@@ -274,37 +288,58 @@ fn decrypt_rc_aes(
     with_key(final_key)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
+    crypt_filters: HashMap<Vec<u8>, CryptDictionary>,
 }
 
 impl DecryptorData {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
         let mut mappings = HashMap::new();
+        let cf = dict.get::<Dict<'_>>(CF);
 
-        if let Some(dict) = dict.get::<Dict<'_>>(CF) {
+        if let Some(dict) = &cf {
             for key in dict.keys() {
                 if let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
-                    mappings.insert(key.as_str().to_string(), crypt_dict);
+                    mappings.insert(key.to_vec(), crypt_dict);
                 }
             }
         }
 
         let stm_f = *mappings
-            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STM_F)?.deref())
             .unwrap_or(&CryptDictionary::identity(default_length));
         let str_f = *mappings
-            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STR_F)?.deref())
             .unwrap_or(&CryptDictionary::identity(default_length));
+
+        // A stream's `Crypt` filter can still name the standard security handler's
+        // own crypt filter where there is no `CF`, which then decrypts like a
+        // document without crypt filters: with RC4.
+        if cf.is_none() {
+            mappings.insert(
+                STD_CF.to_vec(),
+                CryptDictionary {
+                    cfm: DecryptorTag::Rc4,
+                    _length: default_length / 8,
+                },
+            );
+        }
 
         Some(Self {
             stream_filter: stm_f,
             string_filter: str_f,
+            crypt_filters: mappings,
         })
+    }
+
+    /// The crypt filter that a stream's `Crypt` filter names.
+    fn named(&self, name: &[u8]) -> Option<CryptDictionary> {
+        self.crypt_filters.get(name).copied()
     }
 }
 

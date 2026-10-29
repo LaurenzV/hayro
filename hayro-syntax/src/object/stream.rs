@@ -5,7 +5,7 @@ use crate::filter::Filter;
 use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
-use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
+use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
@@ -15,6 +15,7 @@ use crate::util::find_needle;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
+use core::ops::Deref;
 use smallvec::SmallVec;
 
 struct FiltersAndParams<'a> {
@@ -109,6 +110,33 @@ impl<'a> Stream<'a> {
         }
     }
 
+    /// The name of the crypt filter that decrypts the stream instead of `StmF`, if the
+    /// stream has a `Crypt` filter (`Identity` where that names none).
+    fn crypt_filter(&self) -> Result<Option<Name<'a>>, DecodeFailure> {
+        let FiltersAndParams { filters, params } = self.filters_and_params();
+        let mut crypt_filter = None;
+
+        for (i, (filter, params)) in filters.iter().zip(params).enumerate() {
+            if *filter != Filter::Crypt {
+                continue;
+            }
+
+            let name = params
+                .get::<Name<'a>>(NAME)
+                .unwrap_or(Name::new_unescaped(IDENTITY));
+
+            // Only the first filter may name a crypt filter. A later `Crypt` filter
+            // can only pass the data through.
+            if i > 0 && name.deref() != IDENTITY {
+                return Err(DecodeFailure::Decryption);
+            }
+
+            crypt_filter.get_or_insert(name);
+        }
+
+        Ok(crypt_filter)
+    }
+
     /// Return the raw, decrypted data of the stream.
     ///
     /// Stream filters will not be applied.
@@ -122,10 +150,19 @@ impl<'a> Stream<'a> {
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
+            let Ok(crypt_filter) = self.crypt_filter() else {
+                return Cow::default();
+            };
+
+            let target = match &crypt_filter {
+                Some(name) => DecryptionTarget::Named(name),
+                None => DecryptionTarget::Stream,
+            };
+
             match self.dict.obj_id() {
                 Some(obj_id) => Cow::Owned(
                     ctx.xref()
-                        .decrypt(obj_id, self.data, DecryptionTarget::Stream)
+                        .decrypt(obj_id, self.data, target)
                         // TODO: MAybe an error would be better?
                         .unwrap_or_default(),
                 ),
@@ -181,6 +218,11 @@ impl<'a> Stream<'a> {
             .iter()
             .zip(filters_and_params.params.iter())
         {
+            // `raw_data` has already decrypted the data.
+            if *filter == Filter::Crypt {
+                continue;
+            }
+
             let new = filter.apply(
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
