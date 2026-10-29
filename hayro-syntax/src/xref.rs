@@ -868,11 +868,11 @@ fn populate_from_xref_stream<'a>(
 
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
 
-    if f2_len > size_of::<u64>() as u8 {
+    if f2_len == 0 || f2_len > size_of::<u64>() as u8 {
         return None;
     }
 
-    let xref_data = stream.decoded().ok()?;
+    let xref_data = stream.decoded_data().ok()?;
     let mut xref_reader = Reader::new(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array<'_>>(INDEX) {
@@ -1040,7 +1040,7 @@ pub(crate) struct ObjectStream {
 
 impl ObjectStream {
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
-        let data = stream.decoded().ok()?.into_owned();
+        let data = stream.decoded_data().ok()?.into_owned();
         let offsets = Self::read_offsets(stream, &data).unwrap_or_default();
 
         Some(Self { data, offsets })

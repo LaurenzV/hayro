@@ -23,7 +23,7 @@ impl Indexed {
         let values = {
             let data = iter
                 .next::<Stream<'_>>()
-                .and_then(|s| s.decoded().ok())
+                .and_then(|s| s.decoded_data().ok())
                 .or_else(|| {
                     iter.next::<object::String<'_>>()
                         .map(|s| Cow::Owned(s.to_vec()))
