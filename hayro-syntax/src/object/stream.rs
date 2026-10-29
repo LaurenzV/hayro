@@ -198,6 +198,13 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
+        if matches!(
+            self.dict.get::<Object<'_>>(F),
+            Some(Object::String(_) | Object::Dict(_))
+        ) {
+            return Err(DecodeFailure::StreamDecode);
+        }
+
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
 
@@ -262,11 +269,6 @@ impl Skippable for Stream<'_> {
 impl<'a> Readable<'a> for Stream<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
-
-        if dict.contains_key(F) {
-            return None;
-        }
-
         let offset = r.offset();
         parse_proper(r, &dict).or_else(|| {
             r.jump(offset);
@@ -441,5 +443,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn stream_with_external_file() {
+        let data = b"<< /Length 3 /F (data.bin) >> stream\nabc\nendstream";
+        let mut r = Reader::new(data);
+        let stream = r
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(stream.data, b"abc");
+        assert!(stream.dict().contains_key(crate::object::dict::keys::F));
+        assert!(stream.decoded().is_err());
+    }
+
+    #[test]
+    fn inline_filter_abbreviation_still_decodes() {
+        let mut r = Reader::new(b"<< /F /AHx >>");
+        let dict = r
+            .read_with_context::<crate::object::Dict<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        let stream = Stream::new(b"41>", dict);
+
+        assert_eq!(stream.decoded().unwrap().as_ref(), b"A");
     }
 }
