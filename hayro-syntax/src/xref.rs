@@ -2,6 +2,7 @@
 
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
+use crate::filter::Filter;
 use crate::metadata::Metadata;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
@@ -22,6 +23,7 @@ use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_white_space_character;
 use crate::util::findr_needle;
 use crate::{PdfData, object};
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -872,7 +874,7 @@ fn populate_from_xref_stream<'a>(
         return None;
     }
 
-    let xref_data = stream.decoded().ok()?;
+    let xref_data = decode_structural(&stream)?;
     let mut xref_reader = Reader::new(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array<'_>>(INDEX) {
@@ -1033,6 +1035,20 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
     }
 }
 
+/// Xref and object streams never hold images, so don't run an image decoder on them.
+fn decode_structural<'a>(stream: &Stream<'a>) -> Option<Cow<'a, [u8]>> {
+    if stream.filters().iter().any(|filter| {
+        matches!(
+            filter,
+            Filter::CcittFaxDecode | Filter::Jbig2Decode | Filter::DctDecode | Filter::JpxDecode
+        )
+    }) {
+        return None;
+    }
+
+    stream.decoded().ok()
+}
+
 pub(crate) struct ObjectStream {
     data: Vec<u8>,
     offsets: Vec<(u32, Option<usize>)>,
@@ -1040,7 +1056,7 @@ pub(crate) struct ObjectStream {
 
 impl ObjectStream {
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
-        let data = stream.decoded().ok()?.into_owned();
+        let data = decode_structural(stream)?.into_owned();
         let offsets = Self::read_offsets(stream, &data).unwrap_or_default();
 
         Some(Self { data, offsets })
