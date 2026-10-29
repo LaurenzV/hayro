@@ -1,5 +1,4 @@
 use crate::bit_reader::BitWriter;
-use crate::filter::Filter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -19,8 +18,7 @@ pub(crate) fn decode(
 ) -> Option<FilterResult<'static>> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
-        .filter(|g| !g.filters().contains(&Filter::Jbig2Decode))
-        .and_then(|g| g.decoded().ok());
+        .and_then(|g| g.decoded_data().ok());
 
     let settings = hayro_jbig2::DecodeSettings { strict: false };
     let globals = globals

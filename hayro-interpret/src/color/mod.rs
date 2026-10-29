@@ -175,7 +175,7 @@ impl ColorSpaceType {
                     let num_components = dict.get::<usize>(N)?;
 
                     return cache.get_or_insert_with(icc_stream.cache_key(), || {
-                        if let Some(decoded) = icc_stream.decoded().ok().as_ref() {
+                        if let Some(decoded) = icc_stream.decoded_data().ok().as_ref() {
                             ICCProfile::new(decoded, num_components)
                                 .map(|icc| {
                                     // TODO: For SVG and PNG we can assume that the output color space is

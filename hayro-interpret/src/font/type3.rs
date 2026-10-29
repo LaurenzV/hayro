@@ -131,7 +131,7 @@ impl<'a> Type3<'a> {
 
         let name = self.glyph_simulator.glyph_to_string(glyph.glyph_id)?;
         let program = self.char_procs.get(&name)?;
-        let decoded = program.decoded().ok()?;
+        let decoded = program.decoded_data().ok()?;
         let iter = TypedIter::new(decoded.as_ref());
 
         let is_shape_glyph = {

@@ -165,6 +165,27 @@ impl<'a> Stream<'a> {
             .map(|r| r.data)
     }
 
+    /// Return the decoded data of a stream that isn't an image.
+    ///
+    /// Fails with [`DecodeFailure::ImageDecode`] if the stream uses an image filter
+    /// (`DCTDecode`, `JPXDecode`, `JBIG2Decode` or `CCITTFaxDecode`). Use
+    /// [`Stream::decoded_image`] for those.
+    pub fn decoded_data(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        if self.filters().iter().any(|filter| {
+            matches!(
+                filter,
+                Filter::DctDecode
+                    | Filter::JpxDecode
+                    | Filter::Jbig2Decode
+                    | Filter::CcittFaxDecode
+            )
+        }) {
+            return Err(DecodeFailure::ImageDecode);
+        }
+
+        self.decoded()
+    }
+
     /// Return the decoded data of the stream, and return image metadata
     /// if available.
     pub fn decoded_image(
