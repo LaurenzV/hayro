@@ -109,17 +109,6 @@ impl<'a> Stream<'a> {
         }
     }
 
-    fn crypt_filter(&self) -> Option<Name<'a>> {
-        let FiltersAndParams { filters, params } = self.filters_and_params();
-
-        (filters.first() == Some(&Filter::Crypt)).then(|| {
-            params
-                .first()
-                .and_then(|params| params.get::<Name<'a>>(NAME))
-                .unwrap_or(Name::new_unescaped(IDENTITY))
-        })
-    }
-
     /// Return the raw, decrypted data of the stream.
     ///
     /// Stream filters will not be applied.
@@ -236,6 +225,17 @@ impl<'a> Stream<'a> {
             data,
             image_data: None,
         }))
+    }
+
+    fn crypt_filter(&self) -> Option<Name<'a>> {
+        let FiltersAndParams { filters, params } = self.filters_and_params();
+
+        (filters.first() == Some(&Filter::Crypt)).then(|| {
+            params
+                .first()
+                .and_then(|params| params.get::<Name<'a>>(NAME))
+                .unwrap_or(Name::new_unescaped(IDENTITY))
+        })
     }
 }
 
