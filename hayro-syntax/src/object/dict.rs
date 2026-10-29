@@ -11,7 +11,7 @@ use crate::sync::FxHashMap;
 use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.
@@ -118,6 +118,15 @@ impl<'a> Dict<'a> {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
+    }
+
+    /// An iterator over dictionary entries with the byte spans of each key and value.
+    ///
+    /// The iterator rescans the dictionary in source order, including duplicate keys,
+    /// and yields spans relative to [`Dict::data`]. [`Dict::get`] returns the last
+    /// value for a duplicate key.
+    pub fn entry_spans(&self) -> DictEntrySpans<'a> {
+        DictEntrySpans::new(self.data(), self.ctx().in_content_stream())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -343,6 +352,86 @@ where
 }
 
 object!(Dict<'a>, Dict);
+
+/// An iterator over the entries of a dictionary with their byte spans.
+///
+/// Each item is the key, the span of the key, and the span of its value, relative to
+/// [`Dict::data`]. Created by [`Dict::entry_spans`].
+pub struct DictEntrySpans<'a> {
+    reader: Reader<'a>,
+    end_tag: &'static [u8],
+    lenient: bool,
+    in_content_stream: bool,
+    done: bool,
+}
+
+impl<'a> DictEntrySpans<'a> {
+    fn new(data: &'a [u8], in_content_stream: bool) -> Self {
+        let mut reader = Reader::new(data);
+        let lenient = reader.forward_tag(b"<<").is_some();
+
+        Self {
+            reader,
+            end_tag: if lenient { b">>" } else { b"ID" },
+            lenient,
+            in_content_stream,
+            done: data.is_empty(),
+        }
+    }
+
+    fn skip_value(&mut self) -> Option<()> {
+        // Match `parse_dict_with`: inline image dictionaries add no nesting level.
+        let depth = usize::from(self.lenient);
+        if self.in_content_stream {
+            self.reader.skip_with_depth::<Object<'_>>(true, depth)?;
+        } else {
+            self.reader
+                .skip_with_depth::<MaybeRef<Object<'_>>>(false, depth)?;
+        }
+
+        Some(())
+    }
+}
+
+impl<'a> Iterator for DictEntrySpans<'a> {
+    type Item = (Name<'a>, Range<usize>, Range<usize>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.done {
+            self.reader.skip_white_spaces_and_comments();
+
+            if self.reader.at_end() || self.reader.peek_tag(self.end_tag).is_some() {
+                break;
+            }
+
+            let key_start = self.reader.offset();
+            let Some(name) = self.reader.read_without_context::<Name<'a>>() else {
+                if self.lenient
+                    && self
+                        .reader
+                        .skip_with_depth::<Object<'_>>(self.in_content_stream, 1)
+                        .is_some()
+                {
+                    continue;
+                }
+
+                break;
+            };
+            let key_end = self.reader.offset();
+            self.reader.skip_white_spaces_and_comments();
+
+            let value_start = self.reader.offset();
+            if self.skip_value().is_none() {
+                break;
+            }
+
+            return Some((name, key_start..key_end, value_start..self.reader.offset()));
+        }
+
+        self.done = true;
+        None
+    }
+}
 
 struct Repr<'a> {
     data: &'a [u8],
@@ -1190,5 +1279,119 @@ mod tests {
         let dict = Dict::from_bytes(b"<< /A <<>>stream /B true >>").unwrap();
         let _ = dict.entries().count();
         let _ = format!("{dict:?}");
+    }
+
+    fn spans_of(dict: &Dict<'_>) -> Vec<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+        let data = dict.data();
+        dict.entry_spans()
+            .map(|(name, key, value)| {
+                (
+                    name.as_ref().to_vec(),
+                    data[key].to_vec(),
+                    data[value].to_vec(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn entry_spans_keep_lexemes() {
+        let dict = Dict::from_bytes(
+            b"<< /A 1.50 /B (a\\)b) % comment\n/C [1 2 0 R]/D<</E 3 0 R>> /F 3 0 R /G#20H 0.0 >>",
+        )
+        .unwrap();
+
+        assert_eq!(
+            spans_of(&dict),
+            vec![
+                (b"A".to_vec(), b"/A".to_vec(), b"1.50".to_vec()),
+                (b"B".to_vec(), b"/B".to_vec(), b"(a\\)b)".to_vec()),
+                (b"C".to_vec(), b"/C".to_vec(), b"[1 2 0 R]".to_vec()),
+                (b"D".to_vec(), b"/D".to_vec(), b"<</E 3 0 R>>".to_vec()),
+                (b"F".to_vec(), b"/F".to_vec(), b"3 0 R".to_vec()),
+                (b"G H".to_vec(), b"/G#20H".to_vec(), b"0.0".to_vec()),
+            ]
+        );
+    }
+
+    #[test]
+    fn entry_spans_report_duplicate_keys() {
+        let dict = Dict::from_bytes(b"<</A 1 /A 2>>").unwrap();
+
+        assert_eq!(dict.get::<i32>(b"A"), Some(2));
+        assert_eq!(
+            spans_of(&dict),
+            vec![
+                (b"A".to_vec(), b"/A".to_vec(), b"1".to_vec()),
+                (b"A".to_vec(), b"/A".to_vec(), b"2".to_vec()),
+            ]
+        );
+    }
+
+    #[test]
+    fn entry_spans_skip_garbage() {
+        let dict = Dict::from_bytes(b"<< /A 1 garbage /B 2 >>").unwrap();
+
+        assert_eq!(
+            spans_of(&dict),
+            vec![
+                (b"A".to_vec(), b"/A".to_vec(), b"1".to_vec()),
+                (b"B".to_vec(), b"/B".to_vec(), b"2".to_vec()),
+            ]
+        );
+    }
+
+    #[test]
+    fn entry_spans_of_empty_dicts() {
+        assert_eq!(Dict::empty().entry_spans().count(), 0);
+        assert_eq!(Dict::from_bytes(b"<< >>").unwrap().entry_spans().count(), 0);
+    }
+
+    #[test]
+    fn entry_spans_match_dict_nesting_bound() {
+        for inline in [false, true] {
+            let depth = crate::object::MAX_OBJECT_NESTING_DEPTH - usize::from(!inline);
+            let value = format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
+            let body = format!("/W 1 /Custom {value} /H 1");
+            let data = if inline {
+                format!("{body} ID")
+            } else {
+                format!("<<{body}>>")
+            };
+            let dict = if inline {
+                Reader::new(data.as_bytes())
+                    .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
+                    .unwrap()
+                    .get_dict()
+                    .clone()
+            } else {
+                Dict::from_bytes(data.as_bytes()).unwrap()
+            };
+            assert!(dict.contains_key(b"Custom"));
+            assert_eq!(
+                spans_of(&dict),
+                vec![
+                    (b"W".to_vec(), b"/W".to_vec(), b"1".to_vec()),
+                    (b"Custom".to_vec(), b"/Custom".to_vec(), value.into_bytes()),
+                    (b"H".to_vec(), b"/H".to_vec(), b"1".to_vec()),
+                ],
+                "inline: {inline}"
+            );
+        }
+    }
+
+    #[test]
+    fn entry_spans_of_inline_image_dict() {
+        let dict = Reader::new(b"/W 4 /H 2 ID")
+            .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(
+            spans_of(dict.get_dict()),
+            vec![
+                (b"W".to_vec(), b"/W".to_vec(), b"4".to_vec()),
+                (b"H".to_vec(), b"/H".to_vec(), b"2".to_vec()),
+            ]
+        );
     }
 }

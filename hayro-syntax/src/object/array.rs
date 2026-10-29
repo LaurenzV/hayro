@@ -8,6 +8,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::marker::PhantomData;
+use core::ops::Range;
 use smallvec::SmallVec;
 
 /// An array of PDF objects.
@@ -46,6 +47,17 @@ impl<'a> Array<'a> {
     /// Return a flex iterator over the items in the array.
     pub fn flex_iter(&self) -> FlexArrayIter<'a> {
         FlexArrayIter::new(self.data, &self.ctx)
+    }
+
+    /// Returns an iterator over the byte spans of the items of the array.
+    ///
+    /// The iterator rescans the array and yields spans relative to [`Array::data`]
+    /// in source order.
+    pub fn spans(&self) -> ArraySpans<'a> {
+        ArraySpans {
+            reader: Reader::new(self.data),
+            in_content_stream: self.ctx.in_content_stream(),
+        }
     }
 
     /// Return the raw data of the array.
@@ -153,6 +165,37 @@ impl<'a> Iterator for ArrayIter<'a> {
         // can't be read.
         self.reader
             .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
+    }
+}
+
+/// An iterator over the byte spans of the items of an array.
+///
+/// Created by [`Array::spans`].
+pub struct ArraySpans<'a> {
+    reader: Reader<'a>,
+    in_content_stream: bool,
+}
+
+impl Iterator for ArraySpans<'_> {
+    type Item = Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.reader.skip_white_spaces_and_comments();
+
+        if self.reader.at_end() {
+            return None;
+        }
+
+        let start = self.reader.offset();
+        // The depth matches that of the items in `Array::skip_with_depth`.
+        if self.in_content_stream {
+            self.reader.skip_with_depth::<Object<'_>>(true, 1)?;
+        } else {
+            self.reader
+                .skip_with_depth::<MaybeRef<Object<'_>>>(false, 1)?;
+        }
+
+        Some(start..self.reader.offset())
     }
 }
 
@@ -456,5 +499,35 @@ mod tests {
     #[test]
     fn array_with_unreadable_item() {
         let _ = array_ref_impl(b"[true <<>>stream false]");
+    }
+
+    #[test]
+    fn spans_keep_lexemes() {
+        let array = Array::from_bytes(b"[ 1.50 (a\\)b)% comment\n/N [1 [2]] <</A 1>> 3 0 R 0.0 4]")
+            .unwrap();
+        let spans = array
+            .spans()
+            .map(|span| &array.data()[span])
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            spans,
+            vec![
+                &b"1.50"[..],
+                b"(a\\)b)",
+                b"/N",
+                b"[1 [2]]",
+                b"<</A 1>>",
+                b"3 0 R",
+                b"0.0",
+                b"4",
+            ]
+        );
+        assert_eq!(spans.len(), array.raw_iter().count());
+    }
+
+    #[test]
+    fn spans_of_empty_array() {
+        assert_eq!(Array::from_bytes(b"[ ]").unwrap().spans().count(), 0);
     }
 }
