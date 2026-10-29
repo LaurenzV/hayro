@@ -409,12 +409,19 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
     Some(())
 }
 
+// Match Acrobat's 256-level limit; krilla gradients can exceed 32 levels.
+const MAX_PROCEDURE_DEPTH: usize = 256;
+
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     let mut r = Reader::new(data);
-    parse_procedure_inner(&mut r)
+    parse_procedure_inner(&mut r, 0)
 }
 
-fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
+fn parse_procedure_inner(r: &mut Reader<'_>, depth: usize) -> Option<Vec<PostScriptOp>> {
+    if depth >= MAX_PROCEDURE_DEPTH {
+        return None;
+    }
+
     let mut stack = ParseStack::new();
 
     let mut ops = vec![];
@@ -429,7 +436,7 @@ fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
 
             break;
         } else if r.peek_byte()? == b'{' {
-            stack.push(parse_procedure_inner(r)?);
+            stack.push(parse_procedure_inner(r, depth + 1)?);
         } else {
             let op = PostScriptOp::from_reader(r, &mut stack)?;
             ops.push(op);
@@ -552,12 +559,32 @@ impl PostScriptOp {
 
 #[cfg(test)]
 mod tests {
-    use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
+    use crate::function::type4::{MAX_PROCEDURE_DEPTH, PostScriptOp, Type4, parse_procedure};
     use crate::function::{Function, FunctionType, Interval, Repr};
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
     use hayro_syntax::object::Number;
+
+    fn nested_program(depth: usize) -> Vec<u8> {
+        let mut program = "{ true ".repeat(depth - 1);
+        program.push_str("{ 1 }");
+        program.push_str(&" if }".repeat(depth - 1));
+
+        program.into_bytes()
+    }
+
+    #[test]
+    fn nested_procedures_up_to_bound() {
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH)).is_some());
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH + 1)).is_none());
+    }
+
+    #[test]
+    fn deep_procedure_nesting_fails() {
+        let program = format!("{}{}", "{".repeat(300_000), "}".repeat(300_000));
+        assert!(parse_procedure(program.as_bytes()).is_none());
+    }
 
     #[test]
     fn lex_1() {

@@ -16,7 +16,7 @@ pub(crate) struct DeviceN {
 }
 
 impl DeviceN {
-    pub(super) fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
+    pub(super) fn new(array: &Array<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/DeviceN`
         let _ = iter.next::<Name<'_>>()?;
@@ -27,7 +27,7 @@ impl DeviceN {
             .collect::<Vec<_>>();
         let num_components = u8::try_from(names.len()).ok()?;
         let all_none = names.iter().all(|n| n.as_str() == "None");
-        let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
+        let alternate_space = ColorSpace::new_nested(iter.next::<Object<'_>>()?, cache, depth)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
         if num_components == 0 || num_components as usize > MAX_COMPONENTS {

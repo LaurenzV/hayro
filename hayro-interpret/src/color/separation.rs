@@ -12,12 +12,12 @@ pub(crate) struct Separation {
 }
 
 impl Separation {
-    pub(super) fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
+    pub(super) fn new(array: &Array<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/Separation`
         let _ = iter.next::<Name<'_>>()?;
         let name = iter.next::<Name<'_>>()?;
-        let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
+        let alternate_space = ColorSpace::new_nested(iter.next::<Object<'_>>()?, cache, depth)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
         // Either I did something wrong, or no other viewers properly handles
         // `All`, so let's just ignore it as well.
