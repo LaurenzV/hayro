@@ -176,7 +176,6 @@ impl WriteIndirect for Stream<'_> {
         let data = self.raw_data();
         let mut obj = chunk.stream(id, &data);
 
-        // The data are written decrypted, so the copy must not keep the `Crypt` filters.
         if self.filters().contains(&Filter::Crypt) {
             write_dict(
                 self.dict(),
@@ -196,7 +195,6 @@ fn write_filters_without_crypt(
     pdf_dict: &mut Dict<'_>,
     ctx: &mut ExtractionContext<'_>,
 ) {
-    // A single filter is the `Crypt` filter itself, so nothing is left.
     let Some(filters) = hayro_dict.get::<array::Array<'_>>(FILTER) else {
         return;
     };

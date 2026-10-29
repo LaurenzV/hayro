@@ -10,8 +10,7 @@ use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
-    CF, CFM, ENCRYPT_META_DATA, FILTER, IDENTITY, LENGTH, O, OE, P, R, STD_CF, STM_F, STR_F, U, UE,
-    V,
+    CF, CFM, ENCRYPT_META_DATA, FILTER, IDENTITY, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
 };
 use crate::object::{Dict, Name, ObjectIdentifier};
 use crate::sync::HashMap;
@@ -77,8 +76,6 @@ pub(crate) enum Decryptor {
 pub(crate) enum DecryptionTarget<'a> {
     String,
     Stream,
-    /// A stream whose `Crypt` filter names the crypt filter that decrypts it
-    /// instead of `StmF`.
     Named(&'a [u8]),
 }
 
@@ -89,7 +86,6 @@ impl Decryptor {
         data: &[u8],
         target: DecryptionTarget<'_>,
     ) -> Option<Vec<u8>> {
-        // `Identity` passes the data through, whatever `CF` defines under that name.
         if matches!(target, DecryptionTarget::Named(IDENTITY)) {
             return Some(data.to_vec());
         }
@@ -97,9 +93,7 @@ impl Decryptor {
         match self {
             Self::None => Some(data.to_vec()),
             Self::Rc4 { key } => match target {
-                // Without crypt filters, only the standard security handler's own
-                // one can be named, and it decrypts like the document.
-                DecryptionTarget::Named(name) if name != STD_CF => None,
+                DecryptionTarget::Named(_) => None,
                 _ => decrypt_rc4(key, data, id),
             },
             Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
@@ -298,9 +292,8 @@ pub(crate) struct DecryptorData {
 impl DecryptorData {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
         let mut mappings = HashMap::new();
-        let cf = dict.get::<Dict<'_>>(CF);
 
-        if let Some(dict) = &cf {
+        if let Some(dict) = dict.get::<Dict<'_>>(CF) {
             for key in dict.keys() {
                 if let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
@@ -317,19 +310,6 @@ impl DecryptorData {
             .get(dict.get::<Name<'_>>(STR_F)?.deref())
             .unwrap_or(&CryptDictionary::identity(default_length));
 
-        // A stream's `Crypt` filter can still name the standard security handler's
-        // own crypt filter where there is no `CF`, which then decrypts like a
-        // document without crypt filters: with RC4.
-        if cf.is_none() {
-            mappings.insert(
-                STD_CF.to_vec(),
-                CryptDictionary {
-                    cfm: DecryptorTag::Rc4,
-                    _length: default_length / 8,
-                },
-            );
-        }
-
         Some(Self {
             stream_filter: stm_f,
             string_filter: str_f,
@@ -337,7 +317,6 @@ impl DecryptorData {
         })
     }
 
-    /// The crypt filter that a stream's `Crypt` filter names.
     fn named(&self, name: &[u8]) -> Option<CryptDictionary> {
         self.crypt_filters.get(name).copied()
     }

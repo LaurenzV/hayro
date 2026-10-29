@@ -344,7 +344,6 @@ fn write_null_objects() {
     assert_eq!(data, b"<<\n      /F1 5 0 R\n      /F2 null\n    >>");
 }
 
-// The streams are written decrypted, so their `Crypt` filters must be left out.
 fn write_without_crypt_filters() {
     let hayro_pdf = load_pdf("pdfs/custom/encrypted_crypt_filter_streams.pdf");
     let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);

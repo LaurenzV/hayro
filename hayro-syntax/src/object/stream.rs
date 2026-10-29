@@ -110,8 +110,6 @@ impl<'a> Stream<'a> {
         }
     }
 
-    /// The name of the crypt filter that decrypts the stream instead of `StmF`, if the
-    /// stream has a `Crypt` filter (`Identity` where that names none).
     fn crypt_filter(&self) -> Result<Option<Name<'a>>, DecodeFailure> {
         let FiltersAndParams { filters, params } = self.filters_and_params();
         let mut crypt_filter = None;
@@ -125,8 +123,6 @@ impl<'a> Stream<'a> {
                 .get::<Name<'a>>(NAME)
                 .unwrap_or(Name::new_unescaped(IDENTITY));
 
-            // Only the first filter may name a crypt filter. A later `Crypt` filter
-            // can only pass the data through.
             if i > 0 && name.deref() != IDENTITY {
                 return Err(DecodeFailure::Decryption);
             }
@@ -218,7 +214,6 @@ impl<'a> Stream<'a> {
             .iter()
             .zip(filters_and_params.params.iter())
         {
-            // `raw_data` has already decrypted the data.
             if *filter == Filter::Crypt {
                 continue;
             }
