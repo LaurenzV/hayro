@@ -171,13 +171,10 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
-        // An `F` that names a file, a string or a dictionary rather than an
-        // inline image's abbreviated filter, puts the data in an external
-        // file, which is not read; the bytes of the stream are to be ignored.
-        if self.dict.contains_key(F)
-            && self.dict.get::<Name<'_>>(F).is_none()
-            && self.dict.get::<Array<'_>>(F).is_none()
-        {
+        if matches!(
+            self.dict.get::<Object<'_>>(F),
+            Some(Object::String(_) | Object::Dict(_))
+        ) {
             return Err(DecodeFailure::StreamDecode);
         }
 
