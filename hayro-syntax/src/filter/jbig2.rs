@@ -1,4 +1,5 @@
 use crate::bit_reader::BitWriter;
+use crate::filter::Filter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -16,8 +17,10 @@ pub(crate) fn decode(
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult<'static>> {
+    // Globals hold raw segments. A JBIG2-encoded one would decode its own globals in turn.
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
+        .filter(|g| !g.filters().contains(&Filter::Jbig2Decode))
         .and_then(|g| g.decoded().ok());
 
     let settings = hayro_jbig2::DecodeSettings { strict: false };
