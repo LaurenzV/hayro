@@ -428,7 +428,7 @@ impl FontType {
             .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE3))
             // See PDFBOX-2599. Apparently, Acrobat accepts this as well.
             .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE))?
-            .decoded()
+            .decoded_data()
             .ok()?;
 
         let data = Arc::new(data.into_owned());
@@ -468,7 +468,7 @@ impl CidToGIdMap {
                 None
             }
         } else if let Some(stream) = dict.get::<Stream<'_>>(CID_TO_GID_MAP) {
-            let decoded = stream.decoded().ok()?;
+            let decoded = stream.decoded_data().ok()?;
             let mut forward = FxHashMap::default();
             let mut inverse = FxHashMap::default();
 
@@ -576,7 +576,7 @@ fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<
             }
         }
         Object::Stream(s) => {
-            let decoded = s.decoded().ok()?;
+            let decoded = s.decoded_data().ok()?;
             let resolver = cmap_resolver.clone();
             CMap::parse(&decoded, move |n| (resolver)(n))
         }

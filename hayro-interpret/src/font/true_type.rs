@@ -222,7 +222,7 @@ impl EmbeddedKind {
         let (encoding, differences) = read_encoding(dict);
         let base_font = descriptor
             .get::<Stream<'_>>(FONT_FILE2)
-            .and_then(|s| s.decoded().ok())
+            .and_then(|s| s.decoded_data().ok())
             .and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
 
         let glyph_names = base_font.glyph_names();

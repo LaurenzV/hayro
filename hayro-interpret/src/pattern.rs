@@ -234,7 +234,7 @@ impl<'a> TilingPattern<'a> {
             self.nesting_depth,
         );
 
-        let decoded = self.stream.decoded().ok()?;
+        let decoded = self.stream.decoded_data().ok()?;
         let iter = TypedIter::new(decoded.as_ref());
 
         let clip_path = ClipPath {
