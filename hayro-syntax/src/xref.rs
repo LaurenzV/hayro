@@ -868,7 +868,7 @@ fn populate_from_xref_stream<'a>(
 
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
 
-    if f2_len > size_of::<u64>() as u8 {
+    if f2_len == 0 || f2_len > size_of::<u64>() as u8 {
         return None;
     }
 
