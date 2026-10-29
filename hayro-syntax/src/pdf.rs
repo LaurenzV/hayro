@@ -6,7 +6,8 @@ use crate::page::Pages;
 use crate::page::cached::CachedPages;
 use crate::reader::Reader;
 use crate::sync::Arc;
-use crate::xref::{XRef, XRefError, fallback, root_xref};
+use crate::xref::{ObjectSource, XRef, XRefError, fallback, root_xref};
+use alloc::vec::Vec;
 
 pub use crate::crypto::DecryptionError;
 use crate::metadata::Metadata;
@@ -65,6 +66,22 @@ impl Pdf {
             header_version: version,
             pages,
             data,
+        })
+    }
+
+    /// Read a PDF from a caller-supplied object source.
+    ///
+    /// Returns `Err` if the trailer or the page tree cannot be read.
+    pub fn from_source(source: Arc<dyn ObjectSource>) -> Result<Self, LoadPdfError> {
+        let version = source.header_version().unwrap_or(PdfVersion::Pdf10);
+        let xref = Arc::new(XRef::from_source(source).ok_or(LoadPdfError::Invalid)?);
+        let pages = CachedPages::new(xref.clone()).ok_or(LoadPdfError::Invalid)?;
+
+        Ok(Self {
+            xref,
+            header_version: version,
+            pages,
+            data: PdfData::from(Vec::new()),
         })
     }
 
@@ -161,6 +178,94 @@ impl PdfVersion {
 #[cfg(test)]
 mod tests {
     use crate::pdf::{Pdf, PdfVersion};
+
+    use crate::object::{ObjectIdentifier, Stream};
+    use crate::sync::{Arc, HashMap};
+    use crate::xref::ObjectSource;
+
+    struct MapSource {
+        objects: HashMap<ObjectIdentifier, Vec<u8>>,
+        trailer: Vec<u8>,
+    }
+
+    impl MapSource {
+        fn new(objects: &[(i32, &[u8])], trailer: &[u8]) -> Arc<Self> {
+            Arc::new(Self {
+                objects: objects
+                    .iter()
+                    .map(|(n, b)| (ObjectIdentifier::new(*n, 0), b.to_vec()))
+                    .collect(),
+                trailer: trailer.to_vec(),
+            })
+        }
+    }
+
+    impl ObjectSource for MapSource {
+        fn object(&self, id: ObjectIdentifier) -> Option<&[u8]> {
+            self.objects.get(&id).map(|b| b.as_slice())
+        }
+
+        fn trailer(&self) -> &[u8] {
+            &self.trailer
+        }
+    }
+
+    const CATALOG: (i32, &[u8]) = (1, b"<< /Type /Catalog /Pages 2 0 R >>");
+    const PAGES: (i32, &[u8]) = (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    const TRAILER: &[u8] = b"<< /Root 1 0 R /Info 5 0 R /Size 6 >>";
+
+    #[test]
+    fn source_resolves_pages_and_streams() {
+        let source = MapSource::new(
+            &[
+                CATALOG,
+                PAGES,
+                (
+                    3,
+                    b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>",
+                ),
+                (4, b"<< /Length 4 0 R >>\nstream\n0 0 m\nendstream"),
+                (5, b"<< /Title (From a source) >>"),
+            ],
+            TRAILER,
+        );
+        let pdf = Pdf::from_source(source).unwrap();
+
+        assert_eq!(pdf.pages().len(), 1);
+        let page = &pdf.pages()[0];
+        assert_eq!(page.base_dimensions(), (200.0, 100.0));
+        // A cyclic /Length falls back to scanning for endstream.
+        assert_eq!(page.page_stream(), Some(&b"0 0 m"[..]));
+        assert_eq!(pdf.metadata().title.as_deref(), Some(&b"From a source"[..]));
+        assert!(
+            pdf.xref()
+                .get::<Stream<'_>>(ObjectIdentifier::new(4, 0))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn source_absent_object_is_null() {
+        let source = MapSource::new(
+            &[
+                CATALOG,
+                PAGES,
+                (3, b"<< /Type /Page /Parent 2 0 R /Contents 9 0 R >>"),
+            ],
+            TRAILER,
+        );
+        let pdf = Pdf::from_source(source).unwrap();
+
+        assert_eq!(pdf.pages().len(), 1);
+        assert!(pdf.metadata().title.is_none());
+    }
+
+    #[test]
+    fn source_without_root_is_invalid() {
+        let source = MapSource::new(&[CATALOG, PAGES], b"<< /Size 3 >>");
+
+        assert!(Pdf::from_source(source).is_err());
+    }
 
     #[test]
     fn issue_49() {
