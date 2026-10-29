@@ -17,7 +17,6 @@ pub(crate) fn decode(
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult<'static>> {
-    // Globals hold raw segments. A JBIG2-encoded one would decode its own globals in turn.
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .filter(|g| !g.filters().contains(&Filter::Jbig2Decode))
