@@ -134,8 +134,8 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
                 device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
             }
             TextRenderingMode::Clip => {
-                // The glyphs are only added to the clipping path, but like invisible
-                // text they are still passed on, for example for text extraction.
+                // TODO: Pass clipping-only text with its own draw mode, so that devices
+                // can tell it apart from invisible text.
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
             }
         }
