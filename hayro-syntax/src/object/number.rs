@@ -1,6 +1,5 @@
 //! Numbers.
 
-use crate::math::powi_f64;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -9,10 +8,13 @@ use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::{Debug, Display, Formatter};
 
 #[rustfmt::skip]
-static POWERS_OF_10: [f64; 20] = [
+static POWERS_OF_10: [f64; 23] = [
     1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
     1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+    1e20, 1e21, 1e22,
 ];
+
+const MAX_EXACT_MANTISSA: u64 = 1 << 53;
 
 /// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -159,27 +161,32 @@ impl Number {
             return None;
         }
 
-        Some(Self::from_parts(negative, mantissa, decimal_shift))
+        Self::from_parts(negative, mantissa, decimal_shift)
     }
 
     #[inline(always)]
-    fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Self {
+    fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Option<Self> {
         match decimal_shift {
             None => {
                 let value = mantissa as i64;
-                Self(InternalNumber::Integer(if negative {
+                Some(Self(InternalNumber::Integer(if negative {
                     value.wrapping_neg()
                 } else {
                     value
-                }))
+                })))
             }
             Some(shift) => {
-                let divisor = match POWERS_OF_10.get(shift as usize) {
-                    Some(power) => *power,
-                    None => powi_f64(10.0, shift),
-                };
+                // Clinger's fast path rounds once when the mantissa and divisor are exact.
+                if mantissa > MAX_EXACT_MANTISSA {
+                    return None;
+                }
+                let divisor = *POWERS_OF_10.get(shift as usize)?;
                 let value = mantissa as f64 / divisor;
-                Self(InternalNumber::Real(if negative { -value } else { value }))
+                Some(Self(InternalNumber::Real(if negative {
+                    -value
+                } else {
+                    value
+                })))
             }
         }
     }
@@ -257,23 +264,23 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
 
     let integer_overflow = !has_dot && mantissa > i64::MAX as u64;
 
-    if overflowed || integer_overflow {
-        let end_offset = number_end.unwrap_or_else(|| r.offset());
-        let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
-
-        if !has_dot && let Ok(value) = number.parse::<i64>() {
-            return Some(Number(InternalNumber::Integer(value)));
-        }
-
-        let value = number.parse::<f64>().ok()?;
-        return Some(Number(InternalNumber::Real(value)));
+    if !overflowed
+        && !integer_overflow
+        && let Some(number) =
+            Number::from_parts(negative, mantissa, has_dot.then_some(decimal_shift))
+    {
+        return Some(number);
     }
 
-    Some(Number::from_parts(
-        negative,
-        mantissa,
-        has_dot.then_some(decimal_shift),
-    ))
+    let end_offset = number_end.unwrap_or_else(|| r.offset());
+    let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
+
+    if !has_dot && let Ok(value) = number.parse::<i64>() {
+        return Some(Number(InternalNumber::Integer(value)));
+    }
+
+    let value = number.parse::<f64>().ok()?;
+    Some(Number(InternalNumber::Real(value)))
 }
 
 object!(Number, Number);
@@ -680,5 +687,59 @@ mod tests {
         let got = reader.read_without_context::<Number>().unwrap().as_f64();
         assert_eq!(got, 1.234_567_890_123_456_8e24);
         assert_eq!(reader.offset(), input.len());
+    }
+
+    fn read_f64(input: &str) -> f64 {
+        let mut reader = Reader::new(input.as_bytes());
+        let got = reader.read_without_context::<Number>().unwrap().as_f64();
+        assert_eq!(reader.offset(), input.len());
+        got
+    }
+
+    fn read_f64_from_content(input: &str) -> f64 {
+        let content = format!("{input} 0 Td");
+        let mut ops = crate::content::UntypedIter::new(content.as_bytes());
+        let op = ops.next().unwrap();
+        match op.operands().next() {
+            Some(crate::object::Object::Number(number)) => number.as_f64(),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn reals_round_correctly() {
+        for value in [
+            519_188.221_071_372_04,
+            1e-25,
+            f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            0.1,
+            1.5,
+            -0.000_123,
+            9_007_199_254_740_993.0,
+            core::f64::consts::PI,
+        ] {
+            let text = format!("{value}");
+            assert_eq!(read_f64(&text).to_bits(), value.to_bits(), "{text}");
+            assert_eq!(
+                read_f64_from_content(&text).to_bits(),
+                value.to_bits(),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn real_at_fast_path_limits() {
+        assert_eq!(read_f64("900719925474099.2"), 900_719_925_474_099.2);
+        assert_eq!(read_f64("900719925474099.3"), 900_719_925_474_099.3);
+        assert_eq!(read_f64("0.0000000000000000000001"), 1e-22);
+        assert_eq!(read_f64("0.00000000000000000000001"), 1e-23);
+    }
+
+    #[test]
+    fn real_fallback_keeps_trailing_minus_and_sign() {
+        assert_eq!(read_f64("+519188.22107137204"), 519_188.221_071_372_04);
+        assert_eq!(read_f64("-519188.22107137204-12"), -519_188.221_071_372_04);
     }
 }
