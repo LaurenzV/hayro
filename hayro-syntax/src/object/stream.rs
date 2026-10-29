@@ -15,7 +15,6 @@ use crate::util::find_needle;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::Deref;
 use smallvec::SmallVec;
 
 struct FiltersAndParams<'a> {
@@ -110,27 +109,15 @@ impl<'a> Stream<'a> {
         }
     }
 
-    fn crypt_filter(&self) -> Result<Option<Name<'a>>, DecodeFailure> {
+    fn crypt_filter(&self) -> Option<Name<'a>> {
         let FiltersAndParams { filters, params } = self.filters_and_params();
-        let mut crypt_filter = None;
 
-        for (i, (filter, params)) in filters.iter().zip(params).enumerate() {
-            if *filter != Filter::Crypt {
-                continue;
-            }
-
-            let name = params
-                .get::<Name<'a>>(NAME)
-                .unwrap_or(Name::new_unescaped(IDENTITY));
-
-            if i > 0 && name.deref() != IDENTITY {
-                return Err(DecodeFailure::Decryption);
-            }
-
-            crypt_filter.get_or_insert(name);
-        }
-
-        Ok(crypt_filter)
+        (filters.first() == Some(&Filter::Crypt)).then(|| {
+            params
+                .first()
+                .and_then(|params| params.get::<Name<'a>>(NAME))
+                .unwrap_or(Name::new_unescaped(IDENTITY))
+        })
     }
 
     /// Return the raw, decrypted data of the stream.
@@ -146,10 +133,7 @@ impl<'a> Stream<'a> {
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
-            let Ok(crypt_filter) = self.crypt_filter() else {
-                return Cow::default();
-            };
-
+            let crypt_filter = self.crypt_filter();
             let target = match &crypt_filter {
                 Some(name) => DecryptionTarget::Named(name),
                 None => DecryptionTarget::Stream,

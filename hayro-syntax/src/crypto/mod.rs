@@ -100,7 +100,7 @@ impl Decryptor {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
-                    DecryptionTarget::Named(name) => dict.named(name)?,
+                    DecryptionTarget::Named(name) => *dict.crypt_filters.get(name)?,
                 };
 
                 match crypt_dict.cfm {
@@ -315,10 +315,6 @@ impl DecryptorData {
             string_filter: str_f,
             crypt_filters: mappings,
         })
-    }
-
-    fn named(&self, name: &[u8]) -> Option<CryptDictionary> {
-        self.crypt_filters.get(name).copied()
     }
 }
 

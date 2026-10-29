@@ -2,12 +2,12 @@ use crate::ExtractionContext;
 use hayro_syntax::Filter;
 use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::{
-    AF, CRYPT, DECODE_PARMS, DP, FILTER, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO,
-    PT_DATA, REF, STRUCT_PARENT, STRUCT_PARENTS,
+    AF, DECODE_PARMS, DP, FILTER, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA,
+    REF, STRUCT_PARENT, STRUCT_PARENTS,
 };
 use hayro_syntax::object::{MaybeRef, Null, Number, ObjectIdentifier, Stream};
 use hayro_syntax::object::{Object, array, dict};
-use pdf_writer::{Chunk, Dict, Finish, Obj, Ref};
+use pdf_writer::{Chunk, Dict, Obj, Ref};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -175,62 +175,31 @@ impl WriteIndirect for Stream<'_> {
     fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>) {
         let data = self.raw_data();
         let mut obj = chunk.stream(id, &data);
+        let dict = self.dict();
 
-        if self.filters().contains(&Filter::Crypt) {
-            write_dict(
-                self.dict(),
-                obj.deref_mut(),
-                ctx,
-                &[LENGTH, FILTER, DECODE_PARMS, DP],
-            );
-            write_filters_without_crypt(self.dict(), obj.deref_mut(), ctx);
-        } else {
-            write_dict(self.dict(), obj.deref_mut(), ctx, &[LENGTH]);
+        if self.filters().first() != Some(&Filter::Crypt) {
+            write_dict(dict, obj.deref_mut(), ctx, &[LENGTH]);
+            return;
         }
-    }
-}
 
-fn write_filters_without_crypt(
-    hayro_dict: &dict::Dict<'_>,
-    pdf_dict: &mut Dict<'_>,
-    ctx: &mut ExtractionContext<'_>,
-) {
-    let Some(filters) = hayro_dict.get::<array::Array<'_>>(FILTER) else {
-        return;
-    };
-    let mut params = hayro_dict
-        .get::<array::Array<'_>>(DP)
-        .or_else(|| hayro_dict.get::<array::Array<'_>>(DECODE_PARMS))
-        .map(|params| params.raw_iter());
+        write_dict(
+            dict,
+            obj.deref_mut(),
+            ctx,
+            &[LENGTH, FILTER, DECODE_PARMS, DP],
+        );
 
-    let kept = filters
-        .iter::<object::Name<'_>>()
-        .filter_map(|filter| {
-            let params = params.as_mut().and_then(|params| params.next());
-            (filter.deref() != CRYPT).then_some((filter, params))
-        })
-        .collect::<Vec<_>>();
+        for (key, sources) in [(FILTER, &[FILTER][..]), (DECODE_PARMS, &[DECODE_PARMS, DP])] {
+            let rest: Vec<_> = sources
+                .iter()
+                .find_map(|source| dict.get::<array::Array<'_>>(source))
+                .map(|array| array.raw_iter().skip(1).collect())
+                .unwrap_or_default();
 
-    if kept.is_empty() {
-        return;
-    }
-
-    let mut filters = pdf_dict.insert(pdf_writer::Name(FILTER)).array();
-    for (filter, _) in &kept {
-        filter.write_direct(filters.push(), ctx);
-    }
-    filters.finish();
-
-    if kept
-        .iter()
-        .any(|(_, params)| !matches!(params, None | Some(MaybeRef::NotRef(Object::Null(_)))))
-    {
-        let mut out = pdf_dict.insert(pdf_writer::Name(DECODE_PARMS)).array();
-        for (_, params) in &kept {
-            match params {
-                Some(params) => params.write_direct(out.push(), ctx),
-                None => {
-                    out.push().primitive(pdf_writer::Null);
+            if !rest.is_empty() {
+                let mut array = obj.insert(pdf_writer::Name(key)).array();
+                for item in rest {
+                    item.write_direct(array.push(), ctx);
                 }
             }
         }

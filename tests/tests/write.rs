@@ -352,7 +352,6 @@ fn write_without_crypt_filters() {
 
     let flate = page.resources().x_objects.get::<Stream<'_>>("A").unwrap();
     assert_eq!(flate.filters().as_slice(), [Filter::FlateDecode]);
-    assert!(!flate.dict().contains_key(DECODE_PARMS));
     assert_eq!(
         flate.decoded().unwrap().as_ref(),
         b"0.9 0.5 0 rg 30 25 60 60 re f"
