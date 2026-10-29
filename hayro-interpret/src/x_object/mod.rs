@@ -65,9 +65,11 @@ fn xobject_oc(dict: &Dict<'_>, context: &mut Context<'_>) -> bool {
     };
 
     if let Some(oc_ref) = dict.get_ref(OC) {
-        context.ocg_state.begin_ocg(&oc_dict, oc_ref.into());
+        context
+            .ocg_state
+            .begin_ocg(&oc_dict, oc_ref.into(), context.xref);
     } else {
-        context.ocg_state.begin_ocmd(&oc_dict);
+        context.ocg_state.begin_ocmd(&oc_dict, context.xref);
     }
 
     true

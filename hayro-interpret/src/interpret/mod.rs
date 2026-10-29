@@ -182,6 +182,11 @@ fn interpret_annotation<'a>(
         return;
     }
 
+    // 12.5.2: The `OC` entry of an annotation specifies its optional content properties.
+    if !context.ocg_state.is_oc_active(annot, context.xref) {
+        return;
+    }
+
     if let Some(apx) = appearance_stream(annot).and_then(|o| FormXObject::new(&o)) {
         let Some(rect) = annot.get::<Rect>(RECT) else {
             return;
@@ -529,7 +534,9 @@ pub fn interpret<'a>(
                     });
 
                 if let Some((dict, oc_ref)) = oc {
-                    context.ocg_state.begin_ocg(&dict, oc_ref.into());
+                    context
+                        .ocg_state
+                        .begin_ocg(&dict, oc_ref.into(), context.xref);
                 } else {
                     context.ocg_state.begin_marked_content();
                 }

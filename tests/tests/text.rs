@@ -12,13 +12,21 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 8] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
+        (
+            "text::optional_content_expressions",
+            optional_content_expressions,
+        ),
+        (
+            "text::annotation_optional_content",
+            annotation_optional_content,
+        ),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -29,7 +37,10 @@ fn read(path: &str) -> Vec<u8> {
 }
 
 #[derive(Default)]
-struct TextCollector(String);
+struct TextCollector {
+    text: String,
+    marked_content: bool,
+}
 
 impl<'a> Device<'a> for TextCollector {
     fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
@@ -38,9 +49,9 @@ impl<'a> Device<'a> for TextCollector {
     fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
         for glyph in glyph_run.glyphs() {
             match glyph.as_unicode() {
-                Some(BfString::Char(c)) => self.0.push(c),
-                Some(BfString::String(s)) => self.0.push_str(&s),
-                None => self.0.push(char::REPLACEMENT_CHARACTER),
+                Some(BfString::Char(c)) => self.text.push(c),
+                Some(BfString::String(s)) => self.text.push_str(&s),
+                None => self.text.push(char::REPLACEMENT_CHARACTER),
             }
         }
     }
@@ -48,21 +59,35 @@ impl<'a> Device<'a> for TextCollector {
     fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
     fn begin_marked_content(&mut self, tag: &[u8], properties: Option<&Dict<'_>>) {
-        write!(self.0, "<{}", String::from_utf8_lossy(tag)).unwrap();
+        if !self.marked_content {
+            return;
+        }
+
+        write!(self.text, "<{}", String::from_utf8_lossy(tag)).unwrap();
         if let Some(properties) = properties {
             for key in properties.keys() {
                 let value = properties.get::<Object<'_>>(&key).unwrap();
-                write!(self.0, " {key} {value}").unwrap();
+                write!(self.text, " {key} {value}").unwrap();
             }
         }
-        self.0.push('>');
+        self.text.push('>');
     }
     fn end_marked_content(&mut self) {
-        self.0.push_str("</>");
+        if self.marked_content {
+            self.text.push_str("</>");
+        }
     }
 }
 
 fn page_text(file: &[u8]) -> String {
+    collect_text(file, false)
+}
+
+fn page_text_with_marked_content(file: &[u8]) -> String {
+    collect_text(file, true)
+}
+
+fn collect_text(file: &[u8], marked_content: bool) -> String {
     let pdf = Pdf::new(file.to_vec()).unwrap();
     let cache = InterpreterCache::new();
     let mut context = Context::new(
@@ -72,10 +97,13 @@ fn page_text(file: &[u8]) -> String {
         pdf.xref(),
         crate::interpreter_settings(),
     );
-    let mut collector = TextCollector::default();
+    let mut collector = TextCollector {
+        text: String::new(),
+        marked_content,
+    };
     interpret_page(&pdf.pages()[0], &mut context, &mut collector);
 
-    collector.0
+    collector.text
 }
 
 fn glyph_names() {
@@ -106,7 +134,7 @@ fn marked_content() {
     let file = &read("pdfs/text/marked_content.pdf");
 
     assert_eq!(
-        page_text(file),
+        page_text_with_marked_content(file),
         r#"<P /MCID 0>Hi</><Span /MCID 1 /ActualText "fi">x</><Artifact>.</>"#
     );
 }
@@ -115,4 +143,16 @@ fn clip_mode() {
     let file = &read("pdfs/text/clip_mode.pdf");
 
     assert_eq!(page_text(file), "Clip and fill");
+}
+
+fn optional_content_expressions() {
+    let file = &read("pdfs/text/optional_content_expressions.pdf");
+
+    assert_eq!(page_text(file), "BDFG");
+}
+
+fn annotation_optional_content() {
+    let file = &read("pdfs/text/annotation_optional_content.pdf");
+
+    assert_eq!(page_text(file), "wy");
 }
