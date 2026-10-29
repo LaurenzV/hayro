@@ -1,4 +1,3 @@
-use super::xobject_oc;
 use crate::context::Context;
 use crate::device::Device;
 use crate::{ClipPath, FillRule, interpret};
@@ -59,20 +58,13 @@ impl<'a> FormXObject<'a> {
         context: &mut Context<'a>,
         device: &mut impl Device<'a>,
     ) {
-        if !context.ocg_state.is_visible() {
+        if !context.ocg_state.is_visible()
+            || !context.ocg_state.is_oc_active(&self.dict, context.xref)
+        {
             return;
         }
 
         if !context.begin_nested_interpretation() {
-            return;
-        }
-
-        let has_oc = xobject_oc(&self.dict, context);
-        if !context.ocg_state.is_visible() {
-            if has_oc {
-                context.ocg_state.end_marked_content();
-            }
-            context.end_nested_interpretation();
             return;
         }
 
@@ -123,10 +115,6 @@ impl<'a> FormXObject<'a> {
 
         context.pop_root_transform();
         context.restore_state(device);
-
-        if has_oc {
-            context.ocg_state.end_marked_content();
-        }
 
         context.end_nested_interpretation();
     }
