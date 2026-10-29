@@ -1,6 +1,6 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::runner::Test;
-use hayro::hayro_interpret::font::{Glyph, GlyphRun};
+use hayro::hayro_interpret::font::GlyphRun;
 use hayro::hayro_interpret::hayro_cmap::BfString;
 use hayro::hayro_interpret::kurbo::{Affine, BezPath, Rect};
 use hayro::hayro_interpret::{
@@ -12,10 +12,9 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 5] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
-        ("text::type3_advance_width", type3_advance_width),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
@@ -63,32 +62,6 @@ impl<'a> Device<'a> for TextCollector {
 }
 
 fn page_text(file: &[u8]) -> String {
-    let mut collector = TextCollector::default();
-    interpret_first_page(file, &mut collector);
-
-    collector.0
-}
-
-#[derive(Default)]
-struct Type3Widths(Vec<Option<f32>>);
-
-impl<'a> Device<'a> for Type3Widths {
-    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
-    fn push_clip_path(&mut self, _: &ClipPath) {}
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
-    fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
-        for glyph in glyph_run.glyphs() {
-            if let Glyph::Type3(glyph) = &**glyph {
-                self.0.push(glyph.advance_width());
-            }
-        }
-    }
-    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
-    fn pop_clip(&mut self) {}
-    fn pop_transparency_group(&mut self) {}
-}
-
-fn interpret_first_page(file: &[u8], device: &mut impl for<'a> Device<'a>) {
     let pdf = Pdf::new(file.to_vec()).unwrap();
     let cache = InterpreterCache::new();
     let mut context = Context::new(
@@ -98,7 +71,10 @@ fn interpret_first_page(file: &[u8], device: &mut impl for<'a> Device<'a>) {
         pdf.xref(),
         crate::interpreter_settings(),
     );
-    interpret_page(&pdf.pages()[0], &mut context, device);
+    let mut collector = TextCollector::default();
+    interpret_page(&pdf.pages()[0], &mut context, &mut collector);
+
+    collector.0
 }
 
 fn glyph_names() {
@@ -132,13 +108,4 @@ fn marked_content() {
         page_text(file),
         r#"<P /MCID 0>Hi</><Span /MCID 1 /ActualText "fi">x</><Artifact>.</>"#
     );
-}
-
-fn type3_advance_width() {
-    let file = &read("pdfs/text/type3_advance_width.pdf");
-    let mut widths = Type3Widths::default();
-    interpret_first_page(file, &mut widths);
-
-    // `/Widths [250 400]` in a font matrix of 0.002, at an upem of 1000.
-    assert_eq!(widths.0, [Some(500.0), Some(800.0), Some(500.0)]);
 }

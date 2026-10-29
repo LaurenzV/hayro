@@ -283,9 +283,7 @@ impl<'a> Type3Glyph<'a> {
     /// Get the advance width for this glyph.
     ///
     /// The advance width is how far to move horizontally after drawing
-    /// this glyph before drawing the next one. Like
-    /// [`OutlineGlyph::advance_width`], it assumes an upem value of 1000,
-    /// so the font matrix is already applied.
+    /// this glyph before drawing the next one.
     pub fn advance_width(&self) -> Option<f32> {
         u8::try_from(self.char_code)
             .ok()
