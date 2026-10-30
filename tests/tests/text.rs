@@ -12,13 +12,14 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 7] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
+        ("text::font_properties", font_properties),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -115,4 +116,58 @@ fn clip_mode() {
     let file = &read("pdfs/text/clip_mode.pdf");
 
     assert_eq!(page_text(file), "Clip and fill");
+}
+
+#[derive(Default)]
+struct FontCollector(Vec<String>);
+
+impl<'a> Device<'a> for FontCollector {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+    fn push_clip_path(&mut self, _: &ClipPath) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+        let Some(font) = glyph_run.font() else {
+            self.0.push("none".to_string());
+            return;
+        };
+        self.0.push(format!(
+            "{} flags={:?} weight={:?} stem_v={:?} italic_angle={:?} ascent={:?} descent={:?} cap_height={:?} bbox={:?}",
+            font.base_font().map_or("?".to_string(), |name| name.as_str().to_string()),
+            font.flags().map(|flags| flags.bits()),
+            font.weight(),
+            font.stem_v(),
+            font.italic_angle(),
+            font.ascent(),
+            font.descent(),
+            font.cap_height(),
+            font.bbox().map(|bbox| (bbox.x0, bbox.y0, bbox.x1, bbox.y1)),
+        ));
+    }
+    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+    fn pop_clip(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
+}
+
+fn font_properties() {
+    let pdf = Pdf::new(read("pdfs/text/font_properties.pdf")).unwrap();
+    let cache = InterpreterCache::new();
+    let mut context = Context::new(
+        Affine::IDENTITY,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        &cache,
+        pdf.xref(),
+        crate::interpreter_settings(),
+    );
+    let mut collector = FontCollector::default();
+    interpret_page(&pdf.pages()[0], &mut context, &mut collector);
+
+    assert_eq!(
+        collector.0,
+        [
+            "none",
+            "ABCDEF+Helvetica-Bold flags=Some(262304) weight=Some(700.0) stem_v=Some(140.0) italic_angle=Some(-12.5) ascent=Some(718.0) descent=Some(-207.0) cap_height=Some(718.0) bbox=Some((-170.0, -228.0, 1003.0, 962.0))",
+            "Composite flags=Some(4) weight=None stem_v=Some(80.0) italic_angle=Some(0.0) ascent=Some(880.0) descent=Some(-120.0) cap_height=Some(700.0) bbox=Some((0.0, -120.0, 1000.0, 880.0))",
+            "Helvetica flags=None weight=None stem_v=None italic_angle=None ascent=None descent=None cap_height=None bbox=None",
+        ]
+    );
 }
