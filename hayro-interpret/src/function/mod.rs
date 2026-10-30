@@ -12,6 +12,7 @@ use crate::function::type0::Type0;
 use crate::function::type2::Type2;
 use crate::function::type3::Type3;
 use crate::function::type4::Type4;
+use crate::util::hash128;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{DOMAIN, FUNCTION_TYPE, RANGE};
 use hayro_syntax::object::{Object, dict_or_stream};
@@ -216,6 +217,11 @@ impl TransferFunction {
 
     pub(crate) fn apply_f32(&self, value: f32) -> f32 {
         self.samples()[(value * 255.0 + 0.5) as u8 as usize] as f32 / 255.0
+    }
+
+    /// Identifies the function by the values it maps each byte to, which is how it's applied.
+    pub(crate) fn cache_key(&self) -> u128 {
+        hash128(self.samples())
     }
 
     fn samples(&self) -> &[u8; 256] {

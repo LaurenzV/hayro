@@ -54,6 +54,11 @@ impl<'a, 'b> StencilImage<'a, 'b> {
         self.image_xobject.stream()
     }
 
+    /// Return the paint the stencil is filled with.
+    pub fn paint(&self) -> &Paint<'a> {
+        &self.paint
+    }
+
     // These are hidden since clients are supposed to call get the
     // width/height from `LumaData` instead.
     #[doc(hidden)]

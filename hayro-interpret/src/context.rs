@@ -353,12 +353,27 @@ impl<'a> Context<'a> {
         resources: &Resources<'_>,
         name: &Name<'_>,
     ) -> Option<ColorSpace> {
+        self.get_keyed_color_space(resources, name)
+            .map(|(color_space, _)| color_space)
+    }
+
+    /// Like [`Self::get_color_space`], also returning the cache key of the object the name
+    /// resolved to.
+    pub(crate) fn get_keyed_color_space(
+        &mut self,
+        resources: &Resources<'_>,
+        name: &Name<'_>,
+    ) -> Option<(ColorSpace, u128)> {
         let cs_object = resources.get_color_space(name)?;
-        self.interpreter_cache
+        let key = cs_object.cache_key();
+        let color_space = self
+            .interpreter_cache
             .object_cache
-            .get_or_insert_with(cs_object.cache_key(), || {
+            .get_or_insert_with(key, || {
                 ColorSpace::new(cs_object.clone(), &self.interpreter_cache.object_cache)
-            })
+            })?;
+
+        Some((color_space, key))
     }
 
     pub(crate) fn num_states(&self) -> usize {

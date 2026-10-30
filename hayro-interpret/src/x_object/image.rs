@@ -6,6 +6,7 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::ActiveTransferFunction;
+use crate::util::hash128;
 use crate::{BlendMode, CacheKey, Image, ImageDrawProps, RasterImage, StencilImage};
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Name, Object, Stream};
@@ -16,6 +17,8 @@ pub(crate) struct ImageXObject<'a> {
     width: u32,
     height: u32,
     pub(crate) color_space: Option<ColorSpace>,
+    /// The cache key of the color space, if it was resolved by name from the resources.
+    named_color_space: Option<u128>,
     pub(crate) cache: Cache,
     pub(crate) interpolate: bool,
     pub(crate) kind: ImageKind,
@@ -40,7 +43,7 @@ impl ImageKind {
 impl<'a> ImageXObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
-        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
+        resolve_cs: impl FnOnce(&Name<'_>) -> Option<(ColorSpace, u128)>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,
@@ -65,7 +68,7 @@ impl<'a> ImageXObject<'a> {
 
     fn new_inner(
         stream: &Stream<'a>,
-        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
+        resolve_cs: impl FnOnce(&Name<'_>) -> Option<(ColorSpace, u128)>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         mut kind: ImageKind,
@@ -82,6 +85,7 @@ impl<'a> ImageXObject<'a> {
             kind = ImageKind::StencilMask;
         }
 
+        let mut named_color_space = None;
         let image_cs = if kind.is_mask() {
             // Masks are always single-channel.
             Some(ColorSpace::device_gray())
@@ -97,9 +101,11 @@ impl<'a> ImageXObject<'a> {
                 // Apparently, some PDF producers also do this for normal images,
                 // though the PDF spec forbids it. See https://github.com/LaurenzV/hayro/pull/1311.
                 .or_else(|| {
-                    cs_obj
+                    let (color_space, key) = cs_obj
                         .and_then(|c| c.into_name())
-                        .and_then(|n| resolve_cs(&n))
+                        .and_then(|n| resolve_cs(&n))?;
+                    named_color_space = Some(key);
+                    Some(color_space)
                 })
         };
 
@@ -120,6 +126,7 @@ impl<'a> ImageXObject<'a> {
             cache: cache.clone(),
             height,
             color_space: image_cs,
+            named_color_space,
             warning_sink: warning_sink.clone(),
             transfer_function,
             interpolate,
@@ -240,7 +247,13 @@ impl<'a> ImageXObject<'a> {
 }
 
 impl CacheKey for ImageXObject<'_> {
+    /// Identifies the image as it decodes: the same stream can decode differently with a
+    /// color space resolved from other resources or under another transfer function.
     fn cache_key(&self) -> u128 {
-        self.stream.cache_key()
+        hash128(&(
+            self.stream.cache_key(),
+            self.named_color_space,
+            self.transfer_function.as_ref().map(CacheKey::cache_key),
+        ))
     }
 }
