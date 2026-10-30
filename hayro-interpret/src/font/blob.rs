@@ -6,8 +6,8 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
 use skrifa::raw::TableProvider;
+use skrifa::raw::ps::Sid;
 use skrifa::raw::ps::cff::{CffFontRef, Subfont, charset::Charset, v1::Cff};
-use skrifa::raw::ps::string::Sid;
 use skrifa::raw::ps::type1::Type1Font;
 use skrifa::raw::tables::post::DEFAULT_GLYPH_NAMES;
 use skrifa::raw::{FontData as ReadFontData, FontRead};
@@ -142,7 +142,7 @@ impl CffFontBlob {
     }
 
     pub(crate) fn glyph_index_by_cid(&self, cid: u16) -> Option<GlyphId> {
-        self.charset()?.glyph_id(Sid::new(cid)).ok()
+        self.charset()?.glyph_id(Sid::new(cid))
     }
 
     pub(crate) fn glyph_index(&self, code: u8) -> Option<GlyphId> {
