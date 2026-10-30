@@ -118,16 +118,70 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn skip_white_spaces_and_comments(&mut self) {
-        while let Some(b) = self.peek_byte() {
-            if is_white_space_character(b) {
-                self.forward();
-            } else if b == b'%' {
-                Comment::skip(self, true);
-            } else {
-                return;
-            }
+        skip_white_spaces_and_comments_in(self, &Unknown);
+    }
+}
+
+/// Where literal strings and comments end, if that is known without reading them.
+///
+/// Rebuilding the xref table reads objects from many starting points inside one
+/// another, so it looks the ends up instead of reading each string or comment again
+/// from every start; all other reading uses [`Unknown`], which compiles to reading them.
+pub(crate) trait Ends {
+    /// Where the literal string whose `(` is at `start` of `data` ends, after its `)`, or
+    /// `Some(None)` if it doesn't end.
+    fn string_end(&self, data: &[u8], start: usize) -> Option<Option<usize>>;
+    /// Where the comment whose `%` is at `start` of `data` ends, at the first end-of-line
+    /// byte after it or at the end of the data.
+    fn comment_end(&self, data: &[u8], start: usize) -> Option<usize>;
+    /// Notes that a string or comment of `len` bytes was read because its end wasn't known.
+    fn read(&self, len: usize);
+}
+
+/// No ends are known.
+pub(crate) struct Unknown;
+
+impl Ends for Unknown {
+    #[inline(always)]
+    fn string_end(&self, _: &[u8], _: usize) -> Option<Option<usize>> {
+        None
+    }
+
+    #[inline(always)]
+    fn comment_end(&self, _: &[u8], _: usize) -> Option<usize> {
+        None
+    }
+
+    #[inline(always)]
+    fn read(&self, _: usize) {}
+}
+
+#[inline]
+pub(crate) fn skip_white_spaces_and_comments_in(r: &mut Reader<'_>, ends: &impl Ends) {
+    while let Some(b) = r.peek_byte() {
+        if is_white_space_character(b) {
+            r.forward();
+        } else if b == b'%' {
+            Comment::skip_in(r, ends);
+        } else {
+            return;
         }
     }
+}
+
+/// Runs `skip` on `r`, and moves `r` back to where it was if `skip` fails, as
+/// [`ReaderExt::skip`] does.
+#[inline]
+pub(crate) fn skip_or_stay<'a>(
+    r: &mut Reader<'a>,
+    skip: impl FnOnce(&mut Reader<'a>) -> Option<()>,
+) -> Option<()> {
+    let old_offset = r.offset;
+
+    skip(r).or_else(|| {
+        r.offset = old_offset;
+        None
+    })
 }
 
 #[derive(Clone, Debug)]

@@ -1,7 +1,7 @@
 //! Comments and white spaces.
 
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{Ends, Readable, ReaderContext, ReaderExt, Skippable, Unknown};
 
 const fn build_regular_character_table() -> [bool; 256] {
     let mut table = [true; 256];
@@ -66,8 +66,22 @@ pub(crate) struct Comment<'a>(pub(crate) &'a [u8]);
 
 impl Skippable for Comment<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
+        Self::skip_in(r, &Unknown)
+    }
+}
+
+impl Comment<'_> {
+    #[inline]
+    pub(crate) fn skip_in(r: &mut Reader<'_>, ends: &impl Ends) -> Option<()> {
+        let start = r.offset();
         r.forward_tag(b"%")?;
-        r.forward_while(|b| !is_eol_character(b));
+
+        if let Some(end) = ends.comment_end(r.data, start) {
+            r.jump(end);
+        } else {
+            r.forward_while(|b| !is_eol_character(b));
+            ends.read(r.offset() - start);
+        }
 
         Some(())
     }
