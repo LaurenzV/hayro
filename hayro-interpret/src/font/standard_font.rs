@@ -403,13 +403,16 @@ impl StandardKind {
         let result = self
             .code_to_ps_name(code)
             .and_then(|c| {
-                self.base_font_blob.name_to_glyph(c).or_else(|| {
-                    // If the font doesn't have a POST table, try to map via unicode instead.
-                    glyph_names::get(c).and_then(|c| {
-                        self.base_font_blob
-                            .unicode_to_glyph(c.chars().nth(0).unwrap() as u32)
+                self.base_font_blob
+                    .name_to_glyph(c)
+                    .or_else(|| self.base_font_blob.name_to_glyph(normalized_glyph_name(c)))
+                    .or_else(|| {
+                        // If the font doesn't have a POST table, try to map via unicode instead.
+                        glyph_names::get(c).and_then(|c| {
+                            self.base_font_blob
+                                .unicode_to_glyph(c.chars().nth(0).unwrap() as u32)
+                        })
                     })
-                })
             })
             .unwrap_or(GlyphId::NOTDEF);
         code_to_glyph.insert(code, result);
@@ -486,5 +489,57 @@ impl StandardKind {
 
     pub(crate) fn is_monospace(&self) -> bool {
         self.base_font.is_monospace()
+    }
+}
+
+#[cfg(all(test, feature = "embed-fonts"))]
+mod tests {
+    use crate::font::{Glyph, GlyphRun};
+    use crate::{
+        BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+        InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
+    };
+    use hayro_syntax::Pdf;
+    use kurbo::{Affine, BezPath, Rect, Shape};
+
+    #[derive(Default)]
+    struct Outlines(Vec<Rect>);
+
+    impl<'a> Device<'a> for Outlines {
+        fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+        fn draw_glyph_run(&mut self, run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+            for glyph in run.glyphs() {
+                if let Glyph::Outline(outline) = &**glyph {
+                    self.0.push(outline.outline().bounding_box());
+                }
+            }
+        }
+        fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+        fn pop_clip(&mut self) {}
+        fn pop_transparency_group(&mut self) {}
+    }
+
+    // The embedded substitutes have no `sfthyphen` glyph, so a soft hyphen in a standard font
+    // has to be drawn with the font's hyphen.
+    #[test]
+    fn soft_hyphen_is_drawn_like_a_hyphen() {
+        let pdf =
+            Pdf::new(include_bytes!("../../../tests/pdfs/text/soft_hyphen.pdf").to_vec()).unwrap();
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 1.0, 1.0),
+            &cache,
+            pdf.xref(),
+            InterpreterSettings::default(),
+        );
+        let mut outlines = Outlines::default();
+        interpret_page(&pdf.pages()[0], &mut context, &mut outlines);
+
+        // The text is `a`, a soft hyphen, `b`, a hyphen and `c`, in a non-embedded Courier.
+        assert!(outlines.0[1].area() > 0.0);
+        assert_eq!(outlines.0[1], outlines.0[3]);
     }
 }
