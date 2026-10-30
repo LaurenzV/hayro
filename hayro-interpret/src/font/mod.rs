@@ -124,12 +124,24 @@ impl Glyph<'_> {
 pub struct PositionedGlyph<'a> {
     pub(crate) glyph: Glyph<'a>,
     pub(crate) transform: Affine,
+    pub(crate) adjustment: f32,
 }
 
 impl PositionedGlyph<'_> {
     /// Return the transform that places this glyph in text space.
     pub fn transform(&self) -> Affine {
         self.transform
+    }
+
+    /// Return the `TJ` adjustment that was applied directly before this glyph.
+    ///
+    /// The value is in thousandths of a unit of text space, as written in the
+    /// `TJ` array, and is the sum of all numbers between the previous character
+    /// and this one. A positive value moves the glyph to the left in horizontal
+    /// writing mode and down in vertical writing mode. Glyphs that are not
+    /// preceded by an adjustment return 0.
+    pub fn adjustment(&self) -> f32 {
+        self.adjustment
     }
 }
 
@@ -145,6 +157,7 @@ impl<'a> Deref for PositionedGlyph<'a> {
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
     pub(crate) writing_mode: WritingMode,
+    pub(crate) text_properties: TextProperties,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
@@ -157,6 +170,31 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     pub fn writing_mode(&self) -> WritingMode {
         self.writing_mode
     }
+
+    /// Return the text state parameters the run was shown with.
+    pub fn text_properties(&self) -> TextProperties {
+        self.text_properties
+    }
+}
+
+/// The text state parameters of a [`GlyphRun`].
+///
+/// These parameters are already applied to the transform of each glyph. They
+/// are exposed for consumers like text extraction that need to know the
+/// individual values, for example to tell a gap between words apart from the
+/// spacing between characters.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextProperties {
+    /// The font size set with `Tf`.
+    pub font_size: f32,
+    /// The character spacing set with `Tc`, in unscaled text space units.
+    pub char_spacing: f32,
+    /// The word spacing set with `Tw`, in unscaled text space units.
+    pub word_spacing: f32,
+    /// The horizontal scaling set with `Tz`, as a factor where 1.0 means 100%.
+    pub horizontal_scaling: f32,
+    /// The text rise set with `Ts`, in unscaled text space units.
+    pub rise: f32,
 }
 
 /// An identifier that uniquely identifies a glyph, for caching purposes.
