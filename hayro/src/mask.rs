@@ -91,26 +91,31 @@ fn draw_soft_mask(
     let mut resources = vello_cpu::Resources::default();
     renderer.ctx.render(&mut pix, &mut resources);
 
-    let mut rendered_mask = match mask.mask_type() {
-        MaskType::Luminosity => Mask::new_luminance(&pix),
-        MaskType::Alpha => Mask::new_alpha(&pix),
+    let mut values = match mask.mask_type() {
+        MaskType::Luminosity => luminance(&pix),
+        MaskType::Alpha => pix.data().iter().map(|pixel| pixel.a).collect(),
     };
 
     if let Some(transfer_function) = mask.transfer_function() {
-        // TODO: Allow deconstructing a mask in Vello CPU.
-        let mut map = Vec::with_capacity(
-            usize::from(rendered_mask.width()) * usize::from(rendered_mask.height()),
-        );
-
-        for y in 0..rendered_mask.height() {
-            for x in 0..rendered_mask.width() {
-                map.push(rendered_mask.sample(x, y));
-            }
-        }
-
-        transfer_function.apply_to(&mut map);
-        rendered_mask = Mask::from_parts(map, rendered_mask.width(), rendered_mask.height());
+        transfer_function.apply_to(&mut values);
     }
 
-    rendered_mask
+    Mask::from_parts(values, width, height)
+}
+
+/// The luminance of each pixel of a premultiplied pixmap, as `Mask::new_luminance` computes it
+/// (its weighted channels added in the same order, so the result is the same), with each
+/// channel's weighted values looked up rather than divided and multiplied for every pixel.
+pub(crate) fn luminance(pixmap: &Pixmap) -> Vec<u8> {
+    let [r, g, b] = [0.2126_f32, 0.7152, 0.0722]
+        .map(|weight| std::array::from_fn::<f32, 256, _>(|v| (v as f32 / 255.0) * weight));
+
+    pixmap
+        .data()
+        .iter()
+        .map(|pixel| {
+            let luma = r[usize::from(pixel.r)] + g[usize::from(pixel.g)] + b[usize::from(pixel.b)];
+            (luma * 255.0 + 0.5) as u8
+        })
+        .collect()
 }

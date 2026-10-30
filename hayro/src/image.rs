@@ -529,7 +529,11 @@ impl Renderer<'_> {
                                     None,
                                     Some(self.ctx.blend_mode()),
                                     None,
-                                    Some(Mask::new_luminance(&mask_pix)),
+                                    Some(Mask::from_parts(
+                                        crate::mask::luminance(&mask_pix),
+                                        mask_pix.width(),
+                                        mask_pix.height(),
+                                    )),
                                     None,
                                 );
                                 self.ctx.set_transform(transform);
