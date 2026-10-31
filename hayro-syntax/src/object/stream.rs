@@ -5,7 +5,7 @@ use crate::filter::Filter;
 use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
-use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
+use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
@@ -122,10 +122,16 @@ impl<'a> Stream<'a> {
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
+            let crypt_filter = self.crypt_filter();
+            let target = match &crypt_filter {
+                Some(name) => DecryptionTarget::Named(name),
+                None => DecryptionTarget::Stream,
+            };
+
             match self.dict.obj_id() {
                 Some(obj_id) => Cow::Owned(
                     ctx.xref()
-                        .decrypt(obj_id, self.data, DecryptionTarget::Stream)
+                        .decrypt(obj_id, self.data, target)
                         // TODO: MAybe an error would be better?
                         .unwrap_or_default(),
                 ),
@@ -165,22 +171,55 @@ impl<'a> Stream<'a> {
             .map(|r| r.data)
     }
 
+    /// Return the decoded data of a stream that isn't an image.
+    ///
+    /// Fails with [`DecodeFailure::ImageDecode`] if the stream uses an image filter
+    /// (`DCTDecode`, `JPXDecode`, `JBIG2Decode` or `CCITTFaxDecode`). Use
+    /// [`Stream::decoded_image`] for those.
+    pub fn decoded_data(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        if self.filters().iter().any(|filter| {
+            matches!(
+                filter,
+                Filter::DctDecode
+                    | Filter::JpxDecode
+                    | Filter::Jbig2Decode
+                    | Filter::CcittFaxDecode
+            )
+        }) {
+            return Err(DecodeFailure::ImageDecode);
+        }
+
+        self.decoded()
+    }
+
     /// Return the decoded data of the stream, and return image metadata
     /// if available.
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
+        if matches!(
+            self.dict.get::<Object<'_>>(F),
+            Some(Object::String(_) | Object::Dict(_))
+        ) {
+            return Err(DecodeFailure::StreamDecode);
+        }
+
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
 
         let mut current: Option<FilterResult<'a>> = None;
 
-        for (filter, params) in filters_and_params
+        for (i, (filter, params)) in filters_and_params
             .filters
             .iter()
             .zip(filters_and_params.params.iter())
+            .enumerate()
         {
+            if i == 0 && *filter == Filter::Crypt {
+                continue;
+            }
+
             let new = filter.apply(
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params,
@@ -193,6 +232,17 @@ impl<'a> Stream<'a> {
             data,
             image_data: None,
         }))
+    }
+
+    fn crypt_filter(&self) -> Option<Name<'a>> {
+        let FiltersAndParams { filters, params } = self.filters_and_params();
+
+        (filters.first() == Some(&Filter::Crypt)).then(|| {
+            params
+                .first()
+                .and_then(|params| params.get::<Name<'a>>(NAME))
+                .unwrap_or(Name::new_unescaped(IDENTITY))
+        })
     }
 }
 
@@ -219,11 +269,6 @@ impl Skippable for Stream<'_> {
 impl<'a> Readable<'a> for Stream<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
-
-        if dict.contains_key(F) {
-            return None;
-        }
-
         let offset = r.offset();
         parse_proper(r, &dict).or_else(|| {
             r.jump(offset);
@@ -398,5 +443,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn stream_with_external_file() {
+        let data = b"<< /Length 3 /F (data.bin) >> stream\nabc\nendstream";
+        let mut r = Reader::new(data);
+        let stream = r
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(stream.data, b"abc");
+        assert!(stream.dict().contains_key(crate::object::dict::keys::F));
+        assert!(stream.decoded().is_err());
+    }
+
+    #[test]
+    fn inline_filter_abbreviation_still_decodes() {
+        let mut r = Reader::new(b"<< /F /AHx >>");
+        let dict = r
+            .read_with_context::<crate::object::Dict<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        let stream = Stream::new(b"41>", dict);
+
+        assert_eq!(stream.decoded().unwrap().as_ref(), b"A");
     }
 }

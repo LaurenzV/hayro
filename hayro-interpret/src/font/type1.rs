@@ -157,7 +157,7 @@ impl Type1Kind {
     fn new(dict: &Dict<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC)?;
         let data = descriptor.get::<Stream<'_>>(FONT_FILE)?;
-        let font = Type1FontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
+        let font = Type1FontBlob::new(Arc::new(data.decoded_data().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
@@ -253,7 +253,7 @@ impl CffKind {
     fn new(dict: &Dict<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC)?;
         let data = descriptor.get::<Stream<'_>>(FONT_FILE3)?;
-        let font = CffFontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
+        let font = CffFontBlob::new(Arc::new(data.decoded_data().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, &descriptor)?;

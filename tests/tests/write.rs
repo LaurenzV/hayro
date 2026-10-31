@@ -3,9 +3,9 @@ use crate::harness::runner::{Outcome, Test};
 use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, load_pdf, render_pdf, try_load_pdf};
 use hayro::RenderSettings;
-use hayro_syntax::Pdf;
-use hayro_syntax::object::dict::keys::GROUP;
+use hayro_syntax::object::dict::keys::{DECODE_PARMS, FILTER, GROUP};
 use hayro_syntax::object::{Dict, Stream};
+use hayro_syntax::{Filter, Pdf};
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 
@@ -244,7 +244,7 @@ pub(crate) fn tests() -> Vec<Test> {
         })
     });
 
-    let units: [(&str, fn()); 4] = [
+    let units: [(&str, fn()); 5] = [
         (
             "write::dont_cache_page_references",
             dont_cache_page_references,
@@ -258,6 +258,10 @@ pub(crate) fn tests() -> Vec<Test> {
             write_xobject_preserves_page_group,
         ),
         ("write::write_null_objects", write_null_objects),
+        (
+            "write::write_without_crypt_filters",
+            write_without_crypt_filters,
+        ),
     ];
 
     snapshots
@@ -345,4 +349,26 @@ fn write_null_objects() {
     let data = dict.data();
 
     assert_eq!(data, b"<<\n      /F1 5 0 R\n      /F2 null\n    >>");
+}
+
+fn write_without_crypt_filters() {
+    let hayro_pdf = load_pdf("pdfs/custom/encrypted_crypt_filter_streams.pdf");
+    let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
+    let rewritten = Pdf::new(extracted).unwrap();
+    let page = &rewritten.pages()[0];
+
+    let flate = page.resources().x_objects.get::<Stream<'_>>("A").unwrap();
+    assert_eq!(flate.filters().as_slice(), [Filter::FlateDecode]);
+    assert_eq!(
+        flate.decoded().unwrap().as_ref(),
+        b"0.9 0.5 0 rg 30 25 60 60 re f"
+    );
+
+    let rc4 = page.resources().x_objects.get::<Stream<'_>>("B").unwrap();
+    assert!(!rc4.dict().contains_key(FILTER));
+    assert!(!rc4.dict().contains_key(DECODE_PARMS));
+    assert_eq!(
+        rc4.decoded().unwrap().as_ref(),
+        b"0.6 0 0.6 rg 150 25 60 60 re f"
+    );
 }

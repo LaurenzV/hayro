@@ -10,11 +10,10 @@ use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
-    CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
+    CF, CFM, ENCRYPT_META_DATA, FILTER, IDENTITY, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
 };
 use crate::object::{Dict, Name, ObjectIdentifier};
 use crate::sync::HashMap;
-use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp;
@@ -74,9 +73,10 @@ pub(crate) enum Decryptor {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DecryptionTarget {
+pub(crate) enum DecryptionTarget<'a> {
     String,
     Stream,
+    Named(&'a [u8]),
 }
 
 impl Decryptor {
@@ -84,15 +84,23 @@ impl Decryptor {
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        target: DecryptionTarget,
+        target: DecryptionTarget<'_>,
     ) -> Option<Vec<u8>> {
+        if matches!(target, DecryptionTarget::Named(IDENTITY)) {
+            return Some(data.to_vec());
+        }
+
         match self {
             Self::None => Some(data.to_vec()),
-            Self::Rc4 { key } => decrypt_rc4(key, data, id),
+            Self::Rc4 { key } => match target {
+                DecryptionTarget::Named(_) => None,
+                _ => decrypt_rc4(key, data, id),
+            },
             Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
+                    DecryptionTarget::Named(name) => *dict.crypt_filters.get(name)?,
                 };
 
                 match crypt_dict.cfm {
@@ -274,10 +282,11 @@ fn decrypt_rc_aes(
     with_key(final_key)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
+    crypt_filters: HashMap<Vec<u8>, CryptDictionary>,
 }
 
 impl DecryptorData {
@@ -289,21 +298,22 @@ impl DecryptorData {
                 if let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
-                    mappings.insert(key.as_str().to_string(), crypt_dict);
+                    mappings.insert(key.to_vec(), crypt_dict);
                 }
             }
         }
 
         let stm_f = *mappings
-            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STM_F)?.deref())
             .unwrap_or(&CryptDictionary::identity(default_length));
         let str_f = *mappings
-            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STR_F)?.deref())
             .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
             stream_filter: stm_f,
             string_filter: str_f,
+            crypt_filters: mappings,
         })
     }
 }
