@@ -1,5 +1,5 @@
-use crate::font::UNITS_PER_EM;
-use crate::font::outline::OutlinePath;
+use crate::UNITS_PER_EM;
+use crate::outline::OutlinePath;
 use kurbo::BezPath;
 use rustc_hash::FxHashMap;
 use skrifa::instance::{LocationRef, Size};

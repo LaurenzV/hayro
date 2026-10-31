@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::{Glyph, GlyphRun, PositionedGlyph, UNITS_PER_EM};
+use crate::font::{Glyph, GlyphRun, PositionedGlyph, UNITS_PER_EM, get_glyph};
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
 use hayro_cmap::WritingMode;
@@ -50,9 +50,9 @@ pub(crate) fn append_text_string<'a>(
             let transform = ctx.text_state().full_transform()
                 * Affine::scale(1.0 / UNITS_PER_EM as f64)
                 * Affine::translate(origin_displacement);
-            let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
-
-            ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
+            if let Some(glyph) = get_glyph(&font, font.map_code(code), code, ctx, resources) {
+                ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
+            }
         }
 
         ctx.text_state_mut().apply_code_advance(code, adv);

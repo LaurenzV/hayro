@@ -320,10 +320,10 @@ fn get_standard(font: &StandardFont) -> Option<FontData> {
             &include_bytes!("../assets/LiberationSerif-BoldItalic.ttf")[..],
         )),
         StandardFont::ZapfDingBats => Some(Arc::new(
-            &include_bytes!("../../hayro-interpret/assets/FoxitDingbats.pfb")[..],
+            &include_bytes!("../../hayro-font/assets/FoxitDingbats.pfb")[..],
         )),
         StandardFont::Symbol => Some(Arc::new(
-            &include_bytes!("../../hayro-interpret/assets/FoxitSymbol.pfb")[..],
+            &include_bytes!("../../hayro-font/assets/FoxitSymbol.pfb")[..],
         )),
     }
 }

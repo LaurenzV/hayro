@@ -1,11 +1,11 @@
-use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::generated::{glyph_names, mac_os_roman, mac_roman, standard};
-use crate::font::standard_font::{StandardFont, StandardKind, select_standard_font};
-use crate::font::{
+use crate::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::generated::{glyph_names, mac_os_roman, mac_roman, standard};
+use crate::standard_font::{StandardFont, StandardKind, select_standard_font};
+use crate::{CMapResolverFn, CacheKey, FontResolverFn};
+use crate::{
     Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
     strip_subset_prefix, unicode_from_name,
 };
-use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -87,7 +87,7 @@ impl TrueTypeFont {
         }
     }
 
-    pub(crate) fn font_data(&self) -> Option<crate::font::FontData> {
+    pub(crate) fn font_data(&self) -> Option<crate::FontData> {
         match &self.kind {
             Kind::Embedded(e) => Some(e.base_font.font_data()),
             Kind::Standard(_) => None,

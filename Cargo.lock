@@ -613,6 +613,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-font"
+version = "0.5.0"
+dependencies = [
+ "bitflags",
+ "hayro-cmap",
+ "hayro-syntax",
+ "kurbo",
+ "phf",
+ "rustc-hash",
+ "siphasher",
+ "skrifa 0.46.0",
+ "yoke",
+]
+
+[[package]]
 name = "hayro-fuzz"
 version = "0.0.0"
 dependencies = [
@@ -629,16 +644,15 @@ version = "0.8.0"
 dependencies = [
  "bitflags",
  "hayro-cmap",
+ "hayro-font",
  "hayro-syntax",
  "image",
  "kurbo",
  "moxcms",
- "phf",
  "rustc-hash",
  "siphasher",
  "skrifa 0.46.0",
  "smallvec",
- "yoke",
 ]
 
 [[package]]

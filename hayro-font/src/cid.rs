@@ -1,10 +1,10 @@
-use crate::font::blob::{CffFontBlob, OpenTypeFontBlob, Type1FontBlob};
-use crate::font::generated::glyph_names;
-use crate::font::standard_font::select_standard_font;
-use crate::font::{
+use crate::blob::{CffFontBlob, OpenTypeFontBlob, Type1FontBlob};
+use crate::generated::glyph_names;
+use crate::standard_font::select_standard_font;
+use crate::{CMapResolverFn, CacheKey, FontResolverFn};
+use crate::{
     FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, stretch_glyph, strip_subset_prefix,
 };
-use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap, CharacterCollection, CidFamily, WritingMode};
 use hayro_syntax::object;
 use hayro_syntax::object::Dict;
@@ -273,7 +273,7 @@ impl Type0Font {
         path
     }
 
-    pub(crate) fn font_data(&self) -> Option<crate::font::FontData> {
+    pub(crate) fn font_data(&self) -> Option<crate::FontData> {
         match &self.font_type {
             FontType::OpenType(t) => Some(t.font_data()),
             FontType::Cff(c) => Some(c.font_data()),

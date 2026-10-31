@@ -1,8 +1,8 @@
 use crate::FontResolverFn;
-use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
-use crate::font::true_type::{Width, read_encoding, read_widths};
-use crate::font::{
+use crate::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
+use crate::true_type::{Width, read_encoding, read_widths};
+use crate::{
     Encoding, FontData, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_glyph,
     strip_subset_prefix,
 };
@@ -157,25 +157,21 @@ impl StandardFont {
         use std::sync::Arc;
 
         let data = match self {
-            Self::Helvetica => &include_bytes!("../../assets/FoxitSans.pfb")[..],
-            Self::HelveticaBold => &include_bytes!("../../assets/FoxitSansBold.pfb")[..],
-            Self::HelveticaOblique => &include_bytes!("../../assets/FoxitSansItalic.pfb")[..],
-            Self::HelveticaBoldOblique => {
-                &include_bytes!("../../assets/FoxitSansBoldItalic.pfb")[..]
-            }
-            Self::Courier => &include_bytes!("../../assets/FoxitFixed.pfb")[..],
-            Self::CourierBold => &include_bytes!("../../assets/FoxitFixedBold.pfb")[..],
-            Self::CourierOblique => &include_bytes!("../../assets/FoxitFixedItalic.pfb")[..],
-            Self::CourierBoldOblique => {
-                &include_bytes!("../../assets/FoxitFixedBoldItalic.pfb")[..]
-            }
-            Self::TimesRoman => &include_bytes!("../../assets/FoxitSerif.pfb")[..],
-            Self::TimesBold => &include_bytes!("../../assets/FoxitSerifBold.pfb")[..],
-            Self::TimesItalic => &include_bytes!("../../assets/FoxitSerifItalic.pfb")[..],
-            Self::TimesBoldItalic => &include_bytes!("../../assets/FoxitSerifBoldItalic.pfb")[..],
-            Self::ZapfDingBats => &include_bytes!("../../assets/FoxitDingbats.pfb")[..],
+            Self::Helvetica => &include_bytes!("../assets/FoxitSans.pfb")[..],
+            Self::HelveticaBold => &include_bytes!("../assets/FoxitSansBold.pfb")[..],
+            Self::HelveticaOblique => &include_bytes!("../assets/FoxitSansItalic.pfb")[..],
+            Self::HelveticaBoldOblique => &include_bytes!("../assets/FoxitSansBoldItalic.pfb")[..],
+            Self::Courier => &include_bytes!("../assets/FoxitFixed.pfb")[..],
+            Self::CourierBold => &include_bytes!("../assets/FoxitFixedBold.pfb")[..],
+            Self::CourierOblique => &include_bytes!("../assets/FoxitFixedItalic.pfb")[..],
+            Self::CourierBoldOblique => &include_bytes!("../assets/FoxitFixedBoldItalic.pfb")[..],
+            Self::TimesRoman => &include_bytes!("../assets/FoxitSerif.pfb")[..],
+            Self::TimesBold => &include_bytes!("../assets/FoxitSerifBold.pfb")[..],
+            Self::TimesItalic => &include_bytes!("../assets/FoxitSerifItalic.pfb")[..],
+            Self::TimesBoldItalic => &include_bytes!("../assets/FoxitSerifBoldItalic.pfb")[..],
+            Self::ZapfDingBats => &include_bytes!("../assets/FoxitDingbats.pfb")[..],
             Self::Symbol => {
-                include_bytes!("../../assets/FoxitSymbol.pfb")
+                include_bytes!("../assets/FoxitSymbol.pfb")
             }
         };
 

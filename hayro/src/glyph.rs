@@ -1,6 +1,6 @@
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::font::{Glyph, GlyphRun, OutlineGlyph};
-use hayro_interpret::{CacheKey, DrawMode, DrawProps, FillRule, Paint, StrokeProps};
+use hayro_interpret::{DrawMode, DrawProps, FillRule, Paint, StrokeProps};
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::rc::Rc;
 
