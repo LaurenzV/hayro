@@ -12,13 +12,14 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 7] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
+        ("text::cid_without_to_unicode", cid_without_to_unicode),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -115,4 +116,12 @@ fn clip_mode() {
     let file = &read("pdfs/text/clip_mode.pdf");
 
     assert_eq!(page_text(file), "Clip and fill");
+}
+
+fn cid_without_to_unicode() {
+    // An embedded font with a Japan1 character collection and no `ToUnicode` map, drawing
+    // katakana ko and the long vowel mark in Shift-JIS.
+    let file = &read("pdfs/text/cid_without_to_unicode.pdf");
+
+    assert_eq!(page_text(file), "\u{30B3}\u{30FC}");
 }
