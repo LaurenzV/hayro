@@ -211,9 +211,7 @@ pub struct RenderSettings {
     /// The aliasing threshold for fills and strokes.
     ///
     /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
-    /// whose coverage exceeds the threshold and samples tiling patterns without
-    /// interpolation. See
-    /// [`RenderContext::set_aliasing_threshold`](vello_cpu::RenderContext::set_aliasing_threshold).
+    /// whose coverage exceeds the threshold.
     pub aliasing_threshold: Option<u8>,
 }
 
