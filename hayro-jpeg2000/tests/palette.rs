@@ -54,3 +54,9 @@ fn unresolved() {
         reference("palette_unresolved"),
     );
 }
+
+#[test]
+fn column_too_deep_ignored() {
+    let decoded = decode("palette_column_too_deep", &DecodeSettings::default());
+    assert!(decoded.is_ok());
+}
