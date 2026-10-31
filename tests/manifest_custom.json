@@ -1411,5 +1411,10 @@
     "id": "literal_string_raw_eol",
     "svg": true,
     "file": "pdfs/custom/literal_string_raw_eol.pdf"
+  },
+  {
+    "id": "aliasing_threshold",
+    "file": "pdfs/custom/aliasing_threshold.pdf",
+    "aliasing_threshold": 127
   }
 ]

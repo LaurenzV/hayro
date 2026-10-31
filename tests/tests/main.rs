@@ -3,6 +3,7 @@ use crate::harness::runner::Test;
 use crate::harness::snapshot::encode_png;
 use crate::harness::ui::Ui;
 use crate::harness::{args, assets, references, report, runner, ui};
+use hayro::RenderSettings;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -112,13 +113,7 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
-        .chain([
-            Test::unit("visibility", visibility),
-            Test::unit(
-                "aliasing_threshold_applies_to_every_fill",
-                aliasing_threshold_applies_to_every_fill,
-            ),
-        ])
+        .chain([Test::unit("visibility", visibility)])
         .filter(|test| args.matches(&test.name))
         .collect();
     tests.sort_by(|a, b| a.name.cmp(&b.name));
@@ -201,9 +196,10 @@ pub(crate) fn render_pdf(
     pdf: &Pdf,
     name: &str,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<RgbaImage> {
-    hayro::render_pdf(pdf, 1.0, settings, range)
+    hayro::render_pdf(pdf, 1.0, settings, render_settings, range)
         .unwrap()
         .into_iter()
         .enumerate()
@@ -347,83 +343,4 @@ fn visibility() {
             LoadPdfError::Invalid => {}
         }
     }
-}
-
-fn single_page_pdf(content: &str) -> Vec<u8> {
-    let pattern = "0 1 0 rg 1 1 m 1 9 9 9 9 1 c f";
-    let objects = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] \
-            /Resources << /Pattern << /P0 5 0 R >> >> /Contents 4 0 R >>"
-            .to_string(),
-        format!(
-            "<< /Length {} >>\nstream\n{content}\nendstream",
-            content.len()
-        ),
-        format!(
-            "<< /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 \
-                /YStep 10 /Resources << >> /Length {} >>\nstream\n{pattern}\nendstream",
-            pattern.len()
-        ),
-    ];
-    let mut pdf = b"%PDF-1.7\n".to_vec();
-    let mut offsets = Vec::new();
-    for (index, object) in objects.iter().enumerate() {
-        offsets.push(pdf.len());
-        pdf.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", index + 1).as_bytes());
-    }
-    let xref = pdf.len();
-    pdf.extend_from_slice(
-        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
-    );
-    for offset in offsets {
-        pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
-    }
-    pdf.extend_from_slice(
-        format!(
-            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
-            objects.len() + 1
-        )
-        .as_bytes(),
-    );
-    pdf
-}
-
-fn aliasing_threshold_applies_to_every_fill() {
-    // Exercise images, subsequent fills, and a tiling pattern's child context.
-    let content = "0 0 1 rg 5 20 m 5 35 20 38 35 20 c f \
-        q 20 10 -10 20 12 2 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\x00\x00\x00 EI Q \
-        1 0 0 rg 2 2 m 30 8 l 10 16 l f \
-        /Pattern cs /P0 scn 22 22 15 15 re f";
-    let pdf = Pdf::new(single_page_pdf(content)).unwrap();
-    let page = &pdf.pages()[0];
-    let render = |aliasing_threshold| {
-        let settings = hayro::RenderSettings {
-            aliasing_threshold,
-            ..Default::default()
-        };
-        hayro::render(
-            page,
-            &hayro::RenderCache::new(),
-            &interpreter_settings(),
-            &settings,
-            &hayro::PixmapSettings {
-                x_scale: 3.0,
-                y_scale: 3.0,
-                bg_color: hayro::vello_cpu::color::palette::css::WHITE,
-            },
-        )
-        .take_rgba8(hayro::vello_cpu::peniko::ImageAlphaType::Alpha)
-    };
-    let partial = |data: &[u8]| {
-        data.as_chunks::<4>()
-            .0
-            .iter()
-            .filter(|pixel| pixel[..3].iter().any(|value| !matches!(value, 0 | 255)))
-            .count()
-    };
-
-    assert!(partial(&render(None)) > 0);
-    assert_eq!(partial(&render(Some(127))), 0);
 }

@@ -337,6 +337,7 @@ pub fn render_pdf(
     pdf: &Pdf,
     scale: f32,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
     let cache = RenderCache::new();
@@ -353,7 +354,7 @@ pub fn render_pdf(
                 page,
                 &cache,
                 &settings,
-                &RenderSettings::default(),
+                render_settings,
                 &PixmapSettings {
                     x_scale: scale,
                     y_scale: scale,
