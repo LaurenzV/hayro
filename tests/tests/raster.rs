@@ -3,6 +3,7 @@ use crate::harness::manifest::entries;
 use crate::harness::runner::{Outcome, Test};
 use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, render_pdf, try_load_pdf};
+use hayro::RenderSettings;
 
 /// Returns the raster tests of all manifests, as well as the names of the ignored ones.
 pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
@@ -28,6 +29,10 @@ pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
                 &pdf,
                 &entry.name,
                 interpreter_settings(),
+                &RenderSettings {
+                    aliasing_threshold: entry.aliasing_threshold,
+                    ..Default::default()
+                },
                 entry.range.clone(),
             );
             check(Suite::Raster, &entry.name, pages, entry.max_diff_pixels)

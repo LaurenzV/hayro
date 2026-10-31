@@ -74,6 +74,7 @@ pub(crate) struct GlobalState {
     outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     scaler: Scaler,
     force_image_interpolation: bool,
+    aliasing_threshold: Option<u8>,
 }
 
 impl GlobalState {
@@ -83,6 +84,7 @@ impl GlobalState {
             outline_cache: cache.outline_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
+            aliasing_threshold: settings.aliasing_threshold,
         }
     }
 }
@@ -112,7 +114,10 @@ impl<'r> Renderer<'r> {
     }
 
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
-        RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
+        let mut ctx =
+            RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()));
+        ctx.set_aliasing_threshold(self.global.aliasing_threshold);
+        ctx
     }
 
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
@@ -203,6 +208,11 @@ impl<'a> RenderCache<'a> {
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
+    /// The aliasing threshold for fills and strokes.
+    ///
+    /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
+    /// whose coverage exceeds the threshold.
+    pub aliasing_threshold: Option<u8>,
 }
 
 /// Settings for the output pixmap.
@@ -295,6 +305,7 @@ pub fn render_into<'a>(
     ctx.take_current_state();
     ctx.reset_mask();
     ctx.reset_filter_effect();
+    ctx.set_aliasing_threshold(render_settings.aliasing_threshold);
 
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
@@ -324,6 +335,7 @@ pub fn render_pdf(
     pdf: &Pdf,
     scale: f32,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
     let cache = RenderCache::new();
@@ -340,7 +352,7 @@ pub fn render_pdf(
                 page,
                 &cache,
                 &settings,
-                &RenderSettings::default(),
+                render_settings,
                 &PixmapSettings {
                     x_scale: scale,
                     y_scale: scale,

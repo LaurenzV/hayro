@@ -3,6 +3,7 @@ use crate::harness::runner::Test;
 use crate::harness::snapshot::encode_png;
 use crate::harness::ui::Ui;
 use crate::harness::{args, assets, references, report, runner, ui};
+use hayro::RenderSettings;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -195,9 +196,10 @@ pub(crate) fn render_pdf(
     pdf: &Pdf,
     name: &str,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<RgbaImage> {
-    hayro::render_pdf(pdf, 1.0, settings, range)
+    hayro::render_pdf(pdf, 1.0, settings, render_settings, range)
         .unwrap()
         .into_iter()
         .enumerate()

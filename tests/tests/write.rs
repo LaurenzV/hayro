@@ -2,6 +2,7 @@ use crate::harness::assets::FALLBACK_FONTS;
 use crate::harness::runner::{Outcome, Test};
 use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, load_pdf, render_pdf, try_load_pdf};
+use hayro::RenderSettings;
 use hayro_syntax::object::dict::keys::{DECODE_PARMS, FILTER, GROUP};
 use hayro_syntax::object::{Dict, Stream};
 use hayro_syntax::{Filter, Pdf};
@@ -232,7 +233,13 @@ pub(crate) fn tests() -> Vec<Test> {
             }
 
             let pdf = Pdf::new(buf).unwrap();
-            let rendered = render_pdf(&pdf, snapshot, interpreter_settings(), None);
+            let rendered = render_pdf(
+                &pdf,
+                snapshot,
+                interpreter_settings(),
+                &RenderSettings::default(),
+                None,
+            );
             check(Suite::Write, snapshot, rendered, 0)
         })
     });

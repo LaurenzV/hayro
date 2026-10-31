@@ -34,7 +34,11 @@ impl Renderer<'_> {
             sampler: ImageSampler {
                 x_extend: x.extend,
                 y_extend: y.extend,
-                quality: ImageQuality::Medium,
+                quality: if self.global.aliasing_threshold.is_some() {
+                    ImageQuality::Low
+                } else {
+                    ImageQuality::Medium
+                },
                 alpha: t.opacity,
             },
         };
