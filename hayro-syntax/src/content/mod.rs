@@ -111,6 +111,7 @@ pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
     operator: Option<Operator<'a>>,
+    stopped_before_end: bool,
 }
 
 impl<'a> UntypedIter<'a> {
@@ -120,6 +121,7 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(data),
             stack: Stack::new(),
             operator: None,
+            stopped_before_end: false,
         }
     }
 
@@ -129,7 +131,13 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(&[]),
             stack: Stack::new(),
             operator: None,
+            stopped_before_end: false,
         }
+    }
+
+    /// Return whether unread data remained when the iterator stopped.
+    pub fn stopped_before_end(&self) -> bool {
+        self.stopped_before_end
     }
 
     /// Return the next instruction.
@@ -137,7 +145,14 @@ impl<'a> UntypedIter<'a> {
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
         self.stack.clear();
 
-        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        let Some(operator) = read_instruction(&mut self.reader, &mut self.stack) else {
+            if !self.reader.at_end() {
+                self.stopped_before_end = true;
+                self.reader.jump_to_end();
+            }
+
+            return None;
+        };
         self.operator = Some(operator);
         Some(Instruction {
             operands: &self.stack,
@@ -181,10 +196,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
             }
             _ => {
                 *r = cur;
-                let Some(operator) = r.read_without_context::<Operator<'a>>() else {
-                    r.jump_to_end();
-                    return None;
-                };
+                let operator = r.read_without_context::<Operator<'a>>()?;
 
                 // Inline images need special casing...
                 if operator.as_ref() == b"BI" {
@@ -399,6 +411,7 @@ impl BinaryTracker {
 #[derive(Clone)]
 pub struct TypedIter<'a> {
     untyped: UntypedIter<'a>,
+    stopped_on_invalid_path: bool,
 }
 
 impl<'a> TypedIter<'a> {
@@ -406,16 +419,31 @@ impl<'a> TypedIter<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         Self {
             untyped: UntypedIter::new(data),
+            stopped_on_invalid_path: false,
         }
     }
 
     pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> Self {
-        Self { untyped }
+        Self {
+            untyped,
+            stopped_on_invalid_path: false,
+        }
+    }
+
+    /// Return whether parsing or an invalid path instruction stopped the iterator
+    /// with unread data.
+    pub fn stopped_before_end(&self) -> bool {
+        self.untyped.stopped_before_end()
+            || (self.stopped_on_invalid_path && !self.untyped.reader.at_end())
     }
 
     /// Return the next typed instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
+        if self.stopped_on_invalid_path {
+            return None;
+        }
+
         let op = self.untyped.next()?;
         // TODO: Explore whether dispatching can be made more efficient.
         match TypedInstruction::dispatch(&op) {
@@ -436,6 +464,7 @@ impl<'a> TypedIter<'a> {
                 ]
                 .contains(&op.operator.0.deref())
                 {
+                    self.stopped_on_invalid_path = true;
                     None
                 } else {
                     Some(TypedInstruction::Fallback(op.operator))
@@ -777,4 +806,89 @@ mod macros {
     pub(crate) use op3;
     pub(crate) use op4;
     pub(crate) use op6;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TypedIter, UntypedIter};
+
+    fn nested_operand(depth: usize) -> Vec<u8> {
+        format!("q {}(X){} TJ Q", "[".repeat(depth), "]".repeat(depth)).into_bytes()
+    }
+
+    fn read_operators(data: &[u8]) -> (Vec<Vec<u8>>, bool) {
+        let mut iter = UntypedIter::new(data);
+        let mut operators = vec![];
+
+        while let Some(instruction) = iter.next() {
+            operators.push(instruction.operator.as_ref().to_vec());
+        }
+
+        (operators, iter.stopped_before_end())
+    }
+
+    #[test]
+    fn invalid_path_operands_stop_before_end() {
+        for path in ["1 m", "1 l", "1 c", "1 v", "1 y", "1 re"] {
+            let content = format!("q {path} 0 0 10 10 re f Q");
+            let mut iter = TypedIter::new(content.as_bytes());
+            assert!(iter.next().is_some());
+            assert!(!iter.stopped_before_end());
+            assert!(iter.next().is_none(), "{path}");
+            assert!(iter.stopped_before_end(), "{path}");
+            assert!(iter.next().is_none());
+            assert!(iter.stopped_before_end());
+        }
+    }
+
+    #[test]
+    fn invalid_path_at_end_does_not_report_unread_data() {
+        let mut iter = TypedIter::new(b"1 m");
+        assert!(iter.next().is_none());
+        assert!(!iter.stopped_before_end());
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn invalid_non_path_operands_do_not_stop() {
+        let mut iter = TypedIter::new(b"1 cm 0 0 10 10 re f");
+        let mut count = 0;
+        while iter.next().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 3);
+        assert!(!iter.stopped_before_end());
+    }
+
+    #[test]
+    fn reads_to_end() {
+        let (operators, stopped) = read_operators(&nested_operand(1));
+        assert_eq!(operators, [&b"q"[..], b"TJ", b"Q"]);
+        assert!(!stopped);
+    }
+
+    #[test]
+    fn nested_operand_up_to_bound() {
+        let (operators, stopped) = read_operators(&nested_operand(512));
+        assert_eq!(operators, [&b"q"[..], b"TJ", b"Q"]);
+        assert!(!stopped);
+
+        let (operators, stopped) = read_operators(&nested_operand(513));
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
+
+    #[test]
+    fn deep_operand_stops_before_end() {
+        let (operators, stopped) = read_operators(&nested_operand(300_000));
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
+
+    #[test]
+    fn unterminated_operand_stops_before_end() {
+        let (operators, stopped) = read_operators(b"q (unterminated Q");
+        assert_eq!(operators, [&b"q"[..]]);
+        assert!(stopped);
+    }
 }

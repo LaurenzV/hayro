@@ -146,6 +146,8 @@ pub enum InterpreterWarning {
     /// An annotation has an `AP` dictionary, but its normal appearance could not
     /// be selected or loaded, so the annotation was not drawn.
     UnresolvedAnnotationAppearance,
+    /// A content stream stopped before its end, leaving some operators uninterpreted.
+    TruncatedContentStream,
 }
 
 /// interpret the contents of the page and render them into the device.
@@ -764,6 +766,10 @@ pub fn interpret<'a>(
         }
     }
 
+    if ops.stopped_before_end() {
+        (context.settings.warning_sink)(InterpreterWarning::TruncatedContentStream);
+    }
+
     // A path object, including a pending `W` or `W*`, can't continue beyond the content
     // stream it starts in.
     context.path_mut().truncate(0);
@@ -771,5 +777,74 @@ pub fn interpret<'a>(
 
     while context.num_states() > num_states {
         context.restore_state(device);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InterpreterSettings, InterpreterWarning, interpret_page};
+    use crate::context::{Context, InterpreterCache};
+    use crate::device::DummyDevice;
+    use hayro_syntax::Pdf;
+    use kurbo::{Affine, Rect};
+    use std::sync::{Arc, Mutex};
+
+    fn warnings(content: &[u8]) -> Vec<InterpreterWarning> {
+        let mut data = format!(
+            "%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R >>\nendobj\n\
+4 0 obj\n<< /Length {} >>\nstream\n",
+            content.len()
+        )
+        .into_bytes();
+        data.extend(content);
+        data.extend(b"\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        let pdf = Pdf::new(data).unwrap();
+        let page = &pdf.pages()[0];
+
+        let warnings = Arc::new(Mutex::new(vec![]));
+        let sink = warnings.clone();
+        let settings = InterpreterSettings {
+            warning_sink: Arc::new(move |w| sink.lock().unwrap().push(w)),
+            ..Default::default()
+        };
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            &cache,
+            pdf.xref(),
+            settings,
+        );
+        interpret_page(page, &mut context, &mut DummyDevice);
+
+        warnings.lock().unwrap().clone()
+    }
+
+    #[test]
+    fn complete_content_stream_has_no_warning() {
+        assert!(warnings(b"q 0 0 1 1 re f Q").is_empty());
+    }
+
+    #[test]
+    fn invalid_path_operands_are_reported() {
+        let warnings = warnings(b"q 1 m 0 0 10 10 re f Q");
+        assert!(matches!(
+            warnings.as_slice(),
+            [InterpreterWarning::TruncatedContentStream]
+        ));
+    }
+
+    #[test]
+    fn deeply_nested_operand_is_reported() {
+        let content = format!("q {}0{} TJ Q", "[".repeat(300_000), "]".repeat(300_000));
+        let warnings = warnings(content.as_bytes());
+
+        assert!(matches!(
+            warnings.as_slice(),
+            [InterpreterWarning::TruncatedContentStream]
+        ));
     }
 }
