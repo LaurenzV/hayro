@@ -253,14 +253,14 @@ impl<'a, T: Readable<'a>> FromBytes<'a> for T {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ObjectIdentifier {
     /// The object number.
-    pub obj_number: i32,
+    pub obj_number: u32,
     /// The generation number.
     pub gen_number: i32,
 }
 
 impl ObjectIdentifier {
     /// Create a new `ObjectIdentifier`.
-    pub fn new(obj_number: i32, gen_number: i32) -> Self {
+    pub fn new(obj_number: u32, gen_number: i32) -> Self {
         Self {
             obj_number,
             gen_number,
@@ -270,7 +270,7 @@ impl ObjectIdentifier {
 
 impl Readable<'_> for ObjectIdentifier {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_number = r.read_without_context::<i32>()?;
+        let obj_number = r.read_without_context::<u32>()?;
         r.skip_white_spaces_and_comments();
         let gen_number = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
@@ -285,7 +285,7 @@ impl Readable<'_> for ObjectIdentifier {
 
 impl Skippable for ObjectIdentifier {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<i32>(false)?;
+        r.skip::<u32>(false)?;
         r.skip_white_spaces_and_comments();
         r.skip::<i32>(false)?;
         r.skip_white_spaces_and_comments();
