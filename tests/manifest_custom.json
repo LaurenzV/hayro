@@ -263,6 +263,18 @@
     "file": "pdfs/custom/function_type0_2.pdf"
   },
   {
+    "id": "function_type0_12_bit",
+    "file": "pdfs/custom/function_type0_12_bit.pdf"
+  },
+  {
+    "id": "function_type3_intervals",
+    "file": "pdfs/custom/function_type3_intervals.pdf"
+  },
+  {
+    "id": "function_type4_stack",
+    "file": "pdfs/custom/function_type4_stack.pdf"
+  },
+  {
     "id": "image_1_bit_per_component",
     "file": "pdfs/custom/image_1_bit_per_component.pdf"
   },
@@ -864,6 +876,10 @@
     "file": "pdfs/custom/pattern_tiling_cache_key.pdf"
   },
   {
+    "id": "pattern_tiling_huge_x_step",
+    "file": "pdfs/custom/pattern_tiling_huge_x_step.pdf"
+  },
+  {
     "id": "pattern_tiling_inner_transform",
     "file": "pdfs/custom/pattern_tiling_inner_transform.pdf"
   },
@@ -876,9 +892,25 @@
     "file": "pdfs/custom/pattern_tiling_lines.pdf"
   },
   {
+    "id": "pattern_tiling_negative_step",
+    "file": "pdfs/custom/pattern_tiling_negative_step.pdf"
+  },
+  {
     "id": "pattern_tiling_nested",
     "svg": true,
     "file": "pdfs/custom/pattern_tiling_nested.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap",
+    "file": "pdfs/custom/pattern_tiling_overlap.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap_rotated",
+    "file": "pdfs/custom/pattern_tiling_overlap_rotated.pdf"
+  },
+  {
+    "id": "pattern_tiling_overlap_transparent",
+    "file": "pdfs/custom/pattern_tiling_overlap_transparent.pdf"
   },
   {
     "id": "pattern_tiling_rotated",
@@ -1180,6 +1212,10 @@
   {
     "id": "encrypted_aes_256_hardened",
     "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
+  },
+  {
+    "id": "encrypted_crypt_filter_streams",
+    "file": "pdfs/custom/encrypted_crypt_filter_streams.pdf"
   },
   {
     "id": "issue10_1",

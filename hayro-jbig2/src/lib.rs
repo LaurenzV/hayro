@@ -393,6 +393,10 @@ impl PageSize {
             bail!(FormatError::EmptyPage);
         }
 
+        if page_info.width > bitmap::MAX_DIMENSION || height > bitmap::MAX_DIMENSION {
+            bail!(OverflowError::BitmapDimension);
+        }
+
         Ok(Self {
             width: page_info.width,
             height,
