@@ -6,10 +6,9 @@ It currently only implements a very small subset of the PostScript language,
 with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
-The supported types include integers and real numbers, name objects and strings. The
-`[`, `]`, `<<` and `>>` tokens are returned as executable names, so that the caller can
-construct arrays and dictionaries if needed. Unsupported is anything else, including
-procedures. An error will be returned in case any of these is encountered.
+The supported types include integers and real numbers, name objects, strings and
+procedures. The `[`, `]`, `<<` and `>>` tokens are returned as executable names, so
+that the caller can construct arrays and dictionaries if needed.
 
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
@@ -25,6 +24,7 @@ mod error;
 mod name;
 mod number;
 mod object;
+mod procedure;
 mod reader;
 mod string;
 
@@ -32,6 +32,7 @@ pub use error::{Error, Result};
 pub use name::Name;
 pub use number::Number;
 pub use object::Object;
+pub use procedure::Procedure;
 pub use string::String;
 
 use reader::Reader;
@@ -79,6 +80,14 @@ impl<'a> Scanner<'a> {
     pub fn parse_string(&mut self) -> Result<String<'a>> {
         match self.parse_object()? {
             Object::String(s) => Ok(s),
+            _ => Err(Error::SyntaxError),
+        }
+    }
+
+    /// Parse the next object as a [`Procedure`].
+    pub fn parse_procedure(&mut self) -> Result<Procedure<'a>> {
+        match self.parse_object()? {
+            Object::Procedure(p) => Ok(p),
             _ => Err(Error::SyntaxError),
         }
     }
@@ -151,6 +160,26 @@ endcmap"#;
         );
         assert_eq!(scanner.parse_name().unwrap(), Name::new(b"]", false));
         assert!(scanner.at_end());
+    }
+
+    #[test]
+    fn procedure_round_trip() {
+        let input = b"{dup 0 lt {neg} if}";
+        let mut scanner = Scanner::new(input);
+        let proc = scanner.parse_procedure().unwrap();
+        assert!(scanner.at_end());
+
+        let mut inner = proc.objects();
+        assert_eq!(inner.parse_name().unwrap(), Name::new(b"dup", false));
+        assert_eq!(inner.parse_number().unwrap(), Number::Integer(0));
+        assert_eq!(inner.parse_name().unwrap(), Name::new(b"lt", false));
+        let nested = inner.parse_procedure().unwrap();
+        assert_eq!(inner.parse_name().unwrap(), Name::new(b"if", false));
+        assert!(inner.at_end());
+
+        let mut nested = nested.objects();
+        assert_eq!(nested.parse_name().unwrap(), Name::new(b"neg", false));
+        assert!(nested.at_end());
     }
 
     #[test]
