@@ -188,6 +188,19 @@ endcmap"#;
     }
 
     #[test]
+    fn immediate_name_in_procedure() {
+        let mut scanner = Scanner::new(b"{//mydict begin}");
+        let mut inner = scanner.parse_procedure().unwrap().objects();
+
+        let name = inner.parse_name().unwrap();
+        assert!(name.is_immediate());
+        assert!(!name.is_literal());
+        assert_eq!(name.as_bytes(), b"mydict");
+        assert_eq!(inner.parse_name().unwrap(), Name::new(b"begin", false));
+        assert!(inner.at_end());
+    }
+
+    #[test]
     fn dict_tokens() {
         let mut scanner = Scanner::new(b"<</Registry (Adobe)>>");
 
