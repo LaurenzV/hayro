@@ -1,7 +1,7 @@
 use crate::CacheKey;
-use crate::font::cid::Type0Font;
-use crate::font::true_type::TrueTypeFont;
-use crate::font::type1::Type1Font;
+use crate::cid::Type0Font;
+use crate::true_type::TrueTypeFont;
+use crate::type1::Type1Font;
 use hayro_cmap::BfString;
 use kurbo::BezPath;
 use skrifa::GlyphId;
@@ -12,7 +12,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct OutlineFontData {
     /// Raw font bytes (TrueType/OpenType/CFF data).
-    pub data: crate::font::FontData,
+    pub data: crate::FontData,
     /// Cache key for font deduplication.
     pub cache_key: u128,
     /// PostScript name (e.g., "TimesNewRomanPS-BoldMT").

@@ -3,7 +3,7 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
-use crate::font::{Font, FontData, FontQuery, StandardFont};
+use crate::font::{Font, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
@@ -34,14 +34,7 @@ const ANNOTATION_NO_VIEW: u32 = 1 << 5;
 
 pub use state::ActiveTransferFunction;
 
-/// A callback function for resolving font queries.
-///
-/// The first argument is the raw data, the second argument is the index in case the font
-/// is a TTC, otherwise it should be 0.
-pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
-/// A callback function for resolving cmap names to their files.
-pub type CMapResolverFn =
-    Arc<dyn Fn(hayro_cmap::CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
+pub use hayro_font::{CMapResolverFn, FontResolverFn};
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
@@ -111,8 +104,8 @@ impl Default for InterpreterSettings {
             font_resolver: Arc::new(|_| None),
             #[cfg(feature = "embed-fonts")]
             font_resolver: Arc::new(|query| match query {
-                FontQuery::Standard(s) => Some(s.get_font_data()),
-                FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
+                crate::font::FontQuery::Standard(s) => Some(s.get_font_data()),
+                crate::font::FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
             }),
             #[cfg(feature = "embed-cmaps")]
             cmap_resolver: Arc::new(hayro_cmap::load_embedded),

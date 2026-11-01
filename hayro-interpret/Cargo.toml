@@ -11,13 +11,12 @@ readme = "README.md"
 
 [dependencies]
 hayro-cmap = { workspace = true }
+hayro-font = { workspace = true }
 hayro-syntax = { workspace = true, features = ["std", "images", "unsafe"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 moxcms = { workspace = true, features = ["in_place"] }
-phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
-yoke = { workspace = true, features = ["derive"]}
 siphasher = { workspace = true }
 bitflags = { workspace = true }
 rustc-hash = { workspace = true }
@@ -28,7 +27,7 @@ image = { workspace = true, features = ["png"] }
 [features]
 default = ["embed-fonts", "embed-cmaps"]
 # Embed a light-weight set of fonts (around 240KB) that can be used as a substitute for the 14 PDF standard fonts.
-embed-fonts = []
+embed-fonts = ["hayro-font/embed-fonts"]
 # Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["hayro-cmap/embed-cmaps"]
 
