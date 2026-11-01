@@ -70,7 +70,7 @@ pub(crate) fn parse_inner<'a>(
                     supplement = parse_integer(&mut scanner).and_then(|n| i32::try_from(n).ok());
                 }
                 Some("CMapName") => {
-                    cmap_name = scanner.parse_name().ok().and_then(|n| n.decode().ok());
+                    cmap_name = scanner.parse_name().ok().map(|n| n.as_bytes().to_vec());
                 }
                 Some("WMode") => {
                     writing_mode = parse_writing_mode(&mut scanner);
@@ -109,8 +109,7 @@ pub(crate) fn parse_inner<'a>(
                         return None;
                     }
 
-                    let operand = operand.decode().ok()?;
-                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(&operand))?;
+                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(operand.as_bytes()))?;
 
                     base = Some(Box::new(parse_inner(
                         nested_data,
@@ -175,7 +174,7 @@ fn parse_integer(scanner: &mut Scanner<'_>) -> Option<i64> {
 fn parse_string_or_name(scanner: &mut Scanner<'_>) -> Option<Vec<u8>> {
     match scanner.parse_object().ok()? {
         Object::String(s) => s.decode().ok(),
-        Object::Name(n) => n.decode().ok(),
+        Object::Name(n) => Some(n.as_bytes().to_vec()),
         _ => None,
     }
 }
