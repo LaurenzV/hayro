@@ -47,10 +47,11 @@ pub(crate) fn parse_inner<'a>(
     let mut supplement = None;
     let mut cmap_name = None;
     let mut writing_mode = None;
-    let mut last_name: Option<Vec<u8>> = None;
+    let mut last = None;
 
     while !scanner.at_end() {
         let obj = scanner.parse_object().ok()?;
+        let prev = last.replace(obj.clone());
 
         let Object::Name(name) = &obj else { continue };
 
@@ -74,9 +75,7 @@ pub(crate) fn parse_inner<'a>(
                 Some("WMode") => {
                     writing_mode = parse_writing_mode(&mut scanner);
                 }
-                _ => {
-                    last_name = name.decode().ok();
-                }
+                _ => {}
             }
         } else {
             match name.as_str() {
@@ -102,7 +101,16 @@ pub(crate) fn parse_inner<'a>(
                     parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
                 }
                 Some("usecmap") => {
-                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(last_name.as_deref()?))?;
+                    let Some(Object::Name(operand)) = prev else {
+                        return None;
+                    };
+
+                    if !operand.is_literal() {
+                        return None;
+                    }
+
+                    let operand = operand.decode().ok()?;
+                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(&operand))?;
 
                     base = Some(Box::new(parse_inner(
                         nested_data,
@@ -310,11 +318,9 @@ fn parse_bf_range<F>(
                     dst_base: decode_be(&ctx.buf)?,
                 });
             }
-            Object::Array(array) => {
-                let mut array_scanner = array.objects();
-
+            _ if name_matches(&next, "[") => {
                 for code in start..=end {
-                    let s = array_scanner.parse_string().ok()?;
+                    let s = scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
                     entries.push(BfRange {
@@ -324,6 +330,10 @@ fn parse_bf_range<F>(
                         },
                         dst_base: decode_be(&ctx.buf)?,
                     });
+                }
+
+                if !name_matches(&scanner.parse_object().ok()?, "]") {
+                    return None;
                 }
             }
             _ => return None,
