@@ -20,15 +20,17 @@ pub(crate) fn render_glyph<'a>(
     device: &mut impl Device<'a>,
 ) -> Option<()> {
     let mut state = glyph.state.clone();
-    let root_transform =
-        transform * glyph_transform * glyph.font.matrix() * Affine::scale(UNITS_PER_EM as f64);
+    let root_transform = transform
+        * glyph_transform
+        * glyph.glyph.font().matrix()
+        * Affine::scale(UNITS_PER_EM as f64);
     state.ctm = root_transform;
 
     // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
     // (though the graphics state itself should be preserved).
     state.text_state = TextState::default();
 
-    let program = glyph.font.glyph_program(glyph.glyph_id)?;
+    let program = glyph.glyph.program()?;
     let decoded = program.decoded_data().ok()?;
     let iter = TypedIter::new(decoded.as_ref());
 
@@ -65,7 +67,7 @@ pub(crate) fn render_glyph<'a>(
     let resources = program
         .dict()
         .get(RESOURCES)
-        .or_else(|| glyph.font.resources())
+        .or_else(|| glyph.glyph.font().resources())
         .map(Resources::new);
     let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
 

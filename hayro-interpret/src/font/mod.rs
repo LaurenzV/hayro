@@ -10,17 +10,15 @@ use hayro_cmap::{BfString, WritingMode};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, Rect};
-use skrifa::GlyphId;
 use std::ops::Deref;
-use std::rc::Rc;
 
 mod type3;
 
 pub use hayro_font::{
-    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphIdentifier, OutlineFontData,
-    OutlineGlyph, StandardFont, Type3Font,
+    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphId, GlyphIdentifier, OutlineFontData,
+    OutlineGlyph, StandardFont,
 };
-pub(crate) use hayro_font::{Font, UNITS_PER_EM};
+pub(crate) use hayro_font::{Font, FontCache, FontGlyph, UNITS_PER_EM};
 
 /// A glyph that can be drawn.
 pub enum Glyph<'a> {
@@ -114,8 +112,7 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
 /// A type3 glyph.
 #[derive(Clone)]
 pub struct Type3Glyph<'a> {
-    pub(crate) font: Rc<Type3Font<'a>>,
-    pub(crate) glyph_id: GlyphId,
+    pub(crate) glyph: hayro_font::Type3Glyph<'a>,
     pub(crate) state: State<'a>,
     pub(crate) bbox: Rect,
     pub(crate) parent_resources: Resources<'a>,
@@ -123,7 +120,6 @@ pub struct Type3Glyph<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) settings: InterpreterSettings,
     pub(crate) nesting_depth: u32,
-    pub(crate) char_code: u32,
 }
 
 /// A glyph defined by PDF drawing instructions.
@@ -143,12 +139,12 @@ impl<'a> Type3Glyph<'a> {
     ///
     /// See [`Glyph::as_unicode`] for details on the fallback chain used.
     pub fn as_unicode(&self) -> Option<BfString> {
-        self.font.char_code_to_unicode(self.char_code)
+        self.glyph.as_unicode()
     }
 
     /// Get the original character code that selected this glyph.
     pub fn char_code(&self) -> u32 {
-        self.char_code
+        self.glyph.char_code()
     }
 
     /// Get the advance width for this glyph.
@@ -156,15 +152,13 @@ impl<'a> Type3Glyph<'a> {
     /// The advance width is how far to move horizontally after drawing
     /// this glyph before drawing the next one.
     pub fn advance_width(&self) -> Option<f32> {
-        u8::try_from(self.char_code)
-            .ok()
-            .map(|code| self.font.glyph_width(code))
+        Some(self.glyph.advance_width())
     }
 }
 
 impl CacheKey for Type3Glyph<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(&(self.font.cache_key(), self.glyph_id, self.bbox.cache_key()))
+        hash128(&(self.glyph.cache_key(), self.bbox.cache_key()))
     }
 }
 
@@ -180,24 +174,22 @@ pub(crate) fn get_glyph<'a>(
     char_code: u32,
     ctx: &mut Context<'a>,
     resources: &Resources<'a>,
-) -> Option<Glyph<'a>> {
-    if let Some(outline) = font.outline_glyph(glyph, char_code) {
-        return Some(Glyph::Outline(outline));
+) -> Glyph<'a> {
+    match font.glyph(glyph, char_code) {
+        FontGlyph::Outline(outline) => Glyph::Outline(outline),
+        FontGlyph::Type3(glyph) => {
+            let nesting_depth = ctx.nesting_depth() + 1;
+
+            Glyph::Type3(Box::new(Type3Glyph {
+                glyph,
+                state: ctx.snapshot(),
+                bbox: ctx.bbox(),
+                parent_resources: resources.clone(),
+                cache: ctx.interpreter_cache.clone(),
+                xref: ctx.xref,
+                settings: ctx.settings.clone(),
+                nesting_depth,
+            }))
+        }
     }
-
-    let font = font.type3()?;
-    let nesting_depth = ctx.nesting_depth() + 1;
-
-    Some(Glyph::Type3(Box::new(Type3Glyph {
-        font: font.clone(),
-        glyph_id: glyph,
-        state: ctx.snapshot(),
-        bbox: ctx.bbox(),
-        parent_resources: resources.clone(),
-        cache: ctx.interpreter_cache.clone(),
-        xref: ctx.xref,
-        settings: ctx.settings.clone(),
-        nesting_depth,
-        char_code,
-    })))
 }

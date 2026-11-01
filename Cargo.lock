@@ -651,7 +651,6 @@ dependencies = [
  "moxcms",
  "rustc-hash",
  "siphasher",
- "skrifa 0.46.0",
  "smallvec",
 ]
 

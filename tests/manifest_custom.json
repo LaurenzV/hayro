@@ -1420,5 +1420,9 @@
     "id": "aliasing_threshold",
     "file": "pdfs/custom/aliasing_threshold.pdf",
     "aliasing_threshold": 127
+  },
+  {
+    "id": "font_type1_opentype_builtin_encoding",
+    "file": "pdfs/custom/font_type1_opentype_builtin_encoding.pdf"
   }
 ]

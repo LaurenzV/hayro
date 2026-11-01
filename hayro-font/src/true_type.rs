@@ -1,7 +1,8 @@
-use crate::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::FontLoader;
+use crate::GlyphId;
 use crate::generated::{glyph_names, mac_os_roman, mac_roman, standard};
+use crate::program::{CmapPlatform, CmapSubtable, FontProgram, OpenTypeProgram};
 use crate::standard_font::{StandardFont, StandardKind, select_standard_font};
-use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use crate::{
     Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
     strip_subset_prefix, unicode_from_name,
@@ -13,35 +14,21 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use kurbo::BezPath;
 use rustc_hash::FxHashMap;
-use skrifa::attribute::Style;
-use skrifa::raw::TableProvider;
-use skrifa::raw::tables::cmap::PlatformId;
-use skrifa::{GlyphId, MetadataProvider};
-use std::cell::RefCell;
 use std::ops::Deref;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct TrueTypeFont {
-    cache_key: u128,
     kind: Kind,
     to_unicode: Option<CMap>,
 }
 
 impl TrueTypeFont {
-    pub(crate) fn new(
-        dict: &Dict<'_>,
-        font_resolver: &FontResolverFn,
-        cmap_resolver: &CMapResolverFn,
-    ) -> Option<Self> {
-        let cache_key = dict.cache_key();
-        let to_unicode = read_to_unicode(dict, cmap_resolver);
+    pub(crate) fn new(dict: &Dict<'_>, loader: &FontLoader<'_>) -> Option<Self> {
+        let to_unicode = read_to_unicode(dict, loader.cmap_resolver);
 
-        if let Some(embedded) = EmbeddedKind::new(dict) {
+        if let Some(embedded) = EmbeddedKind::new(dict, loader) {
             return Some(Self {
-                cache_key,
                 kind: Kind::Embedded(embedded),
                 to_unicode,
             });
@@ -52,20 +39,18 @@ impl TrueTypeFont {
             let standard_font = fallback_query.pick_standard_font();
 
             Some(Self {
-                cache_key,
                 kind: Kind::Standard(StandardKind::new_with_standard(
                     dict,
                     standard_font,
                     true,
-                    font_resolver,
+                    &loader.programs,
                 )?),
                 to_unicode: to_unicode.clone(),
             })
         };
 
-        if let Some(standard) = StandardKind::new(dict, font_resolver) {
+        if let Some(standard) = StandardKind::new(dict, &loader.programs) {
             Some(Self {
-                cache_key,
                 kind: Kind::Standard(standard),
                 to_unicode,
             })
@@ -74,16 +59,27 @@ impl TrueTypeFont {
         }
     }
 
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+    pub(crate) fn program(&self) -> FontProgram {
         match &self.kind {
-            Kind::Embedded(e) => e.outline_glyph(glyph),
-            Kind::Standard(s) => s.outline_glyph(glyph),
+            Kind::Embedded(e) => FontProgram::OpenType(e.base_font.clone()),
+            Kind::Standard(s) => s.program.clone(),
+        }
+    }
+
+    pub(crate) fn is_standard(&self) -> bool {
+        matches!(self.kind, Kind::Standard(_))
+    }
+
+    pub(crate) fn glyph_stretch(&self, glyph: GlyphId, code: u8) -> f64 {
+        match &self.kind {
+            Kind::Embedded(_) => 1.0,
+            Kind::Standard(s) => s.glyph_stretch(glyph, code),
         }
     }
 
     pub(crate) fn font_data(&self) -> Option<crate::FontData> {
         match &self.kind {
-            Kind::Embedded(e) => Some(e.base_font.font_data()),
+            Kind::Embedded(e) => Some(e.base_font.data().clone()),
             Kind::Standard(_) => None,
         }
     }
@@ -97,10 +93,7 @@ impl TrueTypeFont {
 
     pub(crate) fn weight(&self) -> Option<u32> {
         match &self.kind {
-            Kind::Embedded(e) => {
-                let weight = e.base_font.font_ref().attributes().weight.value().round() as u32;
-                if weight > 0 { Some(weight) } else { None }
-            }
+            Kind::Embedded(e) => e.base_font.weight(),
             Kind::Standard(s) => Some(if s.is_bold() { 700 } else { 400 }),
         }
     }
@@ -114,8 +107,7 @@ impl TrueTypeFont {
                 {
                     return true;
                 }
-                // Check skrifa font attributes
-                e.base_font.font_ref().attributes().style != Style::Normal
+                e.base_font.is_italic()
             }
             Kind::Standard(s) => s.is_italic(),
         }
@@ -140,14 +132,7 @@ impl TrueTypeFont {
                 {
                     return true;
                 }
-                // Check skrifa font metrics
-                e.base_font
-                    .font_ref()
-                    .metrics(
-                        skrifa::instance::Size::unscaled(),
-                        skrifa::instance::LocationRef::default(),
-                    )
-                    .is_monospace
+                e.base_font.is_monospace()
             }
             Kind::Standard(s) => s.is_monospace(),
         }
@@ -188,12 +173,6 @@ impl TrueTypeFont {
     }
 }
 
-impl CacheKey for TrueTypeFont {
-    fn cache_key(&self) -> u128 {
-        self.cache_key
-    }
-}
-
 #[derive(Debug)]
 enum Kind {
     Embedded(EmbeddedKind),
@@ -202,42 +181,32 @@ enum Kind {
 
 #[derive(Debug)]
 struct EmbeddedKind {
-    base_font: OpenTypeFontBlob,
+    base_font: OpenTypeProgram,
     widths: Vec<Width>,
     missing_width: f32,
     font_flags: Option<FontFlags>,
-    glyph_names: FxHashMap<String, GlyphId>,
     encoding: Encoding,
-    // Only used for PDFs that mistakenly embed a
-    // CFF font.
-    cff_blob: Option<CffFontBlob>,
     differences: FxHashMap<u8, String>,
-    cached_mappings: RefCell<FxHashMap<u8, GlyphId>>,
+    code_to_glyph: Box<[GlyphId; 256]>,
     /// PostScript name from the PDF.
     postscript_name: Option<String>,
     is_zapf_dingbats: bool,
 }
 
 impl EmbeddedKind {
-    fn new(dict: &Dict<'_>) -> Option<Self> {
+    fn new(dict: &Dict<'_>, loader: &FontLoader<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
 
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let (encoding, differences) = read_encoding(dict);
-        let base_font = descriptor
+        let Some(FontProgram::OpenType(base_font)) = descriptor
             .get::<Stream<'_>>(FONT_FILE2)
-            .and_then(|s| s.decoded_data().ok())
-            .and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
-
-        let glyph_names = base_font.glyph_names();
-
-        let cff_font_blob = base_font
-            .font_ref()
-            .cff()
-            .ok()
-            .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
+            .and_then(|stream| loader.programs.load(&stream))
+        else {
+            return None;
+        };
 
         let postscript_name = dict
             .get::<Name<'_>>(BASE_FONT)
@@ -247,19 +216,24 @@ impl EmbeddedKind {
             Some((StandardFont::ZapfDingBats, _))
         );
 
-        Some(Self {
+        let mut kind = Self {
             base_font,
             differences,
-            cff_blob: cff_font_blob,
             widths,
             missing_width,
-            glyph_names,
             font_flags,
             encoding,
-            cached_mappings: RefCell::new(FxHashMap::default()),
+            code_to_glyph: Box::new([GlyphId::NOTDEF; 256]),
             postscript_name,
             is_zapf_dingbats,
-        })
+        };
+        let base_font = kind.base_font.clone();
+        let subtables = base_font.cmap_subtables();
+        kind.code_to_glyph = Box::new(std::array::from_fn(|code| {
+            kind.lookup_glyph(code as u8, &subtables)
+        }));
+
+        Some(kind)
     }
 
     fn is_non_symbolic(&self) -> bool {
@@ -279,19 +253,16 @@ impl EmbeddedKind {
             .or_else(|| standard::get(code))
     }
 
-    fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        self.base_font.outline_glyph(glyph)
+    fn map_code(&self, code: u8) -> GlyphId {
+        self.code_to_glyph[code as usize]
     }
 
-    fn map_code(&self, code: u8) -> GlyphId {
-        if let Some(glyph) = self.cached_mappings.borrow().get(&code) {
-            return *glyph;
-        }
-
-        if let Some(blob) = self.cff_blob.as_ref() {
+    fn lookup_glyph(&self, code: u8, subtables: &[CmapSubtable<'_>]) -> GlyphId {
+        // Some PDFs mistakenly embed an OpenType font with CFF outlines.
+        if self.base_font.is_cff() {
             return self
                 .code_to_name(code)
-                .and_then(|name| blob.glyph_index_by_name(name))
+                .and_then(|name| self.base_font.glyph_by_name(name))
                 .unwrap_or(GlyphId::NOTDEF);
         }
 
@@ -302,74 +273,60 @@ impl EmbeddedKind {
                 return GlyphId::NOTDEF;
             };
 
-            if let Ok(cmap) = self.base_font.font_ref().cmap() {
-                for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Windows
-                        && record.encoding_id() == 1
-                        && let Ok(subtable) = record.subtable(cmap.offset_data())
-                    {
-                        glyph = glyph.or_else(|| {
-                            glyph_names::get(lookup)
-                                .map(|n| n.to_string())
-                                .or_else(|| unicode_from_name(lookup).map(|n| n.to_string()))
-                                .and_then(|n| n.chars().next())
-                                .and_then(|c| subtable.map_codepoint(c))
-                                .filter(|g| *g != GlyphId::NOTDEF)
-                        });
-                    }
+            for subtable in subtables {
+                if subtable.platform() == CmapPlatform::Windows && subtable.encoding_id() == 1 {
+                    glyph = glyph.or_else(|| {
+                        glyph_names::get(lookup)
+                            .map(|n| n.to_string())
+                            .or_else(|| unicode_from_name(lookup).map(|n| n.to_string()))
+                            .and_then(|n| n.chars().next())
+                            .and_then(|c| subtable.map(u32::from(c)))
+                            .filter(|g| *g != GlyphId::NOTDEF)
+                    });
                 }
+            }
 
-                for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Macintosh
-                        && record.encoding_id() == 0
-                        && let Ok(subtable) = record.subtable(cmap.offset_data())
-                    {
-                        glyph = glyph.or_else(|| {
-                            mac_os_roman::get_inverse(lookup)
-                                .or_else(|| mac_roman::get_inverse(lookup))
-                                .and_then(|c| subtable.map_codepoint(c))
-                                .filter(|g| *g != GlyphId::NOTDEF)
-                        });
-                    }
+            for subtable in subtables {
+                if subtable.platform() == CmapPlatform::Macintosh && subtable.encoding_id() == 0 {
+                    glyph = glyph.or_else(|| {
+                        mac_os_roman::get_inverse(lookup)
+                            .or_else(|| mac_roman::get_inverse(lookup))
+                            .and_then(|c| subtable.map(u32::from(c)))
+                            .filter(|g| *g != GlyphId::NOTDEF)
+                    });
                 }
             }
 
             if glyph.is_none() {
-                if let Some(gid) = self.glyph_names.get(lookup) {
-                    glyph = Some(*gid);
+                if let Some(gid) = self.base_font.glyph_by_name(lookup) {
+                    glyph = Some(gid);
                 } else if let Some(gid) = glyph_num_string(lookup) {
                     glyph = Some(GlyphId::new(gid));
                 }
             }
-        } else if let Ok(cmap) = self.base_font.font_ref().cmap() {
-            for record in cmap.encoding_records() {
-                if record.platform_id() == PlatformId::Windows
-                    && matches!(record.encoding_id(), 0 | 1)
+        } else {
+            for subtable in subtables {
+                if subtable.platform() == CmapPlatform::Windows
+                    && matches!(subtable.encoding_id(), 0 | 1)
                 {
-                    if let Ok(subtable) = record.subtable(cmap.offset_data()) {
-                        for offset in [0x0000_u32, 0xF000, 0xF100, 0xF200] {
-                            glyph = glyph
-                                .or_else(|| subtable.map_codepoint(code as u32 + offset))
-                                .filter(|g| *g != GlyphId::NOTDEF);
-                        }
+                    for offset in [0x0000_u32, 0xF000, 0xF100, 0xF200] {
+                        glyph = glyph
+                            .or_else(|| subtable.map(u32::from(code) + offset))
+                            .filter(|g| *g != GlyphId::NOTDEF);
                     }
                 } else if matches!(
-                    record.platform_id(),
-                    PlatformId::Macintosh | PlatformId::Unicode
-                ) && record.encoding_id() == 0
-                    && let Ok(subtable) = record.subtable(cmap.offset_data())
+                    subtable.platform(),
+                    CmapPlatform::Macintosh | CmapPlatform::Unicode
+                ) && subtable.encoding_id() == 0
                 {
                     glyph = glyph
-                        .or_else(|| subtable.map_codepoint(code))
+                        .or_else(|| subtable.map(u32::from(code)))
                         .filter(|g| *g != GlyphId::NOTDEF);
                 }
             }
         }
 
-        let glyph = glyph.unwrap_or(GlyphId::NOTDEF);
-        self.cached_mappings.borrow_mut().insert(code, glyph);
-
-        glyph
+        glyph.unwrap_or(GlyphId::NOTDEF)
     }
 
     fn glyph_width(&self, code: u8) -> f32 {
@@ -378,7 +335,6 @@ impl EmbeddedKind {
             Some(Width::Missing) => self.missing_width,
             _ => self
                 .base_font
-                .glyph_metrics()
                 .advance_width(self.map_code(code))
                 .unwrap_or(0.0),
         }

@@ -47,12 +47,14 @@ pub(crate) fn append_text_string<'a>(
 
         if show_glyphs && ctx.ocg_state.is_visible() {
             let origin_displacement = font.origin_displacement(code);
+            let glyph_id = font.map_code(code);
             let transform = ctx.text_state().full_transform()
                 * Affine::scale(1.0 / UNITS_PER_EM as f64)
-                * Affine::translate(origin_displacement);
-            if let Some(glyph) = get_glyph(&font, font.map_code(code), code, ctx, resources) {
-                ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
-            }
+                * Affine::translate(origin_displacement)
+                * Affine::scale_non_uniform(font.glyph_stretch(glyph_id, code), 1.0);
+            let glyph = get_glyph(&font, glyph_id, code, ctx, resources);
+
+            ctx.glyph_scratch.push(PositionedGlyph { glyph, transform });
         }
 
         ctx.text_state_mut().apply_code_advance(code, adv);

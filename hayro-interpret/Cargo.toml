@@ -16,7 +16,6 @@ hayro-syntax = { workspace = true, features = ["std", "images", "unsafe"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 moxcms = { workspace = true, features = ["in_place"] }
-skrifa = { workspace = true }
 siphasher = { workspace = true }
 bitflags = { workspace = true }
 rustc-hash = { workspace = true }
