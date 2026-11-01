@@ -1,14 +1,17 @@
 use crate::FontData;
 use crate::GlyphId;
-use crate::UNITS_PER_EM;
-use kurbo::BezPath;
+use crate::{HintingCache, UNITS_PER_EM};
+use kurbo::{Affine, BezPath};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use skrifa::font::Kind;
 use skrifa::raw::model::attribute::Style;
 use skrifa::raw::model::charmap::Encoding;
 use skrifa::raw::ps::cff::CffFontRef;
 use skrifa::raw::{FontRef, TableProvider};
-use skrifa::{DrawMemory, Font, GlyphSource, GlyphSourceOrder, ScalerFont, Tag};
+use skrifa::{
+    DrawMemory, Font, GlyphSource, GlyphSourceOrder, HintOptions, OutlineSource, RasterTarget,
+    ScalerFont, Tag,
+};
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
@@ -162,6 +165,41 @@ impl FontProgram {
         self.sfnt()
             .and_then(|font| font.style_metrics().is_fixed_pitch)
             .unwrap_or(false)
+    }
+
+    pub(crate) fn hinted_outline(
+        &self,
+        glyph: GlyphId,
+        ppem: f32,
+        cache: &HintingCache,
+    ) -> Option<BezPath> {
+        // Fonts that need their instructions are drawn by `outline`, which runs them.
+        if self.font().is_hint_reliant() {
+            return None;
+        }
+
+        let scaler = cache.get_or_insert_with(self.content_hash(), ppem, || {
+            // Like FreeType's light hinting, TrueType outlines use the auto-hinter.
+            let options = match self.font().outline_glyphs().source() {
+                Some(OutlineSource::Glyf) => HintOptions::auto(),
+                _ => HintOptions::interpreter(),
+            };
+            let scaler = ScalerFont::hinted(
+                self.font().clone(),
+                ppem,
+                options.with_target(RasterTarget::Light),
+            );
+
+            scaler.is_hinted().then_some(scaler)
+        })?;
+
+        let mut path = OutlinePath::new();
+        scaler
+            .outline(glyph.to_skrifa())?
+            .draw(DrawMemory::Scratch, &mut path)
+            .ok()?;
+
+        Some(Affine::scale(f64::from(UNITS_PER_EM / ppem)) * path.take())
     }
 
     pub(crate) fn outline(&self, glyph: GlyphId) -> BezPath {

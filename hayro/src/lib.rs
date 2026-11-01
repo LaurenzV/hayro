@@ -38,7 +38,7 @@ use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
-use hayro_interpret::font::GlyphRun;
+use hayro_interpret::font::{GlyphRun, HintingCache};
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
@@ -69,12 +69,16 @@ mod paint;
 mod path;
 mod tiling;
 
+type OutlineCache = FxHashMap<(u128, u32), Option<Rc<BezPath>>>;
+
 pub(crate) struct GlobalState {
     level: Level,
-    outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    outline_cache: Rc<RefCell<OutlineCache>>,
+    hinting_cache: HintingCache,
     scaler: Scaler,
     force_image_interpolation: bool,
     aliasing_threshold: Option<u8>,
+    hinting: bool,
 }
 
 impl GlobalState {
@@ -82,9 +86,11 @@ impl GlobalState {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
+            hinting_cache: cache.hinting_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
             aliasing_threshold: settings.aliasing_threshold,
+            hinting: settings.hinting,
         }
     }
 }
@@ -190,7 +196,8 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 #[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
-    pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    pub(crate) outline_cache: Rc<RefCell<OutlineCache>>,
+    pub(crate) hinting_cache: HintingCache,
 }
 
 impl<'a> RenderCache<'a> {
@@ -199,12 +206,13 @@ impl<'a> RenderCache<'a> {
         Self {
             interpreter_cache: InterpreterCache::new(),
             outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            hinting_cache: HintingCache::new(),
         }
     }
 }
 
 /// Settings for rendering a page.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
@@ -213,6 +221,18 @@ pub struct RenderSettings {
     /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
     /// whose coverage exceeds the threshold.
     pub aliasing_threshold: Option<u8>,
+    /// Whether text should be hinted.
+    pub hinting: bool,
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            force_image_interpolation: false,
+            aliasing_threshold: None,
+            hinting: true,
+        }
+    }
 }
 
 /// Settings for the output pixmap.

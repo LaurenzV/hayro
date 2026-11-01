@@ -33,6 +33,7 @@ use kurbo::{BezPath, Vec2};
 use outline::OutlineFont;
 use program::FontProgram;
 use rustc_hash::FxHashMap;
+use skrifa::ScalerFont;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -273,6 +274,35 @@ impl<'a> FontCache<'a> {
     }
 }
 
+/// A cache for hinting font programs.
+#[derive(Clone, Default)]
+pub struct HintingCache(Rc<RefCell<HintedScalers>>);
+
+impl HintingCache {
+    /// Create a new, empty cache.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn get_or_insert_with(
+        &self,
+        program: u128,
+        ppem: f32,
+        f: impl FnOnce() -> Option<ScalerFont>,
+    ) -> Option<Rc<ScalerFont>> {
+        let key = (program, ppem.to_bits());
+
+        if let Some(scaler) = self.0.borrow().get(&key) {
+            return scaler.clone();
+        }
+
+        let scaler = f().map(Rc::new);
+        self.0.borrow_mut().insert(key, scaler.clone());
+
+        scaler
+    }
+}
+
 /// A glyph of a [`Font`].
 #[derive(Clone, Debug)]
 pub enum FontGlyph<'a> {
@@ -300,6 +330,15 @@ impl OutlineGlyph {
         } else {
             self.program.outline(self.id)
         }
+    }
+
+    /// Return the outline of the glyph hinted at `ppem`, or `None` if its font can't be hinted.
+    pub fn hinted_outline(&self, ppem: f32, cache: &HintingCache) -> Option<BezPath> {
+        if self.hidden {
+            return Some(BezPath::new());
+        }
+
+        self.program.hinted_outline(self.id, ppem, cache)
     }
 
     /// Return the identifier of the glyph. You can use this to calculate the cache key
@@ -543,6 +582,7 @@ struct FontCacheInner<'a> {
 }
 
 type ProgramMap = RefCell<FxHashMap<u128, Option<FontProgram>>>;
+type HintedScalers = FxHashMap<(u128, u32), Option<Rc<ScalerFont>>>;
 
 pub(crate) struct FontLoader<'l> {
     pub(crate) programs: ProgramLoader<'l>,
