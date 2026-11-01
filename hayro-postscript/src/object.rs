@@ -52,7 +52,14 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
             }
         }
         b'{' => procedure::parse(r).map(|d| Object::Procedure(Procedure::new(d))),
-        b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(Object::Number),
+        b'.' | b'+' | b'-' | b'0'..=b'9' => {
+            let token = name::parse_executable(r).ok_or(Error::SyntaxError)?;
+
+            match number::parse(token) {
+                Err(Error::SyntaxError) => Ok(Object::Name(Name::new(token, false))),
+                n => n.map(Object::Number),
+            }
+        }
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
@@ -110,6 +117,32 @@ mod tests {
     #[test]
     fn negative_integer() {
         assert_eq!(read_ok(b"-7 "), Object::Number(Number::Integer(-7)));
+    }
+
+    #[test]
+    fn number_like_names() {
+        for name in [
+            &b"-|"[..],
+            b"|-",
+            b"23A",
+            b"13-456",
+            b"-",
+            b"+",
+            b".",
+            b"1e",
+            b"-16#FF",
+            b"16#",
+            b"37#1",
+            b"8#9",
+        ] {
+            assert_eq!(read_ok(name), Object::Name(Name::new(name, false)));
+        }
+    }
+
+    #[test]
+    fn number_limitcheck() {
+        assert_eq!(read_err(b"16#10000000000000000 "), Error::LimitCheck);
+        assert_eq!(read_err(b"1e400 "), Error::LimitCheck);
     }
 
     #[test]

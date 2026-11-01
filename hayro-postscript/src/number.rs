@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::reader::{Reader, is_delimiter, is_whitespace};
+use crate::reader::Reader;
 use core::num::IntErrorKind;
 
 /// A PostScript number object (integer or real).
@@ -19,15 +19,8 @@ impl Number {
     }
 }
 
-fn is_terminated(r: &Reader<'_>) -> bool {
-    match r.peek_byte() {
-        None => true,
-        Some(b) => is_whitespace(b) || is_delimiter(b),
-    }
-}
-
-pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
-    let saved = r.offset();
+pub(crate) fn parse(token: &[u8]) -> Result<Number> {
+    let r = &mut Reader::new(token);
 
     // Optional sign.
     let first = r.peek_byte().ok_or(Error::SyntaxError)?;
@@ -58,12 +51,16 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
         let num_start = r.offset();
         r.forward_while(|b| b.is_ascii_alphanumeric());
 
-        if r.offset() == num_start || !is_terminated(r) {
+        if r.offset() == num_start || r.peek_byte().is_some() {
             return Err(Error::SyntaxError);
         }
 
         let num_bytes = r.range(num_start..r.offset()).ok_or(Error::SyntaxError)?;
         let num_str = core::str::from_utf8(num_bytes).map_err(|_| Error::SyntaxError)?;
+
+        if !num_str.chars().all(|c| c.is_digit(base)) {
+            return Err(Error::SyntaxError);
+        }
         let value = u64::from_str_radix(num_str, base).map_err(|e| match e.kind() {
             IntErrorKind::PosOverflow => Error::LimitCheck,
             _ => Error::SyntaxError,
@@ -97,11 +94,10 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
         r.forward_while(|b| b.is_ascii_digit());
     }
 
-    if !is_terminated(r) {
+    if r.peek_byte().is_some() {
         return Err(Error::SyntaxError);
     }
 
-    let token = r.range(saved..r.offset()).ok_or(Error::SyntaxError)?;
     let str = core::str::from_utf8(token).map_err(|_| Error::SyntaxError)?;
 
     if has_dot || has_exponent {
@@ -137,8 +133,7 @@ mod tests {
     use super::*;
 
     fn read_num(input: &[u8]) -> Result<Number> {
-        let mut r = Reader::new(input);
-        read(&mut r)
+        parse(input.trim_ascii_end())
     }
 
     #[test]
@@ -233,6 +228,10 @@ mod tests {
     fn radix_overflow() {
         assert_eq!(read_num(b"16#10000000000000000 "), Err(Error::LimitCheck));
         assert_eq!(read_num(b"8#9 "), Err(Error::SyntaxError));
+        assert_eq!(
+            read_num(b"16#FFFFFFFFFFFFFFFFFFZ "),
+            Err(Error::SyntaxError)
+        );
     }
 
     #[test]
