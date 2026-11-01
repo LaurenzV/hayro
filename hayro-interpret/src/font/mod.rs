@@ -111,12 +111,6 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     }
 }
 
-impl CacheKey for GlyphIdentifier {
-    fn cache_key(&self) -> u128 {
-        Self::cache_key(self)
-    }
-}
-
 /// A type3 glyph.
 #[derive(Clone)]
 pub struct Type3Glyph<'a> {
@@ -171,6 +165,12 @@ impl<'a> Type3Glyph<'a> {
 impl CacheKey for Type3Glyph<'_> {
     fn cache_key(&self) -> u128 {
         hash128(&(self.font.cache_key(), self.glyph_id, self.bbox.cache_key()))
+    }
+}
+
+impl CacheKey for GlyphIdentifier {
+    fn cache_key(&self) -> u128 {
+        Self::cache_key(self)
     }
 }
 

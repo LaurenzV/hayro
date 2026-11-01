@@ -130,18 +130,6 @@ enum Kind {
     Type1(Type1Kind),
 }
 
-fn is_cff(dict: &Dict<'_>) -> bool {
-    dict.get::<Dict<'_>>(FONT_DESC)
-        .map(|dict| dict.contains_key(FONT_FILE3))
-        .unwrap_or(false)
-}
-
-fn is_type1(dict: &Dict<'_>) -> bool {
-    dict.get::<Dict<'_>>(FONT_DESC)
-        .map(|dict| dict.contains_key(FONT_FILE))
-        .unwrap_or(false)
-}
-
 #[derive(Debug)]
 struct Type1Kind {
     font: Type1FontBlob,
@@ -334,4 +322,16 @@ impl CffKind {
         self.code_to_ps_name(code)
             .and_then(|name| glyph_name_to_unicode(name, is_zapf_dingbats))
     }
+}
+
+fn is_cff(dict: &Dict<'_>) -> bool {
+    dict.get::<Dict<'_>>(FONT_DESC)
+        .map(|dict| dict.contains_key(FONT_FILE3))
+        .unwrap_or(false)
+}
+
+fn is_type1(dict: &Dict<'_>) -> bool {
+    dict.get::<Dict<'_>>(FONT_DESC)
+        .map(|dict| dict.contains_key(FONT_FILE))
+        .unwrap_or(false)
 }

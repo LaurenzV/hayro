@@ -50,6 +50,60 @@ pub enum StandardFont {
 }
 
 impl StandardFont {
+    /// Return the postscrit name of the font.
+    pub fn postscript_name(&self) -> &'static str {
+        match self {
+            Self::Helvetica => "Helvetica",
+            Self::HelveticaBold => "Helvetica-Bold",
+            Self::HelveticaOblique => "Helvetica-Oblique",
+            Self::HelveticaBoldOblique => "Helvetica-BoldOblique",
+            Self::Courier => "Courier",
+            Self::CourierBold => "Courier-Bold",
+            Self::CourierOblique => "Courier-Oblique",
+            Self::CourierBoldOblique => "Courier-BoldOblique",
+            Self::TimesRoman => "Times-Roman",
+            Self::TimesBold => "Times-Bold",
+            Self::TimesItalic => "Times-Italic",
+            Self::TimesBoldItalic => "Times-BoldItalic",
+            Self::ZapfDingBats => "ZapfDingbats",
+            Self::Symbol => "Symbol",
+        }
+    }
+
+    /// Return suitable font data for the given standard font.
+    ///
+    /// Currently, this will return the corresponding Foxit font, which is a set of permissibly
+    /// licensed fonts that is also very light-weight.
+    ///
+    /// You can use the result of this method in your implementation of [`FontResolverFn`].
+    ///
+    /// [`FontResolverFn`]: crate::FontResolverFn
+    #[cfg(feature = "embed-fonts")]
+    pub fn get_font_data(&self) -> (FontData, u32) {
+        use std::sync::Arc;
+
+        let data = match self {
+            Self::Helvetica => &include_bytes!("../assets/FoxitSans.pfb")[..],
+            Self::HelveticaBold => &include_bytes!("../assets/FoxitSansBold.pfb")[..],
+            Self::HelveticaOblique => &include_bytes!("../assets/FoxitSansItalic.pfb")[..],
+            Self::HelveticaBoldOblique => &include_bytes!("../assets/FoxitSansBoldItalic.pfb")[..],
+            Self::Courier => &include_bytes!("../assets/FoxitFixed.pfb")[..],
+            Self::CourierBold => &include_bytes!("../assets/FoxitFixedBold.pfb")[..],
+            Self::CourierOblique => &include_bytes!("../assets/FoxitFixedItalic.pfb")[..],
+            Self::CourierBoldOblique => &include_bytes!("../assets/FoxitFixedBoldItalic.pfb")[..],
+            Self::TimesRoman => &include_bytes!("../assets/FoxitSerif.pfb")[..],
+            Self::TimesBold => &include_bytes!("../assets/FoxitSerifBold.pfb")[..],
+            Self::TimesItalic => &include_bytes!("../assets/FoxitSerifItalic.pfb")[..],
+            Self::TimesBoldItalic => &include_bytes!("../assets/FoxitSerifBoldItalic.pfb")[..],
+            Self::ZapfDingBats => &include_bytes!("../assets/FoxitDingbats.pfb")[..],
+            Self::Symbol => {
+                include_bytes!("../assets/FoxitSymbol.pfb")
+            }
+        };
+
+        (Arc::new(data), 0)
+    }
+
     pub(crate) fn code_to_name(&self, code: u8) -> Option<&'static str> {
         match self {
             Self::Symbol => symbol::get(code),
@@ -83,26 +137,6 @@ impl StandardFont {
             Self::TimesBoldItalic => metrics::TIMES_BOLD_ITALIC.get(name).copied(),
             Self::ZapfDingBats => metrics::ZAPF_DING_BATS.get(name).copied(),
             Self::Symbol => metrics::SYMBOL.get(name).copied(),
-        }
-    }
-
-    /// Return the postscrit name of the font.
-    pub fn postscript_name(&self) -> &'static str {
-        match self {
-            Self::Helvetica => "Helvetica",
-            Self::HelveticaBold => "Helvetica-Bold",
-            Self::HelveticaOblique => "Helvetica-Oblique",
-            Self::HelveticaBoldOblique => "Helvetica-BoldOblique",
-            Self::Courier => "Courier",
-            Self::CourierBold => "Courier-Bold",
-            Self::CourierOblique => "Courier-Oblique",
-            Self::CourierBoldOblique => "Courier-BoldOblique",
-            Self::TimesRoman => "Times-Roman",
-            Self::TimesBold => "Times-Bold",
-            Self::TimesItalic => "Times-Italic",
-            Self::TimesBoldItalic => "Times-BoldItalic",
-            Self::ZapfDingBats => "ZapfDingbats",
-            Self::Symbol => "Symbol",
         }
     }
 
@@ -142,186 +176,6 @@ impl StandardFont {
             self,
             Self::Courier | Self::CourierBold | Self::CourierOblique | Self::CourierBoldOblique
         )
-    }
-
-    /// Return suitable font data for the given standard font.
-    ///
-    /// Currently, this will return the corresponding Foxit font, which is a set of permissibly
-    /// licensed fonts that is also very light-weight.
-    ///
-    /// You can use the result of this method in your implementation of [`FontResolverFn`].
-    ///
-    /// [`FontResolverFn`]: crate::FontResolverFn
-    #[cfg(feature = "embed-fonts")]
-    pub fn get_font_data(&self) -> (FontData, u32) {
-        use std::sync::Arc;
-
-        let data = match self {
-            Self::Helvetica => &include_bytes!("../assets/FoxitSans.pfb")[..],
-            Self::HelveticaBold => &include_bytes!("../assets/FoxitSansBold.pfb")[..],
-            Self::HelveticaOblique => &include_bytes!("../assets/FoxitSansItalic.pfb")[..],
-            Self::HelveticaBoldOblique => &include_bytes!("../assets/FoxitSansBoldItalic.pfb")[..],
-            Self::Courier => &include_bytes!("../assets/FoxitFixed.pfb")[..],
-            Self::CourierBold => &include_bytes!("../assets/FoxitFixedBold.pfb")[..],
-            Self::CourierOblique => &include_bytes!("../assets/FoxitFixedItalic.pfb")[..],
-            Self::CourierBoldOblique => &include_bytes!("../assets/FoxitFixedBoldItalic.pfb")[..],
-            Self::TimesRoman => &include_bytes!("../assets/FoxitSerif.pfb")[..],
-            Self::TimesBold => &include_bytes!("../assets/FoxitSerifBold.pfb")[..],
-            Self::TimesItalic => &include_bytes!("../assets/FoxitSerifItalic.pfb")[..],
-            Self::TimesBoldItalic => &include_bytes!("../assets/FoxitSerifBoldItalic.pfb")[..],
-            Self::ZapfDingBats => &include_bytes!("../assets/FoxitDingbats.pfb")[..],
-            Self::Symbol => {
-                include_bytes!("../assets/FoxitSymbol.pfb")
-            }
-        };
-
-        (Arc::new(data), 0)
-    }
-}
-
-enum StandardFontFamily {
-    Helvetica,
-    Courier,
-    Times,
-}
-
-pub(crate) fn select_standard_font(
-    dict: &Dict<'_>,
-    descriptor: &Dict<'_>,
-) -> Option<(StandardFont, bool)> {
-    let base_font = dict.get::<Name<'_>>(BASE_FONT)?;
-    let name = strip_subset_prefix(base_font.as_str());
-
-    // First try whether it matches literally.
-    match name {
-        "Helvetica" => return Some((StandardFont::Helvetica, true)),
-        "Helvetica-Bold" => return Some((StandardFont::HelveticaBold, true)),
-        "Helvetica-Oblique" => return Some((StandardFont::HelveticaOblique, true)),
-        "Helvetica-BoldOblique" => return Some((StandardFont::HelveticaBoldOblique, true)),
-        "Courier" => return Some((StandardFont::Courier, true)),
-        "Courier-Bold" => return Some((StandardFont::CourierBold, true)),
-        "Courier-Oblique" => return Some((StandardFont::CourierOblique, true)),
-        "Courier-BoldOblique" => return Some((StandardFont::CourierBoldOblique, true)),
-        "Times-Roman" => return Some((StandardFont::TimesRoman, true)),
-        "Times-Bold" => return Some((StandardFont::TimesBold, true)),
-        "Times-Italic" => return Some((StandardFont::TimesItalic, true)),
-        "Times-BoldItalic" => return Some((StandardFont::TimesBoldItalic, true)),
-        "Symbol" => return Some((StandardFont::Symbol, true)),
-        "ZapfDingbats" => return Some((StandardFont::ZapfDingBats, true)),
-        _ => {}
-    }
-
-    // Now, we bruteforce, trying to determine a suitable font based on the
-    // keywords that appear in the name.
-    let lower = name.to_ascii_lowercase();
-
-    let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
-        || lower.contains("bold")
-        || lower.contains("demi");
-    let is_italic = descriptor
-        .get::<f32>(ITALIC_ANGLE)
-        .is_some_and(|a| a != 0.0)
-        || lower.contains("italic")
-        || lower.contains("oblique");
-
-    let (family, exact) = if lower.contains("helvetica") {
-        (Some(StandardFontFamily::Helvetica), true)
-    } else if lower.contains("arial") || lower.contains("sans") {
-        (Some(StandardFontFamily::Helvetica), false)
-    } else if lower.contains("courier") {
-        (Some(StandardFontFamily::Courier), true)
-    } else if lower.contains("mono") {
-        (Some(StandardFontFamily::Courier), false)
-    } else if lower.contains("times") {
-        (Some(StandardFontFamily::Times), true)
-    } else if lower.contains("serif") {
-        (Some(StandardFontFamily::Times), false)
-    } else if lower.contains("zapfdingbats") || lower.contains("dingbats") {
-        return Some((StandardFont::ZapfDingBats, false));
-    } else {
-        (None, false)
-    };
-
-    let font = match (family?, is_bold, is_italic) {
-        (StandardFontFamily::Helvetica, false, false) => StandardFont::Helvetica,
-        (StandardFontFamily::Helvetica, true, false) => StandardFont::HelveticaBold,
-        (StandardFontFamily::Helvetica, false, true) => StandardFont::HelveticaOblique,
-        (StandardFontFamily::Helvetica, true, true) => StandardFont::HelveticaBoldOblique,
-        (StandardFontFamily::Courier, false, false) => StandardFont::Courier,
-        (StandardFontFamily::Courier, true, false) => StandardFont::CourierBold,
-        (StandardFontFamily::Courier, false, true) => StandardFont::CourierOblique,
-        (StandardFontFamily::Courier, true, true) => StandardFont::CourierBoldOblique,
-        (StandardFontFamily::Times, false, false) => StandardFont::TimesRoman,
-        (StandardFontFamily::Times, true, false) => StandardFont::TimesBold,
-        (StandardFontFamily::Times, false, true) => StandardFont::TimesItalic,
-        (StandardFontFamily::Times, true, true) => StandardFont::TimesBoldItalic,
-    };
-
-    Some((font, exact))
-}
-
-#[derive(Debug)]
-pub(crate) enum StandardFontBlob {
-    Cff(CffFontBlob),
-    Otf(OpenTypeFontBlob, FxHashMap<String, GlyphId>),
-}
-
-impl StandardFontBlob {
-    pub(crate) fn from_data(data: FontData, index: u32) -> Option<Self> {
-        if let Some(blob) = CffFontBlob::new(data.clone()) {
-            Some(Self::new_cff(blob))
-        } else {
-            OpenTypeFontBlob::new(data, index).map(Self::new_otf)
-        }
-    }
-
-    pub(crate) fn new_cff(blob: CffFontBlob) -> Self {
-        Self::Cff(blob)
-    }
-
-    pub(crate) fn new_otf(blob: OpenTypeFontBlob) -> Self {
-        let glyph_names = blob.glyph_names();
-        Self::Otf(blob, glyph_names)
-    }
-}
-
-impl StandardFontBlob {
-    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
-        match self {
-            Self::Cff(blob) => blob.glyph_index_by_name(name),
-            Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
-        }
-    }
-
-    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<GlyphId> {
-        match self {
-            Self::Cff(_) => None,
-            Self::Otf(blob, _) => blob
-                .font_ref()
-                .cmap()
-                .ok()
-                .and_then(|c| c.map_codepoint(code)),
-        }
-    }
-
-    pub(crate) fn advance_width(&self, glyph: GlyphId) -> Option<f32> {
-        match self {
-            Self::Cff(_) => None,
-            Self::Otf(blob, _) => blob.glyph_metrics().advance_width(glyph),
-        }
-    }
-
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        // Standard fonts have empty outlines for these, but in Liberation Sans
-        // they are a .notdef rectangle.
-        if glyph == GlyphId::NOTDEF {
-            return BezPath::new();
-        }
-
-        match self {
-            Self::Cff(blob) => blob.outline_glyph(glyph),
-            Self::Otf(blob, _) => blob.outline_glyph(glyph),
-        }
     }
 }
 
@@ -483,4 +337,148 @@ impl StandardKind {
     pub(crate) fn is_monospace(&self) -> bool {
         self.base_font.is_monospace()
     }
+}
+
+#[derive(Debug)]
+pub(crate) enum StandardFontBlob {
+    Cff(CffFontBlob),
+    Otf(OpenTypeFontBlob, FxHashMap<String, GlyphId>),
+}
+
+impl StandardFontBlob {
+    pub(crate) fn from_data(data: FontData, index: u32) -> Option<Self> {
+        if let Some(blob) = CffFontBlob::new(data.clone()) {
+            Some(Self::new_cff(blob))
+        } else {
+            OpenTypeFontBlob::new(data, index).map(Self::new_otf)
+        }
+    }
+
+    pub(crate) fn new_cff(blob: CffFontBlob) -> Self {
+        Self::Cff(blob)
+    }
+
+    pub(crate) fn new_otf(blob: OpenTypeFontBlob) -> Self {
+        let glyph_names = blob.glyph_names();
+        Self::Otf(blob, glyph_names)
+    }
+
+    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
+        match self {
+            Self::Cff(blob) => blob.glyph_index_by_name(name),
+            Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
+        }
+    }
+
+    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<GlyphId> {
+        match self {
+            Self::Cff(_) => None,
+            Self::Otf(blob, _) => blob
+                .font_ref()
+                .cmap()
+                .ok()
+                .and_then(|c| c.map_codepoint(code)),
+        }
+    }
+
+    pub(crate) fn advance_width(&self, glyph: GlyphId) -> Option<f32> {
+        match self {
+            Self::Cff(_) => None,
+            Self::Otf(blob, _) => blob.glyph_metrics().advance_width(glyph),
+        }
+    }
+
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+        // Standard fonts have empty outlines for these, but in Liberation Sans
+        // they are a .notdef rectangle.
+        if glyph == GlyphId::NOTDEF {
+            return BezPath::new();
+        }
+
+        match self {
+            Self::Cff(blob) => blob.outline_glyph(glyph),
+            Self::Otf(blob, _) => blob.outline_glyph(glyph),
+        }
+    }
+}
+
+pub(crate) fn select_standard_font(
+    dict: &Dict<'_>,
+    descriptor: &Dict<'_>,
+) -> Option<(StandardFont, bool)> {
+    let base_font = dict.get::<Name<'_>>(BASE_FONT)?;
+    let name = strip_subset_prefix(base_font.as_str());
+
+    // First try whether it matches literally.
+    match name {
+        "Helvetica" => return Some((StandardFont::Helvetica, true)),
+        "Helvetica-Bold" => return Some((StandardFont::HelveticaBold, true)),
+        "Helvetica-Oblique" => return Some((StandardFont::HelveticaOblique, true)),
+        "Helvetica-BoldOblique" => return Some((StandardFont::HelveticaBoldOblique, true)),
+        "Courier" => return Some((StandardFont::Courier, true)),
+        "Courier-Bold" => return Some((StandardFont::CourierBold, true)),
+        "Courier-Oblique" => return Some((StandardFont::CourierOblique, true)),
+        "Courier-BoldOblique" => return Some((StandardFont::CourierBoldOblique, true)),
+        "Times-Roman" => return Some((StandardFont::TimesRoman, true)),
+        "Times-Bold" => return Some((StandardFont::TimesBold, true)),
+        "Times-Italic" => return Some((StandardFont::TimesItalic, true)),
+        "Times-BoldItalic" => return Some((StandardFont::TimesBoldItalic, true)),
+        "Symbol" => return Some((StandardFont::Symbol, true)),
+        "ZapfDingbats" => return Some((StandardFont::ZapfDingBats, true)),
+        _ => {}
+    }
+
+    // Now, we bruteforce, trying to determine a suitable font based on the
+    // keywords that appear in the name.
+    let lower = name.to_ascii_lowercase();
+
+    let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
+        || lower.contains("bold")
+        || lower.contains("demi");
+    let is_italic = descriptor
+        .get::<f32>(ITALIC_ANGLE)
+        .is_some_and(|a| a != 0.0)
+        || lower.contains("italic")
+        || lower.contains("oblique");
+
+    let (family, exact) = if lower.contains("helvetica") {
+        (Some(StandardFontFamily::Helvetica), true)
+    } else if lower.contains("arial") || lower.contains("sans") {
+        (Some(StandardFontFamily::Helvetica), false)
+    } else if lower.contains("courier") {
+        (Some(StandardFontFamily::Courier), true)
+    } else if lower.contains("mono") {
+        (Some(StandardFontFamily::Courier), false)
+    } else if lower.contains("times") {
+        (Some(StandardFontFamily::Times), true)
+    } else if lower.contains("serif") {
+        (Some(StandardFontFamily::Times), false)
+    } else if lower.contains("zapfdingbats") || lower.contains("dingbats") {
+        return Some((StandardFont::ZapfDingBats, false));
+    } else {
+        (None, false)
+    };
+
+    let font = match (family?, is_bold, is_italic) {
+        (StandardFontFamily::Helvetica, false, false) => StandardFont::Helvetica,
+        (StandardFontFamily::Helvetica, true, false) => StandardFont::HelveticaBold,
+        (StandardFontFamily::Helvetica, false, true) => StandardFont::HelveticaOblique,
+        (StandardFontFamily::Helvetica, true, true) => StandardFont::HelveticaBoldOblique,
+        (StandardFontFamily::Courier, false, false) => StandardFont::Courier,
+        (StandardFontFamily::Courier, true, false) => StandardFont::CourierBold,
+        (StandardFontFamily::Courier, false, true) => StandardFont::CourierOblique,
+        (StandardFontFamily::Courier, true, true) => StandardFont::CourierBoldOblique,
+        (StandardFontFamily::Times, false, false) => StandardFont::TimesRoman,
+        (StandardFontFamily::Times, true, false) => StandardFont::TimesBold,
+        (StandardFontFamily::Times, false, true) => StandardFont::TimesItalic,
+        (StandardFontFamily::Times, true, true) => StandardFont::TimesBoldItalic,
+    };
+
+    Some((font, exact))
+}
+
+enum StandardFontFamily {
+    Helvetica,
+    Courier,
+    Times,
 }

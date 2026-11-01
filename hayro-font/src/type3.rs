@@ -62,17 +62,20 @@ impl<'a> Type3Font<'a> {
         })
     }
 
-    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
-        self.code_to_ps_name(code)
-            .map(|g| self.glyph_simulator.string_to_glyph(g))
-            .unwrap_or(GlyphId::NOTDEF)
+    /// Return the font matrix.
+    pub fn matrix(&self) -> Affine {
+        self.matrix
     }
 
-    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
-        self.encodings
-            .get(&code)
-            .map(|s| s.as_str())
-            .or_else(|| self.encoding.map_code(code))
+    /// Return the content stream that draws a glyph.
+    pub fn glyph_program(&self, glyph: GlyphId) -> Option<&Stream<'a>> {
+        let name = self.glyph_simulator.glyph_to_string(glyph)?;
+        self.char_procs.get(&name)
+    }
+
+    /// Return the resources of the font.
+    pub fn resources(&self) -> Option<Dict<'a>> {
+        self.dict.get(RESOURCES)
     }
 
     /// Return the advance width of a character code, scaled to [`UNITS_PER_EM`].
@@ -103,24 +106,21 @@ impl<'a> Type3Font<'a> {
             .and_then(|name| glyph_name_to_unicode(name, false))
     }
 
-    /// Return the font matrix.
-    pub fn matrix(&self) -> Affine {
-        self.matrix
-    }
-
-    /// Return the content stream that draws a glyph.
-    pub fn glyph_program(&self, glyph: GlyphId) -> Option<&Stream<'a>> {
-        let name = self.glyph_simulator.glyph_to_string(glyph)?;
-        self.char_procs.get(&name)
-    }
-
-    /// Return the resources of the font.
-    pub fn resources(&self) -> Option<Dict<'a>> {
-        self.dict.get(RESOURCES)
-    }
-
     /// Return the cache key of the font.
     pub fn cache_key(&self) -> u128 {
         self.dict.cache_key()
+    }
+
+    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+        self.code_to_ps_name(code)
+            .map(|g| self.glyph_simulator.string_to_glyph(g))
+            .unwrap_or(GlyphId::NOTDEF)
+    }
+
+    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
+        self.encodings
+            .get(&code)
+            .map(|s| s.as_str())
+            .or_else(|| self.encoding.map_code(code))
     }
 }
