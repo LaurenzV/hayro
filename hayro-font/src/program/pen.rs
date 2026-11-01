@@ -1,5 +1,5 @@
 use kurbo::BezPath;
-use skrifa::outline::OutlinePen;
+use skrifa::PathSink;
 
 pub(crate) struct OutlinePath(BezPath);
 
@@ -13,7 +13,7 @@ impl OutlinePath {
     }
 }
 
-impl OutlinePen for OutlinePath {
+impl PathSink for OutlinePath {
     #[inline]
     fn move_to(&mut self, x: f32, y: f32) {
         self.0.move_to((x, y));
