@@ -1,4 +1,3 @@
-use crate::array::{self, Array};
 use crate::error::{Error, Result};
 use crate::name::{self, Name};
 use crate::number::{self, Number};
@@ -14,8 +13,6 @@ pub enum Object<'a> {
     Name(Name<'a>),
     /// A string object.
     String(String<'a>),
-    /// An array object.
-    Array(Array<'a>),
 }
 
 pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
@@ -33,7 +30,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                     .map(|s| Object::String(String::from_ascii85(s)))
                     .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
-                read_dict_delimiter(r)
+                read_delimiter_name(r, 2)
             } else {
                 string::parse_hex(r)
                     .map(|s| Object::String(String::from_hex(s)))
@@ -43,10 +40,10 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
         b'/' => name::parse_literal(r)
             .map(|s| Object::Name(Name::new(s, true)))
             .ok_or(Error::SyntaxError),
-        b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
+        b'[' | b']' => read_delimiter_name(r, 1),
         b'>' => {
             if r.peek_bytes(2) == Some(b">>") {
-                read_dict_delimiter(r)
+                read_delimiter_name(r, 2)
             } else {
                 Err(Error::SyntaxError)
             }
@@ -62,8 +59,8 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
     }
 }
 
-fn read_dict_delimiter<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
-    r.read_bytes(2)
+fn read_delimiter_name<'a>(r: &mut Reader<'a>, len: usize) -> Result<Object<'a>> {
+    r.read_bytes(len)
         .map(|s| Object::Name(Name::new(s, false)))
         .ok_or(Error::SyntaxError)
 }
@@ -154,9 +151,13 @@ mod tests {
     }
 
     #[test]
-    fn array_simple() {
-        let obj = read_ok(b"[1 2 3]");
-        assert_eq!(obj, Object::Array(Array::new(b"1 2 3")));
+    fn array_delimiters() {
+        let mut r = Reader::new(b"[1]]");
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"[", false))));
+        assert_eq!(read(&mut r), Ok(Object::Number(Number::Integer(1))));
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"]", false))));
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"]", false))));
+        assert!(at_end(&mut r));
     }
 
     #[test]
@@ -182,11 +183,6 @@ mod tests {
         while !at_end(&mut r) {
             assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"<<", false))));
         }
-    }
-
-    #[test]
-    fn stray_close_bracket() {
-        assert_eq!(read_err(b"]"), Error::SyntaxError);
     }
 
     #[test]

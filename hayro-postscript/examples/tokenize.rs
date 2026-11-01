@@ -54,21 +54,5 @@ fn print_object(object: &Object<'_>) {
             let decoded = s.decode().unwrap_or_else(|_| Vec::new());
             print!("String({})", String::from_utf8_lossy(&decoded));
         }
-        Object::Array(arr) => {
-            print!("[");
-            let mut inner = arr.objects();
-            let mut first = true;
-            while !inner.at_end() {
-                if !first {
-                    print!(" ");
-                }
-                first = false;
-                match inner.parse_object() {
-                    Ok(obj) => print_object(&obj),
-                    Err(e) => print!("Error({e})"),
-                }
-            }
-            print!("]");
-        }
     }
 }

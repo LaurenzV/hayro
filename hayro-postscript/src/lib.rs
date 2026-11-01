@@ -6,10 +6,10 @@ It currently only implements a very small subset of the PostScript language,
 with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
-The supported types include integers and real numbers, name objects, strings and arrays.
-The `<<` and `>>` tokens are returned as executable names, so that the caller can
-construct dictionaries if needed. Unsupported is anything else, including procedures.
-An error will be returned in case any of these is encountered.
+The supported types include integers and real numbers, name objects and strings. The
+`[`, `]`, `<<` and `>>` tokens are returned as executable names, so that the caller can
+construct arrays and dictionaries if needed. Unsupported is anything else, including
+procedures. An error will be returned in case any of these is encountered.
 
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
@@ -21,7 +21,6 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
-mod array;
 mod error;
 mod name;
 mod number;
@@ -29,7 +28,6 @@ mod object;
 mod reader;
 mod string;
 
-pub use array::Array;
 pub use error::{Error, Result};
 pub use name::Name;
 pub use number::Number;
@@ -81,14 +79,6 @@ impl<'a> Scanner<'a> {
     pub fn parse_string(&mut self) -> Result<String<'a>> {
         match self.parse_object()? {
             Object::String(s) => Ok(s),
-            _ => Err(Error::SyntaxError),
-        }
-    }
-
-    /// Parse the next object as an [`Array`].
-    pub fn parse_array(&mut self) -> Result<Array<'a>> {
-        match self.parse_object()? {
-            Object::Array(a) => Ok(a),
             _ => Err(Error::SyntaxError),
         }
     }
@@ -149,17 +139,18 @@ endcmap"#;
     }
 
     #[test]
-    fn array_round_trip() {
-        let input = b"[123 /abc (xyz)]";
-        let mut scanner = Scanner::new(input);
-        let arr = scanner.parse_array().unwrap();
-        assert!(scanner.at_end());
+    fn array_tokens() {
+        let mut scanner = Scanner::new(b"[123 /abc (xyz)]");
 
-        let mut inner = arr.objects();
-        assert_eq!(inner.parse_number().unwrap(), Number::Integer(123));
-        assert_eq!(inner.parse_name().unwrap(), Name::new(b"abc", true));
-        assert_eq!(inner.parse_string().unwrap(), String::from_literal(b"xyz"));
-        assert!(inner.at_end());
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b"[", false));
+        assert_eq!(scanner.parse_number().unwrap(), Number::Integer(123));
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b"abc", true));
+        assert_eq!(
+            scanner.parse_string().unwrap(),
+            String::from_literal(b"xyz")
+        );
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b"]", false));
+        assert!(scanner.at_end());
     }
 
     #[test]
