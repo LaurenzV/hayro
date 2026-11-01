@@ -55,6 +55,11 @@ impl<'a> Scanner<'a> {
         self.reader.offset()
     }
 
+    /// Move the scanner to a byte offset into the data it was created with.
+    pub fn set_offset(&mut self, offset: usize) {
+        self.reader.jump(offset);
+    }
+
     /// Returns `true` if there are no more tokens to parse.
     pub fn at_end(&mut self) -> bool {
         token::at_end(&mut self.reader)
@@ -226,6 +231,32 @@ endcmap"#;
         assert_eq!(scanner.parse_name(), Ok(Name::new(b"dict", false)));
         assert_eq!(scanner.parse_name(), Ok(Name::new(b"eexec", false)));
         assert_eq!(scanner.offset(), input.len() - 3);
+    }
+
+    #[test]
+    fn set_offset_skips_binary_data() {
+        let input = b"dup 0 4 RD {(<% NP";
+        let mut scanner = Scanner::new(input);
+
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"dup", false)));
+        assert_eq!(scanner.parse_number(), Ok(Number::Integer(0)));
+        assert_eq!(scanner.parse_number(), Ok(Number::Integer(4)));
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"RD", false)));
+
+        let start = scanner.offset() + 1;
+        assert_eq!(&input[start..start + 4], b"{(<%");
+
+        scanner.set_offset(start + 4);
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"NP", false)));
+        assert!(scanner.at_end());
+    }
+
+    #[test]
+    fn set_offset_past_end() {
+        let mut scanner = Scanner::new(b"1 2");
+        scanner.set_offset(10);
+        assert!(scanner.at_end());
+        assert!(scanner.parse_token().is_err());
     }
 
     #[test]
