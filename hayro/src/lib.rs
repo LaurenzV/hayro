@@ -82,6 +82,7 @@ pub(crate) struct GlobalState {
     force_image_interpolation: bool,
     aliasing_threshold: Option<u8>,
     hinting: bool,
+    glyph_caching: bool,
 }
 
 impl GlobalState {
@@ -95,6 +96,7 @@ impl GlobalState {
             force_image_interpolation: settings.force_image_interpolation,
             aliasing_threshold: settings.aliasing_threshold,
             hinting: settings.hinting,
+            glyph_caching: settings.glyph_caching,
         }
     }
 }
@@ -230,6 +232,8 @@ pub struct RenderSettings {
     pub aliasing_threshold: Option<u8>,
     /// Whether text should be hinted.
     pub hinting: bool,
+    /// Whether rasterized glyphs should be cached and reused.
+    pub glyph_caching: bool,
 }
 
 impl Default for RenderSettings {
@@ -238,6 +242,7 @@ impl Default for RenderSettings {
             force_image_interpolation: false,
             aliasing_threshold: None,
             hinting: true,
+            glyph_caching: true,
         }
     }
 }

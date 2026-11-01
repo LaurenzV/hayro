@@ -200,7 +200,8 @@ impl Renderer<'_> {
                 let color = color.to_rgba().to_rgba8();
                 let color = AlphaColor::from_rgba8(color[0], color[1], color[2], color[3]);
                 let hint = self.hint(glyph_run);
-                let use_cache = self.global.aliasing_threshold.is_none()
+                let use_cache = self.global.glyph_caching
+                    && self.global.aliasing_threshold.is_none()
                     && glyph_run.writing_mode() == WritingMode::Horizontal;
                 let clip_path = self.begin_fill_run(props, Rect::ZERO);
                 for glyph in glyph_run.glyphs() {
