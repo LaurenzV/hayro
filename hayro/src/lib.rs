@@ -187,7 +187,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple render invocations on the same document.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
     pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
