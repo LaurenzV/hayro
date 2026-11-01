@@ -1,6 +1,6 @@
 //! Reading bytes and PDF objects from data.
 
-use crate::budget::ParseBudget;
+use crate::budget::BudgetRef;
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
 use crate::trivia::{Comment, is_white_space_character};
@@ -38,7 +38,6 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     #[inline]
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
         let old_offset = self.offset;
-        self.attach_budget(ctx.budget());
 
         T::read(self, ctx).or_else(|| {
             self.offset = old_offset;
@@ -129,7 +128,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 #[derive(Clone)]
 struct ReaderContextData<'a> {
     xref: &'a XRef,
-    budget: Option<&'a dyn ParseBudget>,
+    budget: Option<&'a BudgetRef<'a>>,
     in_content_stream: bool,
     in_object_stream: bool,
     obj_number: Option<ObjectIdentifier>,
@@ -178,7 +177,7 @@ impl<'a> ReaderContext<'a> {
     }
 
     /// A context without a document, whose reads charge `budget`.
-    pub fn with_budget(budget: Option<&'a dyn ParseBudget>) -> Self {
+    pub fn with_budget(budget: Option<&'a BudgetRef<'a>>) -> Self {
         match budget {
             None => Self::dummy(),
             Some(budget) => Self(ReaderContextInner::Shared(Arc::new(ReaderContextData {
@@ -200,7 +199,7 @@ impl<'a> ReaderContext<'a> {
 
     /// The budget that reads in this context charge, if any.
     #[inline]
-    pub(crate) fn budget(&self) -> Option<&'a dyn ParseBudget> {
+    pub(crate) fn budget(&self) -> Option<&'a BudgetRef<'a>> {
         match &self.0 {
             ReaderContextInner::Shared(inner) => inner.budget,
             ReaderContextInner::Dummy { .. } => None,
@@ -285,10 +284,7 @@ pub trait Readable<'a>: Sized {
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
         Self::from_bytes_with_budget_impl(b, None)
     }
-    fn from_bytes_with_budget_impl(
-        b: &'a [u8],
-        budget: Option<&'a dyn ParseBudget>,
-    ) -> Option<Self> {
+    fn from_bytes_with_budget_impl(b: &'a [u8], budget: Option<&'a BudgetRef<'a>>) -> Option<Self> {
         let mut r = Reader::new_with_budget(b, budget);
         Self::read(&mut r, &ReaderContext::with_budget(budget))
     }

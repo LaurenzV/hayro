@@ -47,9 +47,35 @@ pub trait ParseBudget: Sync {
     fn exhausted(&self) -> bool;
 }
 
+/// A reference to a budget, which readers hold by a thin pointer so that a
+/// reader without a budget stays small.
+#[derive(Copy, Clone)]
+pub struct BudgetRef<'a>(&'a dyn ParseBudget);
+
+impl<'a> BudgetRef<'a> {
+    /// Refers to `budget`.
+    pub fn new(budget: &'a dyn ParseBudget) -> Self {
+        Self(budget)
+    }
+}
+
+impl<'a> core::ops::Deref for BudgetRef<'a> {
+    type Target = dyn ParseBudget + 'a;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl core::fmt::Debug for BudgetRef<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("BudgetRef")
+    }
+}
+
 /// Charges `bytes` to `budget`, if any, before an allocation.
 #[inline]
-pub(crate) fn allocate(budget: Option<&dyn ParseBudget>, bytes: usize) -> Option<()> {
+pub(crate) fn allocate(budget: Option<&BudgetRef<'_>>, bytes: usize) -> Option<()> {
     match budget {
         Some(budget) => budget.allocate(bytes).ok(),
         None => Some(()),

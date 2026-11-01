@@ -1,6 +1,6 @@
 //! Reading objects with a `ParseBudget`.
 
-use hayro_syntax::budget::{Exhausted, ParseBudget};
+use hayro_syntax::budget::{BudgetRef, Exhausted, ParseBudget};
 use hayro_syntax::object::{Array, Dict, FromBytes, MaybeRef, Name, Object};
 use std::sync::Mutex;
 use std::time::Instant;
@@ -112,7 +112,8 @@ fn valid_and_damaged_objects_read_the_same() {
     for input in VALID {
         let limits = Limits::default();
         let plain = MaybeRef::<Object<'_>>::from_bytes(input);
-        let budgeted = MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &limits).unwrap();
+        let budget = BudgetRef::new(&limits);
+        let budgeted = MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &budget).unwrap();
         // Every scanned byte is charged, and bytes that a read scans again,
         // such as a stream's /Length, are charged again.
         assert!(limits.state().work <= 3 * input.len());
@@ -130,7 +131,8 @@ fn valid_and_damaged_objects_read_the_same() {
 fn lazy_reads_return_the_same_values() {
     let input = b"<< /A << /B [1 (two) /Three] >> >>";
     let limits = Limits::default();
-    let dict = Dict::from_bytes_with_budget(input, &limits)
+    let budget = BudgetRef::new(&limits);
+    let dict = Dict::from_bytes_with_budget(input, &budget)
         .unwrap()
         .unwrap();
     let inner = dict.get::<Dict<'_>>("A").unwrap();
@@ -146,7 +148,7 @@ fn a_long_name_stops_at_the_work_limit() {
     input.resize(10 << 20, b'a');
     let limits = Limits::with(|s| s.work_limit = Some(64 << 10));
     assert_eq!(
-        Name::from_bytes_with_budget(&input, &limits),
+        Name::from_bytes_with_budget(&input, &BudgetRef::new(&limits)),
         Err(Exhausted)
     );
     let s = limits.state();
@@ -165,7 +167,7 @@ fn a_long_string_is_cancelled_while_it_is_read() {
         // The token is cancelled during the read, after 10 windows.
         let limits = Limits::with(|s| s.cancel_after_polls = Some(10));
         assert_eq!(
-            hayro_syntax::object::String::from_bytes_with_budget(&input, &limits),
+            hayro_syntax::object::String::from_bytes_with_budget(&input, &BudgetRef::new(&limits)),
             Err(Exhausted)
         );
         let s = limits.state();
@@ -180,7 +182,7 @@ fn a_long_string_is_cancelled_while_it_is_read() {
 fn a_deadline_stops_a_large_object() {
     let input = large_dict(200_000);
     let limits = Limits::with(|s| s.deadline = Some(Instant::now()));
-    assert!(Dict::from_bytes_with_budget(&input, &limits).is_err());
+    assert!(Dict::from_bytes_with_budget(&input, &BudgetRef::new(&limits)).is_err());
     let s = limits.state();
     assert!(s.refused);
     assert_eq!(s.work, 0);
@@ -191,7 +193,8 @@ fn a_large_dictionary_charges_its_table_before_allocating_it() {
     let input = large_dict(100_000);
 
     let unlimited = Limits::default();
-    let dict = Dict::from_bytes_with_budget(&input, &unlimited)
+    let budget = BudgetRef::new(&unlimited);
+    let dict = Dict::from_bytes_with_budget(&input, &budget)
         .unwrap()
         .unwrap();
     assert_eq!(dict.len(), 100_000);
@@ -206,7 +209,7 @@ fn a_large_dictionary_charges_its_table_before_allocating_it() {
 
     for limit in [0, 1 << 10, 1 << 20] {
         let limits = Limits::with(|s| s.memory_limit = Some(limit));
-        assert!(Dict::from_bytes_with_budget(&input, &limits).is_err());
+        assert!(Dict::from_bytes_with_budget(&input, &BudgetRef::new(&limits)).is_err());
         let s = limits.state();
         assert!(s.refused);
         assert!(s.peak_memory <= limit);
@@ -227,12 +230,15 @@ fn escaped_names_and_strings_charge_their_buffers() {
 
     for input in [&name, &literal, &hex] {
         let limits = Limits::with(|s| s.memory_limit = Some(1 << 10));
-        assert!(MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &limits).is_err());
+        assert!(
+            MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &BudgetRef::new(&limits))
+                .is_err()
+        );
         assert!(limits.state().refused);
 
         let limits = Limits::default();
         assert!(matches!(
-            MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &limits),
+            MaybeRef::<Object<'_>>::from_bytes_with_budget(input, &BudgetRef::new(&limits)),
             Ok(Some(_))
         ));
         assert!(limits.state().memory >= input.len() / 2 - 2);
@@ -245,7 +251,8 @@ fn lazy_reads_charge_the_budget_after_the_first_read() {
     input.resize(1 << 20, b'x');
     input.extend_from_slice(b") /B [1 2 3] >>");
     let limits = Limits::default();
-    let dict = Dict::from_bytes_with_budget(&input, &limits)
+    let budget = BudgetRef::new(&limits);
+    let dict = Dict::from_bytes_with_budget(&input, &budget)
         .unwrap()
         .unwrap();
     let after_read = limits.state().work;
@@ -270,12 +277,14 @@ fn a_stream_without_its_length_searches_for_endstream_within_the_budget() {
 
     let limits = Limits::default();
     assert!(matches!(
-        MaybeRef::<Object<'_>>::from_bytes_with_budget(&input, &limits),
+        MaybeRef::<Object<'_>>::from_bytes_with_budget(&input, &BudgetRef::new(&limits)),
         Ok(Some(_))
     ));
 
     let limits = Limits::with(|s| s.work_limit = Some(1 << 20));
-    assert!(MaybeRef::<Object<'_>>::from_bytes_with_budget(&input, &limits).is_err());
+    assert!(
+        MaybeRef::<Object<'_>>::from_bytes_with_budget(&input, &BudgetRef::new(&limits)).is_err()
+    );
     let s = limits.state();
     assert!(s.refused);
     assert!(s.work <= 1 << 20);

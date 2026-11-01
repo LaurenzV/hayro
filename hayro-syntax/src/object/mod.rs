@@ -1,6 +1,6 @@
 //! Parsing and reading from PDF objects.
 
-use crate::budget::{Exhausted, ParseBudget};
+use crate::budget::{BudgetRef, Exhausted};
 pub use crate::object::array::Array;
 pub use crate::object::date::DateTime;
 pub use crate::object::dict::Dict;
@@ -251,7 +251,7 @@ pub trait FromBytes<'a>: Sized {
     /// parser recovered an object; see [`crate::budget`].
     fn from_bytes_with_budget(
         b: &'a [u8],
-        budget: &'a dyn ParseBudget,
+        budget: &'a BudgetRef<'a>,
     ) -> Result<Option<Self>, Exhausted>;
 }
 
@@ -262,7 +262,7 @@ impl<'a, T: Readable<'a>> FromBytes<'a> for T {
 
     fn from_bytes_with_budget(
         b: &'a [u8],
-        budget: &'a dyn ParseBudget,
+        budget: &'a BudgetRef<'a>,
     ) -> Result<Option<Self>, Exhausted> {
         if budget.exhausted() {
             return Err(Exhausted);

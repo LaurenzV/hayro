@@ -1,6 +1,6 @@
 //! A byte reader.
 
-use crate::budget::{ParseBudget, WORK_WINDOW};
+use crate::budget::{BudgetRef, WORK_WINDOW};
 use core::ops::Range;
 
 /// A reader for reading bytes and PDF objects.
@@ -13,7 +13,7 @@ pub struct Reader<'a> {
     /// The offset up to which reading was charged to `budget`, or
     /// `usize::MAX` without a budget.
     charged_to: usize,
-    budget: Option<&'a dyn ParseBudget>,
+    budget: Option<&'a BudgetRef<'a>>,
 }
 
 impl core::fmt::Debug for Reader<'_> {
@@ -39,10 +39,13 @@ impl<'a> Reader<'a> {
 
     /// Create a new reader that charges the bytes it reads to `budget`.
     ///
+    /// A reader reads with the budget it was created with, not with the
+    /// budget of the context it reads in.
+    ///
     /// When the budget refuses, the reader moves to the end of the data, so
     /// that the read fails as if the data had ended.
     #[inline]
-    pub fn new_with_budget(data: &'a [u8], budget: Option<&'a dyn ParseBudget>) -> Self {
+    pub fn new_with_budget(data: &'a [u8], budget: Option<&'a BudgetRef<'a>>) -> Self {
         let mut reader = Self::new(data);
         reader.attach_budget(budget);
         reader
@@ -51,7 +54,7 @@ impl<'a> Reader<'a> {
     /// Charges the bytes this reader reads from now on to `budget`, unless
     /// it already charges a budget.
     #[inline]
-    pub(crate) fn attach_budget(&mut self, budget: Option<&'a dyn ParseBudget>) {
+    fn attach_budget(&mut self, budget: Option<&'a BudgetRef<'a>>) {
         if self.budget.is_none() && budget.is_some() {
             self.budget = budget;
             self.charged_to = self.offset;
@@ -60,7 +63,7 @@ impl<'a> Reader<'a> {
 
     /// The budget this reader charges, if any.
     #[inline]
-    pub(crate) fn budget(&self) -> Option<&'a dyn ParseBudget> {
+    pub(crate) fn budget(&self) -> Option<&'a BudgetRef<'a>> {
         self.budget
     }
 
@@ -207,6 +210,8 @@ impl<'a> Reader<'a> {
     /// Advances the offset by one byte.
     #[inline]
     pub fn forward(&mut self) {
+        // After a refusal the reader is at the end of its data, where it
+        // stays: every read past the end fails.
         if self.charge(self.offset + 1).is_some() {
             self.offset += 1;
         }
