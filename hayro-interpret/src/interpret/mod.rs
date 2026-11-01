@@ -297,9 +297,8 @@ pub fn interpret<'a>(
                     r.1.as_f64(),
                     r.0.as_f64() + r.2.as_f64(),
                     r.1.as_f64() + r.3.as_f64(),
-                )
-                .to_path(0.1);
-                context.path_mut().extend(rect);
+                );
+                context.path_mut().extend(rect.path_elements(0.1));
 
                 let p = Point::new(r.0.as_f64(), r.1.as_f64());
                 *(context.last_point_mut()) = p;
