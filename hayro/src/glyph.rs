@@ -19,8 +19,9 @@ impl Renderer<'_> {
     ) {
         match glyph {
             Glyph::Outline(glyph) => {
+                let id = glyph.identifier().cache_key();
                 let (outline, transform, _) =
-                    self.fill_outline(glyph, props.transform * transform, hint);
+                    self.fill_outline(glyph, id, props.transform * transform, hint);
                 let props = DrawProps { transform, ..props };
 
                 self.fill_path(outline.as_ref(), props, FillRule::NonZero);
@@ -42,7 +43,7 @@ impl Renderer<'_> {
     ) {
         match glyph {
             Glyph::Outline(glyph) => {
-                let outline = self.cached_outline(glyph);
+                let outline = self.cached_outline(glyph, glyph.identifier().cache_key());
                 self.stroke_path(
                     &(transform * outline.as_ref().clone()),
                     props,
@@ -65,6 +66,7 @@ impl Renderer<'_> {
     fn fill_outline(
         &self,
         glyph: &OutlineGlyph,
+        id: u128,
         transform: Affine,
         hint: bool,
     ) -> (Rc<BezPath>, Affine, bool) {
@@ -74,33 +76,38 @@ impl Renderer<'_> {
         if hint && b == 0.0 && (MIN_HINTING_PPEM..=MAX_HINTING_PPEM).contains(&ppem) {
             let ppem = ppem as f32;
 
-            if let Some(hinted) = self.cached_hinted_outline(glyph, ppem) {
+            if let Some(hinted) = self.cached_hinted_outline(glyph, id, ppem) {
                 return (hinted, Affine::new([a, b, c, d, e, f.round()]), true);
             }
         }
 
-        (self.cached_outline(glyph), transform, false)
+        (self.cached_outline(glyph, id), transform, false)
     }
 
-    fn cached_hinted_outline(&self, glyph: &OutlineGlyph, ppem: f32) -> Option<Rc<BezPath>> {
-        self.cached_path(glyph, ppem, || {
+    fn cached_hinted_outline(
+        &self,
+        glyph: &OutlineGlyph,
+        id: u128,
+        ppem: f32,
+    ) -> Option<Rc<BezPath>> {
+        self.cached_path(id, ppem, || {
             glyph.hinted_outline(ppem, &self.global.hinting_cache)
         })
     }
 
-    fn cached_outline(&self, glyph: &OutlineGlyph) -> Rc<BezPath> {
-        self.cached_path(glyph, 0.0, || Some(glyph.outline()))
+    fn cached_outline(&self, glyph: &OutlineGlyph, id: u128) -> Rc<BezPath> {
+        self.cached_path(id, 0.0, || Some(glyph.outline()))
             .unwrap_or_default()
     }
 
     // Unhinted outlines are stored with a size of 0.
     fn cached_path(
         &self,
-        glyph: &OutlineGlyph,
+        id: u128,
         ppem: f32,
         path: impl FnOnce() -> Option<BezPath>,
     ) -> Option<Rc<BezPath>> {
-        let key = (glyph.identifier().cache_key(), ppem.to_bits());
+        let key = (id, ppem.to_bits());
 
         if let Some(path) = self.global.outline_cache.borrow().get(&key) {
             return path.clone();
@@ -129,8 +136,12 @@ impl Renderer<'_> {
                     return None;
                 };
 
-                let (path, glyph_transform, _) =
-                    self.fill_outline(outline, transform * glyph.transform(), self.hint(glyph_run));
+                let (path, glyph_transform, _) = self.fill_outline(
+                    outline,
+                    outline.identifier().cache_key(),
+                    transform * glyph.transform(),
+                    self.hint(glyph_run),
+                );
                 Some(inverse * glyph_transform * path.as_ref().clone())
             })
             .collect()
@@ -145,7 +156,8 @@ impl Renderer<'_> {
                     return None;
                 };
 
-                Some(glyph.transform() * self.cached_outline(outline).as_ref().clone())
+                let outline = self.cached_outline(outline, outline.identifier().cache_key());
+                Some(glyph.transform() * outline.as_ref().clone())
             })
             .collect()
     }
@@ -209,9 +221,9 @@ impl Renderer<'_> {
                         continue;
                     };
 
-                    let (path, transform, hinted) =
-                        self.fill_outline(outline, props.transform * glyph.transform(), hint);
                     let id = outline.identifier().cache_key();
+                    let (path, transform, hinted) =
+                        self.fill_outline(outline, id, props.transform * glyph.transform(), hint);
 
                     if !use_cache || !self.fill_cached_glyph(id, hinted, &path, transform, color) {
                         self.ctx.set_paint(color);
@@ -246,7 +258,8 @@ impl Renderer<'_> {
                         continue;
                     };
 
-                    let outline = glyph.transform() * self.cached_outline(outline).as_ref().clone();
+                    let outline = self.cached_outline(outline, outline.identifier().cache_key());
+                    let outline = glyph.transform() * outline.as_ref().clone();
                     self.ctx.stroke_path(&outline);
                 }
                 self.finish_run(clip_path);
