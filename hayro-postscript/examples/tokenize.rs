@@ -47,6 +47,8 @@ fn print_object(object: &Object<'_>) {
         Object::Name(name) => {
             let kind = if name.is_literal() {
                 "literal"
+            } else if name.is_immediate() {
+                "immediate"
             } else {
                 "executable"
             };

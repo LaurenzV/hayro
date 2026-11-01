@@ -40,9 +40,12 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                     .ok_or(Error::SyntaxError)
             }
         }
-        b'/' => name::parse_literal(r)
-            .map(|s| Object::Name(Name::new(s, true)))
-            .ok_or(Error::SyntaxError),
+        b'/' => if r.peek_bytes(2) == Some(b"//") {
+            name::parse_immediate(r).map(|s| Object::Name(Name::new_immediate(s)))
+        } else {
+            name::parse_literal(r).map(|s| Object::Name(Name::new(s, true)))
+        }
+        .ok_or(Error::SyntaxError),
         b'[' | b']' => read_delimiter_name(r, 1),
         b'>' => {
             if r.peek_bytes(2) == Some(b">>") {
@@ -151,6 +154,14 @@ mod tests {
             read_ok(b"/CMapName "),
             Object::Name(Name::new(b"CMapName", true))
         );
+    }
+
+    #[test]
+    fn immediate_name() {
+        let mut r = Reader::new(b"//add/x");
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new_immediate(b"add"))));
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"x", true))));
+        assert!(at_end(&mut r));
     }
 
     #[test]

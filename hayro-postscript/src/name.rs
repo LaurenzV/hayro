@@ -4,17 +4,42 @@ use crate::reader::{Reader, is_regular};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Name<'a> {
     data: &'a [u8],
-    literal: bool,
+    kind: Kind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Executable,
+    Literal,
+    Immediate,
 }
 
 impl<'a> Name<'a> {
     pub(crate) fn new(data: &'a [u8], literal: bool) -> Self {
-        Self { data, literal }
+        let kind = if literal {
+            Kind::Literal
+        } else {
+            Kind::Executable
+        };
+
+        Self { data, kind }
+    }
+
+    pub(crate) fn new_immediate(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            kind: Kind::Immediate,
+        }
     }
 
     /// Returns `true` if this is a literal name.
     pub fn is_literal(&self) -> bool {
-        self.literal
+        self.kind == Kind::Literal
+    }
+
+    /// Returns `true` if this is an immediately evaluated name.
+    pub fn is_immediate(&self) -> bool {
+        self.kind == Kind::Immediate
     }
 
     /// Returns the name as a string if it is valid UTF-8, or
@@ -34,6 +59,11 @@ pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     while r.eat(is_regular).is_some() {}
     r.range(start..r.offset())
+}
+
+pub(crate) fn parse_immediate<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    r.forward_tag(b"/")?;
+    parse_literal(r)
 }
 
 pub(crate) fn parse_executable<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
@@ -104,6 +134,20 @@ mod tests {
     #[test]
     fn literal_not_a_name() {
         assert!(read_literal(b"Name").is_none());
+    }
+
+    #[test]
+    fn immediate_simple() {
+        let mut r = Reader::new(b"//Helvetica ");
+        assert_eq!(parse_immediate(&mut r), Some(&b"Helvetica"[..]));
+        assert_eq!(r.peek_byte(), Some(b' '));
+    }
+
+    #[test]
+    fn immediate_empty() {
+        let mut r = Reader::new(b"//(x)");
+        assert_eq!(parse_immediate(&mut r), Some(&b""[..]));
+        assert_eq!(r.peek_byte(), Some(b'('));
     }
 
     #[test]
