@@ -1,7 +1,7 @@
 use crate::FontLoader;
 use crate::GlyphId;
 use crate::generated::{glyph_names, mac_os_roman, mac_roman, standard};
-use crate::program::{CmapPlatform, CmapSubtable, FontProgram, OpenTypeProgram};
+use crate::program::{CmapPlatform, CmapSubtable, FontProgram, ProgramKind};
 use crate::standard_font::{StandardFont, StandardKind, select_standard_font};
 use crate::{
     Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
@@ -61,7 +61,7 @@ impl TrueTypeFont {
 
     pub(crate) fn program(&self) -> FontProgram {
         match &self.kind {
-            Kind::Embedded(e) => FontProgram::OpenType(e.base_font.clone()),
+            Kind::Embedded(e) => e.base_font.clone(),
             Kind::Standard(s) => s.program.clone(),
         }
     }
@@ -181,7 +181,7 @@ enum Kind {
 
 #[derive(Debug)]
 struct EmbeddedKind {
-    base_font: OpenTypeProgram,
+    base_font: FontProgram,
     widths: Vec<Width>,
     missing_width: f32,
     font_flags: Option<FontFlags>,
@@ -201,12 +201,10 @@ impl EmbeddedKind {
 
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let (encoding, differences) = read_encoding(dict);
-        let Some(FontProgram::OpenType(base_font)) = descriptor
+        let base_font = descriptor
             .get::<Stream<'_>>(FONT_FILE2)
             .and_then(|stream| loader.programs.load(&stream))
-        else {
-            return None;
-        };
+            .filter(|program| program.kind() == ProgramKind::Sfnt)?;
 
         let postscript_name = dict
             .get::<Name<'_>>(BASE_FONT)
@@ -259,7 +257,7 @@ impl EmbeddedKind {
 
     fn lookup_glyph(&self, code: u8, subtables: &[CmapSubtable<'_>]) -> GlyphId {
         // Some PDFs mistakenly embed an OpenType font with CFF outlines.
-        if self.base_font.is_cff() {
+        if self.base_font.has_cff_outlines() {
             return self
                 .code_to_name(code)
                 .and_then(|name| self.base_font.glyph_by_name(name))

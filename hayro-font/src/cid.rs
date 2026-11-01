@@ -2,7 +2,7 @@ use crate::CMapResolverFn;
 use crate::FontLoader;
 use crate::GlyphId;
 use crate::generated::glyph_names;
-use crate::program::FontProgram;
+use crate::program::{FontProgram, ProgramKind};
 use crate::standard_font::select_standard_font;
 use crate::{
     FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, stretch_factor, strip_subset_prefix,
@@ -161,15 +161,15 @@ impl Type0Font {
         // At this point, not much we can do anymore. Just hope that the
         // selected font has the right glyph order, and map via that.
 
-        match &self.program {
-            FontProgram::OpenType(_) => self.cid_to_gid_map.map(cid as u16),
-            FontProgram::Cff(c) => {
-                if c.is_cid() {
+        match self.program.kind() {
+            ProgramKind::Sfnt => self.cid_to_gid_map.map(cid as u16),
+            ProgramKind::Cff => {
+                if self.program.is_cid_keyed() {
                     // Very confusing stuff going on here, see https://github.com/mozilla/pdf.js/pull/15563.
                     // The PDF spec makes it sounds like cid-to-gid map should only be used for TrueType fonts,
                     // but Acrobat also seems to support it for CFF fonts with some weird behavior.
                     if matches!(self.cid_to_gid_map, CidToGIdMap::Identity) {
-                        c.glyph_by_cid(cid as u16).unwrap_or(GlyphId::NOTDEF)
+                        self.program.glyph_by_cid(cid).unwrap_or(GlyphId::NOTDEF)
                     } else {
                         GlyphId::new(self.cid_to_gid_map.inverse_map(GlyphId::new(cid)) as u32)
                     }
@@ -179,7 +179,7 @@ impl Type0Font {
             }
             // Maybe we need similar processing to CFF fonts? But since
             // Type1 fonts are invalid anyway, let's just ignore for now.
-            FontProgram::Type1(_) => GlyphId::new(cid),
+            ProgramKind::Type1 => GlyphId::new(cid),
         }
     }
 
@@ -207,10 +207,10 @@ impl Type0Font {
                 BfString::String(_) => None,
             })?;
 
-        match &self.program {
-            FontProgram::OpenType(t) => t.cmap_glyph(character),
+        match self.program.kind() {
+            ProgramKind::Sfnt => self.program.cmap_glyph(character),
             // Map the character to a glyph name via the AGL, and then look it up.
-            FontProgram::Cff(_) | FontProgram::Type1(_) => glyph_names::get_reverse(character)
+            ProgramKind::Cff | ProgramKind::Type1 => glyph_names::get_reverse(character)
                 .and_then(|name| self.program.glyph_by_name(name)),
         }
     }
@@ -244,9 +244,9 @@ impl Type0Font {
     }
 
     pub(crate) fn font_data(&self) -> Option<crate::FontData> {
-        match &self.program {
-            FontProgram::OpenType(_) | FontProgram::Cff(_) => Some(self.program.data().clone()),
-            FontProgram::Type1(_) => None,
+        match self.program.kind() {
+            ProgramKind::Sfnt | ProgramKind::Cff => Some(self.program.data().clone()),
+            ProgramKind::Type1 => None,
         }
     }
 

@@ -18,7 +18,6 @@ phf = { workspace = true, features = ["macros"] }
 rustc-hash = { workspace = true }
 siphasher = { workspace = true }
 skrifa = { workspace = true }
-yoke = { workspace = true, features = ["derive"] }
 
 [features]
 default = ["embed-fonts"]
