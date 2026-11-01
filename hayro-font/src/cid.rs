@@ -94,7 +94,8 @@ impl Type0Font {
             .get::<Array<'_>>(W2)
             .and_then(|a| read_widths2(&a))
             .unwrap_or_default();
-        let cid_to_gid_map = CidToGIdMap::new(&descendant_font).unwrap_or_default();
+        let needs_inverse = program.kind() == ProgramKind::Cff && program.is_cid_keyed();
+        let cid_to_gid_map = CidToGIdMap::new(&descendant_font, needs_inverse).unwrap_or_default();
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
         let mut to_unicode_is_cid_indexed = false;
 
@@ -354,13 +355,13 @@ enum CidToGIdMap {
     #[default]
     Identity,
     Mapped {
-        forward: FxHashMap<u16, GlyphId>,
+        forward: Vec<u16>,
         inverse: FxHashMap<GlyphId, u16>,
     },
 }
 
 impl CidToGIdMap {
-    fn new(dict: &Dict<'_>) -> Option<Self> {
+    fn new(dict: &Dict<'_>, with_inverse: bool) -> Option<Self> {
         if let Some(name) = dict.get::<Name<'_>>(CID_TO_GID_MAP) {
             if name.deref() == IDENTITY {
                 Some(Self::Identity)
@@ -369,14 +370,20 @@ impl CidToGIdMap {
             }
         } else if let Some(stream) = dict.get::<Stream<'_>>(CID_TO_GID_MAP) {
             let decoded = stream.decoded_data().ok()?;
-            let mut forward = FxHashMap::default();
+            let forward: Vec<u16> = decoded
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .take(usize::from(u16::MAX) + 1)
+                .map(|gid| u16::from_be_bytes(*gid))
+                .collect();
+
             let mut inverse = FxHashMap::default();
-
-            for (cid, gid) in decoded.as_chunks::<2>().0.iter().enumerate() {
-                let gid = GlyphId::new(u16::from_be_bytes([gid[0], gid[1]]) as u32);
-
-                forward.insert(cid as u16, gid);
-                inverse.insert(gid, cid as u16);
+            if with_inverse {
+                inverse.reserve(forward.len());
+                for (cid, gid) in forward.iter().enumerate() {
+                    inverse.insert(GlyphId::new(u32::from(*gid)), cid as u16);
+                }
             }
 
             Some(Self::Mapped { forward, inverse })
@@ -388,7 +395,9 @@ impl CidToGIdMap {
     fn map(&self, code: u16) -> GlyphId {
         match self {
             Self::Identity => GlyphId::new(code as u32),
-            Self::Mapped { forward, .. } => forward.get(&code).copied().unwrap_or(GlyphId::NOTDEF),
+            Self::Mapped { forward, .. } => forward
+                .get(usize::from(code))
+                .map_or(GlyphId::NOTDEF, |gid| GlyphId::new(u32::from(*gid))),
         }
     }
 
