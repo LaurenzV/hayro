@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use hayro_postscript::{Number, Object, Scanner};
+use hayro_postscript::{Number, Scanner, Token};
 
 #[cfg(feature = "embed-cmaps")]
 use crate::bcmap;
@@ -50,10 +50,10 @@ pub(crate) fn parse_inner<'a>(
     let mut last = None;
 
     while !scanner.at_end() {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
         let prev = last.replace(obj.clone());
 
-        let Object::Name(name) = &obj else { continue };
+        let Token::Name(name) = &obj else { continue };
 
         if name.is_literal() {
             match name.as_str() {
@@ -101,7 +101,7 @@ pub(crate) fn parse_inner<'a>(
                     parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
                 }
                 Some("usecmap") => {
-                    let Some(Object::Name(operand)) = prev else {
+                    let Some(Token::Name(operand)) = prev else {
                         return None;
                     };
 
@@ -172,9 +172,9 @@ fn parse_integer(scanner: &mut Scanner<'_>) -> Option<i64> {
 }
 
 fn parse_string_or_name(scanner: &mut Scanner<'_>) -> Option<Vec<u8>> {
-    match scanner.parse_object().ok()? {
-        Object::String(s) => s.decode().ok(),
-        Object::Name(n) => Some(n.as_bytes().to_vec()),
+    match scanner.parse_token().ok()? {
+        Token::String(s) => s.decode().ok(),
+        Token::Name(n) => Some(n.as_bytes().to_vec()),
         _ => None,
     }
 }
@@ -185,7 +185,7 @@ fn parse_codespace_range<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endcodespacerange") {
             return Some(());
@@ -214,7 +214,7 @@ fn parse_range<F>(
     end_marker: &str,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, end_marker) {
             return Some(());
@@ -242,7 +242,7 @@ fn parse_char<F>(
     end_marker: &str,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, end_marker) {
             return Some(());
@@ -271,7 +271,7 @@ fn parse_bf_char<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endbfchar") {
             return Some(());
@@ -297,7 +297,7 @@ fn parse_bf_range<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endbfrange") {
             return Some(());
@@ -306,10 +306,10 @@ fn parse_bf_range<F>(
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
         let end = read_u32_code(scanner, &mut ctx.buf)?;
 
-        let next = scanner.parse_object().ok()?;
+        let next = scanner.parse_token().ok()?;
 
         match &next {
-            Object::String(s) => {
+            Token::String(s) => {
                 s.decode_into(&mut ctx.buf).ok()?;
 
                 entries.push(BfRange {
@@ -331,7 +331,7 @@ fn parse_bf_range<F>(
                     });
                 }
 
-                if !name_matches(&scanner.parse_object().ok()?, "]") {
+                if !name_matches(&scanner.parse_token().ok()?, "]") {
                     return None;
                 }
             }
@@ -373,8 +373,8 @@ fn read_u32_code(scanner: &mut Scanner<'_>, buf: &mut Vec<u8>) -> Option<u32> {
 }
 
 #[inline]
-fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
-    let Object::String(s) = obj else { return None };
+fn extract_u32_code(obj: &Token<'_>, buf: &mut Vec<u8>) -> Option<u32> {
+    let Token::String(s) = obj else { return None };
     s.decode_into(buf).ok()?;
     bytes_to_u32(buf)
 }
@@ -393,6 +393,6 @@ fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
     Some(val)
 }
 
-fn name_matches(obj: &Object<'_>, expected: &str) -> bool {
-    matches!(obj, Object::Name(name) if !name.is_literal() && name.as_str() == Some(expected))
+fn name_matches(obj: &Token<'_>, expected: &str) -> bool {
+    matches!(obj, Token::Name(name) if !name.is_literal() && name.as_str() == Some(expected))
 }

@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
-use crate::object;
 use crate::reader::Reader;
 use crate::string;
+use crate::token;
 
 /// A PostScript procedure (executable array) object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,9 +14,9 @@ impl<'a> Procedure<'a> {
         Self { data }
     }
 
-    /// Return a [`Scanner`](crate::Scanner) that iterates over the objects inside
+    /// Return a [`Scanner`](crate::Scanner) that iterates over the tokens inside
     /// this procedure.
-    pub fn objects(&self) -> crate::Scanner<'a> {
+    pub fn tokens(&self) -> crate::Scanner<'a> {
         crate::Scanner::new(self.data)
     }
 }
@@ -57,7 +57,7 @@ fn skip(r: &mut Reader<'_>) -> Result<()> {
                     let _ = string::parse_hex(r).ok_or(Error::SyntaxError)?;
                 }
             }
-            b'%' => object::skip_whitespace_and_comments(r),
+            b'%' => token::skip_whitespace_and_comments(r),
             _ => {
                 r.forward();
             }

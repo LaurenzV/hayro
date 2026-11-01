@@ -1,12 +1,12 @@
 /*!
 A lightweight PostScript scanner.
 
-This crate provides a scanner for tokenizing PostScript programs into typed objects.
+This crate provides a scanner for tokenizing PostScript programs into typed tokens.
 It currently only implements a very small subset of the PostScript language,
 with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
-The supported types include integers and real numbers, name objects, strings and
+The supported tokens are integers and real numbers, names, strings and
 procedures. The `[`, `]`, `<<` and `>>` tokens are returned as executable names, so
 that the caller can construct arrays and dictionaries if needed.
 
@@ -23,21 +23,21 @@ extern crate alloc;
 mod error;
 mod name;
 mod number;
-mod object;
 mod procedure;
 mod reader;
 mod string;
+mod token;
 
 pub use error::{Error, Result};
 pub use name::Name;
 pub use number::Number;
-pub use object::Object;
 pub use procedure::Procedure;
 pub use string::String;
+pub use token::Token;
 
 use reader::Reader;
 
-/// A PostScript scanner that parses [`Object`]s from a byte stream.
+/// A PostScript scanner that parses [`Token`]s from a byte stream.
 pub struct Scanner<'a> {
     reader: Reader<'a>,
 }
@@ -55,44 +55,44 @@ impl<'a> Scanner<'a> {
         self.reader.offset()
     }
 
-    /// Returns `true` if there are no more objects to parse.
+    /// Returns `true` if there are no more tokens to parse.
     pub fn at_end(&mut self) -> bool {
-        object::at_end(&mut self.reader)
+        token::at_end(&mut self.reader)
     }
 
-    /// Parse the next object.
-    pub fn parse_object(&mut self) -> Result<Object<'a>> {
-        object::read(&mut self.reader)
+    /// Parse the next token.
+    pub fn parse_token(&mut self) -> Result<Token<'a>> {
+        token::read(&mut self.reader)
     }
 
-    /// Parse the next object as a [`Number`].
+    /// Parse the next token as a [`Number`].
     pub fn parse_number(&mut self) -> Result<Number> {
-        match self.parse_object()? {
-            Object::Number(n) => Ok(n),
+        match self.parse_token()? {
+            Token::Number(n) => Ok(n),
             _ => Err(Error::SyntaxError),
         }
     }
 
-    /// Parse the next object as a [`Name`].
+    /// Parse the next token as a [`Name`].
     pub fn parse_name(&mut self) -> Result<Name<'a>> {
-        match self.parse_object()? {
-            Object::Name(n) => Ok(n),
+        match self.parse_token()? {
+            Token::Name(n) => Ok(n),
             _ => Err(Error::SyntaxError),
         }
     }
 
-    /// Parse the next object as a [`String`].
+    /// Parse the next token as a [`String`].
     pub fn parse_string(&mut self) -> Result<String<'a>> {
-        match self.parse_object()? {
-            Object::String(s) => Ok(s),
+        match self.parse_token()? {
+            Token::String(s) => Ok(s),
             _ => Err(Error::SyntaxError),
         }
     }
 
-    /// Parse the next object as a [`Procedure`].
+    /// Parse the next token as a [`Procedure`].
     pub fn parse_procedure(&mut self) -> Result<Procedure<'a>> {
-        match self.parse_object()? {
-            Object::Procedure(p) => Ok(p),
+        match self.parse_token()? {
+            Token::Procedure(p) => Ok(p),
             _ => Err(Error::SyntaxError),
         }
     }
@@ -174,7 +174,7 @@ endcmap"#;
         let proc = scanner.parse_procedure().unwrap();
         assert!(scanner.at_end());
 
-        let mut inner = proc.objects();
+        let mut inner = proc.tokens();
         assert_eq!(inner.parse_name().unwrap(), Name::new(b"dup", false));
         assert_eq!(inner.parse_number().unwrap(), Number::Integer(0));
         assert_eq!(inner.parse_name().unwrap(), Name::new(b"lt", false));
@@ -182,7 +182,7 @@ endcmap"#;
         assert_eq!(inner.parse_name().unwrap(), Name::new(b"if", false));
         assert!(inner.at_end());
 
-        let mut nested = nested.objects();
+        let mut nested = nested.tokens();
         assert_eq!(nested.parse_name().unwrap(), Name::new(b"neg", false));
         assert!(nested.at_end());
     }
@@ -190,7 +190,7 @@ endcmap"#;
     #[test]
     fn immediate_name_in_procedure() {
         let mut scanner = Scanner::new(b"{//mydict begin}");
-        let mut inner = scanner.parse_procedure().unwrap().objects();
+        let mut inner = scanner.parse_procedure().unwrap().tokens();
 
         let name = inner.parse_name().unwrap();
         assert!(name.is_immediate());

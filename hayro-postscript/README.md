@@ -7,12 +7,12 @@
 
 A lightweight PostScript scanner.
 
-This crate provides a scanner for tokenizing PostScript programs into typed objects.
+This crate provides a scanner for tokenizing PostScript programs into typed tokens.
 It currently only implements a very small subset of the PostScript language,
 with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
-The supported types include integers and real numbers, name objects, strings and
+The supported tokens are integers and real numbers, names, strings and
 procedures. The `[`, `]`, `<<` and `>>` tokens are returned as executable names, so
 that the caller can construct arrays and dictionaries if needed.
 
