@@ -32,7 +32,10 @@ fn main() {
                 print_object(&object);
                 println!();
             }
-            Err(e) => eprintln!("Error: {e}"),
+            Err(e) => {
+                eprintln!("Error: {e}");
+                break;
+            }
         }
     }
 }
@@ -54,5 +57,25 @@ fn print_object(object: &Object<'_>) {
             let decoded = s.decode().unwrap_or_else(|_| Vec::new());
             print!("String({})", String::from_utf8_lossy(&decoded));
         }
+        Object::Procedure(proc) => print_procedure(proc.objects()),
     }
+}
+
+fn print_procedure(mut inner: Scanner<'_>) {
+    print!("{{");
+    let mut first = true;
+    while !inner.at_end() {
+        if !first {
+            print!(" ");
+        }
+        first = false;
+        match inner.parse_object() {
+            Ok(obj) => print_object(&obj),
+            Err(e) => {
+                print!("Error({e})");
+                break;
+            }
+        }
+    }
+    print!("}}");
 }

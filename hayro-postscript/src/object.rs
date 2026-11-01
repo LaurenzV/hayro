@@ -1,6 +1,7 @@
 use crate::error::{Error, Result};
 use crate::name::{self, Name};
 use crate::number::{self, Number};
+use crate::procedure::{self, Procedure};
 use crate::reader::Reader;
 use crate::string::{self, String};
 
@@ -13,6 +14,8 @@ pub enum Object<'a> {
     Name(Name<'a>),
     /// A string object.
     String(String<'a>),
+    /// A procedure object.
+    Procedure(Procedure<'a>),
 }
 
 pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
@@ -48,10 +51,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                 Err(Error::SyntaxError)
             }
         }
-        b'{' => {
-            r.forward();
-            Err(Error::UnsupportedType)
-        }
+        b'{' => procedure::parse(r).map(|d| Object::Procedure(Procedure::new(d))),
         b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(Object::Number),
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
@@ -158,6 +158,19 @@ mod tests {
         assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"]", false))));
         assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"]", false))));
         assert!(at_end(&mut r));
+    }
+
+    #[test]
+    fn procedure() {
+        assert_eq!(
+            read_ok(b"{1 {2} add}"),
+            Object::Procedure(Procedure::new(b"1 {2} add"))
+        );
+    }
+
+    #[test]
+    fn stray_close_brace() {
+        assert_eq!(read_err(b"}"), Error::SyntaxError);
     }
 
     #[test]
