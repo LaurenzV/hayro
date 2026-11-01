@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use hayro_postscript::{Object, Scanner};
+use hayro_postscript::{Number, Object, Scanner};
 
 #[cfg(feature = "embed-cmaps")]
 use crate::bcmap;
@@ -66,7 +66,7 @@ pub(crate) fn parse_inner<'a>(
                     ordering = parse_string_or_name(&mut scanner);
                 }
                 Some("Supplement") => {
-                    supplement = scanner.parse_number().ok().map(|n| n.as_i32());
+                    supplement = parse_integer(&mut scanner).and_then(|n| i32::try_from(n).ok());
                 }
                 Some("CMapName") => {
                     cmap_name = scanner.parse_name().ok().and_then(|n| n.decode().ok());
@@ -150,10 +150,17 @@ pub(crate) fn parse_inner<'a>(
 }
 
 fn parse_writing_mode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
-    match scanner.parse_number().ok()?.as_i32() {
+    match parse_integer(scanner)? {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
         _ => None,
+    }
+}
+
+fn parse_integer(scanner: &mut Scanner<'_>) -> Option<i64> {
+    match scanner.parse_number().ok()? {
+        Number::Integer(n) => Some(n),
+        Number::Real(_) => None,
     }
 }
 
@@ -209,7 +216,7 @@ fn parse_range<F>(
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
         let byte_len = ctx.buf.len();
         let end = read_u32_code(scanner, &mut ctx.buf)?;
-        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
+        let cid_start = u32::try_from(parse_integer(scanner)?).ok()?;
 
         ranges.push(
             byte_len,
@@ -236,7 +243,7 @@ fn parse_char<F>(
 
         let code = extract_u32_code(&obj, &mut ctx.buf)?;
         let byte_len = ctx.buf.len();
-        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
+        let cid_start = u32::try_from(parse_integer(scanner)?).ok()?;
 
         ranges.push(
             byte_len,
