@@ -29,29 +29,33 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::SUBTYPE;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Dict, Stream};
-use kurbo::{Affine, BezPath, Vec2};
+use kurbo::{BezPath, Vec2};
 use outline::OutlineFont;
-use skrifa::GlyphId;
+use program::FontProgram;
+use rustc_hash::FxHashMap;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
-mod blob;
 mod cid;
 mod generated;
-mod glyph_simulator;
 mod outline;
+mod program;
 mod standard_font;
 mod true_type;
 mod type1;
 mod type3;
 mod util;
 
+pub use hayro_cmap;
+pub use hayro_syntax;
+pub use kurbo;
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
-pub use type3::Type3Font;
+pub use type3::{Type3Font, Type3Glyph};
 
 /// A callback function for resolving font queries.
 ///
@@ -67,50 +71,41 @@ pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 /// The units per em that all outlines and metrics are scaled to.
 pub const UNITS_PER_EM: f32 = 1000.0;
 
+/// The ID of a glyph in a font.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GlyphId(u32);
+
+impl GlyphId {
+    /// The ID of the `.notdef` glyph.
+    pub const NOTDEF: Self = Self(0);
+
+    /// Create a new glyph ID.
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Return the ID as a number.
+    pub const fn to_u32(self) -> u32 {
+        self.0
+    }
+
+    pub(crate) fn to_skrifa(self) -> skrifa::GlyphId {
+        skrifa::GlyphId::new(self.0)
+    }
+
+    pub(crate) fn from_skrifa(glyph: skrifa::GlyphId) -> Self {
+        Self(glyph.to_u32())
+    }
+}
+
 /// A PDF font.
 #[derive(Clone, Debug)]
-pub struct Font<'a>(u128, FontType<'a>);
+pub struct Font<'a>(FontType<'a>);
 
 impl<'a> Font<'a> {
-    /// Load the font described by a font dictionary.
-    pub fn new(
-        dict: &Dict<'a>,
-        font_resolver: &FontResolverFn,
-        cmap_resolver: &CMapResolverFn,
-    ) -> Option<Self> {
-        let f_type = match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
-            TYPE1 | MM_TYPE1 => {
-                FontType::Type1(Rc::new(Type1Font::new(dict, font_resolver, cmap_resolver)?))
-            }
-            // PDFBOX-5463: PDF viewers seem to accept OpenType as well.
-            TRUE_TYPE | OPEN_TYPE => FontType::TrueType(Rc::new(TrueTypeFont::new(
-                dict,
-                font_resolver,
-                cmap_resolver,
-            )?)),
-            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, font_resolver, cmap_resolver)?)),
-            TYPE3 => FontType::Type3(Rc::new(Type3Font::new(dict, cmap_resolver)?)),
-            _ => return None,
-        };
-
-        let cache_key = dict.cache_key();
-
-        Some(Self(cache_key, f_type))
-    }
-
-    /// Load one of the 14 standard fonts.
-    pub fn new_standard(
-        standard_font: StandardFont,
-        font_resolver: &FontResolverFn,
-    ) -> Option<Self> {
-        let font = Type1Font::new_standard(standard_font, font_resolver)?;
-
-        Some(Self(0, FontType::Type1(Rc::new(font))))
-    }
-
     /// Map a character code to a glyph.
     pub fn map_code(&self, code: u32) -> GlyphId {
-        match &self.1 {
+        match &self.0 {
             FontType::Type1(f) => {
                 debug_assert!(code <= u8::MAX as u32);
 
@@ -130,33 +125,34 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Return the outline glyph that a glyph ID refers to, or `None` for Type 3 fonts.
-    pub fn outline_glyph(&self, glyph: GlyphId, char_code: u32) -> Option<OutlineGlyph> {
-        let font = match &self.1 {
+    /// Return the glyph that a glyph ID refers to.
+    pub fn glyph(&self, glyph: GlyphId, char_code: u32) -> FontGlyph<'a> {
+        let font = match &self.0 {
             FontType::Type1(t) => OutlineFont::Type1(t.clone()),
             FontType::TrueType(t) => OutlineFont::TrueType(t.clone()),
             FontType::Type0(t) => OutlineFont::Type0(t.clone()),
-            FontType::Type3(_) => return None,
+            FontType::Type3(t) => {
+                return FontGlyph::Type3(Type3Glyph::new(t.clone(), glyph, char_code));
+            }
         };
 
-        Some(OutlineGlyph {
-            id: glyph,
-            font,
-            char_code,
-        })
+        FontGlyph::Outline(OutlineGlyph::new(font, glyph, char_code))
     }
 
-    /// Return the Type 3 font, if this is one.
-    pub fn type3(&self) -> Option<&Rc<Type3Font<'a>>> {
-        match &self.1 {
-            FontType::Type3(t) => Some(t),
-            _ => None,
+    /// Return the horizontal scale factor that stretches a glyph to the width the PDF
+    /// font expects for it.
+    pub fn glyph_stretch(&self, glyph: GlyphId, code: u32) -> f64 {
+        match &self.0 {
+            FontType::Type1(t) => t.glyph_stretch(glyph, code as u8),
+            FontType::TrueType(t) => t.glyph_stretch(glyph, code as u8),
+            FontType::Type0(t) => t.glyph_stretch(glyph, code),
+            FontType::Type3(_) => 1.0,
         }
     }
 
     /// Return the advance of a character code.
     pub fn code_advance(&self, code: u32) -> Vec2 {
-        match &self.1 {
+        match &self.0 {
             FontType::Type1(t) => {
                 debug_assert!(code <= u8::MAX as u32);
 
@@ -171,14 +167,14 @@ impl<'a> Font<'a> {
             FontType::Type3(t) => {
                 debug_assert!(code <= u8::MAX as u32);
 
-                Vec2::new(t.glyph_width(code as u8) as f64, 0.0)
+                Vec2::new(t.glyph_width(code) as f64, 0.0)
             }
         }
     }
 
     /// Return the displacement of the glyph origin of a character code.
     pub fn origin_displacement(&self, code: u32) -> Vec2 {
-        match &self.1 {
+        match &self.0 {
             FontType::Type1(_) => Vec2::default(),
             FontType::TrueType(_) => Vec2::default(),
             FontType::Type0(t) => t.origin_displacement(code),
@@ -188,7 +184,7 @@ impl<'a> Font<'a> {
 
     /// Read the next character code from a string, returning the code and its length.
     pub fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        match &self.1 {
+        match &self.0 {
             FontType::Type1(_) => (bytes[offset] as u32, 1),
             FontType::TrueType(_) => (bytes[offset] as u32, 1),
             FontType::Type0(t) => t.read_code(bytes, offset),
@@ -198,7 +194,7 @@ impl<'a> Font<'a> {
 
     /// Whether the font is written horizontally.
     pub fn is_horizontal(&self) -> bool {
-        match &self.1 {
+        match &self.0 {
             FontType::Type1(_) => true,
             FontType::TrueType(_) => true,
             FontType::Type0(t) => t.is_horizontal(),
@@ -206,35 +202,112 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Return the cache key of the font.
-    pub fn cache_key(&self) -> u128 {
-        self.0
+    fn new(dict: &Dict<'a>, loader: &FontLoader<'_>) -> Option<Self> {
+        let f_type = match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
+            TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, loader)?)),
+            // PDFBOX-5463: PDF viewers seem to accept OpenType as well.
+            TRUE_TYPE | OPEN_TYPE => FontType::TrueType(Rc::new(TrueTypeFont::new(dict, loader)?)),
+            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, loader)?)),
+            TYPE3 => FontType::Type3(Rc::new(Type3Font::new(dict, loader.cmap_resolver)?)),
+            _ => return None,
+        };
+
+        Some(Self(f_type))
     }
+
+    fn new_standard(standard_font: StandardFont, loader: &ProgramLoader<'_>) -> Option<Self> {
+        let font = Type1Font::new_standard(standard_font, loader)?;
+
+        Some(Self(FontType::Type1(Rc::new(font))))
+    }
+}
+
+/// A cache for the fonts of a document and the font programs they use, so that each of
+/// them is only loaded once.
+#[derive(Clone, Default)]
+pub struct FontCache<'a>(Rc<FontCacheInner<'a>>);
+
+impl<'a> FontCache<'a> {
+    /// Create a new, empty cache.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Return the font described by a font dictionary.
+    pub fn font(
+        &self,
+        dict: &Dict<'a>,
+        font_resolver: &FontResolverFn,
+        cmap_resolver: &CMapResolverFn,
+    ) -> Option<Font<'a>> {
+        let key = dict.cache_key();
+
+        if let Some(font) = self.0.fonts.borrow().get(&key) {
+            return font.clone();
+        }
+
+        let loader = FontLoader {
+            programs: self.program_loader(font_resolver),
+            cmap_resolver,
+        };
+        let font = Font::new(dict, &loader);
+        self.0.fonts.borrow_mut().insert(key, font.clone());
+
+        font
+    }
+
+    /// Return one of the 14 standard fonts.
+    pub fn standard_font(
+        &self,
+        font: StandardFont,
+        font_resolver: &FontResolverFn,
+    ) -> Option<Font<'a>> {
+        Font::new_standard(font, &self.program_loader(font_resolver))
+    }
+
+    fn program_loader<'l>(&'l self, font_resolver: &'l FontResolverFn) -> ProgramLoader<'l> {
+        ProgramLoader {
+            font_resolver,
+            cache: &self.0.programs,
+        }
+    }
+}
+
+/// A glyph of a [`Font`].
+#[derive(Clone, Debug)]
+pub enum FontGlyph<'a> {
+    /// A glyph defined by an outline.
+    Outline(OutlineGlyph),
+    /// A glyph of a Type 3 font, defined by a content stream of the font.
+    Type3(Type3Glyph<'a>),
 }
 
 /// A glyph defined by an outline.
 #[derive(Clone, Debug)]
 pub struct OutlineGlyph {
-    pub(crate) id: GlyphId,
-    pub(crate) font: OutlineFont,
-    pub(crate) char_code: u32,
+    id: GlyphId,
+    program: FontProgram,
+    hidden: bool,
+    font: OutlineFont,
+    char_code: u32,
 }
 
 impl OutlineGlyph {
     /// Return the outline of the glyph, assuming an upem value of 1000.
     pub fn outline(&self) -> BezPath {
-        self.font.outline_glyph(self.id, self.char_code)
+        if self.hidden {
+            BezPath::new()
+        } else {
+            self.program.outline(self.id)
+        }
     }
 
     /// Return the identifier of the glyph. You can use this to calculate the cache key
-    /// for the glyph.
-    ///
-    /// Note that the `glyph_transform` attribute is not considered in the cache key of
-    /// the identifier, only the glyph ID and the font.
+    /// for the outline of the glyph.
     pub fn identifier(&self) -> GlyphIdentifier {
         GlyphIdentifier {
-            id: self.id,
-            font: self.font.clone(),
+            program: self.program.clone(),
+            glyph: (!self.hidden).then_some(self.id),
         }
     }
 
@@ -268,30 +341,33 @@ impl OutlineGlyph {
         self.font.glyph_advance_width(self.char_code)
     }
 
-    /// Get the cache key for this glyph's font.
-    ///
-    /// This identifies the font uniquely, even when `font_data()` returns `None`
-    /// (e.g., for Type1 fonts). Useful for grouping glyphs by font.
-    pub fn font_cache_key(&self) -> u128 {
-        self.font.cache_key()
+    fn new(font: OutlineFont, id: GlyphId, char_code: u32) -> Self {
+        Self {
+            id,
+            program: font.program(),
+            hidden: id == GlyphId::NOTDEF && font.hides_notdef(),
+            font,
+            char_code,
+        }
     }
 }
 
-/// An identifier that uniquely identifies a glyph, for caching purposes.
-#[derive(Clone, Debug)]
+/// An identifier that uniquely identifies the outline of a glyph, for caching purposes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphIdentifier {
-    id: GlyphId,
-    font: OutlineFont,
+    program: FontProgram,
+    glyph: Option<GlyphId>,
 }
 
 impl GlyphIdentifier {
     /// Return the cache key of the glyph.
     pub fn cache_key(&self) -> u128 {
-        hash128(&(self.id, self.font.cache_key()))
+        hash128(self)
     }
 }
 
 /// A query for a font.
+#[derive(Hash)]
 pub enum FontQuery {
     /// A query for one of the 14 PDF standard fonts.
     Standard(StandardFont),
@@ -303,7 +379,7 @@ pub enum FontQuery {
 }
 
 /// A query for a font with specific properties.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct FallbackFontQuery {
     /// The postscript name of the font.
     pub post_script_name: Option<String>,
@@ -422,7 +498,7 @@ impl Default for FallbackFontQuery {
 }
 
 /// The font stretch.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash)]
 pub enum FontStretch {
     /// Normal.
     Normal,
@@ -457,6 +533,58 @@ impl FontStretch {
             "UltraExpanded" => Self::UltraExpanded,
             _ => Self::Normal,
         }
+    }
+}
+
+#[derive(Default)]
+struct FontCacheInner<'a> {
+    fonts: RefCell<FxHashMap<u128, Option<Font<'a>>>>,
+    programs: ProgramMap,
+}
+
+type ProgramMap = RefCell<FxHashMap<u128, Option<FontProgram>>>;
+
+pub(crate) struct FontLoader<'l> {
+    pub(crate) programs: ProgramLoader<'l>,
+    pub(crate) cmap_resolver: &'l CMapResolverFn,
+}
+
+pub(crate) struct ProgramLoader<'l> {
+    font_resolver: &'l FontResolverFn,
+    cache: &'l ProgramMap,
+}
+
+impl ProgramLoader<'_> {
+    pub(crate) fn load(&self, stream: &Stream<'_>) -> Option<FontProgram> {
+        let key = hash128(&("font program", stream.cache_key()));
+
+        self.get_or_insert_with(key, || {
+            FontProgram::new(Arc::new(stream.decoded_data().ok()?.into_owned()), 0)
+        })
+    }
+
+    pub(crate) fn resolve(&self, query: &FontQuery) -> Option<FontProgram> {
+        let key = hash128(&("resolved font program", query));
+
+        self.get_or_insert_with(key, || {
+            let (data, index) = (self.font_resolver)(query)?;
+            FontProgram::new(data, index)
+        })
+    }
+
+    fn get_or_insert_with(
+        &self,
+        key: u128,
+        f: impl FnOnce() -> Option<FontProgram>,
+    ) -> Option<FontProgram> {
+        if let Some(program) = self.cache.borrow().get(&key) {
+            return program.clone();
+        }
+
+        let program = f();
+        self.cache.borrow_mut().insert(key, program.clone());
+
+        program
     }
 }
 
@@ -508,12 +636,11 @@ bitflags! {
     }
 }
 
-pub(crate) fn stretch_glyph(path: BezPath, expected_width: f32, actual_width: f32) -> BezPath {
+pub(crate) fn stretch_factor(expected_width: f32, actual_width: f32) -> f64 {
     if actual_width != 0.0 && actual_width != expected_width {
-        let stretch_factor = expected_width / actual_width;
-        Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path
+        f64::from(expected_width / actual_width)
     } else {
-        path
+        1.0
     }
 }
 

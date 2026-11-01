@@ -223,6 +223,7 @@ raster/custom/font_type1_cff_4.png c644952dcec76b64afefcbccb8a3edc7
 raster/custom/font_type1_cff_5_p0.png 1873b2010ea91a6b5bb1e6f7ae62f3a5
 raster/custom/font_type1_cff_5_p1.png 0652877e9c95a4d9419f7194668952b8
 raster/custom/font_type1_cff_6.png 3b6fa6c8ae17c8ecc8a9f50658647d9b
+raster/custom/font_type1_opentype_builtin_encoding.png 7ca3211e0e81eefaa2bc09ddb53f470d
 raster/custom/font_type3_filled_glyphs.png 7fa5ea185e57b8d5d9beabf537a9d184
 raster/custom/font_type3_shape_glyphs.png f64a47c855375a16136c81df5ecebd86
 raster/custom/font_type3_stroked_glyphs.png 67f08e117629a21c1f7c01855b6f266d
@@ -1888,7 +1889,7 @@ raster/pdfjs/issue2386_p0.png 65268b39df8835bc23798fa5a17890cc
 raster/pdfjs/issue2386_p1.png 61d37933af2cc9b8c96af57440107e21
 raster/pdfjs/issue2391_1.png bb87dd29bf58156bad762f9351a8d7ec
 raster/pdfjs/issue2391_2.png cce6ea939a1931053f1451d27d7496ab
-raster/pdfjs/issue2442.png bf19759b773b9e2d543404d90a10de94
+raster/pdfjs/issue2442.png 8753d6ac20439ee36f1e29c2bfe9eb36
 raster/pdfjs/issue2462.png 6bcdd5faa52ebf98a2bb3e6ea6d110e7
 raster/pdfjs/issue2531.png 5a28216a2dcaed7fde844aa5048d6baa
 raster/pdfjs/issue2618.png a2252264b585101f42539ca1b3c28fa1
@@ -1911,7 +1912,7 @@ raster/pdfjs/issue2956.png 90ef9d7af31bfc02828730948fb9b850
 raster/pdfjs/issue2984.png 9775dd6150c160d9ba2f249381dda988
 raster/pdfjs/issue3025.png d66a4b49076c9f725af68b70797abc43
 raster/pdfjs/issue3061.png 9b9d9fb6e0ce300415be1b10604249b6
-raster/pdfjs/issue3062.png 2d303d89c7334f42b9b806a6a91a347c
+raster/pdfjs/issue3062.png c6482e2106b9b7e7c84dcf749f9331ef
 raster/pdfjs/issue3064.png 018f5eee0fdf0413db6d73fa8107305d
 raster/pdfjs/issue3115.png 43cf7606b5bb8ccc55e95daa604a600d
 raster/pdfjs/issue3188.png 6f17adaae8c55531b157bdf5dfd0d328
@@ -2093,7 +2094,7 @@ raster/pdfjs/issue7492_eq.png 7bbd5e7e83a7d8a467c8c800baf3f2a1
 raster/pdfjs/issue7507.png ca62c30a1b047d1a9b1788081638df7d
 raster/pdfjs/issue7544.png ff1f384b60acf64c5d8200550e26f1d5
 raster/pdfjs/issue7580_eq.png b8f4de1444bbcfb2ba7c626c728c7fee
-raster/pdfjs/issue7598.png c7dde866643312f0543c993006b53409
+raster/pdfjs/issue7598.png 6b1c81508eca9d680a77f85769ae0c13
 raster/pdfjs/issue7665.png 777ad5679d8c603a90636215c234b46a
 raster/pdfjs/issue7696.png 7ed03d792ed69c4278a6818d3e0702c1
 raster/pdfjs/issue7769.png 748307ecefa4fc2a08e5b87df579239c

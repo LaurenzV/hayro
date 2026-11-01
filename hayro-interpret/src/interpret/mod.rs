@@ -3,11 +3,10 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
-use crate::font::{Font, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
-use crate::interpret::state::{TextStateFont, handle_gs};
+use crate::interpret::state::handle_gs;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
@@ -581,8 +580,7 @@ pub fn interpret<'a>(
                     font_dict_cache.insert(name.clone(), font_dict.clone());
                     context.resolve_font(&font_dict)
                 } else {
-                    Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
-                        .map(TextStateFont::Fallback)
+                    context.fallback_font()
                 };
 
                 context.text_state_mut().font_size = t.1.as_f32();
@@ -592,11 +590,7 @@ pub fn interpret<'a>(
                 if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.text_state_mut().font = Font::new_standard(
-                        StandardFont::Helvetica,
-                        &context.settings.font_resolver,
-                    )
-                    .map(TextStateFont::Fallback);
+                    context.text_state_mut().font = context.fallback_font();
                 }
 
                 text::show_text_string(context, device, resources, s.0);
@@ -605,11 +599,7 @@ pub fn interpret<'a>(
                 if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.text_state_mut().font = Font::new_standard(
-                        StandardFont::Helvetica,
-                        &context.settings.font_resolver,
-                    )
-                    .map(TextStateFont::Fallback);
+                    context.text_state_mut().font = context.fallback_font();
                 }
 
                 text::begin_glyph_run(context);

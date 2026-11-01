@@ -1,11 +1,8 @@
-use crate::CacheKey;
 use crate::cid::Type0Font;
+use crate::program::FontProgram;
 use crate::true_type::TrueTypeFont;
 use crate::type1::Type1Font;
 use hayro_cmap::BfString;
-use kurbo::BezPath;
-use skrifa::GlyphId;
-use skrifa::outline::OutlinePen;
 use std::rc::Rc;
 
 /// Font data and metadata for downstream use.
@@ -13,7 +10,7 @@ use std::rc::Rc;
 pub struct OutlineFontData {
     /// Raw font bytes (TrueType/OpenType/CFF data).
     pub data: crate::FontData,
-    /// Cache key for font deduplication.
+    /// A key that identifies the font data, for deduplication.
     pub cache_key: u128,
     /// PostScript name (e.g., "TimesNewRomanPS-BoldMT").
     pub postscript_name: Option<String>,
@@ -34,22 +31,22 @@ pub(crate) enum OutlineFont {
     Type0(Rc<Type0Font>),
 }
 
-impl CacheKey for OutlineFont {
-    fn cache_key(&self) -> u128 {
+impl OutlineFont {
+    pub(crate) fn program(&self) -> FontProgram {
         match self {
-            Self::Type1(f) => f.cache_key(),
-            Self::TrueType(t) => t.cache_key(),
-            Self::Type0(t0) => t0.cache_key(),
+            Self::Type1(t) => t.program(),
+            Self::TrueType(t) => t.program(),
+            Self::Type0(t) => t.program(),
         }
     }
-}
 
-impl OutlineFont {
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId, code: u32) -> BezPath {
+    // The `.notdef` glyph of the standard fonts is empty, but the one of the fonts
+    // used in place of them might not be.
+    pub(crate) fn hides_notdef(&self) -> bool {
         match self {
-            Self::Type1(t) => t.outline_glyph(glyph),
-            Self::TrueType(t) => t.outline_glyph(glyph),
-            Self::Type0(t) => t.outline_glyph(glyph, code),
+            Self::Type1(t) => t.is_standard(),
+            Self::TrueType(t) => t.is_standard(),
+            Self::Type0(_) => false,
         }
     }
 
@@ -74,11 +71,13 @@ impl OutlineFont {
     ///
     /// Returns None for Type1 fonts and non-embedded TrueType fonts.
     pub(crate) fn font_data(&self) -> Option<OutlineFontData> {
+        let cache_key = self.program().content_hash();
+
         match self {
             Self::Type1(_) => None,
             Self::TrueType(t) => Some(OutlineFontData {
                 data: t.font_data()?,
-                cache_key: t.cache_key(),
+                cache_key,
                 postscript_name: t.postscript_name().map(|s| s.to_string()),
                 weight: t.weight(),
                 is_italic: t.is_italic(),
@@ -87,60 +86,13 @@ impl OutlineFont {
             }),
             Self::Type0(t) => Some(OutlineFontData {
                 data: t.font_data()?,
-                cache_key: t.cache_key(),
+                cache_key,
                 postscript_name: t.postscript_name().map(|s| s.to_string()),
                 weight: t.weight(),
                 is_italic: t.is_italic(),
                 is_serif: t.is_serif(),
                 is_monospace: t.is_monospace(),
             }),
-        }
-    }
-}
-
-pub(crate) struct OutlinePath(BezPath);
-
-impl OutlinePath {
-    pub(crate) fn new() -> Self {
-        Self(BezPath::new())
-    }
-
-    pub(crate) fn take(self) -> BezPath {
-        self.0
-    }
-}
-
-impl OutlinePen for OutlinePath {
-    #[inline]
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.0.move_to((x, y));
-    }
-
-    #[inline]
-    fn line_to(&mut self, x: f32, y: f32) {
-        if !self.0.elements().is_empty() {
-            self.0.line_to((x, y));
-        }
-    }
-
-    #[inline]
-    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
-        if !self.0.elements().is_empty() {
-            self.0.quad_to((cx, cy), (x, y));
-        }
-    }
-
-    #[inline]
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        if !self.0.elements().is_empty() {
-            self.0.curve_to((cx0, cy0), (cx1, cy1), (x, y));
-        }
-    }
-
-    #[inline]
-    fn close(&mut self) {
-        if !self.0.elements().is_empty() {
-            self.0.close_path();
         }
     }
 }

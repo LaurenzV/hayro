@@ -1,23 +1,20 @@
-use crate::FontResolverFn;
-use crate::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::GlyphId;
+use crate::ProgramLoader;
 use crate::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
+use crate::program::FontProgram;
 use crate::true_type::{Width, read_encoding, read_widths};
 use crate::{
-    Encoding, FontData, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_glyph,
+    Encoding, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_factor,
     strip_subset_prefix,
 };
 use hayro_cmap::BfString;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC, FONT_WEIGHT, ITALIC_ANGLE};
-use kurbo::BezPath;
 use rustc_hash::FxHashMap;
-use skrifa::GlyphId;
-use skrifa::raw::TableProvider;
-use std::cell::RefCell;
 
 /// The 14 standard fonts of PDF.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Hash)]
 pub enum StandardFont {
     /// Helvetica.
     Helvetica,
@@ -79,7 +76,7 @@ impl StandardFont {
     ///
     /// [`FontResolverFn`]: crate::FontResolverFn
     #[cfg(feature = "embed-fonts")]
-    pub fn get_font_data(&self) -> (FontData, u32) {
+    pub fn get_font_data(&self) -> (crate::FontData, u32) {
         use std::sync::Arc;
 
         let data = match self {
@@ -182,28 +179,27 @@ impl StandardFont {
 #[derive(Debug)]
 pub(crate) struct StandardKind {
     base_font: StandardFont,
-    base_font_blob: StandardFontBlob,
+    pub(crate) program: FontProgram,
     encoding: Encoding,
     widths: Vec<Width>,
     missing_width: f32,
     fallback: bool,
-    code_to_glyph: RefCell<FxHashMap<u8, GlyphId>>,
-    glyph_to_code: RefCell<FxHashMap<GlyphId, u8>>,
+    code_to_glyph: Box<[GlyphId; 256]>,
     encodings: FxHashMap<u8, String>,
 }
 
 impl StandardKind {
-    pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, loader: &ProgramLoader<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
         let (font, exact) = select_standard_font(dict, &descriptor)?;
-        Self::new_with_standard(dict, font, !exact, resolver)
+        Self::new_with_standard(dict, font, !exact, loader)
     }
 
     pub(crate) fn new_with_standard(
         dict: &Dict<'_>,
         base_font: StandardFont,
         fallback: bool,
-        resolver: &FontResolverFn,
+        loader: &ProgramLoader<'_>,
     ) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
@@ -215,20 +211,21 @@ impl StandardKind {
             encoding = Encoding::BuiltIn;
         }
 
-        let (blob, index) = resolver(&FontQuery::Standard(base_font))?;
-        let base_font_blob = StandardFontBlob::from_data(blob, index)?;
+        let program = loader.resolve(&FontQuery::Standard(base_font))?;
 
-        Some(Self {
+        let mut kind = Self {
             base_font,
-            base_font_blob,
+            program,
             widths,
             missing_width,
             encodings: encoding_map,
-            code_to_glyph: RefCell::new(FxHashMap::default()),
-            glyph_to_code: RefCell::new(FxHashMap::default()),
+            code_to_glyph: Box::new([GlyphId::NOTDEF; 256]),
             fallback,
             encoding,
-        })
+        };
+        kind.code_to_glyph = Box::new(std::array::from_fn(|code| kind.lookup_glyph(code as u8)));
+
+        Some(kind)
     }
 
     fn code_to_ps_name(&self, code: u8) -> Option<&str> {
@@ -244,66 +241,52 @@ impl StandardKind {
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
-        let mut code_to_glyph = self.code_to_glyph.borrow_mut();
-
-        if let Some(glyph) = code_to_glyph.get(&code).copied() {
-            return glyph;
-        }
-
-        let result = self
-            .code_to_ps_name(code)
-            .and_then(|c| {
-                self.base_font_blob.name_to_glyph(c).or_else(|| {
-                    // If the font doesn't have a POST table, try to map via unicode instead.
-                    glyph_names::get(c).and_then(|c| {
-                        self.base_font_blob
-                            .unicode_to_glyph(c.chars().nth(0).unwrap() as u32)
-                    })
-                })
-            })
-            .unwrap_or(GlyphId::NOTDEF);
-        code_to_glyph.insert(code, result);
-        self.glyph_to_code.borrow_mut().insert(result, code);
-
-        result
+        self.code_to_glyph[code as usize]
     }
 
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        let path = self.base_font_blob.outline_glyph(glyph);
-
-        // If the font is not embedded, we might need to stretch it so that
-        // it matches the metrics of the actual underlying font blob.
-
-        if let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
-            && let Some(actual_width) = self.base_font_blob.advance_width(glyph).or_else(|| {
-                self.code_to_ps_name(code)
-                    .and_then(|name| self.base_font.get_width(name))
+    fn lookup_glyph(&self, code: u8) -> GlyphId {
+        self.code_to_ps_name(code)
+            .and_then(|c| {
+                self.program.glyph_by_name(c).or_else(|| {
+                    // If the font doesn't have a POST table, try to map via unicode instead.
+                    glyph_names::get(c)
+                        .and_then(|c| c.chars().next())
+                        .and_then(|c| self.program.cmap_glyph(c))
+                })
             })
-        {
-            // From my experiments: Most PDF viewers, if they detect a font is a
-            // standard font, they completely ignore the widths array, even if
-            // different widths are indicated there. So only if it's an unknown
-            // font do we check the widths array. Otherwise, we always use the
-            // base font metrics.
-            let should_width = if self.fallback {
-                if let Some(Width::Value(w)) = self.widths.get(code as usize).copied() {
-                    w
-                } else {
-                    return path;
-                }
-            } else if let Some(w) = self
-                .code_to_ps_name(code)
+            .unwrap_or(GlyphId::NOTDEF)
+    }
+
+    // The substitute font might have different metrics than the standard font it
+    // replaces, so its glyphs need to be stretched to the expected widths.
+    pub(crate) fn glyph_stretch(&self, glyph: GlyphId, code: u8) -> f64 {
+        let Some(actual_width) = self.program.advance_width(glyph).or_else(|| {
+            self.code_to_ps_name(code)
                 .and_then(|name| self.base_font.get_width(name))
-            {
-                w
-            } else {
-                return path;
-            };
+        }) else {
+            return 1.0;
+        };
 
-            return stretch_glyph(path, should_width, actual_width);
-        }
+        // From my experiments: Most PDF viewers, if they detect a font is a
+        // standard font, they completely ignore the widths array, even if
+        // different widths are indicated there. So only if it's an unknown
+        // font do we check the widths array. Otherwise, we always use the
+        // base font metrics.
+        let expected_width = if self.fallback {
+            match self.widths.get(code as usize).copied() {
+                Some(Width::Value(w)) => w,
+                _ => return 1.0,
+            }
+        } else if let Some(w) = self
+            .code_to_ps_name(code)
+            .and_then(|name| self.base_font.get_width(name))
+        {
+            w
+        } else {
+            return 1.0;
+        };
 
-        path
+        stretch_factor(expected_width, actual_width)
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> Option<f32> {
@@ -336,69 +319,6 @@ impl StandardKind {
 
     pub(crate) fn is_monospace(&self) -> bool {
         self.base_font.is_monospace()
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum StandardFontBlob {
-    Cff(CffFontBlob),
-    Otf(OpenTypeFontBlob, FxHashMap<String, GlyphId>),
-}
-
-impl StandardFontBlob {
-    pub(crate) fn from_data(data: FontData, index: u32) -> Option<Self> {
-        if let Some(blob) = CffFontBlob::new(data.clone()) {
-            Some(Self::new_cff(blob))
-        } else {
-            OpenTypeFontBlob::new(data, index).map(Self::new_otf)
-        }
-    }
-
-    pub(crate) fn new_cff(blob: CffFontBlob) -> Self {
-        Self::Cff(blob)
-    }
-
-    pub(crate) fn new_otf(blob: OpenTypeFontBlob) -> Self {
-        let glyph_names = blob.glyph_names();
-        Self::Otf(blob, glyph_names)
-    }
-
-    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
-        match self {
-            Self::Cff(blob) => blob.glyph_index_by_name(name),
-            Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
-        }
-    }
-
-    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<GlyphId> {
-        match self {
-            Self::Cff(_) => None,
-            Self::Otf(blob, _) => blob
-                .font_ref()
-                .cmap()
-                .ok()
-                .and_then(|c| c.map_codepoint(code)),
-        }
-    }
-
-    pub(crate) fn advance_width(&self, glyph: GlyphId) -> Option<f32> {
-        match self {
-            Self::Cff(_) => None,
-            Self::Otf(blob, _) => blob.glyph_metrics().advance_width(glyph),
-        }
-    }
-
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        // Standard fonts have empty outlines for these, but in Liberation Sans
-        // they are a .notdef rectangle.
-        if glyph == GlyphId::NOTDEF {
-            return BezPath::new();
-        }
-
-        match self {
-            Self::Cff(blob) => blob.outline_glyph(glyph),
-            Self::Otf(blob, _) => blob.outline_glyph(glyph),
-        }
     }
 }
 
