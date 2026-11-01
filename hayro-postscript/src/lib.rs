@@ -50,6 +50,11 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    /// Return the current byte offset into the data the scanner was created with.
+    pub fn offset(&self) -> usize {
+        self.reader.offset()
+    }
+
     /// Returns `true` if there are no more objects to parse.
     pub fn at_end(&mut self) -> bool {
         object::at_end(&mut self.reader)
@@ -194,6 +199,20 @@ endcmap"#;
         );
         assert_eq!(scanner.parse_name().unwrap(), Name::new(b">>", false));
         assert!(scanner.at_end());
+    }
+
+    #[test]
+    fn offset_after_token() {
+        let input = b"/Private 4 dict eexec \x01\x02";
+        let mut scanner = Scanner::new(input);
+        assert_eq!(scanner.offset(), 0);
+
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"Private", true)));
+        assert_eq!(scanner.offset(), 8);
+        assert_eq!(scanner.parse_number(), Ok(Number::Integer(4)));
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"dict", false)));
+        assert_eq!(scanner.parse_name(), Ok(Name::new(b"eexec", false)));
+        assert_eq!(scanner.offset(), input.len() - 3);
     }
 
     #[test]
