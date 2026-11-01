@@ -133,7 +133,7 @@ pub struct ArrayIter<'a> {
 impl<'a> ArrayIter<'a> {
     fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::new_with_budget(data, ctx.budget()),
             ctx: ctx.clone(),
         }
     }
@@ -191,7 +191,7 @@ pub struct FlexArrayIter<'a> {
 impl<'a> FlexArrayIter<'a> {
     fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
-            reader: Reader::new(data),
+            reader: Reader::new_with_budget(data, ctx.budget()),
             ctx: ctx.clone(),
         }
     }

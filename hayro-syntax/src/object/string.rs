@@ -1,5 +1,6 @@
 //! Strings.
 
+use crate::budget;
 use crate::crypto::DecryptionTarget;
 use crate::filter::ascii_hex;
 use crate::object::Object;
@@ -13,10 +14,13 @@ use core::hash::{Hash, Hasher};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
+/// The number of bytes a string stores without allocating.
+const INLINE: usize = 23;
+
 #[derive(Clone)]
 enum StringInner<'a> {
     Borrowed(&'a [u8]),
-    Owned(SmallVec<[u8; 23]>),
+    Owned(SmallVec<[u8; INLINE]>),
 }
 
 impl AsRef<[u8]> for StringInner<'_> {
@@ -152,13 +156,16 @@ fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
+fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; INLINE]>> {
     let start = r.offset();
     skip_hex(r)?;
     let end = r.offset();
 
     // Exclude outer brackets.
     let raw = r.range(start + 1..end - 1)?;
+    if raw.len() / 2 > INLINE {
+        budget::allocate(r.budget(), raw.len().div_ceil(2))?;
+    }
     let decoded = ascii_hex::decode_into(raw)?;
 
     Some(decoded)
@@ -196,6 +203,9 @@ fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
         return Some(StringInner::Borrowed(data));
     }
 
+    if data.len() > INLINE {
+        budget::allocate(r.budget(), data.len())?;
+    }
     let mut r = Reader::new(data);
     let mut result = SmallVec::new();
 

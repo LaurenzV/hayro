@@ -1,5 +1,6 @@
 //! Streams.
 
+use crate::budget::WORK_WINDOW;
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
 use crate::object;
@@ -361,7 +362,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     // TODO: This search can take quadratic time in total when many streams with a wrong length
     // have no `endstream` after them, or only a distant one.
     let tail = r.tail()?;
-    let endstream_offset = find_needle(tail, b"endstream")?;
+    let endstream_offset = find_endstream(r, tail)?;
     let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
     let data = tail.get(..data_end)?;
 
@@ -370,6 +371,32 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     r.forward_tag(b"endstream")?;
 
     Some(Stream::new(data, dict.clone()))
+}
+
+/// Finds `endstream` in `tail`, the tail of `r`. With a budget, searches
+/// window by window, charging each window before searching it.
+fn find_endstream(r: &mut Reader<'_>, tail: &[u8]) -> Option<usize> {
+    const NEEDLE: &[u8] = b"endstream";
+
+    if r.budget().is_none() {
+        return find_needle(tail, NEEDLE);
+    }
+
+    let mut start: usize = 0;
+    loop {
+        let end = start.saturating_add(WORK_WINDOW).min(tail.len());
+        r.charge(r.offset() + end)?;
+
+        if let Some(found) = find_needle(&tail[start..end], NEEDLE) {
+            return Some(start + found);
+        }
+
+        if end == tail.len() {
+            return None;
+        }
+
+        start = end - (NEEDLE.len() - 1);
+    }
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {

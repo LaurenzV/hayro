@@ -1,27 +1,107 @@
 //! A byte reader.
 
+use crate::budget::{ParseBudget, WORK_WINDOW};
 use core::ops::Range;
 
 /// A reader for reading bytes and PDF objects.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Reader<'a> {
     /// The underlying data of the reader.
     pub data: &'a [u8],
     /// The current byte-offset.
     pub offset: usize,
+    /// The offset up to which reading was charged to `budget`, or
+    /// `usize::MAX` without a budget.
+    charged_to: usize,
+    budget: Option<&'a dyn ParseBudget>,
+}
+
+impl core::fmt::Debug for Reader<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Reader")
+            .field("data", &self.data)
+            .field("offset", &self.offset)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'a> Reader<'a> {
     /// Create a new reader.
     #[inline]
     pub fn new(data: &'a [u8]) -> Self {
-        Self { data, offset: 0 }
+        Self {
+            data,
+            offset: 0,
+            charged_to: usize::MAX,
+            budget: None,
+        }
+    }
+
+    /// Create a new reader that charges the bytes it reads to `budget`.
+    ///
+    /// When the budget refuses, the reader moves to the end of the data, so
+    /// that the read fails as if the data had ended.
+    #[inline]
+    pub fn new_with_budget(data: &'a [u8], budget: Option<&'a dyn ParseBudget>) -> Self {
+        let mut reader = Self::new(data);
+        reader.attach_budget(budget);
+        reader
+    }
+
+    /// Charges the bytes this reader reads from now on to `budget`, unless
+    /// it already charges a budget.
+    #[inline]
+    pub(crate) fn attach_budget(&mut self, budget: Option<&'a dyn ParseBudget>) {
+        if self.budget.is_none() && budget.is_some() {
+            self.budget = budget;
+            self.charged_to = self.offset;
+        }
+    }
+
+    /// The budget this reader charges, if any.
+    #[inline]
+    pub(crate) fn budget(&self) -> Option<&'a dyn ParseBudget> {
+        self.budget
+    }
+
+    /// Charges the bytes before `end` if they were not charged yet. If the
+    /// budget refuses, moves to the end of the data and returns `None`.
+    #[inline]
+    pub(crate) fn charge(&mut self, end: usize) -> Option<()> {
+        if end <= self.charged_to {
+            Some(())
+        } else {
+            self.charge_cold(end)
+        }
+    }
+
+    #[cold]
+    fn charge_cold(&mut self, end: usize) -> Option<()> {
+        let Some(budget) = self.budget else {
+            return Some(());
+        };
+        let to = end
+            .max(self.charged_to.saturating_add(WORK_WINDOW))
+            .min(self.data.len());
+
+        if budget.work(to - self.charged_to).is_err() {
+            self.jump_to_end();
+            return None;
+        }
+
+        self.charged_to = to;
+        Some(())
     }
 
     /// Create a new reader at the given offset.
     #[inline]
     pub fn new_with(data: &'a [u8], offset: usize) -> Self {
-        Self { data, offset }
+        Self {
+            data,
+            offset,
+            charged_to: usize::MAX,
+            budget: None,
+        }
     }
 
     /// Returns `true` if the reader has reached the end of the data.
@@ -76,6 +156,7 @@ impl<'a> Reader<'a> {
     #[inline]
     pub fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
         let v = self.peek_bytes(len)?;
+        self.charge(self.offset + len)?;
         self.offset += len;
 
         Some(v)
@@ -85,6 +166,7 @@ impl<'a> Reader<'a> {
     #[inline]
     pub fn read_byte(&mut self) -> Option<u8> {
         let v = self.peek_byte()?;
+        self.charge(self.offset + 1)?;
         self.offset += 1;
 
         Some(v)
@@ -125,7 +207,9 @@ impl<'a> Reader<'a> {
     /// Advances the offset by one byte.
     #[inline]
     pub fn forward(&mut self) {
-        self.offset += 1;
+        if self.charge(self.offset + 1).is_some() {
+            self.offset += 1;
+        }
     }
 
     /// Advances the offset by one byte if the current byte satisfies the predicate.
@@ -152,6 +236,7 @@ impl<'a> Reader<'a> {
     #[inline]
     pub fn forward_tag(&mut self, tag: &[u8]) -> Option<()> {
         self.peek_tag(tag)?;
+        self.charge(self.offset + tag.len())?;
         self.offset += tag.len();
 
         Some(())
@@ -172,17 +257,7 @@ impl<'a> Reader<'a> {
     /// Checks if the next bytes match the specified tag.
     #[inline]
     pub fn peek_tag(&self, tag: &[u8]) -> Option<()> {
-        let mut cloned = self.clone();
-
-        for b in tag.iter().copied() {
-            if cloned.peek_byte() == Some(b) {
-                cloned.forward();
-            } else {
-                return None;
-            }
-        }
-
-        Some(())
+        self.data.get(self.offset..)?.starts_with(tag).then_some(())
     }
 
     /// Read a u16 integer (in big endian order).

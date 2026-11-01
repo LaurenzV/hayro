@@ -100,6 +100,7 @@ pub mod xref;
 // to be used by others
 #[doc(hidden)]
 pub mod bit_reader;
+pub mod budget;
 #[doc(hidden)]
 pub mod byte_reader;
 #[doc(hidden)]

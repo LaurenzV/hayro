@@ -1,5 +1,6 @@
 //! Reading bytes and PDF objects from data.
 
+use crate::budget::ParseBudget;
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
 use crate::trivia::{Comment, is_white_space_character};
@@ -37,6 +38,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     #[inline]
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
         let old_offset = self.offset;
+        self.attach_budget(ctx.budget());
 
         T::read(self, ctx).or_else(|| {
             self.offset = old_offset;
@@ -78,13 +80,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn skip_white_spaces(&mut self) {
-        while let Some(b) = self.peek_byte() {
-            if is_white_space_character(b) {
-                self.forward();
-            } else {
-                return;
-            }
-        }
+        self.forward_while(is_white_space_character);
     }
 
     #[inline]
@@ -120,7 +116,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     fn skip_white_spaces_and_comments(&mut self) {
         while let Some(b) = self.peek_byte() {
             if is_white_space_character(b) {
-                self.forward();
+                self.forward_while(is_white_space_character);
             } else if b == b'%' {
                 Comment::skip(self, true);
             } else {
@@ -130,13 +126,27 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ReaderContextData<'a> {
     xref: &'a XRef,
+    budget: Option<&'a dyn ParseBudget>,
     in_content_stream: bool,
     in_object_stream: bool,
     obj_number: Option<ObjectIdentifier>,
     parent_chain: SmallVec<[ObjectIdentifier; 8]>,
+}
+
+impl core::fmt::Debug for ReaderContextData<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ReaderContextData")
+            .field("xref", &self.xref)
+            .field("budget", &self.budget.is_some())
+            .field("in_content_stream", &self.in_content_stream)
+            .field("in_object_stream", &self.in_object_stream)
+            .field("obj_number", &self.obj_number)
+            .field("parent_chain", &self.parent_chain)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -153,6 +163,7 @@ impl<'a> ReaderContext<'a> {
     pub(crate) fn new(xref: &'a XRef, in_content_stream: bool) -> Self {
         Self(ReaderContextInner::Shared(Arc::new(ReaderContextData {
             xref,
+            budget: None,
             in_content_stream,
             obj_number: None,
             in_object_stream: false,
@@ -166,10 +177,34 @@ impl<'a> ReaderContext<'a> {
         })
     }
 
+    /// A context without a document, whose reads charge `budget`.
+    pub fn with_budget(budget: Option<&'a dyn ParseBudget>) -> Self {
+        match budget {
+            None => Self::dummy(),
+            Some(budget) => Self(ReaderContextInner::Shared(Arc::new(ReaderContextData {
+                xref: XRef::dummy(),
+                budget: Some(budget),
+                in_content_stream: false,
+                obj_number: None,
+                in_object_stream: false,
+                parent_chain: smallvec![],
+            }))),
+        }
+    }
+
     pub(crate) fn dummy_ref() -> &'static Self {
         &Self(ReaderContextInner::Dummy {
             in_content_stream: true,
         })
+    }
+
+    /// The budget that reads in this context charge, if any.
+    #[inline]
+    pub(crate) fn budget(&self) -> Option<&'a dyn ParseBudget> {
+        match &self.0 {
+            ReaderContextInner::Shared(inner) => inner.budget,
+            ReaderContextInner::Dummy { .. } => None,
+        }
     }
 
     #[inline]
@@ -248,8 +283,14 @@ impl<'a> ReaderContext<'a> {
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
-        let mut r = Reader::new(b);
-        Self::read(&mut r, &ReaderContext::dummy())
+        Self::from_bytes_with_budget_impl(b, None)
+    }
+    fn from_bytes_with_budget_impl(
+        b: &'a [u8],
+        budget: Option<&'a dyn ParseBudget>,
+    ) -> Option<Self> {
+        let mut r = Reader::new_with_budget(b, budget);
+        Self::read(&mut r, &ReaderContext::with_budget(budget))
     }
 }
 

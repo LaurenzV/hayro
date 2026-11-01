@@ -1,5 +1,6 @@
 //! Dictionaries.
 
+use crate::budget;
 use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
@@ -85,7 +86,8 @@ impl<'a> Dict<'a> {
     pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
-        Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
+        Reader::new_with_budget(&self.data()[offset..], self.ctx().budget())
+            .read_with_context::<ObjRef>(self.ctx())
     }
 
     /// Returns an iterator over all keys in the dictionary.
@@ -117,7 +119,8 @@ impl<'a> Dict<'a> {
     {
         let offset = *self.offsets()?.get(key.as_ref())?;
 
-        Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
+        Reader::new_with_budget(&self.data()[offset..], self.ctx().budget())
+            .read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
@@ -215,10 +218,39 @@ fn read_inner<'a>(
     // 1) Make dictionaries easily cloneable without wrapping in Arc.
     // 2) Maybe have an efficient per-document allocator pool for hashmaps
     // that can be reused.
+    let budget = ctx.budget();
     #[cfg(feature = "std")]
     let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher);
     #[cfg(not(feature = "std"))]
     let mut offsets = FxHashMap::new();
+    #[cfg(feature = "std")]
+    let mut charged = table_bytes::<Name<'a>, usize>(offsets.capacity());
+    #[cfg(not(feature = "std"))]
+    let mut charged = 0;
+    budget::allocate(budget, charged)?;
+    // Charge for the table before it grows, and grow it ourselves, doubling.
+    #[cfg(feature = "std")]
+    let mut reserve = |offsets: &mut FxHashMap<Name<'a>, usize>| -> Option<()> {
+        if offsets.len() < offsets.capacity() {
+            return Some(());
+        }
+
+        let additional = offsets.capacity().max(8);
+        let bytes = table_bytes::<Name<'a>, usize>(offsets.capacity() + additional)
+            - table_bytes::<Name<'a>, usize>(offsets.capacity());
+        budget::allocate(budget, bytes)?;
+        charged += bytes;
+        offsets.reserve(additional);
+        Some(())
+    };
+    // A B-tree allocates nodes as it grows; charge twice each entry for them.
+    #[cfg(not(feature = "std"))]
+    let mut reserve = |_: &mut FxHashMap<Name<'a>, usize>| -> Option<()> {
+        let bytes = 2 * size_of::<(Name<'a>, usize)>();
+        budget::allocate(budget, bytes)?;
+        charged += bytes;
+        Some(())
+    };
 
     let data = parse_dict_with(
         r,
@@ -227,16 +259,37 @@ fn read_inner<'a>(
         end_tag,
         #[inline]
         |name, offset, _| {
+            reserve(&mut offsets)?;
             offsets.insert(name, offset);
             Some(())
         },
-    )?;
+    );
+
+    let Some(data) = data else {
+        if let Some(budget) = budget {
+            budget.release(charged);
+        }
+        return None;
+    };
 
     Some(Dict(Inner::Some(Arc::new(Repr {
         data,
         offsets,
         ctx: ctx.clone(),
+        charged,
     }))))
+}
+
+#[cfg(feature = "std")]
+/// An upper bound of the bytes that a hash table with `capacity` entries of
+/// `K` and `V` allocates: the buckets, rounded up to a power of two at a load
+/// factor of 7/8, and one control byte per bucket.
+fn table_bytes<K, V>(capacity: usize) -> usize {
+    if capacity == 0 {
+        return 0;
+    }
+    let buckets = (capacity.saturating_mul(8) / 7).next_power_of_two();
+    buckets.saturating_mul(size_of::<(K, V)>() + 1)
 }
 
 pub(crate) struct DictProbe<'a> {
@@ -348,6 +401,16 @@ struct Repr<'a> {
     data: &'a [u8],
     offsets: FxHashMap<Name<'a>, usize>,
     ctx: ReaderContext<'a>,
+    /// The bytes charged to the budget of `ctx` for `offsets`.
+    charged: usize,
+}
+
+impl Drop for Repr<'_> {
+    fn drop(&mut self) {
+        if let Some(budget) = self.ctx.budget() {
+            budget.release(self.charged);
+        }
+    }
 }
 
 pub(crate) struct InlineImageDict<'a>(Dict<'a>);

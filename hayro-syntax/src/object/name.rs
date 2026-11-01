@@ -1,5 +1,6 @@
 //! Names.
 
+use crate::budget;
 use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
@@ -12,10 +13,13 @@ use core::hash::{Hash, Hasher};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
+/// The number of bytes a name stores without allocating.
+const INLINE: usize = 23;
+
 #[derive(Clone)]
 enum NameInner<'a> {
     Borrowed(&'a [u8]),
-    Owned(SmallVec<[u8; 23]>),
+    Owned(SmallVec<[u8; INLINE]>),
 }
 
 /// A PDF name object.
@@ -150,6 +154,9 @@ impl<'a> Readable<'a> for Name<'a> {
 
         // Exclude leading solidus.
         let data = r.range(start + 1..end)?;
+        if data.len() > INLINE && data.contains(&b'#') {
+            budget::allocate(r.budget(), data.len())?;
+        }
         Self::new(data)
     }
 }
