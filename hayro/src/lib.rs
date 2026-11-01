@@ -34,6 +34,7 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 use fearless_simd::Level;
+use glyph_cache::GlyphCache;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
@@ -63,6 +64,7 @@ use vello_cpu::{Mask, Pixmap, RenderContext, peniko};
 
 mod clip;
 mod glyph;
+mod glyph_cache;
 mod image;
 mod mask;
 mod paint;
@@ -74,11 +76,13 @@ type OutlineCache = FxHashMap<(u128, u32), Option<Rc<BezPath>>>;
 pub(crate) struct GlobalState {
     level: Level,
     outline_cache: Rc<RefCell<OutlineCache>>,
+    glyph_cache: Rc<RefCell<GlyphCache>>,
     hinting_cache: HintingCache,
     scaler: Scaler,
     force_image_interpolation: bool,
     aliasing_threshold: Option<u8>,
     hinting: bool,
+    glyph_caching: bool,
 }
 
 impl GlobalState {
@@ -86,11 +90,13 @@ impl GlobalState {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
+            glyph_cache: cache.glyph_cache.clone(),
             hinting_cache: cache.hinting_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
             aliasing_threshold: settings.aliasing_threshold,
             hinting: settings.hinting,
+            glyph_caching: settings.glyph_caching,
         }
     }
 }
@@ -193,10 +199,12 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple render invocations on the same document.
+// TODO: Allow clearing the cache.
 #[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
     pub(crate) outline_cache: Rc<RefCell<OutlineCache>>,
+    pub(crate) glyph_cache: Rc<RefCell<GlyphCache>>,
     pub(crate) hinting_cache: HintingCache,
 }
 
@@ -206,6 +214,7 @@ impl<'a> RenderCache<'a> {
         Self {
             interpreter_cache: InterpreterCache::new(),
             outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            glyph_cache: Rc::new(RefCell::new(GlyphCache::default())),
             hinting_cache: HintingCache::new(),
         }
     }
@@ -223,6 +232,8 @@ pub struct RenderSettings {
     pub aliasing_threshold: Option<u8>,
     /// Whether text should be hinted.
     pub hinting: bool,
+    /// Whether rasterized glyphs should be cached and reused.
+    pub glyph_caching: bool,
 }
 
 impl Default for RenderSettings {
@@ -231,6 +242,7 @@ impl Default for RenderSettings {
             force_image_interpolation: false,
             aliasing_threshold: None,
             hinting: true,
+            glyph_caching: true,
         }
     }
 }

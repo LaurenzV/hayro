@@ -39,6 +39,7 @@ hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-featu
 hayro-cmap = { path = "hayro-cmap", version = "0.1.0", default-features = false }
 hayro-font = { path = "hayro-font", version = "0.5.0", default-features = false }
 
+ab_glyph_rasterizer = { version = "0.1.10", default-features = false, features = ["std"] }
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }

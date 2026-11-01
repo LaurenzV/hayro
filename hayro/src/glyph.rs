@@ -4,6 +4,7 @@ use hayro_interpret::hayro_cmap::WritingMode;
 use hayro_interpret::{DrawMode, DrawProps, FillRule, Paint, StrokeProps};
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::rc::Rc;
+use vello_cpu::color::AlphaColor;
 
 const MIN_HINTING_PPEM: f64 = 4.0;
 const MAX_HINTING_PPEM: f64 = 128.0;
@@ -18,7 +19,7 @@ impl Renderer<'_> {
     ) {
         match glyph {
             Glyph::Outline(glyph) => {
-                let (outline, transform) =
+                let (outline, transform, _) =
                     self.fill_outline(glyph, props.transform * transform, hint);
                 let props = DrawProps { transform, ..props };
 
@@ -66,7 +67,7 @@ impl Renderer<'_> {
         glyph: &OutlineGlyph,
         transform: Affine,
         hint: bool,
-    ) -> (Rc<BezPath>, Affine) {
+    ) -> (Rc<BezPath>, Affine, bool) {
         let [a, b, c, d, e, f] = transform.as_coeffs();
         let ppem = d.abs() * 1000.0;
 
@@ -74,11 +75,11 @@ impl Renderer<'_> {
             let ppem = ppem as f32;
 
             if let Some(hinted) = self.cached_hinted_outline(glyph, ppem) {
-                return (hinted, Affine::new([a, b, c, d, e, f.round()]));
+                return (hinted, Affine::new([a, b, c, d, e, f.round()]), true);
             }
         }
 
-        (self.cached_outline(glyph), transform)
+        (self.cached_outline(glyph), transform, false)
     }
 
     fn cached_hinted_outline(&self, glyph: &OutlineGlyph, ppem: f32) -> Option<Rc<BezPath>> {
@@ -128,7 +129,7 @@ impl Renderer<'_> {
                     return None;
                 };
 
-                let (path, glyph_transform) =
+                let (path, glyph_transform, _) =
                     self.fill_outline(outline, transform * glyph.transform(), self.hint(glyph_run));
                 Some(inverse * glyph_transform * path.as_ref().clone())
             })
@@ -195,18 +196,28 @@ impl Renderer<'_> {
 
     fn fill_outline_run(&mut self, glyph_run: &GlyphRun<'_, '_>, props: &DrawProps<'_>) {
         match &props.paint {
-            Paint::Color(_) => {
+            Paint::Color(color) => {
+                let color = color.to_rgba().to_rgba8();
+                let color = AlphaColor::from_rgba8(color[0], color[1], color[2], color[3]);
                 let hint = self.hint(glyph_run);
+                let use_cache = self.global.glyph_caching
+                    && self.global.aliasing_threshold.is_none()
+                    && glyph_run.writing_mode() == WritingMode::Horizontal;
                 let clip_path = self.begin_fill_run(props, Rect::ZERO);
                 for glyph in glyph_run.glyphs() {
                     let Glyph::Outline(outline) = &**glyph else {
                         continue;
                     };
 
-                    let (path, transform) =
+                    let (path, transform, hinted) =
                         self.fill_outline(outline, props.transform * glyph.transform(), hint);
-                    self.ctx.set_transform(transform);
-                    self.ctx.fill_path(path.as_ref());
+                    let id = outline.identifier().cache_key();
+
+                    if !use_cache || !self.fill_cached_glyph(id, hinted, &path, transform, color) {
+                        self.ctx.set_paint(color);
+                        self.ctx.set_transform(transform);
+                        self.ctx.fill_path(path.as_ref());
+                    }
                 }
                 self.finish_run(clip_path);
             }
