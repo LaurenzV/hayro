@@ -30,12 +30,6 @@ pub(crate) struct TrueTypeFont {
     to_unicode: Option<CMap>,
 }
 
-#[derive(Debug)]
-enum Kind {
-    Embedded(EmbeddedKind),
-    Standard(StandardKind),
-}
-
 impl TrueTypeFont {
     pub(crate) fn new(
         dict: &Dict<'_>,
@@ -192,6 +186,18 @@ impl TrueTypeFont {
         // tests/pdfs/custom/font_truetype_7.pdf
         // tests/pdfs/custom/font_truetype_6.pdf
     }
+}
+
+impl CacheKey for TrueTypeFont {
+    fn cache_key(&self) -> u128 {
+        self.cache_key
+    }
+}
+
+#[derive(Debug)]
+enum Kind {
+    Embedded(EmbeddedKind),
+    Standard(StandardKind),
 }
 
 #[derive(Debug)]
@@ -412,20 +418,6 @@ pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Option<(Vec
     Some((widths, missing_width))
 }
 
-fn glyph_num_string(s: &str) -> Option<u32> {
-    if !s.starts_with('g') || s.len() < 2 {
-        return None;
-    }
-
-    s[1..].parse::<u32>().ok()
-}
-
-impl CacheKey for TrueTypeFont {
-    fn cache_key(&self) -> u128 {
-        self.cache_key
-    }
-}
-
 pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, FxHashMap<u8, String>) {
     fn get_encoding_base(dict: &Dict<'_>, name: Name<'_>) -> Encoding {
         match dict.get::<Name<'_>>(name.as_ref()) {
@@ -474,4 +466,12 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, FxHashMap<u8, String>
             FxHashMap::default(),
         )
     }
+}
+
+fn glyph_num_string(s: &str) -> Option<u32> {
+    if !s.starts_with('g') || s.len() < 2 {
+        return None;
+    }
+
+    s[1..].parse::<u32>().ok()
 }

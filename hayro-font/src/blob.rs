@@ -1,3 +1,4 @@
+use crate::FontData;
 use crate::UNITS_PER_EM;
 use crate::outline::OutlinePath;
 use kurbo::BezPath;
@@ -16,7 +17,6 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use yoke::{Yoke, Yokeable};
 
-type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 type OpenTypeFontYoke = Yoke<OTFYoke<'static>, FontData>;
 type CffFontYoke = Yoke<CFFYoke<'static>, FontData>;
 

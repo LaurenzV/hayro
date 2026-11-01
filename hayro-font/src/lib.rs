@@ -24,6 +24,7 @@ use crate::true_type::TrueTypeFont;
 use crate::type1::Type1Font;
 use crate::util::{CacheKey, hash128};
 use bitflags::bitflags;
+use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection};
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::SUBTYPE;
 use hayro_syntax::object::dict::keys::*;
@@ -48,6 +49,8 @@ mod type1;
 mod type3;
 mod util;
 
+pub use outline::OutlineFontData;
+pub use standard_font::StandardFont;
 pub use type3::Type3Font;
 
 /// A callback function for resolving font queries.
@@ -58,115 +61,11 @@ pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Se
 /// A callback function for resolving cmap names to their files.
 pub type CMapResolverFn = Arc<dyn Fn(CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
 
-/// The units per em that all outlines and metrics are scaled to.
-pub const UNITS_PER_EM: f32 = 1000.0;
-
-pub(crate) fn stretch_glyph(path: BezPath, expected_width: f32, actual_width: f32) -> BezPath {
-    if actual_width != 0.0 && actual_width != expected_width {
-        let stretch_factor = expected_width / actual_width;
-        Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path
-    } else {
-        path
-    }
-}
-
-/// A container for the bytes of a PDF file.
+/// A container for the bytes of a font file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
-/// Strip the 6-character subset prefix from a PostScript font name.
-///
-/// PDF subset fonts use names like "ABCDEF+TimesNewRoman". This function
-/// returns `TimesNewRoman` from such a name, or the original name if no
-/// valid prefix is found.
-pub(crate) fn strip_subset_prefix(name: &str) -> &str {
-    match name.split_once('+') {
-        Some((prefix, rest)) if prefix.len() == 6 => rest,
-        _ => name,
-    }
-}
-
-use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection};
-pub use outline::OutlineFontData;
-pub use standard_font::StandardFont;
-
-/// An identifier that uniquely identifies a glyph, for caching purposes.
-#[derive(Clone, Debug)]
-pub struct GlyphIdentifier {
-    id: GlyphId,
-    font: OutlineFont,
-}
-
-impl GlyphIdentifier {
-    /// Return the cache key of the glyph.
-    pub fn cache_key(&self) -> u128 {
-        hash128(&(self.id, self.font.cache_key()))
-    }
-}
-
-/// A glyph defined by an outline.
-#[derive(Clone, Debug)]
-pub struct OutlineGlyph {
-    pub(crate) id: GlyphId,
-    pub(crate) font: OutlineFont,
-    pub(crate) char_code: u32,
-}
-
-impl OutlineGlyph {
-    /// Return the outline of the glyph, assuming an upem value of 1000.
-    pub fn outline(&self) -> BezPath {
-        self.font.outline_glyph(self.id, self.char_code)
-    }
-
-    /// Return the identifier of the glyph. You can use this to calculate the cache key
-    /// for the glyph.
-    ///
-    /// Note that the `glyph_transform` attribute is not considered in the cache key of
-    /// the identifier, only the glyph ID and the font.
-    pub fn identifier(&self) -> GlyphIdentifier {
-        GlyphIdentifier {
-            id: self.id,
-            font: self.font.clone(),
-        }
-    }
-
-    /// Returns the Unicode code point for this glyph, if available.
-    pub fn as_unicode(&self) -> Option<BfString> {
-        self.font.char_code_to_unicode(self.char_code)
-    }
-
-    /// Get raw font bytes and metadata for downstream use.
-    ///
-    /// Returns `None` for Type1 fonts.
-    pub fn font_data(&self) -> Option<OutlineFontData> {
-        self.font.font_data()
-    }
-
-    /// Get the glyph ID within the font.
-    pub fn glyph_id(&self) -> GlyphId {
-        self.id
-    }
-
-    /// Get the original character code that selected this glyph.
-    pub fn char_code(&self) -> u32 {
-        self.char_code
-    }
-
-    /// Get the advance width for this glyph.
-    ///
-    /// The advance width is how far to move horizontally after drawing
-    /// this glyph before drawing the next one.
-    pub fn advance_width(&self) -> Option<f32> {
-        self.font.glyph_advance_width(self.char_code)
-    }
-
-    /// Get the cache key for this glyph's font.
-    ///
-    /// This identifies the font uniquely, even when `font_data()` returns `None`
-    /// (e.g., for Type1 fonts). Useful for grouping glyphs by font.
-    pub fn font_cache_key(&self) -> u128 {
-        self.font.cache_key()
-    }
-}
+/// The units per em that all outlines and metrics are scaled to.
+pub const UNITS_PER_EM: f32 = 1000.0;
 
 /// A PDF font.
 #[derive(Clone, Debug)]
@@ -306,99 +205,89 @@ impl<'a> Font<'a> {
             FontType::Type3(_) => true,
         }
     }
-}
 
-impl Font<'_> {
     /// Return the cache key of the font.
     pub fn cache_key(&self) -> u128 {
         self.0
     }
 }
 
+/// A glyph defined by an outline.
 #[derive(Clone, Debug)]
-enum FontType<'a> {
-    Type1(Rc<Type1Font>),
-    TrueType(Rc<TrueTypeFont>),
-    Type0(Rc<Type0Font>),
-    Type3(Rc<Type3Font<'a>>),
+pub struct OutlineGlyph {
+    pub(crate) id: GlyphId,
+    pub(crate) font: OutlineFont,
+    pub(crate) char_code: u32,
 }
 
-#[derive(Debug)]
-enum Encoding {
-    Standard,
-    MacRoman,
-    WinAnsi,
-    MacExpert,
-    BuiltIn,
-}
+impl OutlineGlyph {
+    /// Return the outline of the glyph, assuming an upem value of 1000.
+    pub fn outline(&self) -> BezPath {
+        self.font.outline_glyph(self.id, self.char_code)
+    }
 
-impl Encoding {
-    fn map_code(&self, code: u8) -> Option<&'static str> {
-        if code == 0 {
-            return Some(".notdef");
+    /// Return the identifier of the glyph. You can use this to calculate the cache key
+    /// for the glyph.
+    ///
+    /// Note that the `glyph_transform` attribute is not considered in the cache key of
+    /// the identifier, only the glyph ID and the font.
+    pub fn identifier(&self) -> GlyphIdentifier {
+        GlyphIdentifier {
+            id: self.id,
+            font: self.font.clone(),
         }
-        match self {
-            Self::Standard => standard::get(code),
-            Self::MacRoman => mac_roman::get(code).or_else(|| mac_os_roman::get(code)),
-            Self::WinAnsi => win_ansi::get(code),
-            Self::MacExpert => mac_expert::get(code),
-            Self::BuiltIn => None,
-        }
+    }
+
+    /// Returns the Unicode code point for this glyph, if available.
+    pub fn as_unicode(&self) -> Option<BfString> {
+        self.font.char_code_to_unicode(self.char_code)
+    }
+
+    /// Get raw font bytes and metadata for downstream use.
+    ///
+    /// Returns `None` for Type1 fonts.
+    pub fn font_data(&self) -> Option<OutlineFontData> {
+        self.font.font_data()
+    }
+
+    /// Get the glyph ID within the font.
+    pub fn glyph_id(&self) -> GlyphId {
+        self.id
+    }
+
+    /// Get the original character code that selected this glyph.
+    pub fn char_code(&self) -> u32 {
+        self.char_code
+    }
+
+    /// Get the advance width for this glyph.
+    ///
+    /// The advance width is how far to move horizontally after drawing
+    /// this glyph before drawing the next one.
+    pub fn advance_width(&self) -> Option<f32> {
+        self.font.glyph_advance_width(self.char_code)
+    }
+
+    /// Get the cache key for this glyph's font.
+    ///
+    /// This identifies the font uniquely, even when `font_data()` returns `None`
+    /// (e.g., for Type1 fonts). Useful for grouping glyphs by font.
+    pub fn font_cache_key(&self) -> u128 {
+        self.font.cache_key()
     }
 }
 
-/// The font stretch.
-#[derive(Debug, Copy, Clone)]
-pub enum FontStretch {
-    /// Normal.
-    Normal,
-    /// Ultra condensed.
-    UltraCondensed,
-    /// Extra condensed.
-    ExtraCondensed,
-    /// Condensed.
-    Condensed,
-    /// Semi condensed.
-    SemiCondensed,
-    /// Semi expanded.
-    SemiExpanded,
-    /// Expanded.
-    Expanded,
-    /// Extra expanded.
-    ExtraExpanded,
-    /// Ultra expanded.
-    UltraExpanded,
+/// An identifier that uniquely identifies a glyph, for caching purposes.
+#[derive(Clone, Debug)]
+pub struct GlyphIdentifier {
+    id: GlyphId,
+    font: OutlineFont,
 }
 
-impl FontStretch {
-    fn from_string(s: &str) -> Self {
-        match s {
-            "UltraCondensed" => Self::UltraCondensed,
-            "ExtraCondensed" => Self::ExtraCondensed,
-            "Condensed" => Self::Condensed,
-            "SemiCondensed" => Self::SemiCondensed,
-            "SemiExpanded" => Self::SemiExpanded,
-            "Expanded" => Self::Expanded,
-            "ExtraExpanded" => Self::ExtraExpanded,
-            "UltraExpanded" => Self::UltraExpanded,
-            _ => Self::Normal,
-        }
-    }
-}
-
-bitflags! {
-    /// Bitflags describing various characteristics of fonts.
-    #[derive(Debug)]
-    pub(crate) struct FontFlags: u32 {
-        const FIXED_PITCH = 1 << 0;
-        const SERIF = 1 << 1;
-        const SYMBOLIC = 1 << 2;
-        const SCRIPT = 1 << 3;
-        const NON_SYMBOLIC = 1 << 5;
-        const ITALIC = 1 << 6;
-        const ALL_CAP = 1 << 16;
-        const SMALL_CAP = 1 << 17;
-        const FORCE_BOLD = 1 << 18;
+impl GlyphIdentifier {
+    /// Return the cache key of the glyph.
+    pub fn cache_key(&self) -> u128 {
+        hash128(&(self.id, self.font.cache_key()))
     }
 }
 
@@ -529,6 +418,114 @@ impl Default for FallbackFontQuery {
             is_small_cap: false,
             character_collection: None,
         }
+    }
+}
+
+/// The font stretch.
+#[derive(Debug, Copy, Clone)]
+pub enum FontStretch {
+    /// Normal.
+    Normal,
+    /// Ultra condensed.
+    UltraCondensed,
+    /// Extra condensed.
+    ExtraCondensed,
+    /// Condensed.
+    Condensed,
+    /// Semi condensed.
+    SemiCondensed,
+    /// Semi expanded.
+    SemiExpanded,
+    /// Expanded.
+    Expanded,
+    /// Extra expanded.
+    ExtraExpanded,
+    /// Ultra expanded.
+    UltraExpanded,
+}
+
+impl FontStretch {
+    fn from_string(s: &str) -> Self {
+        match s {
+            "UltraCondensed" => Self::UltraCondensed,
+            "ExtraCondensed" => Self::ExtraCondensed,
+            "Condensed" => Self::Condensed,
+            "SemiCondensed" => Self::SemiCondensed,
+            "SemiExpanded" => Self::SemiExpanded,
+            "Expanded" => Self::Expanded,
+            "ExtraExpanded" => Self::ExtraExpanded,
+            "UltraExpanded" => Self::UltraExpanded,
+            _ => Self::Normal,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum FontType<'a> {
+    Type1(Rc<Type1Font>),
+    TrueType(Rc<TrueTypeFont>),
+    Type0(Rc<Type0Font>),
+    Type3(Rc<Type3Font<'a>>),
+}
+
+#[derive(Debug)]
+enum Encoding {
+    Standard,
+    MacRoman,
+    WinAnsi,
+    MacExpert,
+    BuiltIn,
+}
+
+impl Encoding {
+    fn map_code(&self, code: u8) -> Option<&'static str> {
+        if code == 0 {
+            return Some(".notdef");
+        }
+        match self {
+            Self::Standard => standard::get(code),
+            Self::MacRoman => mac_roman::get(code).or_else(|| mac_os_roman::get(code)),
+            Self::WinAnsi => win_ansi::get(code),
+            Self::MacExpert => mac_expert::get(code),
+            Self::BuiltIn => None,
+        }
+    }
+}
+
+bitflags! {
+    /// Bitflags describing various characteristics of fonts.
+    #[derive(Debug)]
+    pub(crate) struct FontFlags: u32 {
+        const FIXED_PITCH = 1 << 0;
+        const SERIF = 1 << 1;
+        const SYMBOLIC = 1 << 2;
+        const SCRIPT = 1 << 3;
+        const NON_SYMBOLIC = 1 << 5;
+        const ITALIC = 1 << 6;
+        const ALL_CAP = 1 << 16;
+        const SMALL_CAP = 1 << 17;
+        const FORCE_BOLD = 1 << 18;
+    }
+}
+
+pub(crate) fn stretch_glyph(path: BezPath, expected_width: f32, actual_width: f32) -> BezPath {
+    if actual_width != 0.0 && actual_width != expected_width {
+        let stretch_factor = expected_width / actual_width;
+        Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path
+    } else {
+        path
+    }
+}
+
+/// Strip the 6-character subset prefix from a PostScript font name.
+///
+/// PDF subset fonts use names like "ABCDEF+TimesNewRoman". This function
+/// returns `TimesNewRoman` from such a name, or the original name if no
+/// valid prefix is found.
+pub(crate) fn strip_subset_prefix(name: &str) -> &str {
+    match name.split_once('+') {
+        Some((prefix, rest)) if prefix.len() == 6 => rest,
+        _ => name,
     }
 }
 
