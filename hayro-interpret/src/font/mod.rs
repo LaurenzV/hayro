@@ -15,8 +15,8 @@ use std::ops::Deref;
 mod type3;
 
 pub use hayro_font::{
-    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphId, GlyphIdentifier, OutlineFontData,
-    OutlineGlyph, StandardFont,
+    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphId, GlyphIdentifier, HintingCache,
+    OutlineFontData, OutlineGlyph, StandardFont,
 };
 pub(crate) use hayro_font::{Font, FontCache, FontGlyph, UNITS_PER_EM};
 
