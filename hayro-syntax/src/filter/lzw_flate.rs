@@ -12,18 +12,18 @@ pub(crate) mod flate {
 
     #[cfg(feature = "unsafe")]
     pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
-        use flate2::read::{DeflateDecoder, ZlibDecoder};
+        use flate2::bufread::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
         fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
             let mut decoder = ZlibDecoder::new(data);
-            let mut result = Vec::new();
+            let mut result = Vec::with_capacity(data.len().saturating_mul(4));
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
         fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
             let mut decoder = DeflateDecoder::new(data);
-            let mut result = Vec::new();
+            let mut result = Vec::with_capacity(data.len().saturating_mul(4));
             decoder.read_to_end(&mut result).ok().map(|_| result)
         }
 
