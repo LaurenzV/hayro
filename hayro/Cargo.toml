@@ -10,6 +10,7 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
+ab_glyph_rasterizer = { workspace = true }
 hayro-interpret = { workspace = true }
 kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
