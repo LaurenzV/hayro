@@ -7,8 +7,9 @@ with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
 The supported types include integers and real numbers, name objects, strings and arrays.
-Unsupported is anything else, including dictionaries, procedures, etc. An error
-will be returned in case any of these is encountered.
+The `<<` and `>>` tokens are returned as executable names, so that the caller can
+construct dictionaries if needed. Unsupported is anything else, including procedures.
+An error will be returned in case any of these is encountered.
 
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
@@ -159,6 +160,20 @@ endcmap"#;
         assert_eq!(inner.parse_name().unwrap(), Name::new(b"abc", true));
         assert_eq!(inner.parse_string().unwrap(), String::from_literal(b"xyz"));
         assert!(inner.at_end());
+    }
+
+    #[test]
+    fn dict_tokens() {
+        let mut scanner = Scanner::new(b"<</Registry (Adobe)>>");
+
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b"<<", false));
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b"Registry", true));
+        assert_eq!(
+            scanner.parse_string().unwrap(),
+            String::from_literal(b"Adobe")
+        );
+        assert_eq!(scanner.parse_name().unwrap(), Name::new(b">>", false));
+        assert!(scanner.at_end());
     }
 
     #[test]

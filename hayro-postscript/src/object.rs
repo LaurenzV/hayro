@@ -33,12 +33,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                     .map(|s| Object::String(String::from_ascii85(s)))
                     .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
-                // TODO: Proper dict support. For now, skip `<<` and return
-                // the next object so callers see the inner tokens.
-                r.forward();
-                r.forward();
-                // TODO: This can easily overflow the stack if we have nested <<<<<.
-                read(r)
+                read_dict_delimiter(r)
             } else {
                 string::parse_hex(r)
                     .map(|s| Object::String(String::from_hex(s)))
@@ -51,10 +46,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
         b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
         b'>' => {
             if r.peek_bytes(2) == Some(b">>") {
-                // TODO: Proper dict support. Skip `>>` closing delimiter.
-                r.forward();
-                r.forward();
-                read(r)
+                read_dict_delimiter(r)
             } else {
                 Err(Error::SyntaxError)
             }
@@ -68,6 +60,12 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
     }
+}
+
+fn read_dict_delimiter<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
+    r.read_bytes(2)
+        .map(|s| Object::Name(Name::new(s, false)))
+        .ok_or(Error::SyntaxError)
 }
 
 pub(crate) fn at_end(r: &mut Reader<'_>) -> bool {
@@ -159,6 +157,31 @@ mod tests {
     fn array_simple() {
         let obj = read_ok(b"[1 2 3]");
         assert_eq!(obj, Object::Array(Array::new(b"1 2 3")));
+    }
+
+    #[test]
+    fn dict_delimiters() {
+        assert_eq!(read_ok(b"<</A"), Object::Name(Name::new(b"<<", false)));
+        assert_eq!(read_ok(b">>/A"), Object::Name(Name::new(b">>", false)));
+    }
+
+    #[test]
+    fn dict_delimiters_around_hex_string() {
+        let mut r = Reader::new(b"<<<41>>>");
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"<<", false))));
+        assert_eq!(read(&mut r), Ok(Object::String(String::from_hex(b"41"))));
+        assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b">>", false))));
+        assert!(at_end(&mut r));
+    }
+
+    #[test]
+    fn many_dict_delimiters() {
+        let input = b"<<".repeat(1_000_000);
+        let mut r = Reader::new(&input);
+
+        while !at_end(&mut r) {
+            assert_eq!(read(&mut r), Ok(Object::Name(Name::new(b"<<", false))));
+        }
     }
 
     #[test]
