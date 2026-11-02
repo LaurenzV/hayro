@@ -568,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "hayro"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ab_glyph_rasterizer",
  "bytemuck",
@@ -595,14 +595,14 @@ dependencies = [
 
 [[package]]
 name = "hayro-ccitt"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "image",
 ]
 
 [[package]]
 name = "hayro-cmap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "brotli",
  "hayro-postscript",
@@ -646,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-interpret"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bitflags",
  "hayro-cmap",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jbig2"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "fearless_simd 1.0.0",
  "hayro-ccitt",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jpeg2000"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "fearless_simd 1.0.0",
  "image",
@@ -681,11 +681,11 @@ dependencies = [
 
 [[package]]
 name = "hayro-postscript"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "hayro-svg"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.22.1",
  "hayro-interpret",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aes",
  "cbc",
@@ -739,7 +739,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-write"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
