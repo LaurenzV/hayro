@@ -119,7 +119,6 @@ fn clip_mode() {
 }
 
 fn to_unicode_cid_ranges() {
-    // A `ToUnicode` map with its Unicode values in `cidrange`s rather than `bfrange`s.
     let file = &read("pdfs/text/to_unicode_cid_ranges.pdf");
 
     assert_eq!(page_text(file), "HI");
