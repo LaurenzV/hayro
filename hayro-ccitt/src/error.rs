@@ -1,6 +1,5 @@
 /// An error that can occur during CCITT decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum DecodeError {
     /// Unexpected end of input while reading bits.
     UnexpectedEof,

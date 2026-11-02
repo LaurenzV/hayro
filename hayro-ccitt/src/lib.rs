@@ -84,7 +84,6 @@ pub trait Decoder {
 
 /// Settings to apply during decoding.
 #[derive(Copy, Clone, Debug)]
-#[non_exhaustive]
 pub struct DecodeSettings {
     /// How many columns the image has (i.e. its width).
     pub columns: u32,
@@ -100,48 +99,21 @@ pub struct DecodeSettings {
     /// (It doesn't have to. In that case this is set to `true` but there are
     /// no end-of-block markers, hayro-ccitt will still use the value of `rows`
     /// to determine when to stop decoding).
-    ///
-    /// Defaults to `true`.
     pub end_of_block: bool,
     /// Whether the stream contains end-of-line markers.
-    ///
-    /// Defaults to `false`.
     pub end_of_line: bool,
     /// Whether the data in the stream for each row is aligned to the byte
     /// boundary.
-    ///
-    /// Defaults to `false`.
     pub rows_are_byte_aligned: bool,
     /// The encoding mode used by the image.
-    ///
-    /// Defaults to [`EncodingMode::Group3_1D`].
     pub encoding: EncodingMode,
     /// Whether to reject data that violates the specification, instead of
     /// decoding it as well as possible.
-    ///
-    /// Defaults to `false`.
     pub strict: bool,
-}
-
-impl DecodeSettings {
-    /// Creates new settings for an image with the given number of columns and
-    /// rows, using the default values for all other settings.
-    pub fn new(columns: u32, rows: u32) -> Self {
-        Self {
-            columns,
-            rows,
-            end_of_block: true,
-            end_of_line: false,
-            rows_are_byte_aligned: false,
-            encoding: EncodingMode::Group3_1D,
-            strict: false,
-        }
-    }
 }
 
 /// The encoding mode for CCITT fax decoding.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum EncodingMode {
     /// Group 4 (MMR).
     Group4,
