@@ -337,16 +337,18 @@ impl Type0Font {
     }
 
     pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
-        if let Some(to_unicode) = &self.to_unicode {
-            let key = if self.to_unicode_is_cid_indexed {
-                self.code_to_cid(code).unwrap_or(0)
-            } else {
-                code
-            };
-            return to_unicode.lookup_bf_string(key);
+        let to_unicode = self.to_unicode.as_ref()?;
+
+        if self.to_unicode_is_cid_indexed {
+            return to_unicode.lookup_bf_string(self.code_to_cid(code).unwrap_or(0));
         }
 
-        None
+        to_unicode.lookup_bf_string(code).or_else(|| {
+            // See pdfjs_issue9367, whose `ToUnicode` map has its Unicode values
+            // in `cidrange`s rather than `bfrange`s.
+            let value = (1..=4).find_map(|len| to_unicode.lookup_cid_code(code, len))?;
+            char::from_u32(value).map(BfString::Char)
+        })
     }
 }
 
