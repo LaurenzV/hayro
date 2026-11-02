@@ -343,7 +343,17 @@ impl Type0Font {
             } else {
                 code
             };
-            return to_unicode.lookup_bf_string(key);
+            return to_unicode.lookup_bf_string(key).or_else(|| {
+                // See pdfjs_issue9367, whose `ToUnicode` map has its Unicode values
+                // in `cidrange`s rather than `bfrange`s.
+                if self.to_unicode_is_cid_indexed {
+                    return None;
+                }
+                let value = to_unicode
+                    .lookup_cid_code(key, 2)
+                    .or_else(|| to_unicode.lookup_cid_code(key, 1))?;
+                char::from_u32(value).map(BfString::Char)
+            });
         }
 
         None
