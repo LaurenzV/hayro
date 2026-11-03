@@ -1,7 +1,7 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::render_pdf;
+use hayro::{RenderSettings, render_pdf};
 use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
@@ -13,7 +13,13 @@ fn load_pdf(file: &[u8]) {
     let pdf = Pdf::new(file.to_vec());
 
     if let Ok(pdf) = pdf {
-        let _pixmaps = render_pdf(&pdf, 1.0, InterpreterSettings::default(), None);
+        let _pixmaps = render_pdf(
+            &pdf,
+            1.0,
+            InterpreterSettings::default(),
+            &RenderSettings::default(),
+            None,
+        );
     }
 }
 
@@ -160,7 +166,7 @@ fn concurrent_object_stream_resolution() {
                         let value = pdf
                             .xref()
                             .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
-                            .and_then(|dict| dict.get::<i32>(b"V"));
+                            .and_then(|dict| dict.get::<u32>(b"V"));
                         assert_eq!(value, Some(100 + number));
                     }
                 });
@@ -198,7 +204,7 @@ fn concurrent_xref_repair_does_not_panic() {
         let value = pdf
             .xref()
             .get::<Dict<'_>>(ObjectIdentifier::new(3, 0))
-            .and_then(|dict| dict.get::<i32>(b"V"));
+            .and_then(|dict| dict.get::<u32>(b"V"));
         assert_eq!(value, Some(103));
     }
 }
@@ -223,7 +229,7 @@ fn concurrent_xref_repair_retries_original_entries() {
                         let value = pdf
                             .xref()
                             .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
-                            .and_then(|dict| dict.get::<i32>(b"V"));
+                            .and_then(|dict| dict.get::<u32>(b"V"));
                         assert_eq!(value, Some(100 + number));
                     }
                 });

@@ -3,72 +3,22 @@
 use crate::context::Context;
 use crate::context::InterpreterCache;
 use crate::device::Device;
-use crate::font::cid::Type0Font;
-use crate::font::generated::{
-    glyph_names, mac_expert, mac_os_roman, mac_roman, standard, tex_glyph_names, win_ansi,
-    zapf_dings,
-};
-use crate::font::true_type::TrueTypeFont;
-use crate::font::type1::Type1Font;
-use crate::font::type3::Type3;
 use crate::interpret::state::State;
-use crate::{CMapResolverFn, CacheKey, FontResolverFn, InterpreterSettings, Paint};
-use bitflags::bitflags;
-use hayro_syntax::object::Name;
-use hayro_syntax::object::dict::keys::SUBTYPE;
-use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::{Dict, Stream};
+use crate::util::hash128;
+use crate::{CacheKey, InterpreterSettings, Paint};
+use hayro_cmap::{BfString, WritingMode};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Rect, Vec2};
-use outline::OutlineFont;
-use skrifa::GlyphId;
-use std::borrow::Cow;
-use std::fmt::Debug;
+use kurbo::{Affine, Rect};
 use std::ops::Deref;
-use std::rc::Rc;
-use std::sync::Arc;
 
-mod blob;
-mod cid;
-mod generated;
-mod glyph_simulator;
-pub(crate) mod outline;
-mod standard_font;
-mod true_type;
-mod type1;
-pub(crate) mod type3;
+mod type3;
 
-pub(crate) const UNITS_PER_EM: f32 = 1000.0;
-
-pub(crate) fn stretch_glyph(path: BezPath, expected_width: f32, actual_width: f32) -> BezPath {
-    if actual_width != 0.0 && actual_width != expected_width {
-        let stretch_factor = expected_width / actual_width;
-        Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path
-    } else {
-        path
-    }
-}
-
-/// A container for the bytes of a PDF file.
-pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
-
-/// Strip the 6-character subset prefix from a PostScript font name.
-///
-/// PDF subset fonts use names like "ABCDEF+TimesNewRoman". This function
-/// returns `TimesNewRoman` from such a name, or the original name if no
-/// valid prefix is found.
-pub(crate) fn strip_subset_prefix(name: &str) -> &str {
-    match name.split_once('+') {
-        Some((prefix, rest)) if prefix.len() == 6 => rest,
-        _ => name,
-    }
-}
-
-use crate::util::hash128;
-use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection, WritingMode};
-pub use outline::OutlineFontData;
-pub use standard_font::StandardFont;
+pub use hayro_font::{
+    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphId, GlyphIdentifier, HintingCache,
+    OutlineFontData, OutlineGlyph, StandardFont,
+};
+pub(crate) use hayro_font::{Font, FontCache, FontGlyph, UNITS_PER_EM};
 
 /// A glyph that can be drawn.
 pub enum Glyph<'a> {
@@ -159,91 +109,10 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     }
 }
 
-/// An identifier that uniquely identifies a glyph, for caching purposes.
-#[derive(Clone, Debug)]
-pub struct GlyphIdentifier {
-    id: GlyphId,
-    font: OutlineFont,
-}
-
-impl CacheKey for GlyphIdentifier {
-    fn cache_key(&self) -> u128 {
-        hash128(&(self.id, self.font.cache_key()))
-    }
-}
-
-/// A glyph defined by an outline.
-#[derive(Clone, Debug)]
-pub struct OutlineGlyph {
-    pub(crate) id: GlyphId,
-    pub(crate) font: OutlineFont,
-    pub(crate) char_code: u32,
-}
-
-impl OutlineGlyph {
-    /// Return the outline of the glyph, assuming an upem value of 1000.
-    pub fn outline(&self) -> BezPath {
-        self.font.outline_glyph(self.id, self.char_code)
-    }
-
-    /// Return the identifier of the glyph. You can use this to calculate the cache key
-    /// for the glyph.
-    ///
-    /// Note that the `glyph_transform` attribute is not considered in the cache key of
-    /// the identifier, only the glyph ID and the font.
-    pub fn identifier(&self) -> GlyphIdentifier {
-        GlyphIdentifier {
-            id: self.id,
-            font: self.font.clone(),
-        }
-    }
-
-    /// Returns the Unicode code point for this glyph, if available.
-    ///
-    /// See [`Glyph::as_unicode`] for details on the fallback chain used.
-    pub fn as_unicode(&self) -> Option<BfString> {
-        self.font.char_code_to_unicode(self.char_code)
-    }
-
-    /// Get raw font bytes and metadata for downstream use.
-    ///
-    /// Returns `None` for Type1 fonts.
-    pub fn font_data(&self) -> Option<OutlineFontData> {
-        self.font.font_data()
-    }
-
-    /// Get the glyph ID within the font.
-    pub fn glyph_id(&self) -> GlyphId {
-        self.id
-    }
-
-    /// Get the original character code that selected this glyph.
-    pub fn char_code(&self) -> u32 {
-        self.char_code
-    }
-
-    /// Get the advance width for this glyph.
-    ///
-    /// The advance width is how far to move horizontally after drawing
-    /// this glyph before drawing the next one.
-    pub fn advance_width(&self) -> Option<f32> {
-        self.font.glyph_advance_width(self.char_code)
-    }
-
-    /// Get the cache key for this glyph's font.
-    ///
-    /// This identifies the font uniquely, even when `font_data()` returns `None`
-    /// (e.g., for Type1 fonts). Useful for grouping glyphs by font.
-    pub fn font_cache_key(&self) -> u128 {
-        self.font.cache_key()
-    }
-}
-
 /// A type3 glyph.
 #[derive(Clone)]
 pub struct Type3Glyph<'a> {
-    pub(crate) font: Rc<Type3<'a>>,
-    pub(crate) glyph_id: GlyphId,
+    pub(crate) glyph: hayro_font::Type3Glyph<'a>,
     pub(crate) state: State<'a>,
     pub(crate) bbox: Rect,
     pub(crate) parent_resources: Resources<'a>,
@@ -251,7 +120,6 @@ pub struct Type3Glyph<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) settings: InterpreterSettings,
     pub(crate) nesting_depth: u32,
-    pub(crate) char_code: u32,
 }
 
 /// A glyph defined by PDF drawing instructions.
@@ -264,20 +132,19 @@ impl<'a> Type3Glyph<'a> {
         glyph_transform: Affine,
         paint: &Paint<'a>,
     ) {
-        self.font
-            .render_glyph(self, transform, glyph_transform, paint, device);
+        type3::render_glyph(self, transform, glyph_transform, paint, device);
     }
 
     /// Returns the Unicode code point for this glyph, if available.
     ///
     /// See [`Glyph::as_unicode`] for details on the fallback chain used.
     pub fn as_unicode(&self) -> Option<BfString> {
-        self.font.char_code_to_unicode(self.char_code)
+        self.glyph.as_unicode()
     }
 
     /// Get the original character code that selected this glyph.
     pub fn char_code(&self) -> u32 {
-        self.char_code
+        self.glyph.char_code()
     }
 
     /// Get the advance width for this glyph.
@@ -285,551 +152,96 @@ impl<'a> Type3Glyph<'a> {
     /// The advance width is how far to move horizontally after drawing
     /// this glyph before drawing the next one.
     pub fn advance_width(&self) -> Option<f32> {
-        u8::try_from(self.char_code)
-            .ok()
-            .map(|code| self.font.glyph_width(code))
+        Some(self.glyph.advance_width())
     }
 }
 
 impl CacheKey for Type3Glyph<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(&(self.font.cache_key(), self.glyph_id, self.bbox.cache_key()))
+        hash128(&(self.glyph.cache_key(), self.bbox.cache_key()))
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct Font<'a>(u128, FontType<'a>);
-
-impl<'a> Font<'a> {
-    pub(crate) fn new(
-        dict: &Dict<'a>,
-        font_resolver: &FontResolverFn,
-        cmap_resolver: &CMapResolverFn,
-    ) -> Option<Self> {
-        let f_type = match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
-            TYPE1 | MM_TYPE1 => {
-                FontType::Type1(Rc::new(Type1Font::new(dict, font_resolver, cmap_resolver)?))
-            }
-            // PDFBOX-5463: PDF viewers seem to accept OpenType as well.
-            TRUE_TYPE | OPEN_TYPE => FontType::TrueType(Rc::new(TrueTypeFont::new(
-                dict,
-                font_resolver,
-                cmap_resolver,
-            )?)),
-            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, font_resolver, cmap_resolver)?)),
-            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict, cmap_resolver)?)),
-            _ => return None,
-        };
-
-        let cache_key = dict.cache_key();
-
-        Some(Self(cache_key, f_type))
-    }
-
-    pub(crate) fn new_standard(
-        standard_font: StandardFont,
-        font_resolver: &FontResolverFn,
-    ) -> Option<Self> {
-        let font = Type1Font::new_standard(standard_font, font_resolver)?;
-
-        Some(Self(0, FontType::Type1(Rc::new(font))))
-    }
-
-    pub(crate) fn map_code(&self, code: u32) -> GlyphId {
-        match &self.1 {
-            FontType::Type1(f) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                f.map_code(code as u8)
-            }
-            FontType::TrueType(t) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                t.map_code(code as u8)
-            }
-            FontType::Type0(t) => t.map_code(code),
-            FontType::Type3(t) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                t.map_code(code as u8)
-            }
-        }
-    }
-
-    pub(crate) fn get_glyph(
-        &self,
-        glyph: GlyphId,
-        char_code: u32,
-        ctx: &mut Context<'a>,
-        resources: &Resources<'a>,
-    ) -> Glyph<'a> {
-        match &self.1 {
-            FontType::Type1(t) => {
-                let font = OutlineFont::Type1(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    char_code,
-                })
-            }
-            FontType::TrueType(t) => {
-                let font = OutlineFont::TrueType(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    char_code,
-                })
-            }
-            FontType::Type0(t) => {
-                let font = OutlineFont::Type0(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    char_code,
-                })
-            }
-            FontType::Type3(t) => {
-                let nesting_depth = ctx.nesting_depth() + 1;
-                let shape_glyph = Type3Glyph {
-                    font: t.clone(),
-                    glyph_id: glyph,
-                    state: ctx.snapshot(),
-                    bbox: ctx.bbox(),
-                    parent_resources: resources.clone(),
-                    cache: ctx.interpreter_cache.clone(),
-                    xref: ctx.xref,
-                    settings: ctx.settings.clone(),
-                    nesting_depth,
-                    char_code,
-                };
-
-                Glyph::Type3(Box::new(shape_glyph))
-            }
-        }
-    }
-
-    pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
-        match &self.1 {
-            FontType::Type1(t) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                Vec2::new(t.glyph_width(code as u8).unwrap_or(0.0) as f64, 0.0)
-            }
-            FontType::TrueType(t) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                Vec2::new(t.glyph_width(code as u8) as f64, 0.0)
-            }
-            FontType::Type0(t) => t.code_advance(code),
-            FontType::Type3(t) => {
-                debug_assert!(code <= u8::MAX as u32);
-
-                Vec2::new(t.glyph_width(code as u8) as f64, 0.0)
-            }
-        }
-    }
-
-    pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
-        match &self.1 {
-            FontType::Type1(_) => Vec2::default(),
-            FontType::TrueType(_) => Vec2::default(),
-            FontType::Type0(t) => t.origin_displacement(code),
-            FontType::Type3(_) => Vec2::default(),
-        }
-    }
-
-    pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        match &self.1 {
-            FontType::Type1(_) => (bytes[offset] as u32, 1),
-            FontType::TrueType(_) => (bytes[offset] as u32, 1),
-            FontType::Type0(t) => t.read_code(bytes, offset),
-            FontType::Type3(_) => (bytes[offset] as u32, 1),
-        }
-    }
-
-    pub(crate) fn is_horizontal(&self) -> bool {
-        match &self.1 {
-            FontType::Type1(_) => true,
-            FontType::TrueType(_) => true,
-            FontType::Type0(t) => t.is_horizontal(),
-            FontType::Type3(_) => true,
-        }
-    }
-}
-
-impl CacheKey for Font<'_> {
+impl CacheKey for GlyphIdentifier {
     fn cache_key(&self) -> u128 {
-        self.0
+        Self::cache_key(self)
     }
 }
 
-#[derive(Clone, Debug)]
-enum FontType<'a> {
-    Type1(Rc<Type1Font>),
-    TrueType(Rc<TrueTypeFont>),
-    Type0(Rc<Type0Font>),
-    Type3(Rc<Type3<'a>>),
-}
+pub(crate) fn get_glyph<'a>(
+    font: &Font<'a>,
+    glyph: GlyphId,
+    char_code: u32,
+    ctx: &mut Context<'a>,
+    resources: &Resources<'a>,
+) -> Glyph<'a> {
+    match font.glyph(glyph, char_code) {
+        FontGlyph::Outline(outline) => Glyph::Outline(outline),
+        FontGlyph::Type3(glyph) => {
+            let nesting_depth = ctx.nesting_depth() + 1;
 
-#[derive(Debug)]
-enum Encoding {
-    Standard,
-    MacRoman,
-    WinAnsi,
-    MacExpert,
-    BuiltIn,
-}
-
-impl Encoding {
-    fn map_code(&self, code: u8) -> Option<&'static str> {
-        if code == 0 {
-            return Some(".notdef");
-        }
-        match self {
-            Self::Standard => standard::get(code),
-            Self::MacRoman => mac_roman::get(code).or_else(|| mac_os_roman::get(code)),
-            Self::WinAnsi => win_ansi::get(code),
-            Self::MacExpert => mac_expert::get(code),
-            Self::BuiltIn => None,
+            Glyph::Type3(Box::new(Type3Glyph {
+                glyph,
+                state: ctx.snapshot(),
+                bbox: ctx.bbox(),
+                parent_resources: resources.clone(),
+                cache: ctx.interpreter_cache.clone(),
+                xref: ctx.xref,
+                settings: ctx.settings.clone(),
+                nesting_depth,
+            }))
         }
     }
 }
 
-/// The font stretch.
-#[derive(Debug, Copy, Clone)]
-pub enum FontStretch {
-    /// Normal.
-    Normal,
-    /// Ultra condensed.
-    UltraCondensed,
-    /// Extra condensed.
-    ExtraCondensed,
-    /// Condensed.
-    Condensed,
-    /// Semi condensed.
-    SemiCondensed,
-    /// Semi expanded.
-    SemiExpanded,
-    /// Expanded.
-    Expanded,
-    /// Extra expanded.
-    ExtraExpanded,
-    /// Ultra expanded.
-    UltraExpanded,
-}
-
-impl FontStretch {
-    fn from_string(s: &str) -> Self {
-        match s {
-            "UltraCondensed" => Self::UltraCondensed,
-            "ExtraCondensed" => Self::ExtraCondensed,
-            "Condensed" => Self::Condensed,
-            "SemiCondensed" => Self::SemiCondensed,
-            "SemiExpanded" => Self::SemiExpanded,
-            "Expanded" => Self::Expanded,
-            "ExtraExpanded" => Self::ExtraExpanded,
-            "UltraExpanded" => Self::UltraExpanded,
-            _ => Self::Normal,
-        }
-    }
-}
-
-bitflags! {
-    /// Bitflags describing various characteristics of fonts.
-    #[derive(Debug)]
-    pub(crate) struct FontFlags: u32 {
-        const FIXED_PITCH = 1 << 0;
-        const SERIF = 1 << 1;
-        const SYMBOLIC = 1 << 2;
-        const SCRIPT = 1 << 3;
-        const NON_SYMBOLIC = 1 << 5;
-        const ITALIC = 1 << 6;
-        const ALL_CAP = 1 << 16;
-        const SMALL_CAP = 1 << 17;
-        const FORCE_BOLD = 1 << 18;
-    }
-}
-
-/// A query for a font.
-pub enum FontQuery {
-    /// A query for one of the 14 PDF standard fonts.
-    Standard(StandardFont),
-    /// A query for a font that is not embedded in the PDF file.
-    ///
-    /// Note that this type of query is currently not supported,
-    /// but will be implemented in the future.
-    Fallback(FallbackFontQuery),
-}
-
-/// A query for a font with specific properties.
-#[derive(Debug, Clone)]
-pub struct FallbackFontQuery {
-    /// The postscript name of the font.
-    pub post_script_name: Option<String>,
-    /// The name of the font.
-    pub font_name: Option<String>,
-    /// The family of the font.
-    pub font_family: Option<String>,
-    /// The stretch of the font.
-    pub font_stretch: FontStretch,
-    /// The weight of the font.
-    pub font_weight: u32,
-    /// Whether the font is monospaced.
-    pub is_fixed_pitch: bool,
-    /// Whether the font is serif.
-    pub is_serif: bool,
-    /// Whether the font is italic.
-    pub is_italic: bool,
-    /// Whether the font is bold.
-    pub is_bold: bool,
-    /// Whether the font is small cap.
-    pub is_small_cap: bool,
-    /// The character collection (registry/ordering) if this is a CID font.
-    pub character_collection: Option<CharacterCollection>,
-}
-
-impl FallbackFontQuery {
-    pub(crate) fn new(dict: &Dict<'_>) -> Self {
-        let post_script_name = dict
-            .get::<Name<'_>>(BASE_FONT)
-            .map(|n| strip_subset_prefix(n.as_str()).to_string());
-
-        let mut data = Self {
-            post_script_name,
-            ..Default::default()
-        };
-
-        if let Some(descriptor) = dict.get::<Dict<'_>>(FONT_DESC) {
-            data.font_name = dict
-                .get::<Name<'_>>(FONT_NAME)
-                .map(|n| strip_subset_prefix(n.as_str()).to_string());
-            data.font_family = descriptor
-                .get::<Name<'_>>(FONT_FAMILY)
-                .map(|n| n.as_str().to_string());
-            data.font_stretch = descriptor
-                .get::<Name<'_>>(FONT_STRETCH)
-                .map(|n| FontStretch::from_string(n.as_str()))
-                .unwrap_or(FontStretch::Normal);
-            data.font_weight = descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400);
-
-            if let Some(flags) = descriptor
-                .get::<u32>(FLAGS)
-                .map(FontFlags::from_bits_truncate)
-            {
-                data.is_serif = flags.contains(FontFlags::SERIF);
-                data.is_italic = flags.contains(FontFlags::ITALIC);
-                data.is_small_cap = flags.contains(FontFlags::SMALL_CAP);
-            }
-        }
-
-        data.is_italic |= data
-            .post_script_name
-            .as_ref()
-            .is_some_and(|s| s.contains("Italic"));
-
-        data.is_bold |= data
-            .post_script_name
-            .as_ref()
-            .is_some_and(|s| s.contains("Bold"));
-
-        data
-    }
-
-    /// Do a best-effort fallback to the 14 standard fonts based on the query.
-    pub fn pick_standard_font(&self) -> StandardFont {
-        if self.is_fixed_pitch {
-            match (self.is_bold, self.is_italic) {
-                (true, true) => StandardFont::CourierBoldOblique,
-                (true, false) => StandardFont::CourierBold,
-                (false, true) => StandardFont::CourierOblique,
-                (false, false) => StandardFont::Courier,
-            }
-        } else if !self.is_serif {
-            match (self.is_bold, self.is_italic) {
-                (true, true) => StandardFont::HelveticaBoldOblique,
-                (true, false) => StandardFont::HelveticaBold,
-                (false, true) => StandardFont::HelveticaOblique,
-                (false, false) => StandardFont::Helvetica,
-            }
-        } else {
-            match (self.is_bold, self.is_italic) {
-                (true, true) => StandardFont::TimesBoldItalic,
-                (true, false) => StandardFont::TimesBold,
-                (false, true) => StandardFont::TimesItalic,
-                (false, false) => StandardFont::TimesRoman,
-            }
-        }
-    }
-}
-
-impl Default for FallbackFontQuery {
-    fn default() -> Self {
-        Self {
-            post_script_name: None,
-            font_name: None,
-            font_family: None,
-            font_stretch: FontStretch::Normal,
-            font_weight: 400,
-            is_fixed_pitch: false,
-            is_serif: false,
-            is_italic: false,
-            is_bold: false,
-            is_small_cap: false,
-            character_collection: None,
-        }
-    }
-}
-
-/// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
-/// Specification (<https://github.com/adobe-type-tools/agl-specification>), with the AGL
-/// extended by glyph names used in the Computer Modern and AMS fonts.
-pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Option<BfString> {
-    let base = name.split('.').next().unwrap_or_default();
-    let mut out = String::new();
-
-    for component in base.split('_') {
-        if let Some(c) = is_zapf_dingbats
-            .then(|| zapf_dings::glyph_name_to_unicode(component))
-            .flatten()
-        {
-            out.push(c);
-        } else if let Some(unicode_str) =
-            glyph_names::get(component).or_else(|| tex_glyph_names::get(component))
-        {
-            out.push_str(unicode_str);
-        } else if let Some(unicode_str) = uni_component(component) {
-            out.push_str(&unicode_str);
-        } else if let Some(c) = u_component(component) {
-            out.push(c);
-        }
-    }
-
-    bf_string_from_str(&out)
-}
-
-fn uni_component(component: &str) -> Option<String> {
-    let digits = component.strip_prefix("uni")?.as_bytes();
-
-    if digits.is_empty() || digits.len() % 4 != 0 {
-        return None;
-    }
-
-    digits
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .map(|group| char::from_u32(parse_uppercase_hex(group)?))
-        .collect()
-}
-
-fn u_component(component: &str) -> Option<char> {
-    let digits = component.strip_prefix('u')?.as_bytes();
-
-    if !(4..=6).contains(&digits.len()) {
-        return None;
-    }
-
-    char::from_u32(parse_uppercase_hex(digits)?)
-}
-
-fn parse_uppercase_hex(digits: &[u8]) -> Option<u32> {
-    digits.iter().try_fold(0_u32, |value, digit| {
-        let digit = match digit {
-            b'0'..=b'9' => digit - b'0',
-            b'A'..=b'F' => digit - b'A' + 10,
-            _ => return None,
-        };
-
-        Some(value * 16 + u32::from(digit))
-    })
-}
-
-fn bf_string_from_str(s: &str) -> Option<BfString> {
-    let mut chars = s.chars();
-    match (chars.next(), chars.next()) {
-        (Some(c), None) => Some(BfString::Char(c)),
-        (Some(_), Some(_)) => Some(BfString::String(s.to_string())),
-        (None, _) => None,
-    }
-}
-
-pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
-    let convert = |input: &str| u32::from_str_radix(input, 16).ok().and_then(char::from_u32);
-
-    name.starts_with("uni")
-        .then(|| name.get(3..).and_then(convert))
-        .or_else(|| {
-            name.starts_with("u")
-                .then(|| name.get(1..).and_then(convert))
-        })
-        .flatten()
-}
-
-pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
-    dict.get::<Stream<'_>>(TO_UNICODE)
-        .and_then(|s| s.decoded_data().ok())
-        // See PDFJS-11915, where `Identity-H` is used for `ToUnicode`. I don't
-        // believe it's valid, but at least mupdf seems to be able to deal with it.
-        .or_else(|| {
-            dict.get::<Name<'_>>(TO_UNICODE)
-                .and_then(|name| (cmap_resolver)(CMapName::from_bytes(name.as_ref())))
-                .map(|d| Cow::Owned(d.to_vec()))
-        })
-        .and_then(|data| {
-            let cmap_resolver = cmap_resolver.clone();
-            CMap::parse(&data, move |name| (cmap_resolver)(name))
-        })
-}
-
-// When mapping to glyphs, some fonts might only have a glyph for the "normalized"
-// name.
-pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
-    if name == "nbspace" {
-        name = "space";
-    }
-
-    if name == "sfthyphen" {
-        name = "hyphen";
-    }
-
-    name
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "embed-fonts"))]
 mod tests {
-    use super::glyph_name_to_unicode;
-    use hayro_cmap::BfString;
+    use crate::font::{Glyph, GlyphRun};
+    use crate::{
+        BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+        InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
+    };
+    use hayro_syntax::Pdf;
+    use kurbo::{Affine, BezPath, Rect, Shape};
 
-    fn map(name: &str) -> Option<String> {
-        glyph_name_to_unicode(name, false).map(|unicode| match unicode {
-            BfString::Char(c) => c.to_string(),
-            BfString::String(s) => s,
-        })
+    #[derive(Default)]
+    struct Outlines(Vec<Rect>);
+
+    impl<'a> Device<'a> for Outlines {
+        fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+        fn draw_glyph_run(&mut self, run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+            for glyph in run.glyphs() {
+                if let Glyph::Outline(outline) = &**glyph {
+                    self.0.push(outline.outline().bounding_box());
+                }
+            }
+        }
+        fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+        fn pop_clip(&mut self) {}
+        fn pop_transparency_group(&mut self) {}
     }
 
+    // The embedded substitutes have no `sfthyphen` glyph, so a soft hyphen in a standard font
+    // has to be drawn with the font's hyphen.
     #[test]
-    fn agl_specification_examples() {
-        assert_eq!(map("Lcommaaccent").as_deref(), Some("\u{013B}"));
-        assert_eq!(map("uni20AC0308").as_deref(), Some("\u{20AC}\u{0308}"));
-        assert_eq!(map("u1040C").as_deref(), Some("\u{1040C}"));
-        assert_eq!(map("uniD801DC0C"), None);
-        assert_eq!(map("uni20ac"), None);
-        assert_eq!(
-            map("Lcommaaccent_uni20AC0308_u1040C.alternate").as_deref(),
-            Some("\u{013B}\u{20AC}\u{0308}\u{1040C}")
+    fn soft_hyphen_is_drawn_like_a_hyphen() {
+        let pdf =
+            Pdf::new(include_bytes!("../../../tests/pdfs/text/soft_hyphen.pdf").to_vec()).unwrap();
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 1.0, 1.0),
+            &cache,
+            pdf.xref(),
+            InterpreterSettings::default(),
         );
-        assert_eq!(map("foo"), None);
-        assert_eq!(map(".notdef"), None);
-    }
+        let mut outlines = Outlines::default();
+        interpret_page(&pdf.pages()[0], &mut context, &mut outlines);
 
-    #[test]
-    fn components() {
-        assert_eq!(map("dalethatafpatah").as_deref(), Some("\u{05D3}\u{05B2}"));
-        assert_eq!(map("hyphen.case").as_deref(), Some("-"));
-        assert_eq!(map("f_f_l").as_deref(), Some("ffl"));
-        assert_eq!(map("f_g102").as_deref(), Some("f"));
-        assert_eq!(map("uni000A0020").as_deref(), Some("\n "));
-        assert_eq!(map("u41"), None);
-        assert_eq!(map("u110000"), None);
+        // The text is `a`, a soft hyphen, `b`, a hyphen and `c`, in a non-embedded Courier.
+        assert!(outlines.0[1].area() > 0.0);
+        assert_eq!(outlines.0[1], outlines.0[3]);
     }
 }

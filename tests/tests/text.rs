@@ -12,13 +12,14 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 7] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
         ("text::tex_glyph_names", tex_glyph_names),
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
+        ("text::to_unicode_cid_ranges", to_unicode_cid_ranges),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -115,4 +116,10 @@ fn clip_mode() {
     let file = &read("pdfs/text/clip_mode.pdf");
 
     assert_eq!(page_text(file), "Clip and fill");
+}
+
+fn to_unicode_cid_ranges() {
+    let file = &read("pdfs/text/to_unicode_cid_ranges.pdf");
+
+    assert_eq!(page_text(file), "HI");
 }

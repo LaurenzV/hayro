@@ -617,7 +617,7 @@ pub struct Metadata {
 }
 
 /// The registry+ordering family of a CID character collection.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CidFamily {
     /// Adobe-Japan1
     AdobeJapan1,
@@ -686,7 +686,7 @@ impl CidFamily {
 }
 
 /// A CID character collection identifying the character set and ordering.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CharacterCollection {
     /// The registry+ordering family.
     pub family: CidFamily,

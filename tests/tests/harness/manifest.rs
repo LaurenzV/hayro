@@ -43,6 +43,7 @@ pub(crate) struct Entry {
     pub(crate) ignore: bool,
     pub(crate) svg: bool,
     pub(crate) max_diff_pixels: u32,
+    pub(crate) aliasing_threshold: Option<u8>,
 }
 
 impl Entry {
@@ -97,6 +98,10 @@ impl Entry {
                 .get("max_diff_pixels")
                 .and_then(Value::as_u64)
                 .map_or(0, |pixels| pixels as u32),
+            aliasing_threshold: fields
+                .get("aliasing_threshold")
+                .and_then(Value::as_u64)
+                .map(|threshold| u8::try_from(threshold).unwrap()),
         }
     }
 }
