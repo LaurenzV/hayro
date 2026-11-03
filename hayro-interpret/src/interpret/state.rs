@@ -102,8 +102,8 @@ impl<'a> State<'a> {
 #[derive(Clone, Debug)]
 pub(crate) enum TextStateFont<'a> {
     /// The font in the text state was explicitly set and resolves to a valid
-    /// font.
-    Font(Font<'a>),
+    /// font, which was loaded from the given dictionary.
+    Font(Font<'a>, Dict<'a>),
     /// The font was not set or an invalid font was set.
     Fallback(Font<'a>),
 }
@@ -113,7 +113,7 @@ impl<'a> Deref for TextStateFont<'a> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            TextStateFont::Font(f) => f,
+            TextStateFont::Font(f, _) => f,
             TextStateFont::Fallback(f) => f,
         }
     }

@@ -7,6 +7,7 @@ use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::{CacheKey, InterpreterSettings, Paint};
 use hayro_cmap::{BfString, WritingMode};
+use hayro_syntax::object::Dict;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, Rect};
@@ -95,6 +96,7 @@ impl<'a> Deref for PositionedGlyph<'a> {
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
     pub(crate) writing_mode: WritingMode,
+    pub(crate) font_dict: Option<&'run Dict<'a>>,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
@@ -106,6 +108,15 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     /// Return the writing mode of the font the run was shown with.
     pub fn writing_mode(&self) -> WritingMode {
         self.writing_mode
+    }
+
+    /// Return the dictionary of the font the run was shown with.
+    ///
+    /// Unlike [`GlyphIdentifier`], which only depends on the font program, this tells apart
+    /// fonts that share a program. Returns `None` if the run is drawn with the fallback font,
+    /// because no font was selected, or the selected font doesn't exist or can't be loaded.
+    pub fn font_dict(&self) -> Option<&'run Dict<'a>> {
+        self.font_dict
     }
 }
 
