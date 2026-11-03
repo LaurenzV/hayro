@@ -135,33 +135,42 @@ impl<'a> UntypedIter<'a> {
     /// Return the next instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
-        self.next_with_span().map(|(instruction, _)| instruction)
+        self.stack.clear();
+
+        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        self.operator = Some(operator);
+        Some(Instruction {
+            operands: &self.stack,
+            operator: self.operator.as_ref().unwrap(),
+        })
     }
 
     fn next_with_span(&mut self) -> Option<(Instruction<'_, 'a>, Range<usize>)> {
         self.stack.clear();
 
-        let (operator, start) = read_instruction(&mut self.reader, &mut self.stack)?;
+        // `read_instruction` skips these as well, but the span starts after them.
+        self.reader.skip_white_spaces_and_comments();
+        let start = self.reader.offset();
+        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        let span = start..self.reader.offset();
+
         self.operator = Some(operator);
         Some((
             Instruction {
                 operands: &self.stack,
                 operator: self.operator.as_ref().unwrap(),
             },
-            start..self.reader.offset(),
+            span,
         ))
     }
 }
 
-/// Read the next instruction, and return its operator and the offset at which it starts.
-fn read_instruction<'a>(
-    r: &mut Reader<'a>,
-    stack: &mut Stack<'a>,
-) -> Option<(Operator<'a>, usize)> {
+// Inlined into both `next` and `next_with_span`, since calling it makes iterating measurably
+// slower.
+#[inline(always)]
+fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Operator<'a>> {
     // Keeps the read position in a register; must be written back before calling out.
     let mut cur = r.clone();
-    cur.skip_white_spaces_and_comments();
-    let instruction_start = cur.offset();
 
     loop {
         cur.skip_white_spaces_and_comments();
@@ -204,7 +213,7 @@ fn read_instruction<'a>(
                     read_inline_image(r, stack)?;
                 }
 
-                return Some((operator, instruction_start));
+                return Some(operator);
             }
         }
     }
@@ -429,7 +438,7 @@ impl<'a> TypedIter<'a> {
     /// Return the next typed instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
-        self.next_with_span().map(|(instruction, _)| instruction)
+        typed(self.untyped.next()?)
     }
 
     /// Return the next typed instruction, together with the range of the data it was read from.
@@ -452,33 +461,36 @@ impl<'a> TypedIter<'a> {
     /// ```
     pub fn next_with_span(&mut self) -> Option<(TypedInstruction<'_, 'a>, Range<usize>)> {
         let (op, span) = self.untyped.next_with_span()?;
-        // TODO: Explore whether dispatching can be made more efficient.
-        let op = match TypedInstruction::dispatch(&op) {
-            Some(op) => op,
-            // In case this returns `None`, the content stream is invalid. In case a path-drawing
-            // operator was used, let's abort completely, otherwise we might end up drawing random stuff.
-            // However, for other operators it could be worth it to just skip it but keep attempting
-            // to read other content operators.
-            None => {
-                if [
-                    &b"m"[..],
-                    &b"l"[..],
-                    &b"c"[..],
-                    &b"v"[..],
-                    &b"y"[..],
-                    &b"h"[..],
-                    &b"re"[..],
-                ]
-                .contains(&op.operator.0.deref())
-                {
-                    return None;
-                } else {
-                    TypedInstruction::Fallback(op.operator)
-                }
-            }
-        };
+        Some((typed(op)?, span))
+    }
+}
 
-        Some((op, span))
+#[inline(always)]
+fn typed<'b, 'a>(op: Instruction<'b, 'a>) -> Option<TypedInstruction<'b, 'a>> {
+    // TODO: Explore whether dispatching can be made more efficient.
+    match TypedInstruction::dispatch(&op) {
+        Some(op) => Some(op),
+        // In case this returns `None`, the content stream is invalid. In case a path-drawing
+        // operator was used, let's abort completely, otherwise we might end up drawing random stuff.
+        // However, for other operators it could be worth it to just skip it but keep attempting
+        // to read other content operators.
+        None => {
+            if [
+                &b"m"[..],
+                &b"l"[..],
+                &b"c"[..],
+                &b"v"[..],
+                &b"y"[..],
+                &b"h"[..],
+                &b"re"[..],
+            ]
+            .contains(&op.operator.0.deref())
+            {
+                None
+            } else {
+                Some(TypedInstruction::Fallback(op.operator))
+            }
+        }
     }
 }
 
