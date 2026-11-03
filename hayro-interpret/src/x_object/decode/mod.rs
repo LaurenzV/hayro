@@ -154,8 +154,11 @@ fn decode_u8_samples(
     let ranges = color_space.component_ranges();
     let indexed_hival = color_space.indexed_hival();
 
-    let decode_component = |value: u32, index: usize| {
-        let component_index = index % num_components;
+    if num_components == 0 {
+        return Some(Vec::new());
+    }
+
+    let decode_component = |value: u32, component_index: usize| {
         let (decode_min, decode_max) = *decode.get(component_index)?;
         let decoded = interpolate(value as f32, 0.0, source_max, decode_min, decode_max);
 
@@ -173,7 +176,28 @@ fn decode_u8_samples(
     };
 
     match bits_per_component {
-        1..8 | 9..16 => {
+        1 | 2 | 4 | 8 => {
+            let num_values = 1_usize << bits_per_component;
+            let lut = (0..num_components)
+                .flat_map(|component| {
+                    (0..num_values).map(move |value| decode_component(value as u32, component))
+                })
+                .collect::<Option<Vec<_>>>()?;
+
+            Some(if bits_per_component == 8 {
+                decode_8bit_samples(data, num_components, &lut)
+            } else {
+                decode_packed_samples(
+                    data,
+                    width,
+                    height,
+                    num_components,
+                    bits_per_component,
+                    &lut,
+                )
+            })
+        }
+        1..16 => {
             let mut buf = Vec::with_capacity(capacity);
             for_each_sample(
                 data,
@@ -182,30 +206,120 @@ fn decode_u8_samples(
                 num_components,
                 bits_per_component,
                 |value, index| {
-                    buf.push(decode_component(value, index)?);
+                    buf.push(decode_component(value, index % num_components)?);
                     Some(())
                 },
             )?;
 
             Some(buf)
         }
-        8 => Some(
-            data.iter()
-                .enumerate()
-                .map(|(index, value)| decode_component(*value as u32, index))
-                .collect::<Option<Vec<_>>>()?,
-        ),
         16 => Some(
             data.as_chunks::<2>()
                 .0
                 .iter()
                 .enumerate()
                 .map(|(index, value)| {
-                    decode_component(u16::from_be_bytes([value[0], value[1]]) as u32, index)
+                    decode_component(
+                        u16::from_be_bytes([value[0], value[1]]) as u32,
+                        index % num_components,
+                    )
                 })
                 .collect::<Option<Vec<_>>>()?,
         ),
         _ => None,
+    }
+}
+
+fn decode_8bit_samples(data: &[u8], num_components: usize, lut: &[u8]) -> Vec<u8> {
+    if num_components == 1 {
+        return data.iter().map(|value| lut[*value as usize]).collect();
+    }
+
+    let mut buf = Vec::with_capacity(data.len());
+    for pixel in data.chunks(num_components) {
+        for (component, value) in pixel.iter().enumerate() {
+            buf.push(lut[component * 256 + *value as usize]);
+        }
+    }
+
+    buf
+}
+
+fn decode_packed_samples(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    num_components: usize,
+    bits_per_component: u8,
+    lut: &[u8],
+) -> Vec<u8> {
+    let bpc = bits_per_component as usize;
+    let samples_per_byte = 8 / bpc;
+    let num_values = 1 << bpc;
+    let mask = num_values as u8 - 1;
+    let row_samples = width as usize * num_components;
+    let row_bytes = (row_samples * bpc).div_ceil(8);
+    let row_data = |row: usize| data.get(row * row_bytes..).unwrap_or_default();
+
+    if row_samples == 0 {
+        return Vec::new();
+    }
+
+    if num_components == 1 {
+        let mut expanded = [[0_u8; 8]; 256];
+        for (byte, samples) in expanded.iter_mut().enumerate() {
+            for (i, sample) in samples.iter_mut().take(samples_per_byte).enumerate() {
+                let value = (byte >> (8 - bpc * (i + 1))) as u8 & mask;
+                *sample = lut[value as usize];
+            }
+        }
+
+        let mut buf = vec![0; row_samples * height as usize];
+        for (index, out) in buf.chunks_exact_mut(row_samples).enumerate() {
+            let row = row_data(index);
+            match samples_per_byte {
+                8 => expand_row::<8>(row, out, &expanded),
+                4 => expand_row::<4>(row, out, &expanded),
+                _ => expand_row::<2>(row, out, &expanded),
+            }
+        }
+
+        return buf;
+    }
+
+    let mut buf = Vec::with_capacity(row_samples * height as usize);
+    for row in 0..height as usize {
+        let row = row_data(row);
+        let mut component = 0;
+        for sample in 0..row_samples {
+            let bit = sample * bpc;
+            let byte = row.get(bit / 8).copied().unwrap_or(0);
+            let value = (byte >> (8 - bpc - bit % 8)) & mask;
+            buf.push(lut[component * num_values + value as usize]);
+            component += 1;
+            if component == num_components {
+                component = 0;
+            }
+        }
+    }
+
+    buf
+}
+
+fn expand_row<const N: usize>(row: &[u8], out: &mut [u8], expanded: &[[u8; 8]; 256]) {
+    let (chunks, remainder) = out.as_chunks_mut::<N>();
+    let available = chunks.len().min(row.len());
+
+    for (chunk, byte) in chunks[..available].iter_mut().zip(row) {
+        chunk.copy_from_slice(&expanded[*byte as usize][..N]);
+    }
+    for chunk in &mut chunks[available..] {
+        chunk.copy_from_slice(&expanded[0][..N]);
+    }
+
+    if !remainder.is_empty() {
+        let byte = row.get(chunks.len()).copied().unwrap_or(0);
+        remainder.copy_from_slice(&expanded[byte as usize][..remainder.len()]);
     }
 }
 

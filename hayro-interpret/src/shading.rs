@@ -205,7 +205,7 @@ impl Shading {
             }
             4 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
@@ -232,7 +232,7 @@ impl Shading {
             }
             5 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let function = read_function(dict, &color_space);
@@ -259,7 +259,7 @@ impl Shading {
             }
             6 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
@@ -283,7 +283,7 @@ impl Shading {
             }
             7 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;

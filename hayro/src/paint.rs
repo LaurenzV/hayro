@@ -4,7 +4,7 @@ use hayro_interpret::encode::{EncodedShadingType, texture_dimensions};
 use hayro_interpret::gradient::SvgGradientKind;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::x_y_advances;
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{Affine, BezPath, Rect};
 use std::sync::Arc;
 use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
 use vello_cpu::peniko::{ColorStop, Gradient, ImageQuality, ImageSampler};
@@ -28,6 +28,23 @@ impl Renderer<'_> {
             }
             Paint::Pattern(p) => {
                 let path_transform = self.ctx.transform();
+                let bbox = {
+                    let mut bbox = path_transform.transform_rect_bbox(path_bbox());
+
+                    if is_stroke {
+                        // Try to account for stroke in bbox.
+                        let (a1, a2) = x_y_advances(path_transform);
+                        let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
+                        bbox = bbox.inflate(factor, factor);
+                    }
+
+                    bbox.intersect(Rect::new(
+                        0.0,
+                        0.0,
+                        self.ctx.width() as f64,
+                        self.ctx.height() as f64,
+                    ))
+                };
 
                 match *p {
                     Pattern::Shading(s) => {
@@ -35,21 +52,6 @@ impl Renderer<'_> {
 
                         clip_path = s.shading.clip_path.clone();
                         let encoded = s.encode();
-                        let mut bbox = (*path_transform * path_bbox().to_path(0.0)).bounding_box();
-
-                        if is_stroke {
-                            // Try to account for stroke in bbox.
-                            let (a1, a2) = x_y_advances(path_transform);
-                            let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
-                            bbox = bbox.inflate(factor, factor);
-                        }
-
-                        bbox = bbox.intersect(Rect::new(
-                            0.0,
-                            0.0,
-                            self.ctx.width() as f64,
-                            self.ctx.height() as f64,
-                        ));
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
                             && let Some(native) =
@@ -127,70 +129,8 @@ impl Renderer<'_> {
                         }
                     }
                     Pattern::Tiling(t) => {
-                        const MAX_PIXMAP_SIZE: f32 = 3000.0;
-                        // TODO: Raise this limit and perform downsampling if reached
-                        // (see pdftc_100k_0138.pdf).
-                        const MIN_PIXMAP_SIZE: f32 = 1.0;
-
-                        let bbox = t.bbox;
-                        let max_x_scale = MAX_PIXMAP_SIZE / bbox.width() as f32;
-                        let min_x_scale = MIN_PIXMAP_SIZE / bbox.width() as f32;
-                        let max_y_scale = MAX_PIXMAP_SIZE / bbox.height() as f32;
-                        let min_y_scale = MIN_PIXMAP_SIZE / bbox.height() as f32;
-
-                        let (mut xs, mut ys) = {
-                            let (x, y) = x_y_advances(&(t.matrix));
-                            (x.length() as f32, y.length() as f32)
-                        };
-                        xs = xs.max(min_x_scale).min(max_x_scale);
-                        ys = ys.max(min_y_scale).min(max_y_scale);
-
-                        let x_step = xs * t.x_step;
-                        let y_step = ys * t.y_step;
-
-                        let pix_width = x_step.abs().round().max(1.0) as u16;
-                        let pix_height = y_step.abs().round().max(1.0) as u16;
-
-                        let xs = pix_width as f32 / t.x_step.abs();
-                        let ys = pix_height as f32 / t.y_step.abs();
-
-                        let scaled_width = bbox.width() as f32 * xs;
-                        let scaled_height = bbox.height() as f32 * ys;
-
-                        let mut ctx = self.child_context(pix_width, pix_height);
-                        let mut renderer = Renderer::new(&mut ctx, self.global);
-                        renderer.inside_pattern = true;
-                        let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
-                            * Affine::translate((-bbox.x0, -bbox.y0));
-                        t.interpret(&mut renderer, initial_transform, is_stroke);
-                        let mut pix = Pixmap::new(pix_width, pix_height);
-                        renderer.ctx.flush();
-                        let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render(&mut pix, &mut resources);
-
-                        // TODO: Fix these
-                        if x_step < 0.0 {
-                            initial_transform *=
-                                Affine::new([-1.0, 0.0, 0.0, 1.0, scaled_width as f64, 0.0]);
-                        }
-
-                        if y_step < 0.0 {
-                            initial_transform *=
-                                Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, scaled_height as f64]);
-                        }
-
-                        paint_transform =
-                            path_transform.inverse() * t.matrix * initial_transform.inverse();
-
-                        let image = Image {
-                            image: ImageSource::Pixmap(Arc::new(pix)),
-                            sampler: ImageSampler {
-                                x_extend: peniko::Extend::Repeat,
-                                y_extend: peniko::Extend::Repeat,
-                                quality: ImageQuality::Medium,
-                                alpha: t.opacity,
-                            },
-                        };
+                        let (image, transform) = self.tiling_paint(&t, bbox, is_stroke);
+                        paint_transform = path_transform.inverse() * transform;
 
                         PaintType::Image(image)
                     }

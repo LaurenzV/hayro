@@ -1,48 +1,26 @@
 use crate::error::{Error, Result};
-use crate::reader::{Reader, is_delimiter, is_whitespace};
+use crate::reader::Reader;
+use core::num::IntErrorKind;
 
 /// A PostScript number object (integer or real).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Number {
-    Integer(i32),
-    Real(f32),
+    Integer(i64),
+    Real(f64),
 }
 
 impl Number {
-    /// Return the value as an `i32`. Reals are truncated.
-    pub fn as_i32(self) -> i32 {
-        match self {
-            Self::Integer(v) => v,
-            Self::Real(v) => v as i32,
-        }
-    }
-
-    /// Return the value as an `f32`.
-    pub fn as_f32(self) -> f32 {
-        match self {
-            Self::Integer(v) => v as f32,
-            Self::Real(v) => v,
-        }
-    }
-
     /// Return the value as an `f64`.
     pub fn as_f64(self) -> f64 {
         match self {
             Self::Integer(v) => v as f64,
-            Self::Real(v) => v as f64,
+            Self::Real(v) => v,
         }
     }
 }
 
-fn is_terminated(r: &Reader<'_>) -> bool {
-    match r.peek_byte() {
-        None => true,
-        Some(b) => is_whitespace(b) || is_delimiter(b),
-    }
-}
-
-pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
-    let saved = r.offset();
+pub(crate) fn parse(token: &[u8]) -> Result<Number> {
+    let r = &mut Reader::new(token);
 
     // Optional sign.
     let first = r.peek_byte().ok_or(Error::SyntaxError)?;
@@ -73,15 +51,22 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
         let num_start = r.offset();
         r.forward_while(|b| b.is_ascii_alphanumeric());
 
-        if r.offset() == num_start || !is_terminated(r) {
+        if r.offset() == num_start || r.peek_byte().is_some() {
             return Err(Error::SyntaxError);
         }
 
         let num_bytes = r.range(num_start..r.offset()).ok_or(Error::SyntaxError)?;
         let num_str = core::str::from_utf8(num_bytes).map_err(|_| Error::SyntaxError)?;
-        let value = i32::from_str_radix(num_str, base).map_err(|_| Error::SyntaxError)?;
 
-        return Ok(Number::Integer(value));
+        if !num_str.chars().all(|c| c.is_digit(base)) {
+            return Err(Error::SyntaxError);
+        }
+        let value = u64::from_str_radix(num_str, base).map_err(|e| match e.kind() {
+            IntErrorKind::PosOverflow => Error::LimitCheck,
+            _ => Error::SyntaxError,
+        })?;
+
+        return Ok(Number::Integer(value as i64));
     }
 
     // Check for real number indicators: `.` or `e`/`E`.
@@ -109,25 +94,37 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
         r.forward_while(|b| b.is_ascii_digit());
     }
 
-    if !is_terminated(r) {
+    if r.peek_byte().is_some() {
         return Err(Error::SyntaxError);
     }
 
-    let token = r.range(saved..r.offset()).ok_or(Error::SyntaxError)?;
     let str = core::str::from_utf8(token).map_err(|_| Error::SyntaxError)?;
 
     if has_dot || has_exponent {
-        let value = str.parse::<f32>().map_err(|_| Error::SyntaxError)?;
+        real(str)
+    } else {
+        match str.parse::<i64>() {
+            Ok(value) => Ok(Number::Integer(value)),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    IntErrorKind::PosOverflow | IntErrorKind::NegOverflow
+                ) =>
+            {
+                real(str)
+            }
+            Err(_) => Err(Error::SyntaxError),
+        }
+    }
+}
 
+fn real(str: &str) -> Result<Number> {
+    let value = str.parse::<f64>().map_err(|_| Error::SyntaxError)?;
+
+    if value.is_finite() {
         Ok(Number::Real(value))
     } else {
-        if !has_digits {
-            return Err(Error::SyntaxError);
-        }
-
-        let value = str.parse::<i32>().map_err(|_| Error::SyntaxError)?;
-
-        Ok(Number::Integer(value))
+        Err(Error::LimitCheck)
     }
 }
 
@@ -136,8 +133,7 @@ mod tests {
     use super::*;
 
     fn read_num(input: &[u8]) -> Result<Number> {
-        let mut r = Reader::new(input);
-        read(&mut r)
+        parse(input.trim_ascii_end())
     }
 
     #[test]
@@ -159,6 +155,7 @@ mod tests {
         assert_eq!(read_num(b"1E6 ").unwrap(), Number::Real(1E6));
         assert_eq!(read_num(b"-1. ").unwrap(), Number::Real(-1.0));
         assert_eq!(read_num(b"0.0 ").unwrap(), Number::Real(0.0));
+        assert_eq!(read_num(b"1.e5 ").unwrap(), Number::Real(1e5));
     }
 
     #[test]
@@ -166,6 +163,75 @@ mod tests {
         assert_eq!(read_num(b"8#1777 ").unwrap(), Number::Integer(0o1777));
         assert_eq!(read_num(b"16#FFFE ").unwrap(), Number::Integer(0xFFFE));
         assert_eq!(read_num(b"2#1000 ").unwrap(), Number::Integer(0b1000));
+        assert_eq!(read_num(b"36#ZZ ").unwrap(), Number::Integer(1295));
+    }
+
+    #[test]
+    fn large_integers() {
+        assert_eq!(
+            read_num(b"4000000001 ").unwrap(),
+            Number::Integer(4000000001)
+        );
+        assert_eq!(
+            read_num(b"9223372036854775807 ").unwrap(),
+            Number::Integer(i64::MAX)
+        );
+        assert_eq!(
+            read_num(b"-9223372036854775808 ").unwrap(),
+            Number::Integer(i64::MIN)
+        );
+    }
+
+    #[test]
+    fn integer_overflow_becomes_real() {
+        assert_eq!(
+            read_num(b"9223372036854775808 ").unwrap(),
+            Number::Real(9223372036854775808.0)
+        );
+        assert_eq!(
+            read_num(b"-9223372036854775809 ").unwrap(),
+            Number::Real(-9223372036854775809.0)
+        );
+        assert_eq!(
+            read_num(b"99999999999999999999999 ").unwrap(),
+            Number::Real(1e23)
+        );
+    }
+
+    #[test]
+    fn real_overflow() {
+        assert_eq!(read_num(b"1e400 "), Err(Error::LimitCheck));
+        assert_eq!(read_num(b"-1e400 "), Err(Error::LimitCheck));
+        assert_eq!(
+            read_num(b"9".repeat(400).as_slice()),
+            Err(Error::LimitCheck)
+        );
+    }
+
+    #[test]
+    fn radix_twos_complement() {
+        assert_eq!(
+            read_num(b"16#FFFFFFFF ").unwrap(),
+            Number::Integer(0xFFFFFFFF)
+        );
+        assert_eq!(
+            read_num(b"16#FFFFFFFFFFFFFFFF ").unwrap(),
+            Number::Integer(-1)
+        );
+        assert_eq!(
+            read_num(b"16#8000000000000000 ").unwrap(),
+            Number::Integer(i64::MIN)
+        );
+    }
+
+    #[test]
+    fn radix_overflow() {
+        assert_eq!(read_num(b"16#10000000000000000 "), Err(Error::LimitCheck));
+        assert_eq!(read_num(b"8#9 "), Err(Error::SyntaxError));
+        assert_eq!(
+            read_num(b"16#FFFFFFFFFFFFFFFFFFZ "),
+            Err(Error::SyntaxError)
+        );
     }
 
     #[test]
@@ -173,5 +239,9 @@ mod tests {
         assert!(read_num(b"abc").is_err());
         assert!(read_num(b"+abc").is_err());
         assert!(read_num(b"1a").is_err());
+        assert!(read_num(b"- ").is_err());
+        assert!(read_num(b". ").is_err());
+        assert!(read_num(b"1e ").is_err());
+        assert!(read_num(b"-16#FF ").is_err());
     }
 }

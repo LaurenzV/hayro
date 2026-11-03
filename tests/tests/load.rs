@@ -1,19 +1,25 @@
 use crate::WORKSPACE_PATH;
 use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::render_pdf;
+use hayro::{RenderSettings, render_pdf};
 use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
-use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
+use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier, Stream};
 use std::sync::Barrier;
 
 fn load_pdf(file: &[u8]) {
     let pdf = Pdf::new(file.to_vec());
 
     if let Ok(pdf) = pdf {
-        let _pixmaps = render_pdf(&pdf, 1.0, InterpreterSettings::default(), None);
+        let _pixmaps = render_pdf(
+            &pdf,
+            1.0,
+            InterpreterSettings::default(),
+            &RenderSettings::default(),
+            None,
+        );
     }
 }
 
@@ -75,7 +81,7 @@ pub(crate) fn tests() -> Vec<Test> {
         ))
     });
 
-    let units: [(&str, fn()); 4] = [
+    let units: [(&str, fn()); 5] = [
         ("load::metadata_in_object_stream", metadata_in_object_stream),
         (
             "load::concurrent_object_stream_resolution",
@@ -89,6 +95,7 @@ pub(crate) fn tests() -> Vec<Test> {
             "load::concurrent_xref_repair_retries_original_entries",
             concurrent_xref_repair_retries_original_entries,
         ),
+        ("load::jbig2_globals_chain", jbig2_globals_chain),
     ];
 
     files
@@ -159,7 +166,7 @@ fn concurrent_object_stream_resolution() {
                         let value = pdf
                             .xref()
                             .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
-                            .and_then(|dict| dict.get::<i32>(b"V"));
+                            .and_then(|dict| dict.get::<u32>(b"V"));
                         assert_eq!(value, Some(100 + number));
                     }
                 });
@@ -197,7 +204,7 @@ fn concurrent_xref_repair_does_not_panic() {
         let value = pdf
             .xref()
             .get::<Dict<'_>>(ObjectIdentifier::new(3, 0))
-            .and_then(|dict| dict.get::<i32>(b"V"));
+            .and_then(|dict| dict.get::<u32>(b"V"));
         assert_eq!(value, Some(103));
     }
 }
@@ -222,11 +229,40 @@ fn concurrent_xref_repair_retries_original_entries() {
                         let value = pdf
                             .xref()
                             .get::<Dict<'_>>(ObjectIdentifier::new(number, 0))
-                            .and_then(|dict| dict.get::<i32>(b"V"));
+                            .and_then(|dict| dict.get::<u32>(b"V"));
                         assert_eq!(value, Some(100 + number));
                     }
                 });
             }
         });
     }
+}
+
+fn jbig2_globals_chain() {
+    use pdf_writer::{Filter, Name, Pdf as PdfWriter, Rect, Ref};
+
+    let length = 100_000;
+    let mut writer = PdfWriter::new();
+    writer.catalog(Ref::new(1)).pages(Ref::new(2));
+    let page = Ref::new(length + 4);
+    writer.pages(Ref::new(2)).kids([page]).count(1);
+    writer
+        .page(page)
+        .parent(Ref::new(2))
+        .media_box(Rect::new(0.0, 0.0, 595.0, 842.0));
+    for index in 3..length + 3 {
+        let mut stream = writer.stream(Ref::new(index), &[]);
+        stream.filter(Filter::Jbig2Decode);
+        stream
+            .decode_parms()
+            .pair(Name(b"JBIG2Globals"), Ref::new(index + 1));
+    }
+    writer.stream(Ref::new(length + 3), &[]);
+    let pdf = Pdf::new(writer.finish()).unwrap();
+
+    let stream = pdf
+        .xref()
+        .get::<Stream<'_>>(ObjectIdentifier::new(3, 0))
+        .unwrap();
+    let _ = stream.decoded();
 }
