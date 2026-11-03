@@ -1,0 +1,50 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 4 4] /XStep 4 /YStep 4 /Resources << >> /Length 22 >>
+stream
+0 0 0 1 k 0 0 2 2 re f
+endstream
+endobj
+3 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 300 100] /Group << /S /Transparency /CS /DeviceGray >> /Length 22 >>
+stream
+0.5 g 0 0 300 100 re f
+endstream
+endobj
+4 0 obj
+<< /Type /Catalog /Pages 5 0 R >>
+endobj
+5 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 5 0 R /MediaBox [0 0 300 100] /Contents 7 0 R /Resources << /Font << /F1 1 0 R >> /Pattern << /Tile 2 0 R >> /ExtGState << /Mask << /SMask << /S /Luminosity /G 3 0 R >> >> >> >> >>
+endobj
+7 0 obj
+<<  /Length 134 >>
+stream
+BT /F1 24 Tf 0 0 0 1 k 10 70 Td (Black ink only) Tj ET
+/Pattern cs /Tile scn 10 40 20 20 re f
+q /Mask gs 0 0 0 1 k 40 40 20 20 re f Q
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000265 00000 n 
+0000000433 00000 n 
+0000000482 00000 n 
+0000000539 00000 n 
+0000000758 00000 n 
+trailer
+<< /Size 8 /Root 4 0 R >>
+startxref
+944
+%%EOF

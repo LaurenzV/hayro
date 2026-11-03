@@ -1,7 +1,7 @@
 //! Encoding shading patterns for easy sampling.
 
 use crate::canvas::Canvas;
-use crate::color::{AlphaColor, ColorSpace};
+use crate::color::{AlphaColor, CmykProfile, ColorComponents, ColorSpace, srgb_to_cmyk};
 use crate::function::MAX_COMPONENTS;
 use crate::function_shading::draw_function;
 use crate::gradient::function_lut;
@@ -19,6 +19,7 @@ pub struct EncodedShadingPattern {
     /// The base transform of the shading pattern.
     pub base_transform: Affine,
     pub(crate) color_space: ColorSpace,
+    pub(crate) background: Option<ColorComponents>,
     pub(crate) background_color: AlphaColor,
     /// The encoded shading type.
     pub shading_type: EncodedShadingType,
@@ -87,6 +88,81 @@ pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
     )
 }
 
+pub(crate) trait ShadingOutput<const C: usize> {
+    fn canvas_background(&self) -> [f32; C];
+    fn gradient_background(&self) -> Option<[f32; C]>;
+    fn convert(&self, components: &[f32]) -> [f32; C];
+    fn is_linear(&self) -> bool;
+
+    fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; C] {
+        let mut out = [0.0; MAX_COMPONENTS];
+        let out = &mut out[..function.num_outputs()];
+
+        match function.eval(input, out) {
+            Some(()) => self.convert(out),
+            None => [0.0; C],
+        }
+    }
+}
+
+pub(crate) struct RgbaOutput<'a>(pub(crate) &'a EncodedShadingPattern);
+
+impl ShadingOutput<4> for RgbaOutput<'_> {
+    fn canvas_background(&self) -> [f32; 4] {
+        self.0.finish(self.0.background_color.components())
+    }
+
+    fn gradient_background(&self) -> Option<[f32; 4]> {
+        let background = self.0.background_color.components();
+        (background[3] > 0.0).then(|| self.0.finish(background))
+    }
+
+    fn convert(&self, components: &[f32]) -> [f32; 4] {
+        self.0.convert(components)
+    }
+
+    fn is_linear(&self) -> bool {
+        self.0.color_space.is_device_gray_or_rgb() && self.0.transfer_function.is_none()
+    }
+}
+
+pub(crate) struct CmykOutput<'a> {
+    pub(crate) pattern: &'a EncodedShadingPattern,
+    pub(crate) profile: Option<&'a CmykProfile>,
+}
+
+impl ShadingOutput<5> for CmykOutput<'_> {
+    fn canvas_background(&self) -> [f32; 5] {
+        self.gradient_background().unwrap_or([0.0; 5])
+    }
+
+    fn gradient_background(&self) -> Option<[f32; 5]> {
+        let background = self.pattern.background.as_ref()?;
+        let color = self.convert(background);
+        (color[4] > 0.0).then_some(color)
+    }
+
+    fn convert(&self, components: &[f32]) -> [f32; 5] {
+        if self.pattern.transfer_function.is_some() {
+            let [r, g, b, a] = self.pattern.convert(components);
+            let [c, m, y, k] = srgb_to_cmyk([r, g, b], self.profile);
+            return [c, m, y, k, a];
+        }
+
+        let mut cmyk = self
+            .pattern
+            .color_space
+            .to_cmyk(components, 1.0, self.profile);
+        cmyk[4] *= self.pattern.opacity;
+        cmyk
+    }
+
+    fn is_linear(&self) -> bool {
+        self.pattern.color_space.is_device_gray_or_cmyk()
+            && self.pattern.transfer_function.is_none()
+    }
+}
+
 impl EncodedShadingPattern {
     pub(crate) fn finish(&self, mut color: [f32; 4]) -> [f32; 4] {
         color[3] *= self.opacity;
@@ -101,16 +177,6 @@ impl EncodedShadingPattern {
         self.finish(self.color_space.to_rgba(components, 1.0).components())
     }
 
-    pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
-        let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..function.num_outputs()];
-
-        match function.eval(input, out) {
-            Some(()) => self.convert(out),
-            None => [0.0; 4],
-        }
-    }
-
     /// Call `f` with the straight RGBA color of each pixel of a grid covering `bbox`, in row-major order.
     pub fn sample_texture(
         &self,
@@ -118,11 +184,42 @@ impl EncodedShadingPattern {
         scale: f32,
         f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
+        self.sample_texture_with(bbox, scale, &RgbaOutput(self), f)
+    }
+
+    /// Call `f` with the straight CMYK and alpha of each pixel of a grid covering `bbox`, in row-major order.
+    ///
+    /// Colors are converted as by [`ColorSpace::to_cmyk`]. If the shading has a transfer
+    /// function, it applies to the sRGB color, which is then converted to CMYK.
+    pub fn sample_texture_cmyk(
+        &self,
+        bbox: Rect,
+        scale: f32,
+        profile: Option<&CmykProfile>,
+        f: impl FnMut([f32; 5]),
+    ) -> (u32, u32, Affine) {
+        self.sample_texture_with(
+            bbox,
+            scale,
+            &CmykOutput {
+                pattern: self,
+                profile,
+            },
+            f,
+        )
+    }
+
+    fn sample_texture_with<const C: usize>(
+        &self,
+        bbox: Rect,
+        scale: f32,
+        output: &impl ShadingOutput<C>,
+        f: impl FnMut([f32; C]),
+    ) -> (u32, u32, Affine) {
         let (width, height) = texture_dimensions(bbox, scale);
         let grid_transform =
             Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(1.0 / scale as f64);
-        let background = self.finish(self.background_color.components());
-        let mut canvas = Canvas::new(width, height, background);
+        let mut canvas = Canvas::new(width, height, output.canvas_background());
         let transform = grid_transform.inverse() * self.base_transform.inverse();
 
         match &self.shading_type {
@@ -132,12 +229,14 @@ impl EncodedShadingPattern {
                     shading.domain,
                     &shading.function,
                     transform,
-                    self,
+                    output,
                 );
             }
-            EncodedShadingType::RadialAxial(shading) => shading.draw(&mut canvas, transform, self),
+            EncodedShadingType::RadialAxial(shading) => {
+                shading.draw(&mut canvas, transform, output);
+            }
             EncodedShadingType::Mesh(shading) => {
-                draw_mesh(&mut canvas, &shading.shading_type, transform, self);
+                draw_mesh(&mut canvas, &shading.shading_type, transform, output);
             }
             EncodedShadingType::Dummy(_) => {}
         }
@@ -219,13 +318,19 @@ impl ShadingPattern {
 
         let color_space = self.shading.color_space.clone();
 
-        let background_color = match (&shading_type, &self.shading.background) {
-            (EncodedShadingType::Dummy(_), _) | (_, None) => AlphaColor::TRANSPARENT,
-            (_, Some(background)) => color_space.to_rgba(background, 1.0),
+        let background = match &shading_type {
+            EncodedShadingType::Dummy(_) => None,
+            _ => self.shading.background.clone(),
         };
+
+        let background_color = background
+            .as_ref()
+            .map(|background| color_space.to_rgba(background, 1.0))
+            .unwrap_or(AlphaColor::TRANSPARENT);
 
         EncodedShadingPattern {
             color_space,
+            background,
             background_color,
             shading_type,
             base_transform,
@@ -300,8 +405,13 @@ pub(crate) enum RadialAxialParams {
 }
 
 impl EncodedRadialAxialShading {
-    fn draw(&self, canvas: &mut Canvas, transform: Affine, pattern: &EncodedShadingPattern) {
-        let lut = function_lut(&self.function, self.domain, pattern);
+    fn draw<const C: usize>(
+        &self,
+        canvas: &mut Canvas<C>,
+        transform: Affine,
+        output: &impl ShadingOutput<C>,
+    ) {
+        let lut = function_lut(&self.function, self.domain, output);
         let to_shading = transform.inverse();
         let (x_advance, y_advance) = x_y_advances(&to_shading);
         let mut row_start = to_shading * Point::new(0.5, 0.5);

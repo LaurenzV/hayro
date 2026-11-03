@@ -1,7 +1,7 @@
 mod image;
 mod mask;
 
-pub(crate) use image::{DecodedImage, decode_image};
+pub(crate) use image::{DecodedCmykImage, DecodedImage, decode_cmyk_image, decode_image};
 pub(crate) use mask::{DecodedMask, decode_mask};
 
 use crate::InterpreterWarning;
