@@ -15,7 +15,7 @@ use crate::x_object::{FormXObject, ImageXObject, XObject};
 use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, OCMD, RECT, TYPE};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -459,6 +459,12 @@ pub fn interpret<'a>(
                         context
                             .ocg_state
                             .begin_ocg(&dict, oc_ref.into(), context.xref);
+                    } else if let Some(name) = bdc.1.clone().into_name()
+                        && let Some(ocmd) = resources.properties.get::<Dict<'_>>(name)
+                        && ocmd.get::<Name<'_>>(TYPE).as_deref() == Some(OCMD)
+                    {
+                        // An OCG must be indirect, but an OCMD in `Properties` can be direct.
+                        context.ocg_state.begin_ocmd(&ocmd, context.xref);
                     } else {
                         context.ocg_state.begin_marked_content();
                     }

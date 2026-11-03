@@ -12,7 +12,7 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 10] = [
+    let units: [(&str, fn()); 11] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
@@ -28,6 +28,10 @@ pub(crate) fn tests() -> Vec<Test> {
         (
             "text::annotation_optional_content",
             annotation_optional_content,
+        ),
+        (
+            "text::optional_content_direct_ocmd",
+            optional_content_direct_ocmd,
         ),
     ];
 
@@ -177,4 +181,10 @@ fn annotation_optional_content() {
     let file = &read("pdfs/text/annotation_optional_content.pdf");
 
     assert_eq!(page_text(file), "wy");
+}
+
+fn optional_content_direct_ocmd() {
+    let file = &read("pdfs/text/optional_content_direct_ocmd.pdf");
+
+    assert_eq!(page_text(file), "BD");
 }
