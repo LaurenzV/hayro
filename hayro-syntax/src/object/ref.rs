@@ -10,14 +10,14 @@ use core::fmt::{Debug, Display, Formatter};
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct ObjRef {
     /// The object number.
-    pub obj_number: i32,
+    pub obj_number: u32,
     /// The generation number.
     pub gen_number: i32,
 }
 
 impl ObjRef {
     /// Create a new object reference.
-    pub fn new(obj_number: i32, gen_number: i32) -> Self {
+    pub fn new(obj_number: u32, gen_number: i32) -> Self {
         Self {
             obj_number,
             gen_number,
@@ -45,7 +45,7 @@ impl From<ObjectIdentifier> for ObjRef {
 
 impl Skippable for ObjRef {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<i32>(false)?;
+        r.skip::<u32>(false)?;
         r.skip_white_spaces();
         r.skip::<i32>(false)?;
         r.skip_white_spaces();
@@ -57,7 +57,7 @@ impl Skippable for ObjRef {
 
 impl Readable<'_> for ObjRef {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_ref = r.read_without_context::<i32>()?;
+        let obj_ref = r.read_without_context::<u32>()?;
         r.skip_white_spaces();
         let gen_num = r.read_without_context::<i32>()?;
         r.skip_white_spaces();
@@ -208,5 +208,32 @@ mod tests {
                 .read_without_context::<ObjRef>()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn ref_above_i32_max() {
+        assert_eq!(
+            Reader::new("2147483648 0 R".as_bytes())
+                .read_without_context::<ObjRef>()
+                .unwrap(),
+            ObjRef::new(2_147_483_648, 0)
+        );
+        assert_eq!(
+            Reader::new("4294967295 0 R".as_bytes())
+                .read_without_context::<ObjRef>()
+                .unwrap(),
+            ObjRef::new(u32::MAX, 0)
+        );
+    }
+
+    #[test]
+    fn ref_invalid_object_number() {
+        for input in ["4294967296 0 R", "-1 0 R"] {
+            assert!(
+                Reader::new(input.as_bytes())
+                    .read_without_context::<ObjRef>()
+                    .is_none()
+            );
+        }
     }
 }

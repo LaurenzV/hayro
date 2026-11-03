@@ -80,9 +80,15 @@ fn check_consumed(
         std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
     let reference = load_reference(reference);
 
-    let mut settings = DecodeSettings::new(reference[0].len() as u32, reference.len() as u32);
-    settings.end_of_block = false;
-    settings.encoding = G4;
+    let mut settings = DecodeSettings {
+        columns: reference[0].len() as u32,
+        rows: reference.len() as u32,
+        end_of_block: false,
+        end_of_line: false,
+        rows_are_byte_aligned: false,
+        encoding: G4,
+        strict: false,
+    };
     configure(&mut settings);
 
     let mut collector = Collector::new(settings.columns);
@@ -131,7 +137,15 @@ fn check_malformed(
     let data =
         std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
 
-    let mut settings = DecodeSettings::new(columns, rows);
+    let mut settings = DecodeSettings {
+        columns,
+        rows,
+        end_of_block: true,
+        end_of_line: false,
+        rows_are_byte_aligned: false,
+        encoding: EncodingMode::Group3_1D,
+        strict: false,
+    };
     configure(&mut settings);
 
     let mut ctx = DecoderContext::new(settings);

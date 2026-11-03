@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::{Glyph, GlyphRun, PositionedGlyph, TextProperties, UNITS_PER_EM};
+use crate::font::{Glyph, GlyphRun, PositionedGlyph, TextProperties, UNITS_PER_EM, get_glyph};
 use crate::interpret::state::TextStateFont;
 use crate::{DrawMode, FillRule};
 use hayro_cmap::WritingMode;
@@ -49,10 +49,12 @@ pub(crate) fn append_text_string<'a>(
 
         if show_glyphs && ctx.ocg_state.is_visible() {
             let origin_displacement = font.origin_displacement(code);
+            let glyph_id = font.map_code(code);
             let transform = ctx.text_state().full_transform()
                 * Affine::scale(1.0 / UNITS_PER_EM as f64)
-                * Affine::translate(origin_displacement);
-            let glyph = font.get_glyph(font.map_code(code), code, ctx, resources);
+                * Affine::translate(origin_displacement)
+                * Affine::scale_non_uniform(font.glyph_stretch(glyph_id, code), 1.0);
+            let glyph = get_glyph(&font, glyph_id, code, ctx, resources);
 
             ctx.glyph_scratch.push(PositionedGlyph {
                 glyph,
