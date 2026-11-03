@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/hayro.svg)](https://crates.io/crates/hayro)
 [![Documentation](https://docs.rs/hayro/badge.svg)](https://docs.rs/hayro)
 
-A set of crates for reading, interpreting and rendering PDF files.
+A set of Rust crates for parsing, interpreting and rendering PDF files.
 
 ## Motivation
 
@@ -61,6 +61,7 @@ used individually if desired. These include:
 - [`hayro-ccitt`](hayro-ccitt): A decoder for group 3 and group 4 CCITT-encoded images.
 - [`hayro-postscript`](hayro-postscript): A lightweight scanner for a specific subset of PostScript.
 - [`hayro-cmap`](hayro-cmap): A parser for CMap files in PDFs.
+- [`hayro-font`](hayro-font): Parsing the fonts of PDF files.
 
 ## Demo
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is just a

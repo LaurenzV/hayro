@@ -1,191 +1,84 @@
-use crate::CMapResolverFn;
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::glyph_simulator::GlyphSimulator;
-use crate::font::true_type::{Width, read_encoding, read_widths};
-use crate::font::{
-    Encoding, GlyphRun, Type3Glyph, UNITS_PER_EM, glyph_name_to_unicode, read_to_unicode,
-};
+use crate::font::{GlyphRun, Type3Glyph, UNITS_PER_EM};
 use crate::interpret::state::TextState;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, interpret};
-use crate::{CacheKey, ClipPath, DrawMode, DrawProps, ImageDrawProps};
+use crate::{ClipPath, DrawMode, DrawProps, ImageDrawProps};
 use crate::{Image, Paint};
-use hayro_cmap::{BfString, CMap};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::Dict;
-use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_MATRIX, RESOURCES};
+use hayro_syntax::object::dict::keys::RESOURCES;
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath};
-use rustc_hash::FxHashMap;
-use skrifa::GlyphId;
 
-#[derive(Debug)]
-pub(crate) struct Type3<'a> {
-    widths: Vec<Width>,
-    missing_width: f32,
-    encoding: Encoding,
-    encodings: FxHashMap<u8, String>,
-    dict: Dict<'a>,
-    char_procs: FxHashMap<String, Stream<'a>>,
-    glyph_simulator: GlyphSimulator,
-    matrix: Affine,
-    to_unicode: Option<CMap>,
-}
+pub(crate) fn render_glyph<'a>(
+    glyph: &Type3Glyph<'a>,
+    transform: Affine,
+    glyph_transform: Affine,
+    paint: &Paint<'a>,
+    device: &mut impl Device<'a>,
+) -> Option<()> {
+    let mut state = glyph.state.clone();
+    let root_transform = transform
+        * glyph_transform
+        * glyph.glyph.font().matrix()
+        * Affine::scale(UNITS_PER_EM as f64);
+    state.ctm = root_transform;
 
-impl<'a> Type3<'a> {
-    pub(crate) fn new(dict: &Dict<'a>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
-        let (encoding, encodings) = read_encoding(dict);
-        let (widths, missing_width) = read_widths(dict, dict)?;
+    // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
+    // (though the graphics state itself should be preserved).
+    state.text_state = TextState::default();
 
-        let matrix = Affine::new(
-            dict.get::<[f64; 6]>(FONT_MATRIX)
-                .unwrap_or([0.001, 0.0, 0.0, 0.001, 0.0, 0.0]),
-        );
+    let program = glyph.glyph.program()?;
+    let decoded = program.decoded_data().ok()?;
+    let iter = TypedIter::new(decoded.as_ref());
 
-        let char_procs = {
-            let mut procs = FxHashMap::default();
-            let dict = dict.get::<Dict<'_>>(CHAR_PROCS).unwrap_or_default();
+    let is_shape_glyph = {
+        let mut iter = iter.clone();
+        let mut is_shape_glyph = true;
 
-            for name in dict.keys() {
-                if let Some(prog) = dict.get::<Stream<'_>>(name.as_ref()) {
-                    procs.insert(name.as_str().to_string(), prog);
+        while let Some(op) = iter.next() {
+            match op {
+                TypedInstruction::ShapeGlyph(_) => {
+                    break;
                 }
-            }
-
-            procs
-        };
-
-        let to_unicode = read_to_unicode(dict, cmap_resolver);
-
-        Some(Self {
-            glyph_simulator: GlyphSimulator::new(),
-            encoding,
-            char_procs,
-            widths,
-            missing_width,
-            encodings,
-            matrix,
-            dict: dict.clone(),
-            to_unicode,
-        })
-    }
-
-    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
-        self.code_to_ps_name(code)
-            .map(|g| self.glyph_simulator.string_to_glyph(g))
-            .unwrap_or(GlyphId::NOTDEF)
-    }
-
-    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
-        self.encodings
-            .get(&code)
-            .map(|s| s.as_str())
-            .or_else(|| self.encoding.map_code(code))
-    }
-
-    pub(crate) fn glyph_width(&self, code: u8) -> f32 {
-        let w = match self.widths.get(code as usize).copied() {
-            Some(Width::Value(w)) => w,
-            _ => self.missing_width,
-        };
-        (w * self.matrix.as_coeffs()[0] as f32) * UNITS_PER_EM
-    }
-
-    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {
-        if let Some(to_unicode) = &self.to_unicode
-            && let Some(c) = to_unicode.lookup_bf_string(char_code)
-        {
-            // Skip null character mappings and fall back to glyph name
-            // lookup. Some PDFs have incorrect ToUnicode mappings that map
-            // to U+0000.
-            if c != BfString::Char('\0') {
-                return Some(c);
+                TypedInstruction::ColorGlyph(_) => {
+                    is_shape_glyph = false;
+                    break;
+                }
+                _ => {}
             }
         }
 
-        u8::try_from(char_code)
-            .ok()
-            .and_then(|code| self.code_to_ps_name(code))
-            .and_then(|name| glyph_name_to_unicode(name, false))
+        is_shape_glyph
+    };
+
+    let mut context = Context::new_with(
+        state.ctm,
+        glyph.bbox,
+        &glyph.cache,
+        glyph.xref,
+        glyph.settings.clone(),
+        state,
+        glyph.nesting_depth,
+    );
+
+    let resources = program
+        .dict()
+        .get(RESOURCES)
+        .or_else(|| glyph.glyph.font().resources())
+        .map(Resources::new);
+    let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
+
+    if is_shape_glyph {
+        let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
+        interpret(iter, resources, &mut context, &mut device);
+    } else {
+        interpret(iter, resources, &mut context, device);
     }
 
-    pub(crate) fn render_glyph(
-        &self,
-        glyph: &Type3Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint<'a>,
-        device: &mut impl Device<'a>,
-    ) -> Option<()> {
-        let mut state = glyph.state.clone();
-        let root_transform =
-            transform * glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
-        state.ctm = root_transform;
-
-        // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
-        // (though the graphics state itself should be preserved).
-        state.text_state = TextState::default();
-
-        let name = self.glyph_simulator.glyph_to_string(glyph.glyph_id)?;
-        let program = self.char_procs.get(&name)?;
-        let decoded = program.decoded().ok()?;
-        let iter = TypedIter::new(decoded.as_ref());
-
-        let is_shape_glyph = {
-            let mut iter = iter.clone();
-            let mut is_shape_glyph = true;
-
-            while let Some(op) = iter.next() {
-                match op {
-                    TypedInstruction::ShapeGlyph(_) => {
-                        break;
-                    }
-                    TypedInstruction::ColorGlyph(_) => {
-                        is_shape_glyph = false;
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            is_shape_glyph
-        };
-
-        let mut context = Context::new_with(
-            state.ctm,
-            glyph.bbox,
-            &glyph.cache,
-            glyph.xref,
-            glyph.settings.clone(),
-            state,
-            glyph.nesting_depth,
-        );
-
-        let resources = program
-            .dict()
-            .get(RESOURCES)
-            .or_else(|| self.dict.get(RESOURCES))
-            .map(Resources::new);
-        let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
-
-        if is_shape_glyph {
-            let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
-            interpret(iter, resources, &mut context, &mut device);
-        } else {
-            interpret(iter, resources, &mut context, device);
-        }
-
-        Some(())
-    }
-}
-
-impl CacheKey for Type3<'_> {
-    fn cache_key(&self) -> u128 {
-        self.dict.cache_key()
-    }
+    Some(())
 }
 
 struct Type3ShapeGlyphDevice<'a, 'b, T: Device<'a>> {

@@ -18,7 +18,7 @@ pub(crate) fn decode(
 ) -> Option<FilterResult<'static>> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
-        .and_then(|g| g.decoded().ok());
+        .and_then(|g| g.decoded_data().ok());
 
     let settings = hayro_jbig2::DecodeSettings { strict: false };
     let globals = globals
