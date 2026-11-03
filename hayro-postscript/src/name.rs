@@ -1,24 +1,45 @@
-use alloc::vec::Vec;
-
-use crate::error::{Error, Result};
 use crate::reader::{Reader, is_regular};
-use crate::string::ascii_hex::decode_hex_digit;
 
 /// A PostScript name object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Name<'a> {
     data: &'a [u8],
-    literal: bool,
+    kind: Kind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Executable,
+    Literal,
+    Immediate,
 }
 
 impl<'a> Name<'a> {
     pub(crate) fn new(data: &'a [u8], literal: bool) -> Self {
-        Self { data, literal }
+        let kind = if literal {
+            Kind::Literal
+        } else {
+            Kind::Executable
+        };
+
+        Self { data, kind }
+    }
+
+    pub(crate) fn new_immediate(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            kind: Kind::Immediate,
+        }
     }
 
     /// Returns `true` if this is a literal name.
     pub fn is_literal(&self) -> bool {
-        self.literal
+        self.kind == Kind::Literal
+    }
+
+    /// Returns `true` if this is an immediately evaluated name.
+    pub fn is_immediate(&self) -> bool {
+        self.kind == Kind::Immediate
     }
 
     /// Returns the name as a string if it is valid UTF-8, or
@@ -27,38 +48,9 @@ impl<'a> Name<'a> {
         core::str::from_utf8(self.data).ok()
     }
 
-    /// Decode the name into `out`, replacing any previous contents.
-    pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
-        out.clear();
-
-        // Fast path: no escape sequences.
-        if !self.data.contains(&b'#') {
-            out.extend_from_slice(self.data);
-            return Ok(());
-        }
-
-        // Slow path: Process escape sequences.
-        let mut inner = Reader::new(self.data);
-
-        while let Some(b) = inner.read_byte() {
-            if b == b'#' {
-                let hex = inner.read_bytes(2).ok_or(Error::SyntaxError)?;
-                let hi = decode_hex_digit(hex[0]).ok_or(Error::SyntaxError)?;
-                let lo = decode_hex_digit(hex[1]).ok_or(Error::SyntaxError)?;
-                out.push(hi << 4 | lo);
-            } else {
-                out.push(b);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Decode the name.
-    pub fn decode(&self) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        self.decode_into(&mut out)?;
-        Ok(out)
+    /// Returns the raw bytes of the name.
+    pub fn as_bytes(&self) -> &'a [u8] {
+        self.data
     }
 }
 
@@ -67,6 +59,11 @@ pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     while r.eat(is_regular).is_some() {}
     r.range(start..r.offset())
+}
+
+pub(crate) fn parse_immediate<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    r.forward_tag(b"/")?;
+    parse_literal(r)
 }
 
 pub(crate) fn parse_executable<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
@@ -107,16 +104,9 @@ mod tests {
     }
 
     #[test]
-    fn literal_with_hex_escape() {
+    fn literal_with_number_sign() {
         let n = read_literal(b"/lime#20Green").unwrap();
-        assert_eq!(n.as_str().unwrap(), "lime#20Green");
-        assert_eq!(n.decode().unwrap(), b"lime Green");
-    }
-
-    #[test]
-    fn literal_multiple_hex_escapes() {
-        let n = read_literal(b"/paired#28#29parentheses").unwrap();
-        assert_eq!(n.decode().unwrap(), b"paired()parentheses");
+        assert_eq!(n.as_bytes(), b"lime#20Green");
     }
 
     #[test]
@@ -144,6 +134,20 @@ mod tests {
     #[test]
     fn literal_not_a_name() {
         assert!(read_literal(b"Name").is_none());
+    }
+
+    #[test]
+    fn immediate_simple() {
+        let mut r = Reader::new(b"//Helvetica ");
+        assert_eq!(parse_immediate(&mut r), Some(&b"Helvetica"[..]));
+        assert_eq!(r.peek_byte(), Some(b' '));
+    }
+
+    #[test]
+    fn immediate_empty() {
+        let mut r = Reader::new(b"//(x)");
+        assert_eq!(parse_immediate(&mut r), Some(&b""[..]));
+        assert_eq!(r.peek_byte(), Some(b'('));
     }
 
     #[test]
@@ -175,17 +179,5 @@ mod tests {
     #[test]
     fn executable_starts_at_delimiter() {
         assert!(read_executable(b"(foo)").is_none());
-    }
-
-    #[test]
-    fn decode_no_escapes() {
-        let n = Name::new(b"simple", true);
-        assert_eq!(n.decode().unwrap(), b"simple");
-    }
-
-    #[test]
-    fn decode_with_escapes() {
-        let n = Name::new(b"lime#20Green", true);
-        assert_eq!(n.decode().unwrap(), b"lime Green");
     }
 }

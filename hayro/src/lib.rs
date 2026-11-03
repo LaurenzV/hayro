@@ -34,11 +34,12 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 use fearless_simd::Level;
+use glyph_cache::GlyphCache;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
-use hayro_interpret::font::GlyphRun;
+use hayro_interpret::font::{GlyphRun, HintingCache};
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
@@ -63,17 +64,25 @@ use vello_cpu::{Mask, Pixmap, RenderContext, peniko};
 
 mod clip;
 mod glyph;
+mod glyph_cache;
 mod image;
 mod mask;
 mod paint;
 mod path;
 mod tiling;
 
+type OutlineCache = FxHashMap<(u128, u32), Option<Rc<BezPath>>>;
+
 pub(crate) struct GlobalState {
     level: Level,
-    outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    outline_cache: Rc<RefCell<OutlineCache>>,
+    glyph_cache: Rc<RefCell<GlyphCache>>,
+    hinting_cache: HintingCache,
     scaler: Scaler,
     force_image_interpolation: bool,
+    aliasing_threshold: Option<u8>,
+    hinting: bool,
+    glyph_caching: bool,
 }
 
 impl GlobalState {
@@ -81,8 +90,13 @@ impl GlobalState {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
+            glyph_cache: cache.glyph_cache.clone(),
+            hinting_cache: cache.hinting_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
             force_image_interpolation: settings.force_image_interpolation,
+            aliasing_threshold: settings.aliasing_threshold,
+            hinting: settings.hinting,
+            glyph_caching: settings.glyph_caching,
         }
     }
 }
@@ -112,7 +126,10 @@ impl<'r> Renderer<'r> {
     }
 
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
-        RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
+        let mut ctx =
+            RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()));
+        ctx.set_aliasing_threshold(self.global.aliasing_threshold);
+        ctx
     }
 
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
@@ -182,10 +199,13 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple render invocations on the same document.
-#[derive(Clone, Default)]
+// TODO: Allow clearing the cache.
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
-    pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    pub(crate) outline_cache: Rc<RefCell<OutlineCache>>,
+    pub(crate) glyph_cache: Rc<RefCell<GlyphCache>>,
+    pub(crate) hinting_cache: HintingCache,
 }
 
 impl<'a> RenderCache<'a> {
@@ -194,15 +214,37 @@ impl<'a> RenderCache<'a> {
         Self {
             interpreter_cache: InterpreterCache::new(),
             outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            glyph_cache: Rc::new(RefCell::new(GlyphCache::default())),
+            hinting_cache: HintingCache::new(),
         }
     }
 }
 
 /// Settings for rendering a page.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
+    /// The aliasing threshold for fills and strokes.
+    ///
+    /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
+    /// whose coverage exceeds the threshold.
+    pub aliasing_threshold: Option<u8>,
+    /// Whether text should be hinted.
+    pub hinting: bool,
+    /// Whether rasterized glyphs should be cached and reused.
+    pub glyph_caching: bool,
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            force_image_interpolation: false,
+            aliasing_threshold: None,
+            hinting: true,
+            glyph_caching: true,
+        }
+    }
 }
 
 /// Settings for the output pixmap.
@@ -295,6 +337,7 @@ pub fn render_into<'a>(
     ctx.take_current_state();
     ctx.reset_mask();
     ctx.reset_filter_effect();
+    ctx.set_aliasing_threshold(render_settings.aliasing_threshold);
 
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
@@ -324,6 +367,7 @@ pub fn render_pdf(
     pdf: &Pdf,
     scale: f32,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
     let cache = RenderCache::new();
@@ -340,7 +384,7 @@ pub fn render_pdf(
                 page,
                 &cache,
                 &settings,
-                &RenderSettings::default(),
+                render_settings,
                 &PixmapSettings {
                     x_scale: scale,
                     y_scale: scale,
