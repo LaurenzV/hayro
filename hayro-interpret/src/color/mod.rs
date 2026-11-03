@@ -33,6 +33,8 @@ use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 
+const MAX_COLOR_SPACE_DEPTH: u8 = 32;
+
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
@@ -155,9 +157,6 @@ pub(crate) enum ColorSpaceType {
     Separation(Separation),
     DeviceN(DeviceN),
 }
-
-// Bound recursive color-space construction.
-const MAX_COLOR_SPACE_DEPTH: u8 = 32;
 
 impl ColorSpaceType {
     fn new(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
@@ -688,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_color_spaces_up_to_bound() {
+    fn color_space_nesting_bound() {
         assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize).is_some());
         assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize + 1).is_none());
     }
