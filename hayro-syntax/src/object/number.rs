@@ -188,6 +188,7 @@ impl Number {
 #[inline(always)]
 fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     let start_offset = r.offset();
+    let plus = r.peek_byte() == Some(b'+');
     let negative = match r.peek_byte()? {
         b'-' => {
             r.forward();
@@ -242,7 +243,12 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     }
 
     if !has_digits {
-        if negative || has_dot {
+        // A lone `+` is zero only where `skip` accepts it (before white space, `(`, `<` or
+        // the end), so that reading agrees with validation.
+        let lone_plus = plus
+            && r.peek_byte()
+                .is_none_or(|b| is_white_space_character(b) || matches!(b, b'(' | b'<'));
+        if negative || has_dot || lone_plus {
             // Treat numbers like just `-`, `+` or `-.` as zero.
             return Some(Number(InternalNumber::Integer(0)));
         }
@@ -555,6 +561,17 @@ mod tests {
                 .unwrap(),
             -34534656.34
         );
+    }
+
+    #[test]
+    fn lone_plus_reads_where_skipped() {
+        for input in ["+", "+ ", "+(", "+<"] {
+            assert_eq!(
+                Reader::new(input.as_bytes()).read_without_context::<i32>(),
+                Some(0),
+                "{input:?}"
+            );
+        }
     }
 
     #[test]
