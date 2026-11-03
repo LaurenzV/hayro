@@ -44,7 +44,7 @@ use crate::trivia::{is_regular_character, is_white_space_character};
 use crate::util::find_needle;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 use smallvec::SmallVec;
 
 // `scn` with 32 DeviceN components and a pattern name.
@@ -135,20 +135,33 @@ impl<'a> UntypedIter<'a> {
     /// Return the next instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
+        self.next_with_span().map(|(instruction, _)| instruction)
+    }
+
+    fn next_with_span(&mut self) -> Option<(Instruction<'_, 'a>, Range<usize>)> {
         self.stack.clear();
 
-        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        let (operator, start) = read_instruction(&mut self.reader, &mut self.stack)?;
         self.operator = Some(operator);
-        Some(Instruction {
-            operands: &self.stack,
-            operator: self.operator.as_ref().unwrap(),
-        })
+        Some((
+            Instruction {
+                operands: &self.stack,
+                operator: self.operator.as_ref().unwrap(),
+            },
+            start..self.reader.offset(),
+        ))
     }
 }
 
-fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Operator<'a>> {
+/// Read the next instruction, and return its operator and the offset at which it starts.
+fn read_instruction<'a>(
+    r: &mut Reader<'a>,
+    stack: &mut Stack<'a>,
+) -> Option<(Operator<'a>, usize)> {
     // Keeps the read position in a register; must be written back before calling out.
     let mut cur = r.clone();
+    cur.skip_white_spaces_and_comments();
+    let instruction_start = cur.offset();
 
     loop {
         cur.skip_white_spaces_and_comments();
@@ -191,7 +204,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
                     read_inline_image(r, stack)?;
                 }
 
-                return Some(operator);
+                return Some((operator, instruction_start));
             }
         }
     }
@@ -313,8 +326,8 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
 
             stack.push(Object::Stream(stream))?;
 
+            // The instruction ends after `EI`.
             r.read_bytes(2)?;
-            r.skip_white_spaces();
 
             break;
         }
@@ -416,10 +429,32 @@ impl<'a> TypedIter<'a> {
     /// Return the next typed instruction.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
-        let op = self.untyped.next()?;
+        self.next_with_span().map(|(instruction, _)| instruction)
+    }
+
+    /// Return the next typed instruction, together with the range of the data it was read from.
+    ///
+    /// The range spans the operands and the operator of the instruction, or the inline image
+    /// from `BI` to `EI`. It doesn't include the white space and comments before the instruction.
+    ///
+    /// ```
+    /// use hayro_syntax::content::TypedIter;
+    ///
+    /// let data = b"q 1 0 0 1 10 20 cm % move\nQ";
+    /// let mut iter = TypedIter::new(data);
+    ///
+    /// let (_, span) = iter.next_with_span().unwrap();
+    /// assert_eq!(&data[span], b"q");
+    /// let (_, span) = iter.next_with_span().unwrap();
+    /// assert_eq!(&data[span], b"1 0 0 1 10 20 cm");
+    /// let (_, span) = iter.next_with_span().unwrap();
+    /// assert_eq!(&data[span], b"Q");
+    /// ```
+    pub fn next_with_span(&mut self) -> Option<(TypedInstruction<'_, 'a>, Range<usize>)> {
+        let (op, span) = self.untyped.next_with_span()?;
         // TODO: Explore whether dispatching can be made more efficient.
-        match TypedInstruction::dispatch(&op) {
-            Some(op) => Some(op),
+        let op = match TypedInstruction::dispatch(&op) {
+            Some(op) => op,
             // In case this returns `None`, the content stream is invalid. In case a path-drawing
             // operator was used, let's abort completely, otherwise we might end up drawing random stuff.
             // However, for other operators it could be worth it to just skip it but keep attempting
@@ -436,12 +471,14 @@ impl<'a> TypedIter<'a> {
                 ]
                 .contains(&op.operator.0.deref())
                 {
-                    None
+                    return None;
                 } else {
-                    Some(TypedInstruction::Fallback(op.operator))
+                    TypedInstruction::Fallback(op.operator)
                 }
             }
-        }
+        };
+
+        Some((op, span))
     }
 }
 
