@@ -1,0 +1,53 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Pattern << /P0 5 0 R >> /ExtGState << /GS0 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<<  /Length 522 >>
+stream
+0 0 1 rg 60 165 m 60 178.8075 48.807500000000005 190 35 190 c 21.1925 190 10 178.8075 10 165 c 10 151.1925 21.1925 140 35 140 c 48.807500000000005 140 60 151.1925 60 165 c f
+0.8 0 0 RG 5 w 65 190 m 92 110 l S
+0 0 0 RG 0.75 w 10 105 m 20 140 50 140 60 105 c S
+q 30 0 0 30 110 160 cm BI /W 2 /H 2 /CS /G /BPC 8 /F /AHx ID 40A0A040> EI Q
+1 0 0 rg 150 110 m 195 120 195 190 160 190 c 175 160 150 140 150 110 c f
+0 0.6 0 RG 4 w 105 150 m 145 105 l S
+/Pattern cs /P0 scn 10 10 80 80 re f
+q /GS0 gs 0 0.5 1 rg 110 10 80 80 re f Q
+endstream
+endobj
+5 0 obj
+<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 13.5 13.5] /XStep 13.5 /YStep 13.5 /Resources << >> /Length 218 >>
+stream
+0 0.6 0 rg 11.25 6.75 m 11.25 9.23535 9.23535 11.25 6.75 11.25 c 4.26465 11.25 2.25 9.23535 2.25 6.75 c 2.25 4.26465 4.26465 2.25 6.75 2.25 c 9.23535 2.25 11.25 4.26465 11.25 6.75 c f 0 0 0 RG 0.8 w 0 0 m 13.5 13.5 l S
+endstream
+endobj
+6 0 obj
+<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G 7 0 R >> >>
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Group << /S /Transparency /CS /DeviceGray >> /Resources << >> /Length 166 >>
+stream
+1 g 188 50 m 188 70.98740000000001 170.9874 88 150 88 c 129.0126 88 112 70.98740000000001 112 50 c 112 29.0126 129.0126 12 150 12 c 170.9874 12 188 29.0126 188 50 c f
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000272 00000 n 
+0000000846 00000 n 
+0000001235 00000 n 
+0000001322 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1652
+%%EOF
