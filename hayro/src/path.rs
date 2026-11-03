@@ -41,7 +41,7 @@ impl Renderer<'_> {
         let dash_pattern = if dash_period * max_factor(self.ctx.transform()) >= MIN_DASH_PERIOD {
             stroke_props.dash_array.iter().map(|n| *n as f64).collect()
         } else {
-            Default::default()
+            kurbo::Dashes::new()
         };
 
         let stroke = kurbo::Stroke {
