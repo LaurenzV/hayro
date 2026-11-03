@@ -16,7 +16,7 @@ impl Type4 {
     /// Create a new type 4 function.
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
         Some(Self {
-            program: parse_procedure(&stream.decoded().ok()?)?,
+            program: parse_procedure(&stream.decoded_data().ok()?)?,
         })
     }
 

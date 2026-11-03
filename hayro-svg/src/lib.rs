@@ -51,7 +51,7 @@ mod path;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple conversion invocations on the same document.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
 }

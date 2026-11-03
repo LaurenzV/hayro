@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use hayro_postscript::{Object, Scanner};
+use hayro_postscript::{Number, Scanner, Token};
 
 #[cfg(feature = "embed-cmaps")]
 use crate::bcmap;
@@ -47,12 +47,13 @@ pub(crate) fn parse_inner<'a>(
     let mut supplement = None;
     let mut cmap_name = None;
     let mut writing_mode = None;
-    let mut last_name: Option<Vec<u8>> = None;
+    let mut last = None;
 
     while !scanner.at_end() {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
+        let prev = last.replace(obj.clone());
 
-        let Object::Name(name) = &obj else { continue };
+        let Token::Name(name) = &obj else { continue };
 
         if name.is_literal() {
             match name.as_str() {
@@ -66,17 +67,15 @@ pub(crate) fn parse_inner<'a>(
                     ordering = parse_string_or_name(&mut scanner);
                 }
                 Some("Supplement") => {
-                    supplement = scanner.parse_number().ok().map(|n| n.as_i32());
+                    supplement = parse_integer(&mut scanner).and_then(|n| i32::try_from(n).ok());
                 }
                 Some("CMapName") => {
-                    cmap_name = scanner.parse_name().ok().and_then(|n| n.decode().ok());
+                    cmap_name = scanner.parse_name().ok().map(|n| n.as_bytes().to_vec());
                 }
                 Some("WMode") => {
                     writing_mode = parse_writing_mode(&mut scanner);
                 }
-                _ => {
-                    last_name = name.decode().ok();
-                }
+                _ => {}
             }
         } else {
             match name.as_str() {
@@ -102,7 +101,15 @@ pub(crate) fn parse_inner<'a>(
                     parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
                 }
                 Some("usecmap") => {
-                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(last_name.as_deref()?))?;
+                    let Some(Token::Name(operand)) = prev else {
+                        return None;
+                    };
+
+                    if !operand.is_literal() {
+                        return None;
+                    }
+
+                    let nested_data = (ctx.get_cmap)(CMapName::from_bytes(operand.as_bytes()))?;
 
                     base = Some(Box::new(parse_inner(
                         nested_data,
@@ -150,17 +157,24 @@ pub(crate) fn parse_inner<'a>(
 }
 
 fn parse_writing_mode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
-    match scanner.parse_number().ok()?.as_i32() {
+    match parse_integer(scanner)? {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
         _ => None,
     }
 }
 
+fn parse_integer(scanner: &mut Scanner<'_>) -> Option<i64> {
+    match scanner.parse_number().ok()? {
+        Number::Integer(n) => Some(n),
+        Number::Real(_) => None,
+    }
+}
+
 fn parse_string_or_name(scanner: &mut Scanner<'_>) -> Option<Vec<u8>> {
-    match scanner.parse_object().ok()? {
-        Object::String(s) => s.decode().ok(),
-        Object::Name(n) => n.decode().ok(),
+    match scanner.parse_token().ok()? {
+        Token::String(s) => s.decode().ok(),
+        Token::Name(n) => Some(n.as_bytes().to_vec()),
         _ => None,
     }
 }
@@ -171,7 +185,7 @@ fn parse_codespace_range<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endcodespacerange") {
             return Some(());
@@ -200,7 +214,7 @@ fn parse_range<F>(
     end_marker: &str,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, end_marker) {
             return Some(());
@@ -209,7 +223,7 @@ fn parse_range<F>(
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
         let byte_len = ctx.buf.len();
         let end = read_u32_code(scanner, &mut ctx.buf)?;
-        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
+        let cid_start = u32::try_from(parse_integer(scanner)?).ok()?;
 
         ranges.push(
             byte_len,
@@ -228,7 +242,7 @@ fn parse_char<F>(
     end_marker: &str,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, end_marker) {
             return Some(());
@@ -236,7 +250,7 @@ fn parse_char<F>(
 
         let code = extract_u32_code(&obj, &mut ctx.buf)?;
         let byte_len = ctx.buf.len();
-        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
+        let cid_start = u32::try_from(parse_integer(scanner)?).ok()?;
 
         ranges.push(
             byte_len,
@@ -257,7 +271,7 @@ fn parse_bf_char<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endbfchar") {
             return Some(());
@@ -283,7 +297,7 @@ fn parse_bf_range<F>(
     ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
-        let obj = scanner.parse_object().ok()?;
+        let obj = scanner.parse_token().ok()?;
 
         if name_matches(&obj, "endbfrange") {
             return Some(());
@@ -292,10 +306,10 @@ fn parse_bf_range<F>(
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
         let end = read_u32_code(scanner, &mut ctx.buf)?;
 
-        let next = scanner.parse_object().ok()?;
+        let next = scanner.parse_token().ok()?;
 
         match &next {
-            Object::String(s) => {
+            Token::String(s) => {
                 s.decode_into(&mut ctx.buf).ok()?;
 
                 entries.push(BfRange {
@@ -303,11 +317,9 @@ fn parse_bf_range<F>(
                     dst_base: decode_be(&ctx.buf)?,
                 });
             }
-            Object::Array(array) => {
-                let mut array_scanner = array.objects();
-
+            _ if name_matches(&next, "[") => {
                 for code in start..=end {
-                    let s = array_scanner.parse_string().ok()?;
+                    let s = scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
                     entries.push(BfRange {
@@ -317,6 +329,10 @@ fn parse_bf_range<F>(
                         },
                         dst_base: decode_be(&ctx.buf)?,
                     });
+                }
+
+                if !name_matches(&scanner.parse_token().ok()?, "]") {
+                    return None;
                 }
             }
             _ => return None,
@@ -357,8 +373,8 @@ fn read_u32_code(scanner: &mut Scanner<'_>, buf: &mut Vec<u8>) -> Option<u32> {
 }
 
 #[inline]
-fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
-    let Object::String(s) = obj else { return None };
+fn extract_u32_code(obj: &Token<'_>, buf: &mut Vec<u8>) -> Option<u32> {
+    let Token::String(s) = obj else { return None };
     s.decode_into(buf).ok()?;
     bytes_to_u32(buf)
 }
@@ -377,6 +393,6 @@ fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
     Some(val)
 }
 
-fn name_matches(obj: &Object<'_>, expected: &str) -> bool {
-    matches!(obj, Object::Name(name) if !name.is_literal() && name.as_str() == Some(expected))
+fn name_matches(obj: &Token<'_>, expected: &str) -> bool {
+    matches!(obj, Token::Name(name) if !name.is_literal() && name.as_str() == Some(expected))
 }

@@ -1,8 +1,9 @@
 use crate::ExtractionContext;
+use hayro_syntax::Filter;
 use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::{
-    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, STRUCT_PARENT,
-    STRUCT_PARENTS,
+    AF, DECODE_PARMS, DP, FILTER, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA,
+    REF, STRUCT_PARENT, STRUCT_PARENTS,
 };
 use hayro_syntax::object::{MaybeRef, Null, Number, ObjectIdentifier, Stream};
 use hayro_syntax::object::{Object, array, dict};
@@ -112,10 +113,10 @@ fn write_dict(
     hayro_dict: &dict::Dict<'_>,
     pdf_dict: &mut Dict<'_>,
     ctx: &mut ExtractionContext<'_>,
-    is_stream: bool,
+    skip: &[&[u8]],
 ) {
     for (name, val) in hayro_dict.entries() {
-        if is_stream && name.deref() == LENGTH {
+        if skip.contains(&name.deref()) {
             continue;
         }
 
@@ -129,7 +130,7 @@ impl WriteDirect for object::Dict<'_> {
     fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         let mut dict = obj.dict();
 
-        write_dict(self, &mut dict, ctx, false);
+        write_dict(self, &mut dict, ctx, &[]);
     }
 }
 
@@ -172,10 +173,36 @@ write_indirect!(array::Array<'_>);
 
 impl WriteIndirect for Stream<'_> {
     fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>) {
-        // TODO: Handle `Crypt` filter
         let data = self.raw_data();
         let mut obj = chunk.stream(id, &data);
-        write_dict(self.dict(), obj.deref_mut(), ctx, true);
+        let dict = self.dict();
+
+        if self.filters().first() != Some(&Filter::Crypt) {
+            write_dict(dict, obj.deref_mut(), ctx, &[LENGTH]);
+            return;
+        }
+
+        write_dict(
+            dict,
+            obj.deref_mut(),
+            ctx,
+            &[LENGTH, FILTER, DECODE_PARMS, DP],
+        );
+
+        for (key, sources) in [(FILTER, &[FILTER][..]), (DECODE_PARMS, &[DECODE_PARMS, DP])] {
+            let rest: Vec<_> = sources
+                .iter()
+                .find_map(|source| dict.get::<array::Array<'_>>(source))
+                .map(|array| array.raw_iter().skip(1).collect())
+                .unwrap_or_default();
+
+            if !rest.is_empty() {
+                let mut array = obj.insert(pdf_writer::Name(key)).array();
+                for item in rest {
+                    item.write_direct(array.push(), ctx);
+                }
+            }
+        }
     }
 }
 

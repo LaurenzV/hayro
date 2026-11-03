@@ -1214,6 +1214,10 @@
     "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
   },
   {
+    "id": "encrypted_crypt_filter_streams",
+    "file": "pdfs/custom/encrypted_crypt_filter_streams.pdf"
+  },
+  {
     "id": "issue10_1",
     "link": true
   },
@@ -1411,5 +1415,14 @@
     "id": "literal_string_raw_eol",
     "svg": true,
     "file": "pdfs/custom/literal_string_raw_eol.pdf"
+  },
+  {
+    "id": "aliasing_threshold",
+    "file": "pdfs/custom/aliasing_threshold.pdf",
+    "aliasing_threshold": 127
+  },
+  {
+    "id": "font_type1_opentype_builtin_encoding",
+    "file": "pdfs/custom/font_type1_opentype_builtin_encoding.pdf"
   }
 ]

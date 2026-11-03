@@ -25,16 +25,20 @@ pub(crate) fn decode(
     };
     let output_len = (columns as usize).checked_mul(rows as usize)?;
 
-    let mut settings = DecodeSettings::new(columns, rows);
-    settings.end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
-    settings.end_of_line = params.get::<bool>(END_OF_LINE).unwrap_or(false);
-    settings.rows_are_byte_aligned = params.get::<bool>(ENCODED_BYTE_ALIGN).unwrap_or(false);
-    settings.encoding = if k < 0 {
-        EncodingMode::Group4
-    } else if k == 0 {
-        EncodingMode::Group3_1D
-    } else {
-        EncodingMode::Group3_2D
+    let settings = DecodeSettings {
+        columns,
+        rows,
+        end_of_block: params.get::<bool>(END_OF_BLOCK).unwrap_or(true),
+        end_of_line: params.get::<bool>(END_OF_LINE).unwrap_or(false),
+        rows_are_byte_aligned: params.get::<bool>(ENCODED_BYTE_ALIGN).unwrap_or(false),
+        encoding: if k < 0 {
+            EncodingMode::Group4
+        } else if k == 0 {
+            EncodingMode::Group3_1D
+        } else {
+            EncodingMode::Group3_2D
+        },
+        strict: false,
     };
     // The value that pixels which are white in the encoding are written as.
     let white: u8 = if params.get::<bool>(BLACK_IS_1).unwrap_or(false) {

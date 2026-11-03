@@ -23,7 +23,7 @@ impl<'a> FormXObject<'a> {
     pub(crate) fn new(stream: &Stream<'a>) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded().ok()?;
+        let decoded = stream.decoded_data().ok()?;
         let resources = dict.get(RESOURCES).map(Resources::new);
 
         let matrix = Affine::new(

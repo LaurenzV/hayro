@@ -72,7 +72,7 @@ impl Type0 {
             stride = stride.checked_mul(size as usize)?;
         }
 
-        let decoded = stream.decoded().ok()?;
+        let decoded = stream.decoded_data().ok()?;
 
         if decoded.len() * 8 / usize::from(bits_per_sample) < stride {
             return None;
