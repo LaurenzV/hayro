@@ -22,6 +22,7 @@ use crate::mask::MaskKind;
 use crate::paint::{
     CachedNativeGradient, CachedShading, CachedShadingPattern, CachedTilingPattern,
 };
+use crate::text::TextLayer;
 use hayro_interpret::font::GlyphRun;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{Float32Ext, TransformExt};
@@ -46,6 +47,7 @@ pub(crate) mod image;
 mod mask;
 pub(crate) mod paint;
 mod path;
+mod text;
 
 /// A cache used by the SVG converter.
 ///
@@ -98,6 +100,14 @@ pub struct SvgRenderSettings {
     /// The background color in format [red, green, blue, alpha].
     /// Determines the background color of the generated SVG root element.
     pub bg_color: [u8; 4],
+    /// Whether to write an invisible layer of the page's text above its content, so that
+    /// the text can be selected, searched and copied.
+    ///
+    /// Glyphs are still drawn as paths. The layer places the text of each glyph, as given
+    /// by [`Glyph::as_unicode`](hayro_interpret::font::Glyph::as_unicode), at the glyph's
+    /// origin. It includes glyphs drawn in the invisible text rendering mode, such as the
+    /// text of a scanned page, but not the text that masks, patterns and Type 3 glyphs draw.
+    pub text_layer: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -105,6 +115,7 @@ impl Default for SvgRenderSettings {
     fn default() -> Self {
         Self {
             bg_color: [0, 0, 0, 0],
+            text_layer: false,
         }
     }
 }
@@ -122,6 +133,9 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     active_clips: Vec<Id>,
     pub(crate) dimensions: (f32, f32),
+    /// The text of the page, if the text layer is enabled. It's `None` while masks,
+    /// patterns and Type 3 glyphs are interpreted, so that their text isn't recorded.
+    text_layer: Option<TextLayer>,
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -318,6 +332,10 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
+        if let Some(text_layer) = &mut self.text_layer {
+            text_layer.record(glyph_run, props.transform);
+        }
+
         self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
             Self::draw_glyph_run(r, glyph_run, props, draw_mode);
         });
@@ -365,6 +383,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn new(page: &'a Page<'a>, render_settings: SvgRenderSettings) -> Self {
         Self {
+            text_layer: render_settings.text_layer.then(TextLayer::default),
             render_settings,
             xml: XmlWriter::new(Options::default()),
             outline_glyphs: Deduplicator::new('g'),
@@ -412,11 +431,18 @@ impl<'a> SvgRenderer<'a> {
     // the case if masks or patterns use new resources that haven't been registered before. As a result,
     pub(crate) fn with_dummy(&mut self, f: impl FnOnce(&mut Self)) {
         let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
+        // Masks, patterns and Type 3 glyphs don't add to the text layer.
+        let text_layer = self.text_layer.take();
         f(self);
+        self.text_layer = text_layer;
         std::mem::swap(&mut self.xml, &mut old_xml);
     }
 
     pub(crate) fn finish(mut self) -> String {
+        // Taken before the definitions interpret masks, patterns and Type 3 glyphs again.
+        if let Some(text_layer) = self.text_layer.take() {
+            self.write_text_layer(text_layer);
+        }
         self.write_glyph_defs();
         self.write_mask_defs();
         self.write_clip_path_defs();
