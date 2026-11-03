@@ -10,7 +10,7 @@ use crate::WarningSinkFn;
 use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::context::Context;
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::interpret::state::ActiveTransferFunction;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -48,12 +48,19 @@ impl<'a> XObject<'a> {
 
     pub(crate) fn draw(
         &self,
+        name: &Name<'_>,
         resources: &Resources<'a>,
         context: &mut Context<'a>,
         device: &mut impl Device<'a>,
     ) {
         match self {
-            Self::FormXObject(form) => form.draw(resources, context, device),
+            Self::FormXObject(form) => {
+                let source = ContentSource::FormXObject {
+                    name: name.clone(),
+                    stream: form.id,
+                };
+                form.draw(&source, resources, context, device);
+            }
             Self::ImageXObject(image) => image.draw(context, device),
         }
     }

@@ -348,4 +348,20 @@ f
         ));
         assert!(iter.next().is_none());
     }
+
+    #[test]
+    fn spans() {
+        let input = b"% comment\n0 0 1 rg BI /W 1 /H 1 /BPC 8 /CS /G ID \xff EI\n(%) Tj";
+
+        let mut iter = TypedIter::new(input);
+
+        let (_, span) = iter.next_with_span().unwrap();
+        assert_eq!(&input[span], b"0 0 1 rg");
+        let (op, span) = iter.next_with_span().unwrap();
+        assert!(matches!(op, TypedInstruction::InlineImage(_)));
+        assert_eq!(&input[span], b"BI /W 1 /H 1 /BPC 8 /CS /G ID \xff EI");
+        let (_, span) = iter.next_with_span().unwrap();
+        assert_eq!(&input[span], b"(%) Tj");
+        assert!(iter.next_with_span().is_none());
+    }
 }
