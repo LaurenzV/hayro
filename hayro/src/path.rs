@@ -3,6 +3,9 @@ use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
 use std::f64::consts::SQRT_2;
 
+/// The shortest dash period, in device pixels, that is dashed rather than stroked solid.
+const MIN_DASH_PERIOD: f32 = 0.1;
+
 impl Renderer<'_> {
     pub(super) fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
         let threshold = if is_text { 0.25 } else { 1.0 };
@@ -32,13 +35,22 @@ impl Renderer<'_> {
             join => join,
         };
 
+        // A dash pattern far finer than a pixel looks like a solid line, but dashing
+        // a path with it can create billions of segments, so stroke it solid.
+        let dash_period: f32 = stroke_props.dash_array.iter().map(|n| n.abs()).sum();
+        let dash_pattern = if dash_period * max_factor(self.ctx.transform()) >= MIN_DASH_PERIOD {
+            stroke_props.dash_array.iter().map(|n| *n as f64).collect()
+        } else {
+            Default::default()
+        };
+
         let stroke = kurbo::Stroke {
             width: line_width as f64,
             join,
             miter_limit: stroke_props.miter_limit as f64,
             start_cap: cap,
             end_cap: cap,
-            dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
+            dash_pattern,
             dash_offset: stroke_props.dash_offset as f64,
         };
 
