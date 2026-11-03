@@ -19,7 +19,6 @@ use std::sync::{Arc, OnceLock};
 
 pub(crate) const MAX_COMPONENTS: usize = 32;
 
-// Bound recursive function construction, evaluation and drop.
 const MAX_FUNCTION_DEPTH: u8 = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

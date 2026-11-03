@@ -6,6 +6,8 @@ use hayro_syntax::reader::{ReaderContext, ReaderExt};
 use std::array;
 use std::ops::Rem;
 
+const MAX_PROCEDURE_DEPTH: usize = 256;
+
 /// A type 4 function (postscript function).
 #[derive(Debug)]
 pub(crate) struct Type4 {
@@ -408,9 +410,6 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 
     Some(())
 }
-
-// Match Acrobat's 256-level limit; krilla gradients can exceed 32 levels.
-const MAX_PROCEDURE_DEPTH: usize = 256;
 
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     let mut r = Reader::new(data);
