@@ -9,8 +9,12 @@ mod device_rgb;
 mod icc;
 mod indexed;
 mod lab;
+mod output;
 mod pattern;
 mod separation;
+
+pub use self::output::CmykProfile;
+pub(crate) use self::output::srgb_to_cmyk;
 
 use self::cal_gray::CalGray;
 use self::cal_rgb::CalRgb;
@@ -24,6 +28,7 @@ use self::lab::Lab;
 use self::pattern::Pattern;
 use self::separation::Separation;
 use crate::cache::{Cache, CacheKey};
+use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
@@ -472,6 +477,96 @@ impl ColorSpace {
         }
     }
 
+    /// Turn the given component values and opacity into cyan, magenta, yellow, black and
+    /// alpha.
+    ///
+    /// `DeviceCMYK` keeps its components, and so do `CalCMYK`, which hayro reads as
+    /// `DeviceCMYK`, and ICC-based CMYK. `DeviceGray` becomes black only. Indexed, Separation
+    /// and `DeviceN` colors are converted through their base or alternate color space.
+    /// Colors in any other color space are converted to sRGB as by
+    /// [`to_rgba`](Self::to_rgba) and from there to CMYK, through `profile` or, without
+    /// one, with the conversion from `DeviceRGB` to `DeviceCMYK` of the PDF specification.
+    #[inline]
+    pub fn to_cmyk(&self, c: &[f32], opacity: f32, profile: Option<&CmykProfile>) -> [f32; 5] {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceGray(_) => {
+                let gray = c.first().copied().unwrap_or(0.0).clamp(0.0, 1.0);
+                [0.0, 0.0, 0.0, 1.0 - gray, opacity]
+            }
+            ColorSpaceType::DeviceCmyk(_) if c.len() == 4 => {
+                let [c, m, y, k] = [c[0], c[1], c[2], c[3]].map(|value| value.clamp(0.0, 1.0));
+                [c, m, y, k, opacity]
+            }
+            ColorSpaceType::Separation(separation) => separation.to_cmyk(c, opacity, profile),
+            ColorSpaceType::DeviceN(device_n) => device_n.to_cmyk(c, opacity, profile),
+            _ => self
+                .to_cmyk_color(c, opacity, profile)
+                .unwrap_or([0.0, 0.0, 0.0, 1.0, 1.0]),
+        }
+    }
+
+    fn to_cmyk_color(
+        &self,
+        input: &[f32],
+        mut opacity: f32,
+        profile: Option<&CmykProfile>,
+    ) -> Option<[f32; 5]> {
+        let mut output = [0; 4];
+        self.convert_cmyk(&self.encode_values(input), &mut output, profile)?;
+
+        // See `to_alpha_color`.
+        if self.is_none() {
+            opacity = 0.0;
+        }
+
+        let [c, m, y, k] = output.map(|value| value as f32 / 255.0);
+        Some([c, m, y, k, opacity])
+    }
+
+    /// Convert encoded component values to CMYK8, as described in
+    /// [`to_cmyk`](Self::to_cmyk).
+    pub(crate) fn convert_cmyk(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+        profile: Option<&CmykProfile>,
+    ) -> Option<()> {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk(_) => output.copy_from_slice(input),
+            ColorSpaceType::ICCBased(icc) if icc.number_components() == 4 => {
+                output.copy_from_slice(input);
+            }
+            ColorSpaceType::DeviceGray(_) => {
+                for (gray, cmyk) in input.iter().zip(output.as_chunks_mut::<4>().0) {
+                    *cmyk = [0, 0, 0, 255 - gray];
+                }
+            }
+            ColorSpaceType::Pattern(pattern) => {
+                return pattern.color_space().convert_cmyk(input, output, profile);
+            }
+            ColorSpaceType::Indexed(indexed) => {
+                return indexed.convert_cmyk(input, output, profile);
+            }
+            ColorSpaceType::Separation(separation) => {
+                return separation.convert_cmyk(input, output, profile);
+            }
+            ColorSpaceType::DeviceN(device_n) => {
+                return device_n.convert_cmyk(input, output, profile);
+            }
+            ColorSpaceType::DeviceRgb(_)
+            | ColorSpaceType::ICCBased(_)
+            | ColorSpaceType::CalGray(_)
+            | ColorSpaceType::CalRgb(_)
+            | ColorSpaceType::Lab(_) => {
+                let mut rgb = vec![0; output.len() / 4 * 3];
+                self.convert(input, &mut rgb)?;
+                return output::rgb_to_cmyk(profile, &rgb, output);
+            }
+        }
+
+        Some(())
+    }
+
     fn to_alpha_color(&self, input: &[f32], mut opacity: f32) -> Option<AlphaColor> {
         let mut output = [0; 3];
         self.convert_values(input, &mut output)?;
@@ -558,6 +653,34 @@ fn f32_to_u8(val: f32) -> u8 {
     (val * 255.0 + 0.5) as u8
 }
 
+/// Convert the tints of a Separation or `DeviceN` color to CMYK through its alternate color
+/// space, without rounding them first, so that an alternate color in `DeviceCMYK` is kept
+/// exactly.
+fn tints_to_cmyk(
+    tint_transform: &Function,
+    alternate_space: &ColorSpace,
+    input: &[f32],
+    num_components: usize,
+    opacity: f32,
+    profile: Option<&CmykProfile>,
+) -> [f32; 5] {
+    // Missing tints take the initial value of 1.
+    let mut tints = [1.0; MAX_COMPONENTS];
+    let tints = &mut tints[..num_components];
+    for (tint, value) in tints.iter_mut().zip(input) {
+        *tint = value.clamp(0.0, 1.0);
+    }
+
+    let mut values = [0.0; MAX_COMPONENTS];
+    let values = &mut values[..tint_transform.num_outputs()];
+
+    if tint_transform.eval(tints, values).is_some() {
+        alternate_space.to_cmyk(values, opacity, profile)
+    } else {
+        alternate_space.to_cmyk(&alternate_space.initial_color(), opacity, profile)
+    }
+}
+
 #[derive(Debug, Clone)]
 /// A color.
 pub struct Color {
@@ -595,6 +718,15 @@ impl Color {
     #[inline]
     pub fn to_rgba(&self) -> AlphaColor {
         self.color_space.to_rgba(&self.components, self.opacity)
+    }
+
+    /// Return the color as cyan, magenta, yellow, black and alpha.
+    ///
+    /// See [`ColorSpace::to_cmyk`] for how the color is converted.
+    #[inline]
+    pub fn to_cmyk(&self, profile: Option<&CmykProfile>) -> [f32; 5] {
+        self.color_space
+            .to_cmyk(&self.components, self.opacity, profile)
     }
 
     /// Create a color from RGBA.

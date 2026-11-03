@@ -1,7 +1,9 @@
 use crate::Renderer;
 use hayro_interpret::Paint;
-use hayro_interpret::encode::{EncodedShadingType, texture_dimensions};
-use hayro_interpret::gradient::SvgGradientKind;
+use hayro_interpret::encode::{
+    EncodedRadialAxialShading, EncodedShadingPattern, EncodedShadingType, texture_dimensions,
+};
+use hayro_interpret::gradient::{SvgGradient, SvgGradientKind, SvgGradientStop};
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::x_y_advances;
 use kurbo::{Affine, BezPath, Rect};
@@ -22,10 +24,7 @@ impl Renderer<'_> {
         let mut clip_path = None;
 
         let paint: PaintType = match paint.clone() {
-            Paint::Color(c) => {
-                let c = c.to_rgba().to_rgba8();
-                AlphaColor::from_rgba8(c[0], c[1], c[2], c[3]).into()
-            }
+            Paint::Color(c) => self.color(&c).into(),
             Paint::Pattern(p) => {
                 let path_transform = self.ctx.transform();
                 let bbox = {
@@ -54,8 +53,12 @@ impl Renderer<'_> {
                         let encoded = s.encode();
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
-                            && let Some(native) =
-                                gradient.as_svg_gradient(&encoded, bbox, NATIVE_GRADIENT_TOLERANCE)
+                            && let Some(native) = self.native_gradient(
+                                gradient,
+                                &encoded,
+                                bbox,
+                                NATIVE_GRADIENT_TOLERANCE,
+                            )
                         {
                             paint_transform = path_transform.inverse()
                                 * Affine::translate((-0.5, -0.5))
@@ -96,13 +99,21 @@ impl Renderer<'_> {
                             let (width, height) = texture_dimensions(bbox, 1.0);
                             let mut image = Vec::with_capacity(width as usize * height as usize);
                             let mut may_have_transparency = false;
-                            let (width, height, transform) =
-                                encoded.sample_texture(bbox, 1.0, |sample| {
-                                    let pixel =
-                                        AlphaColor::<Srgb>::new(sample).premultiply().to_rgba8();
-                                    may_have_transparency |= pixel.a != 255;
-                                    image.push(pixel);
-                                });
+                            let mut push = |sample: [f32; 4]| {
+                                let pixel =
+                                    AlphaColor::<Srgb>::new(sample).premultiply().to_rgba8();
+                                may_have_transparency |= pixel.a != 255;
+                                image.push(pixel);
+                            };
+                            let (width, height, transform) = match &self.cmyk {
+                                Some(pass) => encoded.sample_texture_cmyk(
+                                    bbox,
+                                    1.0,
+                                    pass.profile.as_ref(),
+                                    |sample| push(pass.lanes(sample)),
+                                ),
+                                None => encoded.sample_texture(bbox, 1.0, &mut push),
+                            };
                             paint_transform = path_transform.inverse() * transform;
 
                             let pixmap = Pixmap::from_parts(
@@ -142,5 +153,35 @@ impl Renderer<'_> {
         self.ctx.set_paint(paint);
 
         clip_path
+    }
+
+    /// Approximate an axial or radial shading by a gradient in the colors that the
+    /// renderer paints.
+    fn native_gradient(
+        &self,
+        gradient: &EncodedRadialAxialShading,
+        encoded: &EncodedShadingPattern,
+        bbox: Rect,
+        tolerance: f32,
+    ) -> Option<SvgGradient> {
+        let Some(pass) = &self.cmyk else {
+            return gradient.as_svg_gradient(encoded, bbox, tolerance);
+        };
+
+        let native =
+            gradient.as_svg_gradient_cmyk(encoded, bbox, tolerance, pass.profile.as_ref())?;
+
+        Some(SvgGradient {
+            kind: native.kind,
+            transform: native.transform,
+            stops: native
+                .stops
+                .into_iter()
+                .map(|stop| SvgGradientStop {
+                    offset: stop.offset,
+                    color: pass.lanes(stop.color),
+                })
+                .collect(),
+        })
     }
 }
