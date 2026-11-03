@@ -71,7 +71,9 @@ impl Pdf {
 
     /// Read a PDF from a caller-supplied object source.
     ///
-    /// Returns `Err` if the trailer or the page tree cannot be read.
+    /// The source resolves every object, so [`Pdf::len`] returns zero, [`Pdf::objects`]
+    /// yields nothing, and [`Pdf::data`] is empty. Returns `Err` if the trailer or the
+    /// page tree cannot be read.
     pub fn from_source(source: Arc<dyn ObjectSource>) -> Result<Self, LoadPdfError> {
         let version = source.header_version().unwrap_or(PdfVersion::Pdf10);
         let xref = Arc::new(XRef::from_source(source).ok_or(LoadPdfError::Invalid)?);
@@ -189,7 +191,7 @@ mod tests {
     }
 
     impl MapSource {
-        fn new(objects: &[(i32, &[u8])], trailer: &[u8]) -> Arc<Self> {
+        fn new(objects: &[(u32, &[u8])], trailer: &[u8]) -> Arc<Self> {
             Arc::new(Self {
                 objects: objects
                     .iter()
@@ -210,8 +212,8 @@ mod tests {
         }
     }
 
-    const CATALOG: (i32, &[u8]) = (1, b"<< /Type /Catalog /Pages 2 0 R >>");
-    const PAGES: (i32, &[u8]) = (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    const CATALOG: (u32, &[u8]) = (1, b"<< /Type /Catalog /Pages 2 0 R >>");
+    const PAGES: (u32, &[u8]) = (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
     const TRAILER: &[u8] = b"<< /Root 1 0 R /Info 5 0 R /Size 6 >>";
 
     #[test]
@@ -231,6 +233,8 @@ mod tests {
         );
         let pdf = Pdf::from_source(source).unwrap();
 
+        assert_eq!(pdf.len(), 0);
+        assert!(pdf.data().as_ref().is_empty());
         assert_eq!(pdf.pages().len(), 1);
         let page = &pdf.pages()[0];
         assert_eq!(page.base_dimensions(), (200.0, 100.0));
