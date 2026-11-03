@@ -1,7 +1,7 @@
 use super::form::FormXObject;
 use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::{Context, InterpreterCache};
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::function::{Function, TransferFunction};
 use crate::interpret::state::State;
 use crate::util::hash128;
@@ -144,9 +144,12 @@ impl<'a> SoftMask<'a> {
             state,
             self.0.nesting_depth,
         );
+        let source = ContentSource::SoftMask {
+            stream: self.0.group.id,
+        };
         self.0
             .group
-            .draw(&self.0.parent_resources, &mut ctx, device);
+            .draw(&source, &self.0.parent_resources, &mut ctx, device);
     }
 
     /// Return the underlying mask type.
