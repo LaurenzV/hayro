@@ -7,6 +7,8 @@ use vello_cpu::{Mask, Pixmap, RenderSettings};
 
 impl Renderer<'_> {
     pub(super) fn apply_soft_mask(&mut self, mask: Option<&SoftMask<'_>>) {
+        let __prof = crate::prof::Scope::start(&crate::prof::T_MASK);
+
         let settings = *self.ctx.render_settings();
         let global = self.global;
         let mask = mask.map(|m| {

@@ -18,6 +18,8 @@ impl Renderer<'_> {
         path_bbox: impl Fn() -> Rect,
         is_stroke: bool,
     ) -> Option<BezPath> {
+        let __prof = crate::prof::Scope::start(&crate::prof::T_PAINT);
+
         let mut paint_transform = Affine::IDENTITY;
         let mut clip_path = None;
 

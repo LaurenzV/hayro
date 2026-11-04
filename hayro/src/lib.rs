@@ -63,6 +63,7 @@ use vello_cpu::peniko::{Compose, Fill, Mix};
 use vello_cpu::{Mask, Pixmap, RenderContext, peniko};
 
 mod clip;
+pub mod prof;
 mod glyph;
 mod glyph_cache;
 mod image;
@@ -149,6 +150,7 @@ impl<'r> Renderer<'r> {
 
 impl<'a, 'r> Device<'a> for Renderer<'r> {
     fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, props: ImageDrawProps<'a>) {
+        let __prof = prof::Scope::start(&prof::T_IMAGE);
 
         Self::draw_pdf_image(self, image, props);
     }
@@ -179,6 +181,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
     }
 
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
+        let __prof = prof::Scope::start(&prof::T_PATH);
 
         Self::draw_path(self, path, props, draw_mode);
     }
@@ -193,6 +196,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
+        let __prof = prof::Scope::start(&prof::T_GLYPH);
 
         Self::draw_glyph_run(self, glyph_run, props, draw_mode);
     }
