@@ -1,6 +1,7 @@
 use crate::Renderer;
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
+use hayro_interpret::CacheKey;
 use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Rect};
 use pic_scale::{
@@ -122,14 +123,13 @@ impl Renderer<'_> {
     fn draw_image(&mut self, image_data: impl Into<RenderImageData>, alpha_data: Option<LumaData>) {
         let image_data = image_data.into();
         let cur_transform = *self.ctx.transform();
-        let mut additional_transform = Affine::IDENTITY;
 
         let (x_scale, y_scale) = {
             let (x, y) = x_y_advances(&cur_transform);
             (x.length() as f32, y.length() as f32)
         };
-        let mut img_width = image_data.width();
-        let mut img_height = image_data.height();
+        let img_width = image_data.width();
+        let img_height = image_data.height();
         let interpolate = image_data.interpolate() || self.global.force_image_interpolation;
 
         if let Some(a) = &alpha_data
@@ -139,6 +139,31 @@ impl Renderer<'_> {
         {
             return self.draw_image_with_alpha_mask(image_data, alpha_data.unwrap());
         }
+
+        let prepared = self.prepare_image(image_data, alpha_data, x_scale, y_scale);
+        self.draw_pixmap(
+            prepared.pixmap.clone(),
+            prepared.quality,
+            cur_transform * prepared.additional_transform,
+        );
+    }
+
+    /// VeriPDF: the pure part of `draw_image` — everything between the
+    /// alpha-mismatch check and `draw_pixmap`. Extracted so the `Raster`
+    /// draw path can cache the processed result per (image, draw scales):
+    /// a tiled renderer draws the same image once per tile, and this
+    /// premultiply/resize/pixmap work is identical every time.
+    fn prepare_image(
+        &self,
+        image_data: RenderImageData,
+        alpha_data: Option<LumaData>,
+        x_scale: f32,
+        y_scale: f32,
+    ) -> PreparedImage {
+        let mut additional_transform = Affine::IDENTITY;
+        let interpolate = image_data.interpolate() || self.global.force_image_interpolation;
+        let mut img_width = image_data.width();
+        let mut img_height = image_data.height();
 
         let mut quality = if interpolate {
             ImageQuality::Medium
@@ -403,11 +428,14 @@ impl Renderer<'_> {
             },
         );
 
-        self.draw_pixmap(
-            Arc::new(pixmap),
+        PreparedImage {
+            pixmap: Arc::new(pixmap),
             quality,
-            cur_transform * additional_transform,
-        );
+            additional_transform,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            mask: None,
+        }
     }
 
     fn draw_pixmap(&mut self, pixmap: Arc<Pixmap>, quality: ImageQuality, transform: Affine) {
@@ -551,21 +579,203 @@ impl Renderer<'_> {
                 );
             }
             hayro_interpret::Image::Raster(r) => {
-                r.with_rgba(
-                    |image, alpha| {
-                        let (sx, sy) = image.scale_factors();
-                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
-                        self.ctx.set_transform(transform);
-                        self.draw_image(image, alpha);
-                    },
-                    Some((target_width, target_height)),
-                );
-            }
-        }
+                // VeriPDF: the processed pixmap is cached per (image, draw
+                // scales, interpolation flags). A tiled renderer draws the
+                // same page-covering image once per tile; without this,
+                // every tile redoes the decode, the premultiply/resize and
+                // the RGBA conversion on the full image.
+                let (x_adv, y_adv) = x_y_advances(&transform);
+                let x_scale = x_adv.length() as f32;
+                let y_scale = y_adv.length() as f32;
+                let object_cache = r.object_cache().clone();
+                let prepared =
+                    object_cache.get_or_insert_with_budgeted::<Arc<PreparedImage>>(
+                        (
+                            (r.cache_key(), (x_scale.to_bits(), y_scale.to_bits())),
+                            (
+                                self.global.force_image_interpolation,
+                                self.in_type3_glyph,
+                            ),
+                        )
+                            .cache_key(),
+                        || {
+                            let out = std::cell::RefCell::new(None);
+                            r.with_rgba(
+                                |image, alpha| {
+                                    // An alpha channel with different
+                                    // dimensions or interpolation than the
+                                    // image needs the separate alpha-mask
+                                    // draw path in `draw_image`, which the
+                                    // prepared cache does not model. Leave
+                                    // it uncached; the arm draws it through
+                                    // the original path below.
+                                    let (sx, sy) = image.scale_factors();
+                                    let prepared = match alpha {
+                                        // Mismatched alpha needs the
+                                        // two-pass DestIn composite; both
+                                        // passes are prepared and cached
+                                        // together (see PreparedMask).
+                                        Some(a)
+                                            if a.width != image.width()
+                                                || a.height != image.height()
+                                                || a.interpolate != image.interpolate() =>
+                                        {
+                                            let (iw, ih) =
+                                                (image.width() as f32, image.height() as f32);
+                                            let (aw, ah) =
+                                                (a.width as f32, a.height as f32);
+                                            let base = self.prepare_image(
+                                                image.into(),
+                                                None,
+                                                x_scale * sx,
+                                                y_scale * sy,
+                                            );
+                                            let mask_input =
+                                                RenderImageData::Solid(SolidColorImage {
+                                                    color: [0; 3],
+                                                    width: a.width,
+                                                    height: a.height,
+                                                    interpolate: a.interpolate,
+                                                });
+                                            let mask = self.prepare_image(
+                                                mask_input,
+                                                Some(a),
+                                                x_scale * sx * iw / aw,
+                                                y_scale * sy * ih / ah,
+                                            );
+                                            PreparedImage {
+                                                mask: Some(PreparedMask {
+                                                    pixmap: mask.pixmap,
+                                                    quality: mask.quality,
+                                                    additional_transform: mask
+                                                        .additional_transform,
+                                                    mask_scale: (
+                                                        (iw / aw) as f64,
+                                                        (ih / ah) as f64,
+                                                    ),
+                                                }),
+                                                ..base
+                                            }
+                                        }
+                                        alpha => PreparedImage {
+                                            scale_x: sx,
+                                            scale_y: sy,
+                                            ..self.prepare_image(
+                                                image.into(),
+                                                alpha,
+                                                x_scale * sx,
+                                                y_scale * sy,
+                                            )
+                                        },
+                                    };
+                                    let bytes = prepared.pixmap.data().len() as u64
+                                        + prepared
+                                            .mask
+                                            .as_ref()
+                                            .map_or(0, |m| m.pixmap.data().len() as u64);
+                                    *out.borrow_mut() = Some((Arc::new(prepared), bytes));
+                                },
+                                Some((target_width, target_height)),
+                            );
+                            out.into_inner()
+                        },
+                    );
+
+                match prepared {
+                    Some(prepared) => {
+                        let mut t = transform;
+                        t *= Affine::scale_non_uniform(
+                            prepared.scale_x as f64,
+                            prepared.scale_y as f64,
+                        );
+                        if let Some(mask) = &prepared.mask {
+                            // Same layer structure as
+                            // `draw_image_with_alpha_mask`, with both
+                            // passes served from the cache.
+                            self.ctx.push_layer(None, None, None, None, None);
+                            self.ctx.set_transform(t);
+                            self.draw_pixmap(
+                                prepared.pixmap.clone(),
+                                prepared.quality,
+                                t * prepared.additional_transform.clone(),
+                            );
+                            self.ctx.push_layer(
+                                None,
+                                Some(peniko::BlendMode::new(Mix::Normal, Compose::DestIn)),
+                                None,
+                                None,
+                                None,
+                            );
+                            let mt = t
+                                * Affine::scale_non_uniform(
+                                    mask.mask_scale.0,
+                                    mask.mask_scale.1,
+                                );
+                            self.ctx.set_transform(mt);
+                            self.draw_pixmap(
+                                mask.pixmap.clone(),
+                                mask.quality,
+                                mt * mask.additional_transform.clone(),
+                            );
+                            self.ctx.pop_layer();
+                            self.ctx.pop_layer();
+                            self.ctx.set_transform(t);
+                        } else {
+                            self.ctx.set_transform(t);
+                            self.draw_pixmap(
+                                prepared.pixmap.clone(),
+                                prepared.quality,
+                                t * prepared.additional_transform,
+                            );
+                        }
+                    }
+                    // Not cacheable (mismatched alpha) or the decode
+                    // failed on the cached attempt: draw exactly the way
+                    // the un-patched code does.
+                    None => {
+                        r.with_rgba(
+                            |image, alpha| {
+                                let (sx, sy) = image.scale_factors();
+                                let mut t = transform;
+                                t *= Affine::scale_non_uniform(sx as f64, sy as f64);
+                                self.ctx.set_transform(t);
+                                self.draw_image(image, alpha);
+                            },
+                            Some((target_width, target_height)),
+                        );
+                    }
+                }
+            }        }
 
         self.ctx
             .set_aliasing_threshold(self.global.aliasing_threshold);
     }
+}
+
+/// VeriPDF: the cached output of [`Renderer::prepare_image`], plus the
+/// decode-derived scale factors the un-cached path folds into the ctx
+/// transform before drawing, so a cache hit can reconstruct the draw
+/// without decoding.
+struct PreparedImage {
+    pixmap: Arc<Pixmap>,
+    quality: ImageQuality,
+    additional_transform: Affine,
+    scale_x: f32,
+    scale_y: f32,
+    /// VeriPDF: when the soft mask has different dimensions or
+    /// interpolation than the image, the un-cached path composites the
+    /// image with a `DestIn` mask layer (`draw_image_with_alpha_mask`).
+    /// Both passes are prepared and cached together.
+    mask: Option<PreparedMask>,
+}
+
+/// VeriPDF: the mask pass of a mismatched-alpha image draw.
+struct PreparedMask {
+    pixmap: Arc<Pixmap>,
+    quality: ImageQuality,
+    additional_transform: Affine,
+    /// Image-space to mask-space scale (image dims ÷ alpha dims).
+    mask_scale: (f64, f64),
 }
 
 trait Splat4thExt {

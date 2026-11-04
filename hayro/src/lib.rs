@@ -105,8 +105,8 @@ pub(crate) struct Renderer<'a> {
     global: &'a GlobalState,
     pub(crate) ctx: &'a mut RenderContext,
     pub(crate) inside_pattern: bool,
-    pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
     pub(crate) in_type3_glyph: bool,
+    pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
 }
 
 impl<'r> Renderer<'r> {
@@ -115,8 +115,8 @@ impl<'r> Renderer<'r> {
             global,
             ctx,
             inside_pattern: false,
-            soft_mask_cache: FxHashMap::default(),
             in_type3_glyph: false,
+            soft_mask_cache: FxHashMap::default(),
         }
     }
 
@@ -149,6 +149,7 @@ impl<'r> Renderer<'r> {
 
 impl<'a, 'r> Device<'a> for Renderer<'r> {
     fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, props: ImageDrawProps<'a>) {
+
         Self::draw_pdf_image(self, image, props);
     }
 
@@ -178,6 +179,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
     }
 
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
+
         Self::draw_path(self, path, props, draw_mode);
     }
 
@@ -191,6 +193,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
+
         Self::draw_glyph_run(self, glyph_run, props, draw_mode);
     }
 }
@@ -218,6 +221,27 @@ impl<'a> RenderCache<'a> {
             hinting_cache: HintingCache::new(),
         }
     }
+
+    /// VeriPDF: like [`RenderCache::new`], but decoded-object caching is
+    /// shared through `object_cache`. A tiled renderer constructs one cache
+    /// per document and calls this for every tile, so a page-covering image
+    /// is decoded once instead of once per tile it touches. Everything
+    /// else (outlines, glyphs, hinting) stays per-render.
+    pub fn new_shared(object_cache: hayro_interpret::Cache) -> Self {
+        Self {
+            interpreter_cache: InterpreterCache::with_object_cache(object_cache),
+            outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            glyph_cache: Rc::new(RefCell::new(GlyphCache::default())),
+            hinting_cache: HintingCache::new(),
+        }
+    }
+
+    /// VeriPDF: the interpreter cache this render cache wraps, for the
+    /// parallel decode-prefetch helpers in `hayro_interpret::prefetch`.
+    pub fn interpreter_cache(&self) -> &InterpreterCache<'a> {
+        &self.interpreter_cache
+    }
+
 }
 
 /// Settings for rendering a page.
