@@ -49,6 +49,23 @@ impl<'a> InterpreterCache<'a> {
             object_cache: Cache::new(),
         }
     }
+
+    /// VeriPDF: the shared object cache, for renderer-side caches.
+    pub fn object_cache_handle(&self) -> Cache {
+        self.object_cache.clone()
+    }
+
+    /// VeriPDF: build with an externally owned object cache, so decoded
+    /// objects (images, masks) survive across `render_into` calls — one
+    /// per tile in a tiled renderer. Construct one `Cache` per document
+    /// and clone it into every per-render `InterpreterCache`; keys are
+    /// only unique within a document (see the TODO above).
+    pub fn with_object_cache(object_cache: Cache) -> Self {
+        Self {
+            font_cache: FontCache::new(),
+            object_cache,
+        }
+    }
 }
 
 /// A per-page interpretation context that borrows shared data from an [`InterpreterCache`].

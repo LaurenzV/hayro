@@ -101,6 +101,12 @@ impl RasterImage<'_> {
         self.0.stream()
     }
 
+    /// VeriPDF: the document's shared object cache, so a device can cache
+    /// processed paints next to the decoded images.
+    pub fn object_cache(&self) -> &crate::Cache {
+        &self.0.cache
+    }
+
     // These are hidden since clients are supposed to call get the
     // width/height from `LumaData` instead.
     #[doc(hidden)]

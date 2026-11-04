@@ -1,6 +1,6 @@
-mod decode;
+pub(crate) mod decode;
 mod form;
-mod image;
+pub(crate) mod image;
 pub(crate) mod soft_mask;
 
 pub(crate) use form::FormXObject;

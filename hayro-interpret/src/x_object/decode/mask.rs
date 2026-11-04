@@ -3,6 +3,7 @@ use crate::LumaData;
 use crate::function::interpolate;
 use crate::x_object::image::{ImageKind, ImageXObject};
 use std::sync::LazyLock;
+use std::sync::Arc;
 
 static BILEVEL_MASK_LUT: LazyLock<Box<[u64; 256]>> = LazyLock::new(|| {
     let mut lut = Box::new([0; 256]);
@@ -16,11 +17,32 @@ static BILEVEL_MASK_LUT: LazyLock<Box<[u64; 256]>> = LazyLock::new(|| {
     lut
 });
 
+#[derive(Clone)]
 pub(crate) struct DecodedMask {
     pub(crate) luma: LumaData,
 }
 
+/// VeriPDF: cached per (stream, target dimension) like `decode_image`;
+/// see the comment there. Soft masks of a page-covering image are just as
+/// expensive to re-decode per tile.
 pub(crate) fn decode_mask(
+    obj: &ImageXObject<'_>,
+    target_dimension: Option<(u32, u32)>,
+) -> Option<DecodedMask> {
+    use crate::CacheKey;
+
+    let key = (obj.stream().cache_key(), target_dimension).cache_key();
+    let cached = obj.cache.get_or_insert_with_budgeted::<Arc<DecodedMask>>(key, || {
+        let decoded = decode_mask_uncached(obj, target_dimension)?;
+        let bytes = decoded.luma.data.len() as u64;
+        Some((Arc::new(decoded.clone()), bytes))
+    })?;
+    Some(DecodedMask {
+        luma: cached.luma.clone(),
+    })
+}
+
+fn decode_mask_uncached(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedMask> {

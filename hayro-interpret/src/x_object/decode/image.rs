@@ -3,21 +3,46 @@ use super::{DecodeContext, decode_context, decode_u8_samples, fix_image_length, 
 use crate::color::{ColorComponents, ToLuma, ToRgb};
 use crate::interpret::state::ActiveTransferFunction;
 use crate::x_object::image::ImageXObject;
-use crate::{ImageData, LumaData, RgbData};
+use crate::{CacheKey, ImageData, LumaData, RgbData};
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use smallvec::SmallVec;
+use std::sync::Arc;
 
+#[derive(Clone)]
 pub(crate) struct DecodedImage {
     pub(crate) image: ImageData,
     pub(crate) alpha: Option<LumaData>,
 }
 
+/// VeriPDF: decoded size in bytes, for the byte-budgeted cache.
+fn decoded_image_bytes(decoded: &DecodedImage) -> u64 {
+    let image = match &decoded.image {
+        ImageData::Rgb(d) => d.data.len() as u64,
+        ImageData::Luma(d) => d.data.len() as u64,
+    };
+    image + decoded.alpha.as_ref().map_or(0, |a| a.data.len() as u64)
+}
+
+/// VeriPDF: decodes are cached per (stream, target dimension). A page-covering
+/// image used to be re-decoded for every tile it touched, which made tiled
+/// rendering of image pages (scans, JPEG2000 documents) many times slower
+/// than a single whole-page render. The cache lives in the object cache the
+/// `ImageXObject` already carries, so a caller that keeps one `Cache` per
+/// document gets decode reuse across tiles for free.
 pub(crate) fn decode_image(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedImage> {
-    ImageDecoder::new(obj, target_dimension)?.decode()
+    let key = (obj.stream().cache_key(), target_dimension).cache_key();
+    let cached = obj.cache.get_or_insert_with_budgeted::<Arc<DecodedImage>>(key, || {
+        let decoded = ImageDecoder::new(obj, target_dimension)?.decode()?;
+        Some((Arc::new(decoded.clone()), decoded_image_bytes(&decoded)))
+    })?;
+    Some(DecodedImage {
+        image: cached.image.clone(),
+        alpha: cached.alpha.clone(),
+    })
 }
 
 struct ImageDecoder<'a, 'b> {
