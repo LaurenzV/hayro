@@ -612,6 +612,11 @@ fn resolve_palette_indices(
     };
 
     let mapping = boxes.component_mapping.as_ref().unwrap();
+
+    if mapping.entries.is_empty() {
+        bail!(ColorError::PaletteResolutionFailed);
+    }
+
     let max_index = palette.entries.len() as i64 - 1;
     let mut resolved = Vec::with_capacity(mapping.entries.len());
 
