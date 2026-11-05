@@ -5,7 +5,7 @@ use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use crate::trivia::{is_regular_character, is_white_space_character};
+use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 #[rustfmt::skip]
@@ -85,10 +85,8 @@ impl Skippable for Number {
                     r.forward_while(is_digit_or_minus);
                 }
             }
-            // See PDFJS-bug1753983 - accept just + or - as a zero.
-            // ALso see PDFJS-bug1953099, where the sign is followed by a show
-            // text string operand, requiring us to allow '<' and '(' as well.
-            b if has_sign && (is_white_space_character(b) || matches!(b, b'(' | b'<')) => {}
+            // See PDFJS-bug1753983 and PDFJS-bug1953099 - accept just + or - as a zero.
+            _ if has_sign => {}
             _ => return None,
         }
 
@@ -188,17 +186,16 @@ impl Number {
 #[inline(always)]
 fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     let start_offset = r.offset();
-    let plus = r.peek_byte() == Some(b'+');
-    let negative = match r.peek_byte()? {
+    let (has_sign, negative) = match r.peek_byte()? {
         b'-' => {
             r.forward();
-            true
+            (true, true)
         }
         b'+' => {
             r.forward();
-            false
+            (true, false)
         }
-        _ => false,
+        _ => (false, false),
     };
 
     let mut mantissa: u64 = 0;
@@ -243,12 +240,7 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     }
 
     if !has_digits {
-        // A lone `+` is zero only where `skip` accepts it (before white space, `(`, `<` or
-        // the end), so that reading agrees with validation.
-        let lone_plus = plus
-            && r.peek_byte()
-                .is_none_or(|b| is_white_space_character(b) || matches!(b, b'(' | b'<'));
-        if negative || has_dot || lone_plus {
+        if has_dot || (has_sign && r.peek_byte().is_some_and(|b| !is_regular_character(b))) {
             // Treat numbers like just `-`, `+` or `-.` as zero.
             return Some(Number(InternalNumber::Integer(0)));
         }
@@ -564,11 +556,19 @@ mod tests {
     }
 
     #[test]
-    fn lone_plus_reads_where_skipped() {
-        for input in ["+", "+ ", "+(", "+<"] {
+    fn lone_sign() {
+        for input in ["+ ", "+(", "+<", "+]", "+/", "- ", "-(", "-<", "-]", "-/"] {
             assert_eq!(
                 Reader::new(input.as_bytes()).read_without_context::<i32>(),
                 Some(0),
+                "{input:?}"
+            );
+        }
+
+        for input in ["+", "-", "+abc", "-abc"] {
+            assert_eq!(
+                Reader::new(input.as_bytes()).read_without_context::<i32>(),
+                None,
                 "{input:?}"
             );
         }
