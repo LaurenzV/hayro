@@ -281,9 +281,9 @@ fn parse_bf_char<F>(
         let dst = scanner.parse_string().ok()?;
         dst.decode_into(&mut ctx.buf).ok()?;
 
-        // An empty destination (`<DF> <>`) loses only its own entry, not the whole
-        // CMap: Poppler and PDFium keep the other entries (#1669).
-        let Some(dst_base) = decode_be(&ctx.buf) else { continue };
+        let Some(dst_base) = decode_be(&ctx.buf) else {
+            continue;
+        };
         entries.push(BfRange {
             range: Range {
                 start: code,
@@ -315,9 +315,9 @@ fn parse_bf_range<F>(
             Token::String(s) => {
                 s.decode_into(&mut ctx.buf).ok()?;
 
-                // An empty destination loses only its own entry, not the whole
-                // CMap (#1669).
-                let Some(dst_base) = decode_be(&ctx.buf) else { continue };
+                let Some(dst_base) = decode_be(&ctx.buf) else {
+                    continue;
+                };
                 entries.push(BfRange {
                     range: Range { start, end },
                     dst_base,
@@ -328,9 +328,9 @@ fn parse_bf_range<F>(
                     let s = scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
-                    // An empty array member loses only its own entry, not the
-                    // whole CMap (#1669).
-                    let Some(dst_base) = decode_be(&ctx.buf) else { continue };
+                    let Some(dst_base) = decode_be(&ctx.buf) else {
+                        continue;
+                    };
                     entries.push(BfRange {
                         range: Range {
                             start: code,

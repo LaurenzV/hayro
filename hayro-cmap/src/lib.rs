@@ -821,8 +821,6 @@ endcidchar
 
     #[test]
     fn empty_bfchar_destination_keeps_the_other_entries() {
-        // `<00> <0041>` maps; `<01> <>` has an empty destination. Only `<01>`'s
-        // entry is lost, not the whole CMap (#1669).
         let cmap = parse_with_preamble(
             br#"
 2 beginbfchar
@@ -840,9 +838,10 @@ endbfchar
     fn empty_bfrange_destination_keeps_the_other_entries() {
         let cmap = parse_with_preamble(
             br#"
-2 beginbfrange
+3 beginbfrange
 <02> <03> <>
 <04> <05> <0042>
+<06> <07> [<> <0044>]
 endbfrange
 "#,
         );
@@ -851,6 +850,8 @@ endbfrange
         assert_eq!(cmap.lookup_bf_string(0x03), None);
         assert_eq!(cmap.lookup_bf_string(0x04), Some(BfString::Char('B')));
         assert_eq!(cmap.lookup_bf_string(0x05), Some(BfString::Char('C')));
+        assert_eq!(cmap.lookup_bf_string(0x06), None);
+        assert_eq!(cmap.lookup_bf_string(0x07), Some(BfString::Char('D')));
     }
 
     #[test]
