@@ -281,12 +281,15 @@ fn parse_bf_char<F>(
         let dst = scanner.parse_string().ok()?;
         dst.decode_into(&mut ctx.buf).ok()?;
 
+        let Some(dst_base) = decode_be(&ctx.buf) else {
+            continue;
+        };
         entries.push(BfRange {
             range: Range {
                 start: code,
                 end: code,
             },
-            dst_base: decode_be(&ctx.buf)?,
+            dst_base,
         });
     }
 }
@@ -312,9 +315,12 @@ fn parse_bf_range<F>(
             Token::String(s) => {
                 s.decode_into(&mut ctx.buf).ok()?;
 
+                let Some(dst_base) = decode_be(&ctx.buf) else {
+                    continue;
+                };
                 entries.push(BfRange {
                     range: Range { start, end },
-                    dst_base: decode_be(&ctx.buf)?,
+                    dst_base,
                 });
             }
             _ if name_matches(&next, "[") => {
@@ -322,12 +328,15 @@ fn parse_bf_range<F>(
                     let s = scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
+                    let Some(dst_base) = decode_be(&ctx.buf) else {
+                        continue;
+                    };
                     entries.push(BfRange {
                         range: Range {
                             start: code,
                             end: code,
                         },
-                        dst_base: decode_be(&ctx.buf)?,
+                        dst_base,
                     });
                 }
 
