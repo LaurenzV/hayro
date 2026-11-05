@@ -24,6 +24,10 @@
     "file": "pdfs/custom/annotation_bbox_offset.pdf"
   },
   {
+    "id": "annotation_after_unmatched_restore",
+    "file": "pdfs/custom/annotation_after_unmatched_restore.pdf"
+  },
+  {
     "id": "object_stream_wrong_index",
     "file": "pdfs/custom/object_stream_wrong_index.pdf"
   },
@@ -817,6 +821,10 @@
   {
     "id": "xobject_with_fill_opacity",
     "file": "pdfs/custom/xobject_with_fill_opacity.pdf"
+  },
+  {
+    "id": "xobject_unmatched_restore",
+    "file": "pdfs/custom/xobject_unmatched_restore.pdf"
   },
   {
     "id": "image_jbig2_4",
