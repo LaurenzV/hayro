@@ -110,8 +110,8 @@ fn check_eob(ctx: &mut DecoderContext<'_>, reader: &mut BitReader<'_>) -> Result
     // end of the EOL. Without EOLs, we need to align first, as the padding
     // together with the leading zeros of the next line could otherwise be
     // mistaken for an EOL.
-    if ctx.settings.rows_are_byte_aligned && !ctx.has_eols {
-        reader.align();
+    if !ctx.has_eols {
+        ctx.align_row(reader);
     }
 
     let mut eol_count = read_eols(ctx, reader);
