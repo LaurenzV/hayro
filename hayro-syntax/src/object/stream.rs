@@ -2,10 +2,9 @@
 
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
-use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
-use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE};
+use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE, XREF};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
@@ -116,11 +115,7 @@ impl<'a> Stream<'a> {
         let ctx = self.dict.ctx();
 
         if ctx.xref().needs_decryption(ctx)
-            && self
-                .dict
-                .get::<object::String<'_>>(TYPE)
-                .map(|t| t.as_ref() != b"XRef")
-                .unwrap_or(true)
+            && self.dict.get::<Name<'_>>(TYPE).as_deref() != Some(XREF)
         {
             let crypt_filter = self.crypt_filter();
             let target = match &crypt_filter {
