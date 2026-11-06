@@ -12,7 +12,7 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 7] = [
+    let units: [(&str, fn()); 8] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
@@ -20,6 +20,7 @@ pub(crate) fn tests() -> Vec<Test> {
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
         ("text::to_unicode_cid_ranges", to_unicode_cid_ranges),
+        ("text::glyph_run_font_dict", glyph_run_font_dict),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -63,7 +64,32 @@ impl<'a> Device<'a> for TextCollector {
     }
 }
 
-fn page_text(file: &[u8]) -> String {
+/// The character codes of each glyph run, with the object number of its font dictionary.
+#[derive(Default)]
+struct FontCollector(Vec<(String, Option<u32>)>);
+
+impl<'a> Device<'a> for FontCollector {
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+    fn push_clip_path(&mut self, _: &ClipPath) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+        let codes = glyph_run
+            .glyphs()
+            .iter()
+            .filter_map(|glyph| char::from_u32(glyph.char_code()))
+            .collect();
+        let font = glyph_run
+            .font_dict()
+            .and_then(|dict| dict.obj_id())
+            .map(|id| id.obj_number);
+        self.0.push((codes, font));
+    }
+    fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+    fn pop_clip(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
+}
+
+fn interpret_first_page<D: for<'a> Device<'a> + Default>(file: &[u8]) -> D {
     let pdf = Pdf::new(file.to_vec()).unwrap();
     let cache = InterpreterCache::new();
     let mut context = Context::new(
@@ -73,10 +99,14 @@ fn page_text(file: &[u8]) -> String {
         pdf.xref(),
         crate::interpreter_settings(),
     );
-    let mut collector = TextCollector::default();
-    interpret_page(&pdf.pages()[0], &mut context, &mut collector);
+    let mut device = D::default();
+    interpret_page(&pdf.pages()[0], &mut context, &mut device);
 
-    collector.0
+    device
+}
+
+fn page_text(file: &[u8]) -> String {
+    interpret_first_page::<TextCollector>(file).0
 }
 
 fn glyph_names() {
@@ -122,4 +152,22 @@ fn to_unicode_cid_ranges() {
     let file = &read("pdfs/text/to_unicode_cid_ranges.pdf");
 
     assert_eq!(page_text(file), "HI");
+}
+
+fn glyph_run_font_dict() {
+    let file = &read("pdfs/text/glyph_run_font_dict.pdf");
+
+    // `b` and `c` are shown with two Helvetica dictionaries that share a program. `a` is
+    // shown before a font is selected, `d` with a font that can't be loaded and `e` with
+    // one that doesn't exist, so all three use the fallback font.
+    assert_eq!(
+        interpret_first_page::<FontCollector>(file).0,
+        [
+            ("a".to_string(), None),
+            ("b".to_string(), Some(5)),
+            ("c".to_string(), Some(6)),
+            ("d".to_string(), None),
+            ("e".to_string(), None),
+        ]
+    );
 }

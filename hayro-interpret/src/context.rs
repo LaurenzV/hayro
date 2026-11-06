@@ -395,7 +395,7 @@ impl<'a> Context<'a> {
         );
 
         if let Some(resolved) = resolved {
-            Some(TextStateFont::Font(resolved))
+            Some(TextStateFont::Font(resolved, font_dict.clone()))
         } else {
             (self.settings.warning_sink)(InterpreterWarning::UnsupportedFont);
 

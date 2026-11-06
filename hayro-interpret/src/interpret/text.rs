@@ -37,7 +37,7 @@ pub(crate) fn append_text_string<'a>(
     // In case we have a fallback font (which occurs if either no font was set at all
     // in the content stream, or an invalid one), we only want to show the glyphs
     // using Helvetica if the bytes are actually valid ASCII.
-    let show_glyphs = matches!(font, TextStateFont::Font(_))
+    let show_glyphs = matches!(font, TextStateFont::Font(..))
         || (matches!(font, TextStateFont::Fallback(_)) && bytes.is_ascii());
 
     let mut cur_idx = 0;
@@ -88,9 +88,14 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
     };
 
     let clip_path = {
+        let font_dict = match &ctx.text_state().font {
+            Some(TextStateFont::Font(_, dict)) => Some(dict),
+            _ => None,
+        };
         let run = GlyphRun {
             glyphs: &ctx.glyph_scratch,
             writing_mode,
+            font_dict,
         };
 
         let clip_path = if matches!(
