@@ -2,6 +2,7 @@
 
 use alloc::vec::Vec;
 
+use crate::cancel::Cancel;
 use crate::error::{FormatError, Result, bail};
 use crate::j2c::ComponentData;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
@@ -34,6 +35,7 @@ pub struct DecodedImage<'a> {
     /// The JP2 boxes of the image. In the case of a raw codestream, we
     /// will synthesize the necessary boxes.
     pub(crate) boxes: ImageBoxes,
+    pub(crate) cancel: Cancel<'a>,
 }
 
 pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<Image<'a>> {

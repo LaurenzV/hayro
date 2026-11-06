@@ -133,7 +133,7 @@ fn decode(stream: &str, settings: &DecodeSettings) -> Result<Decoded, String> {
         width,
         height,
         channels: decoded.components().len(),
-        samples: decoded.data_u8(),
+        samples: decoded.data_u8().map_err(|e| e.to_string())?,
     })
 }
 

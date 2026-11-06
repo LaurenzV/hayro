@@ -3,6 +3,7 @@
 
 use super::ComponentData;
 use super::codestream::{Header, WaveletTransform};
+use crate::cancel::{CHUNK, Cancel};
 use crate::error::{ColorError, Result, bail, err};
 use crate::math::{Level, Simd, dispatch, f32x8};
 
@@ -11,6 +12,7 @@ pub(crate) fn apply_inverse(
     components: &mut [ComponentData],
     component_infos: &[super::codestream::ComponentInfo],
     header: &Header,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     if components.len() < 3 {
         return if header.strict {
@@ -35,12 +37,16 @@ pub(crate) fn apply_inverse(
         bail!(ColorError::Mct);
     }
 
-    apply_inner(
-        transform,
-        &mut s0.container,
-        &mut s1.container,
-        &mut s2.container,
-    );
+    for ((c0, c1), c2) in s0
+        .container
+        .chunks_mut(CHUNK)
+        .zip(s1.container.chunks_mut(CHUNK))
+        .zip(s2.container.chunks_mut(CHUNK))
+    {
+        cancel.check()?;
+
+        apply_inner(transform, c0, c1, c2);
+    }
 
     Ok(())
 }
