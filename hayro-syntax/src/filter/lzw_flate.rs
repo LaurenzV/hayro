@@ -12,26 +12,38 @@ pub(crate) mod flate {
 
     #[cfg(feature = "unsafe")]
     pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
-        use flate2::read::{DeflateDecoder, ZlibDecoder};
-        use std::io::Read;
-
-        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = ZlibDecoder::new(data);
-            let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
-        }
-
-        fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = DeflateDecoder::new(data);
-            let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
-        }
-
-        let decoded = zlib_stream(data)
-            .or_else(|| deflate_stream(data))
+        let decoded = inflate(data, true)
+            .or_else(|| inflate(data, false))
             .or_else(|| fallback::decode(data))?;
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
+    }
+
+    #[cfg(feature = "unsafe")]
+    fn inflate(data: &[u8], zlib_header: bool) -> Option<Vec<u8>> {
+        use flate2::{Decompress, FlushDecompress, Status};
+
+        let mut decompress = Decompress::new(zlib_header);
+        let mut out = Vec::new();
+
+        loop {
+            out.reserve(32 * 1024);
+
+            let consumed = decompress.total_in() as usize;
+            let produced = out.len();
+
+            match decompress
+                .decompress_vec(&data[consumed..], &mut out, FlushDecompress::Finish)
+                .ok()?
+            {
+                Status::StreamEnd => return Some(out),
+                Status::Ok | Status::BufError => {
+                    if decompress.total_in() as usize == consumed && out.len() == produced {
+                        return Some(out);
+                    }
+                }
+            }
+        }
     }
 
     #[cfg(not(feature = "unsafe"))]
