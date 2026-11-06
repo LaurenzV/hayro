@@ -295,6 +295,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
         rows_are_byte_aligned: false,
         encoding: hayro_ccitt::EncodingMode::Group4,
         strict,
+        cancel: None,
     };
 
     // "An invocation of the generic region decoding procedure with MMR equal to

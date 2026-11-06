@@ -24,23 +24,27 @@
 //! [`decode`]: crate::decode
 //! [`Decoder`]: crate::Decoder
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
 extern crate alloc;
 
 use crate::bit_reader::BitReader;
+use crate::sync::Arc;
 
 mod bit_reader;
+mod cancel;
 mod codes;
 mod context;
 mod error;
 mod group3;
 mod group4;
+mod sync;
 mod tables;
 mod util;
 
+pub use cancel::CancelCheck;
 pub use context::DecoderContext;
 pub use error::{DecodeError, Result};
 
@@ -84,7 +88,7 @@ pub trait Decoder {
 }
 
 /// Settings to apply during decoding.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone)]
 pub struct DecodeSettings {
     /// How many columns the image has (i.e. its width).
     pub columns: u32,
@@ -111,6 +115,22 @@ pub struct DecodeSettings {
     /// Whether to reject data that violates the specification, instead of
     /// decoding it as well as possible.
     pub strict: bool,
+    /// A check for cancelling decoding.
+    pub cancel: Option<Arc<dyn CancelCheck>>,
+}
+
+impl core::fmt::Debug for DecodeSettings {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DecodeSettings")
+            .field("columns", &self.columns)
+            .field("rows", &self.rows)
+            .field("end_of_block", &self.end_of_block)
+            .field("end_of_line", &self.end_of_line)
+            .field("rows_are_byte_aligned", &self.rows_are_byte_aligned)
+            .field("encoding", &self.encoding)
+            .field("strict", &self.strict)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The encoding mode for CCITT fax decoding.

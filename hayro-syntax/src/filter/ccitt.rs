@@ -39,6 +39,7 @@ pub(crate) fn decode(
             EncodingMode::Group3_2D
         },
         strict: false,
+        cancel: None,
     };
     // The value that pixels which are white in the encoding are written as.
     let white: u8 = if params.get::<bool>(BLACK_IS_1).unwrap_or(false) {
@@ -177,7 +178,7 @@ pub(crate) fn decode(
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
-            width: settings.columns,
+            width: columns,
             height: if rows == 0 { decoded_rows } else { rows },
         }),
     })
