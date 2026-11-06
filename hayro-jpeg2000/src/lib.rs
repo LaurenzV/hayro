@@ -123,6 +123,13 @@ pub struct DecodeSettings {
     /// will be returned, with each pixel value corresponding to the palette
     /// index of the location.
     pub resolve_palette_indices: bool,
+    /// Whether color-space specifications in JP2 boxes (`colr`, such as `sYCC`,
+    /// `CIE Lab`, `YCCK`, or embedded ICC profiles) should be applied.
+    ///
+    /// Disable this when an external container (such as a PDF image dictionary
+    /// with an explicit `/ColorSpace` entry, per ISO 32000-1 §7.4.9) overrides
+    /// the JP2 color space and expects raw codestream component samples.
+    pub resolve_color_space: bool,
     /// Whether strict mode should be enabled when decoding.
     ///
     /// It is recommended to leave this flag disabled, unless you have a
@@ -138,6 +145,7 @@ impl Default for DecodeSettings {
     fn default() -> Self {
         Self {
             resolve_palette_indices: true,
+            resolve_color_space: true,
             strict: false,
             target_resolution: None,
             cancel: None,
@@ -256,9 +264,10 @@ impl<'a> Image<'a> {
             *decoded_image.decoded_components = components.into_iter().map(|c| c.0).collect();
         }
 
-        // Note that this is only valid if all images have the same bit depth.
-        let bit_depth = decoded_image.decoded_components[0].bit_depth;
-        convert_color_space(&mut decoded_image, bit_depth)?;
+        if settings.resolve_color_space {
+            let bit_depth = decoded_image.decoded_components[0].bit_depth;
+            convert_color_space(&mut decoded_image, bit_depth)?;
+        }
 
         Ok(decoded_image)
     }
@@ -286,7 +295,11 @@ pub(crate) fn resolve_alpha_and_color_space(
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
 
-    let mut color_space = get_color_space(boxes, num_components)?;
+    let mut color_space = if settings.resolve_color_space {
+        get_color_space(boxes, num_components)?
+    } else {
+        raw_color_space(num_components.saturating_sub(usize::from(has_alpha)))?
+    };
 
     // If we didn't resolve palette indices, we need to assume grayscale image.
     if !settings.resolve_palette_indices && boxes.palette.is_some() {
@@ -571,7 +584,7 @@ fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()
         match e {
             EnumeratedColorspace::Sycc => {
                 dispatch!(Level::new(), simd => {
-                    sycc_to_rgb(simd, image.decoded_components, bit_depth, cancel)
+                    sycc_to_rgb(simd, image.decoded_components, cancel)
                 })?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
@@ -581,7 +594,7 @@ fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()
             }
             EnumeratedColorspace::Ycck => {
                 dispatch!(Level::new(), simd => {
-                    ycck_to_cmyk(simd, image.decoded_components, bit_depth, cancel)
+                    ycck_to_cmyk(simd, image.decoded_components, cancel)
                 })?;
             }
             _ => {}
@@ -633,18 +646,22 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
                 ColorSpace::RGB
             }
         }
-        jp2::colr::ColorSpace::Unknown => match num_components {
-            1 => ColorSpace::Gray,
-            3 => ColorSpace::RGB,
-            4 => ColorSpace::CMYK,
-            _ => ColorSpace::Unknown {
-                num_channels: u8::try_from(num_components)
-                    .map_err(|_| ValidationError::TooManyChannels)?,
-            },
-        },
+        jp2::colr::ColorSpace::Unknown => raw_color_space(num_components)?,
     };
 
     Ok(cs)
+}
+
+fn raw_color_space(num_components: usize) -> Result<ColorSpace> {
+    Ok(match num_components {
+        1 => ColorSpace::Gray,
+        3 => ColorSpace::RGB,
+        4 => ColorSpace::CMYK,
+        _ => ColorSpace::Unknown {
+            num_channels: u8::try_from(num_components)
+                .map_err(|_| ValidationError::TooManyChannels)?,
+        },
+    })
 }
 
 fn resolve_palette_indices(
@@ -805,13 +822,13 @@ fn cielab_to_rgb<S: Simd>(
 fn ycck_to_cmyk<S: Simd>(
     simd: S,
     components: &mut [ComponentData],
-    bit_depth: u8,
     cancel: Cancel<'_>,
 ) -> Result<()> {
     // Convert YCbCr to CMY, preserving K (T.801, Table M.25).
-    sycc_to_rgb(simd, components, bit_depth, cancel)?;
+    sycc_to_rgb(simd, components, cancel)?;
 
-    let max_value = ((1_u32 << bit_depth) - 1) as f32;
+    let luma_depth = components[0].bit_depth;
+    let max_value = ((1_u32 << luma_depth) - 1) as f32;
     let max_v = f32x8::splat(simd, max_value);
 
     for component in components.iter_mut().take(3) {
@@ -832,12 +849,8 @@ fn ycck_to_cmyk<S: Simd>(
 fn sycc_to_rgb<S: Simd>(
     simd: S,
     components: &mut [ComponentData],
-    bit_depth: u8,
     cancel: Cancel<'_>,
 ) -> Result<()> {
-    let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
-    let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
-
     let (head, _) = components
         .split_at_mut_checked(3)
         .ok_or(ColorError::SyccConversionFailed)?;
@@ -846,7 +859,27 @@ fn sycc_to_rgb<S: Simd>(
         unreachable!();
     };
 
-    let offset_v = f32x8::splat(simd, offset);
+    if y.bit_depth == 0
+        || cb.bit_depth == 0
+        || cr.bit_depth == 0
+        || y.bit_depth > 31
+        || cb.bit_depth > 31
+        || cr.bit_depth > 31
+    {
+        bail!(ColorError::SyccConversionFailed);
+    }
+
+    let luma_depth = y.bit_depth;
+    let max_value = ((1_u32 << luma_depth) - 1) as f32;
+    let cb_offset = (1_u32 << (cb.bit_depth - 1)) as f32;
+    let cr_offset = (1_u32 << (cr.bit_depth - 1)) as f32;
+    let cb_scale = max_value / ((1_u32 << cb.bit_depth) - 1) as f32;
+    let cr_scale = max_value / ((1_u32 << cr.bit_depth) - 1) as f32;
+
+    let cb_offset_v = f32x8::splat(simd, cb_offset);
+    let cr_offset_v = f32x8::splat(simd, cr_offset);
+    let cb_scale_v = f32x8::splat(simd, cb_scale);
+    let cr_scale_v = f32x8::splat(simd, cr_scale);
     let max_v = f32x8::splat(simd, max_value);
     let zero_v = f32x8::splat(simd, 0.0);
     let cr_to_r = f32x8::splat(simd, 1.402);
@@ -868,8 +901,8 @@ fn sycc_to_rgb<S: Simd>(
         }
 
         let y_v = f32x8::from_slice(simd, y_chunk);
-        let cb_v = f32x8::from_slice(simd, cb_chunk) - offset_v;
-        let cr_v = f32x8::from_slice(simd, cr_chunk) - offset_v;
+        let cb_v = (f32x8::from_slice(simd, cb_chunk) - cb_offset_v) * cb_scale_v;
+        let cr_v = (f32x8::from_slice(simd, cr_chunk) - cr_offset_v) * cr_scale_v;
 
         // r = y + 1.402 * cr
         let r = cr_v.mul_add(cr_to_r, y_v);
@@ -883,5 +916,79 @@ fn sycc_to_rgb<S: Simd>(
         b.min(max_v).max(zero_v).store(cr_chunk);
     }
 
+    cb.bit_depth = luma_depth;
+    cr.bit_depth = luma_depth;
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sycc_mixed_precision_normalizes_chroma_to_luma_depth() {
+        let mut components = alloc::vec![
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![512.0, 512.0, 512.0]),
+                bit_depth: 10,
+            },
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![128.0, 255.0, 0.0]),
+                bit_depth: 8,
+            },
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![128.0, 128.0, 255.0]),
+                bit_depth: 8,
+            },
+        ];
+
+        dispatch!(Level::new(), simd => sycc_to_rgb(simd, &mut components, Cancel(None))).unwrap();
+
+        assert_eq!(components[0].bit_depth, 10);
+        assert_eq!(components[1].bit_depth, 10);
+        assert_eq!(components[2].bit_depth, 10);
+
+        // Neutral 8-bit chroma (128) must map to neutral 10-bit gray (~512),
+        // rather than subtracting a 10-bit bias (512) and clamping blue to 0.
+        assert!((components[0].samples()[0] - 512.0).abs() < 1.0);
+        assert!((components[1].samples()[0] - 512.0).abs() < 1.0);
+        assert!((components[2].samples()[0] - 512.0).abs() < 1.0);
+
+        // Max 8-bit Cb (255) drives blue to 10-bit max (1023), and max Cr (255)
+        // drives red to 10-bit max (1023).
+        assert_eq!(components[2].samples()[1], 1023.0);
+        assert_eq!(components[0].samples()[2], 1023.0);
+
+        let decoded = DecodedImage {
+            decoded_components: &mut components,
+            boxes: ImageBoxes::default(),
+            cancel: Cancel(None),
+        };
+        let rgb8 = decoded.data_u8().unwrap();
+        assert_eq!(&rgb8[0..3], &[128, 128, 128]);
+    }
+
+    #[test]
+    fn sycc_rejects_invalid_bit_depths() {
+        let mut components = alloc::vec![
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![0.0]),
+                bit_depth: 0,
+            },
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![0.0]),
+                bit_depth: 8,
+            },
+            ComponentData {
+                container: math::SimdBuffer::new(alloc::vec![0.0]),
+                bit_depth: 8,
+            },
+        ];
+
+        assert!(
+            dispatch!(Level::new(), simd => sycc_to_rgb(simd, &mut components, Cancel(None)))
+                .is_err()
+        );
+    }
 }

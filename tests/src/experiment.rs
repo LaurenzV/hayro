@@ -118,6 +118,7 @@ fn check_jpx_images(folder: &str) {
                         let decoded = catch_unwind(|| {
                             let settings = DecodeSettings {
                                 resolve_palette_indices: false,
+                                resolve_color_space: true,
                                 strict: false,
                                 target_resolution: Some((2000, 2000)),
                                 cancel: None,
