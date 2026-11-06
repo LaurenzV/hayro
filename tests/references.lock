@@ -491,6 +491,7 @@ raster/custom/shading_mesh_same_dict.png 1a579a8fbf5fa5abf22c1079fd45c2d9
 raster/custom/shading_operator_1_p0.png ee6e6c967ee5f35e0d99a92726e3595a
 raster/custom/shading_operator_1_p1.png 8e29d34621c203e181816b6e121f40a7
 raster/custom/shading_operator_2.png 780e9adb8e99ce0248adc6123d7f48db
+raster/custom/soft_mask_small_groups.png 4096f50dbfea8c813284f8ab83cfa7d9
 raster/custom/stream_blanks_before_eol.png c38c7f9bee1426648997742d5bdd861c
 raster/custom/stream_ccit_not_enough_data_p0.png 34417dfa93de246b7819ce76b81e181c
 raster/custom/stream_ccit_not_enough_data_p1.png 769f8e5c4b15a4d098502a818a531f10
@@ -912,7 +913,7 @@ raster/pdfbox/4201.png bfe5ac99dfab68544787c602e13aba49
 raster/pdfbox/4211.png aec260a6cc5559a94bd04445793cfa44
 raster/pdfbox/4218.png 6fec5292f2e730b7809e15b16b4caae5
 raster/pdfbox/4228.png 99ff5911a8282344769d2eff5b7ebaf5
-raster/pdfbox/4245.png 7953a6b3072f2b10763a408b36d312b1
+raster/pdfbox/4245.png 827b3d3bf4aeb16ee4a28c0a1ea1f1a8
 raster/pdfbox/4246.png f48a61fdcb49edb14cae0aad37dc8c86
 raster/pdfbox/4268.png ea83404a92ef5bda3f45c75844408c35
 raster/pdfbox/4277_p0.png 83dc26f98c4766b90769648318cf5e0b
