@@ -59,9 +59,9 @@ impl TrueTypeFont {
         }
     }
 
-    pub(crate) fn program(&self) -> FontProgram {
+    pub(crate) fn program(&self) -> Option<FontProgram> {
         match &self.kind {
-            Kind::Embedded(e) => e.base_font.clone(),
+            Kind::Embedded(e) => Some(e.base_font.clone()),
             Kind::Standard(s) => s.program.clone(),
         }
     }
