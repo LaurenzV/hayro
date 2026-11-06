@@ -72,7 +72,11 @@ impl CacheKey for Dict<'_> {
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
         match self.dict().obj_id() {
-            Some(obj_id) => hash128(&obj_id),
+            // A stream written directly inside an indirect object, which we
+            // accept although it's invalid, has the identifier of that object,
+            // so we tell it apart by where its dictionary is. The address is
+            // stable: the bytes of an object live as long as its document.
+            Some(obj_id) => hash128(&(obj_id, self.dict().data().as_ptr() as usize)),
             None => hash128(&(self.dict().data(), self.raw_data().as_ref())),
         }
     }
@@ -189,5 +193,86 @@ impl CacheKey for Rect {
 impl CacheKey for u128 {
     fn cache_key(&self) -> u128 {
         hash128(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CacheKey;
+    use hayro_syntax::Pdf;
+    use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
+
+    fn pdf(objects: &[&[u8]]) -> Pdf {
+        let mut data = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(data.len());
+            data.extend(format!("{} 0 obj\n", i + 1).bytes());
+            data.extend(*body);
+            data.extend(b"\nendobj\n");
+        }
+
+        let xref = data.len();
+        data.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).bytes());
+
+        for offset in offsets {
+            data.extend(format!("{offset:010} 00000 n \n").bytes());
+        }
+
+        data.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .bytes(),
+        );
+
+        Pdf::new(data).unwrap()
+    }
+
+    #[test]
+    fn direct_streams_in_one_object_have_distinct_keys() {
+        let pdf = pdf(&[
+            b"<< /Type /Catalog /Pages 2 0 R
+/A << /Length 4 /Filter /ASCIIHexDecode >>
+stream
+0 0 
+endstream
+/B << /Length 4 /Filter /ASCIIHexDecode >>
+stream
+0 1 
+endstream
+>>",
+            b"<< /Type /Pages /Kids [] /Count 0 >>",
+        ]);
+        let dict = pdf
+            .xref()
+            .get::<Dict<'_>>(ObjectIdentifier::new(1, 0))
+            .unwrap();
+        let a = dict.get::<Stream<'_>>(b"A").unwrap();
+        let b = dict.get::<Stream<'_>>(b"B").unwrap();
+
+        assert_ne!(a.decoded().unwrap(), b.decoded().unwrap());
+        assert_eq!(a.dict().obj_id(), b.dict().obj_id());
+        assert_ne!(a.cache_key(), b.cache_key());
+        assert_eq!(
+            a.cache_key(),
+            dict.get::<Stream<'_>>(b"A").unwrap().cache_key()
+        );
+    }
+
+    #[test]
+    fn indirect_stream_keeps_its_key() {
+        let pdf = pdf(&[
+            b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [] /Count 0 >>",
+            b"<< /Length 2 >>\nstream\nab\nendstream",
+        ]);
+        let id = ObjectIdentifier::new(3, 0);
+        let first = pdf.xref().get::<Stream<'_>>(id).unwrap();
+        let second = pdf.xref().get::<Stream<'_>>(id).unwrap();
+
+        assert_eq!(first.cache_key(), second.cache_key());
     }
 }
