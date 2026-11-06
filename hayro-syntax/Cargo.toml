@@ -15,7 +15,7 @@ std = ["hayro-ccitt?/std", "hayro-jbig2?/std", "hayro-jpeg2000?/std", "dep:rustc
 images = ["dep:zune-jpeg", "dep:hayro-ccitt", "dep:hayro-jbig2", "dep:hayro-jpeg2000"]
 unsafe = [
     "std",
-    "dep:flate2",
+    "dep:zlib-rs",
     "dep:memchr",
     "hayro-jbig2?/simd",
     "hayro-jpeg2000?/simd",
@@ -26,7 +26,8 @@ unsafe = [
 [dependencies]
 rustc-hash = { workspace = true, optional = true }
 smallvec = { workspace = true }
-flate2 = { workspace = true, optional = true, features = ["zlib-rs"] }
+miniz_oxide = { workspace = true }
+zlib-rs = { workspace = true, optional = true }
 memchr = { workspace = true, optional = true }
 
 zune-jpeg = { workspace = true, optional = true }

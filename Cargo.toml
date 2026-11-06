@@ -46,6 +46,8 @@ image = { version = "0.25", default-features = false }
 kurbo = { version = "0.13.0" }
 resvg = { version = "0.47.0" }
 flate2 = { version = "1" }
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
+zlib-rs = { version = "0.6.8", default-features = false, features = ["rust-allocator"] }
 phf = { version = "0.13.1", default-features = false }
 moxcms = { version = "0.8.1" }
 rustc-hash = { version = "2" }
