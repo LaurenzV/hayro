@@ -3,7 +3,7 @@
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
 use crate::context::{Context, InterpreterCache};
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::font::GlyphRun;
 use crate::interpret::state::{ActiveTransferFunction, State};
 use crate::shading::Shading;
@@ -17,11 +17,13 @@ use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     BBOX, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
 };
-use hayro_syntax::object::{Object, dict_or_stream};
+use hayro_syntax::object::{Name, Object, dict_or_stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Rect, Shape};
+use smallvec::SmallVec;
 use std::fmt::{Debug, Formatter};
+use std::ops::Range;
 use std::sync::Arc;
 
 /// A PDF pattern.
@@ -34,15 +36,15 @@ pub enum Pattern<'a> {
 }
 
 impl<'a> Pattern<'a> {
-    pub(crate) fn new(object: Object<'a>, ctx: &Context<'a>) -> Option<Self> {
+    pub(crate) fn new(object: Object<'a>, name: &Name<'_>, ctx: &Context<'a>) -> Option<Self> {
         match object {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.interpreter_cache.object_cache,
             )?)),
-            Object::Stream(stream) => {
-                Some(Self::Tiling(Box::new(TilingPattern::new(stream, ctx)?)))
-            }
+            Object::Stream(stream) => Some(Self::Tiling(Box::new(TilingPattern::new(
+                stream, name, ctx,
+            )?))),
             _ => None,
         }
     }
@@ -141,6 +143,9 @@ pub struct TilingPattern<'a> {
     /// An additional opacity to apply to the pattern cell as a whole.
     pub opacity: f32,
     stream: Stream<'a>,
+    // A copy of the name the pattern was selected with, since the pattern can outlive the
+    // content stream that names it.
+    name: SmallVec<[u8; 23]>,
     is_color: bool,
     pub(crate) stroke_paint: Color,
     pub(crate) non_stroking_paint: Color,
@@ -158,7 +163,7 @@ impl Debug for TilingPattern<'_> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub(crate) fn new(stream: Stream<'a>, ctx: &Context<'a>) -> Option<Self> {
+    pub(crate) fn new(stream: Stream<'a>, name: &Name<'_>, ctx: &Context<'a>) -> Option<Self> {
         let cache_key = stream.cache_key();
         let dict = stream.dict();
 
@@ -204,6 +209,7 @@ impl<'a> TilingPattern<'a> {
             ctx_bbox,
             is_color,
             stream,
+            name: SmallVec::from_slice(name),
             stroke_paint,
             non_stroking_paint,
             settings: ctx.settings.clone(),
@@ -243,6 +249,11 @@ impl<'a> TilingPattern<'a> {
         };
         device.push_clip_path(&clip_path);
 
+        device.begin_content(&ContentSource::TilingPattern {
+            name: Name::new_unescaped(&self.name),
+            stream: self.stream.obj_id(),
+        });
+
         if self.is_color {
             interpret(iter, &self.resources, &mut context, device);
         } else {
@@ -256,6 +267,7 @@ impl<'a> TilingPattern<'a> {
             interpret(iter, &self.resources, &mut context, &mut device);
         }
 
+        device.end_content();
         device.pop_clip();
 
         Some(())
@@ -332,4 +344,16 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     }
 
     fn pop_transparency_group(&mut self) {}
+
+    fn begin_content(&mut self, source: &ContentSource<'_>) {
+        self.inner.begin_content(source);
+    }
+
+    fn end_content(&mut self) {
+        self.inner.end_content();
+    }
+
+    fn operator(&mut self, span: Range<usize>) {
+        self.inner.operator(span);
+    }
 }

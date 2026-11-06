@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::font::{GlyphRun, Type3Glyph, UNITS_PER_EM};
 use crate::interpret::state::TextState;
 use crate::x_object::soft_mask::SoftMask;
@@ -11,6 +11,7 @@ use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::RESOURCES;
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath};
+use std::ops::Range;
 
 pub(crate) fn render_glyph<'a>(
     glyph: &Type3Glyph<'a>,
@@ -71,12 +72,20 @@ pub(crate) fn render_glyph<'a>(
         .map(Resources::new);
     let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
 
+    device.begin_content(&ContentSource::Type3Glyph {
+        font: glyph.glyph.font().dict().obj_id(),
+        code: glyph.glyph.char_code(),
+        stream: program.obj_id(),
+    });
+
     if is_shape_glyph {
         let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
         interpret(iter, resources, &mut context, &mut device);
     } else {
         interpret(iter, resources, &mut context, device);
     }
+
+    device.end_content();
 
     Some(())
 }
@@ -131,5 +140,17 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
             s.paint = self.paint.clone();
             self.inner.draw_image(Image::Stencil(s), props);
         }
+    }
+
+    fn begin_content(&mut self, source: &ContentSource<'_>) {
+        self.inner.begin_content(source);
+    }
+
+    fn end_content(&mut self) {
+        self.inner.end_content();
+    }
+
+    fn operator(&mut self, span: Range<usize>) {
+        self.inner.operator(span);
     }
 }
