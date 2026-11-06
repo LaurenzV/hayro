@@ -13,6 +13,15 @@ pub(crate) fn decode_1d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
+        if ctx
+            .settings
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.is_cancelled())
+        {
+            return Err(DecodeError::Cancelled);
+        }
+
         let line_start = reader.clone();
 
         if let Err(e) = decode_1d_line(ctx, reader) {
@@ -40,6 +49,15 @@ pub(crate) fn decode_2d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
+        if ctx
+            .settings
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.is_cancelled())
+        {
+            return Err(DecodeError::Cancelled);
+        }
+
         let line_start = reader.clone();
 
         let result = reader.read_bit().and_then(|tag_bit| {

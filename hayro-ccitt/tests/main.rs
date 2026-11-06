@@ -88,11 +88,12 @@ fn check_consumed(
         rows_are_byte_aligned: false,
         encoding: G4,
         strict: false,
+        cancel: None,
     };
     configure(&mut settings);
 
     let mut collector = Collector::new(settings.columns);
-    let mut ctx = DecoderContext::new(settings);
+    let mut ctx = DecoderContext::new(settings.clone());
     let read = decode(&data, &mut collector, &mut ctx)
         .unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
 
@@ -145,6 +146,7 @@ fn check_malformed(
         rows_are_byte_aligned: false,
         encoding: EncodingMode::Group3_1D,
         strict: false,
+        cancel: None,
     };
     configure(&mut settings);
 
