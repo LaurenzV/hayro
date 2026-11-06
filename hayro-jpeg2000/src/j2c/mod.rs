@@ -88,7 +88,7 @@ pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<I
         codestream: parsed_codestream.data,
         header: parsed_codestream.header,
         boxes,
-        settings: *settings,
+        settings: settings.clone(),
         color_space,
         has_alpha,
     })

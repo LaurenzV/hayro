@@ -8,6 +8,7 @@ use super::codestream::{ComponentInfo, Header};
 use super::decode::DecompositionStorage;
 use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
+use crate::cancel::Cancel;
 use crate::error::{Result, TileError, bail};
 use crate::reader::BitReader;
 
@@ -18,6 +19,7 @@ pub(crate) fn parse<'a, 'b>(
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     header: &Header,
     storage: &mut DecompositionStorage<'a>,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     for tile_part in &tile.tile_parts {
         if parse_inner(
@@ -25,7 +27,8 @@ pub(crate) fn parse<'a, 'b>(
             &mut progression_iterator,
             &tile.component_infos,
             storage,
-        )
+            cancel,
+        )?
         .is_none()
             && header.strict
         {
@@ -41,72 +44,94 @@ fn parse_inner<'a>(
     progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
     component_infos: &[ComponentInfo],
     storage: &mut DecompositionStorage<'a>,
-) -> Option<()> {
+    cancel: Cancel<'_>,
+) -> Result<Option<()>> {
     while !tile_part.header().at_end() {
-        let progression_data = progression_iterator.next()?;
-        let resolution = progression_data.resolution;
-        let component_info = &component_infos[progression_data.component as usize];
-        let tile_decompositions =
-            &mut storage.tile_decompositions[progression_data.component as usize];
-        let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
+        cancel.check()?;
 
-        let body_reader = tile_part.body();
-
-        if component_info.coding_style.flags.may_use_sop_markers()
-            && body_reader.peek_marker() == Some(SOP)
+        if parse_packet(
+            &mut tile_part,
+            progression_iterator,
+            component_infos,
+            storage,
+        )
+        .is_none()
         {
-            body_reader.read_marker().ok()?;
-            body_reader.skip_bytes(4)?;
+            return Ok(None);
         }
+    }
 
-        let header_reader = tile_part.header();
+    Ok(Some(()))
+}
 
-        let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
+fn parse_packet<'a>(
+    tile_part: &mut TilePart<'a>,
+    progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
+    component_infos: &[ComponentInfo],
+    storage: &mut DecompositionStorage<'a>,
+) -> Option<()> {
+    let progression_data = progression_iterator.next()?;
+    let resolution = progression_data.resolution;
+    let component_info = &component_infos[progression_data.component as usize];
+    let tile_decompositions = &mut storage.tile_decompositions[progression_data.component as usize];
+    let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
-        // B.10.3 Zero length packet
-        // "The first bit in the packet header denotes whether the packet has a length of zero
-        // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
-        // case. The value 1 indicates a non-zero length."
-        if !zero_length {
-            for sub_band in sub_band_iter.clone() {
-                resolve_segments(
-                    sub_band,
-                    &progression_data,
-                    header_reader,
-                    storage,
-                    component_info,
-                )?;
-            }
+    let body_reader = tile_part.body();
+
+    if component_info.coding_style.flags.may_use_sop_markers()
+        && body_reader.peek_marker() == Some(SOP)
+    {
+        body_reader.read_marker().ok()?;
+        body_reader.skip_bytes(4)?;
+    }
+
+    let header_reader = tile_part.header();
+
+    let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
+
+    // B.10.3 Zero length packet
+    // "The first bit in the packet header denotes whether the packet has a length of zero
+    // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
+    // case. The value 1 indicates a non-zero length."
+    if !zero_length {
+        for sub_band in sub_band_iter.clone() {
+            resolve_segments(
+                sub_band,
+                &progression_data,
+                header_reader,
+                storage,
+                component_info,
+            )?;
         }
+    }
 
-        header_reader.align();
+    header_reader.align();
 
-        if component_info.coding_style.flags.uses_eph_marker()
-            && header_reader.read_marker().ok()? != EPH
-        {
-            return None;
-        }
+    if component_info.coding_style.flags.uses_eph_marker()
+        && header_reader.read_marker().ok()? != EPH
+    {
+        return None;
+    }
 
-        // Now read the packet body.
-        let body_reader = tile_part.body();
+    // Now read the packet body.
+    let body_reader = tile_part.body();
 
-        if !zero_length {
-            for sub_band in sub_band_iter {
-                let sub_band = &mut storage.sub_bands[sub_band];
-                let precinct = &mut storage.precincts[sub_band.precincts.clone()]
-                    [progression_data.precinct as usize];
-                let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
+    if !zero_length {
+        for sub_band in sub_band_iter {
+            let sub_band = &mut storage.sub_bands[sub_band];
+            let precinct = &mut storage.precincts[sub_band.precincts.clone()]
+                [progression_data.precinct as usize];
+            let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
-                for code_block in code_blocks {
-                    let layer = &mut storage.layers[code_block.layers.clone()]
-                        [progression_data.layer_num as usize];
+            for code_block in code_blocks {
+                let layer = &mut storage.layers[code_block.layers.clone()]
+                    [progression_data.layer_num as usize];
 
-                    if let Some(segments) = layer.segments.clone() {
-                        let segments = &mut storage.segments[segments.clone()];
+                if let Some(segments) = layer.segments.clone() {
+                    let segments = &mut storage.segments[segments.clone()];
 
-                        for segment in segments {
-                            segment.data = body_reader.read_bytes(segment.data_length as usize)?;
-                        }
+                    for segment in segments {
+                        segment.data = body_reader.read_bytes(segment.data_length as usize)?;
                     }
                 }
             }
