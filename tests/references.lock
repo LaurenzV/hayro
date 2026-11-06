@@ -483,6 +483,7 @@ raster/custom/shading_mesh_same_dict.png e219fb8ae75b7ce5d8c9120ad3f388ef
 raster/custom/shading_operator_1_p0.png afab4f6e863783e61330bfffeb014b22
 raster/custom/shading_operator_1_p1.png 99cbb79738271ec6db07ad1c0e008152
 raster/custom/shading_operator_2.png e998e4b97a58b8b84a55bfd425bdcefa
+raster/custom/soft_mask_small_groups.png 4096f50dbfea8c813284f8ab83cfa7d9
 raster/custom/stream_ccit_not_enough_data_p0.png 34417dfa93de246b7819ce76b81e181c
 raster/custom/stream_ccit_not_enough_data_p1.png 769f8e5c4b15a4d098502a818a531f10
 raster/custom/stream_flate_bpc_1.png b7ec9907efced8bfddc6ac49e2ba44be
@@ -900,7 +901,7 @@ raster/pdfbox/4201.png bfe5ac99dfab68544787c602e13aba49
 raster/pdfbox/4211.png aec260a6cc5559a94bd04445793cfa44
 raster/pdfbox/4218.png 6fec5292f2e730b7809e15b16b4caae5
 raster/pdfbox/4228.png ad3fcd7ebd5b7f096c08f5db366567b5
-raster/pdfbox/4245.png 2ddfedc649993a3d75e52ff60925afe1
+raster/pdfbox/4245.png 3a6f35ab4e1b9a9c94bcc729d0735844
 raster/pdfbox/4246.png f48a61fdcb49edb14cae0aad37dc8c86
 raster/pdfbox/4268.png ea83404a92ef5bda3f45c75844408c35
 raster/pdfbox/4277_p0.png 83dc26f98c4766b90769648318cf5e0b
@@ -1366,7 +1367,7 @@ raster/pdfjs/bug1652224.png 21e46577b7bf3fb71c4c292356aa7edb
 raster/pdfjs/bug1659412.png 6084ad6fc16cfd7b35a79d4deba78c3f
 raster/pdfjs/bug1671312_ArialNarrow.png bf71a375562a63afe37655a9881ec61f
 raster/pdfjs/bug1671312_reduced.png dc024613cde7efb7e1481ca51f15f57d
-raster/pdfjs/bug1703683.png 785d9dd9b0d671b5fd710ec39eb1ef66
+raster/pdfjs/bug1703683.png d75bbc2d11d506cbceecbd6a5de105a6
 raster/pdfjs/bug1721218_reduced.png a63055ed5094485a88f26d6b5f685602
 raster/pdfjs/bug1727053.png 728408cca42dd922f326fb2aa31f9ffd
 raster/pdfjs/bug1734802_p0.png cc68b5b452cbb06cb266f4f8ae2e5932
@@ -1746,7 +1747,7 @@ raster/pdfjs/issue16081_p7.png c734f841475620ad0fa2cde8c1e38df1
 raster/pdfjs/issue16114.png 617c92d948ce77704fb6c67ca2db174a
 raster/pdfjs/issue16127_p0.png aa6c61b05138d9d3a46e9ea2d24e447b
 raster/pdfjs/issue16127_p1.png 85b8af7e1486c54c9b38d7697a2e3c70
-raster/pdfjs/issue16127_p10.png 9e8f4d44f8e26d9eb82a2edb2ddb16d9
+raster/pdfjs/issue16127_p10.png df034db337d7b7ce4c3583937e2bcd92
 raster/pdfjs/issue16127_p11.png 59557ba2831cff1ebdcbac6c5a790919
 raster/pdfjs/issue16127_p2.png 4cc87b78971c51013b3674dd57813287
 raster/pdfjs/issue16127_p3.png 2c041eae820e74d6c4e2048603d9c20b

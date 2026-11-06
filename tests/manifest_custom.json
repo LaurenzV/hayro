@@ -1432,5 +1432,9 @@
   {
     "id": "font_type1_opentype_builtin_encoding",
     "file": "pdfs/custom/font_type1_opentype_builtin_encoding.pdf"
+  },
+  {
+    "id": "soft_mask_small_groups",
+    "file": "pdfs/custom/soft_mask_small_groups.pdf"
   }
 ]
