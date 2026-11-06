@@ -1435,6 +1435,7 @@
   },
   {
     "id": "pattern_shading_radial_extend_interior",
-    "file": "pdfs/custom/pattern_shading_radial_extend_interior.pdf"
+    "file": "pdfs/custom/pattern_shading_radial_extend_interior.pdf",
+    "svg": true
   }
 ]
