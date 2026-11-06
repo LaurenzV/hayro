@@ -1,0 +1,63 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 128 32] /Contents 4 0 R /Resources << /Shading << /S0 5 0 R /S1 6 0 R >> /ExtGState << /M0 7 0 R /M1 8 0 R >> >> >>
+endobj
+4 0 obj
+<<  /Length 233 >>
+stream
+0 g 0 0 128 32 re f
+q 1 0 0 1 0 0 cm 0 0 32 32 re W n /S0 sh Q
+q 1 0 0 1 32 0 cm 0 0 32 32 re W n /S1 sh Q
+q 1 0 0 1 64 0 cm 0 0 32 32 re W n /M0 gs 1 g 0 0 32 32 re f Q
+q 1 0 0 1 96 0 cm 0 0 32 32 re W n /M1 gs 1 g 0 0 32 32 re f Q
+
+endstream
+endobj
+5 0 obj
+<< /ShadingType 3 /ColorSpace /DeviceGray /Coords [16 16 8 16 16 12] /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> /Extend [true true] >>
+endobj
+6 0 obj
+<< /ShadingType 3 /ColorSpace /DeviceGray /Coords [16 16 8 16 16 12] /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> /Extend [false false] >>
+endobj
+7 0 obj
+<< /SMask << /S /Luminosity /G 9 0 R >> >>
+endobj
+8 0 obj
+<< /SMask << /S /Luminosity /G 10 0 R >> >>
+endobj
+9 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 32 32] /Group << /S /Transparency /CS /DeviceGray >> /Resources << /Shading << /S 5 0 R >> >> /Length 5 >>
+stream
+/S sh
+endstream
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 32 32] /Group << /S /Transparency /CS /DeviceGray >> /Resources << /Shading << /S 6 0 R >> >> /Length 5 >>
+stream
+/S sh
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000290 00000 n 
+0000000575 00000 n 
+0000000749 00000 n 
+0000000925 00000 n 
+0000000983 00000 n 
+0000001042 00000 n 
+0000001231 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1421
+%%EOF

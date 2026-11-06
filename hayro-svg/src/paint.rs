@@ -408,10 +408,7 @@ fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradie
             xml.write_attribute("gradientUnits", "userSpaceOnUse");
             xml.write_attribute(
                 "gradientTransform",
-                &format!(
-                    "matrix({})",
-                    convert_transform(&(Affine::translate((-0.5, -0.5)) * gradient.transform))
-                ),
+                &format!("matrix({})", convert_transform(&gradient.transform)),
             );
             xml.write_attribute("x1", &start.x);
             xml.write_attribute("y1", &start.y);
@@ -429,10 +426,7 @@ fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradie
             xml.write_attribute("gradientUnits", "userSpaceOnUse");
             xml.write_attribute(
                 "gradientTransform",
-                &format!(
-                    "matrix({})",
-                    convert_transform(&(Affine::translate((-0.5, -0.5)) * gradient.transform))
-                ),
+                &format!("matrix({})", convert_transform(&gradient.transform)),
             );
             xml.write_attribute("fx", &start_center.x);
             xml.write_attribute("fy", &start_center.y);
