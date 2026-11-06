@@ -267,7 +267,11 @@ impl Skippable for Stream<'_> {
 }
 
 impl<'a> Readable<'a> for Stream<'a> {
-    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(_: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
+        None
+    }
+
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
         let offset = r.offset();
         parse_proper(r, &dict).or_else(|| {
@@ -417,7 +421,7 @@ mod tests {
     fn display() {
         let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
         let stream = reader
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(format!("{stream}"), "Stream (len: 3)");
@@ -428,7 +432,7 @@ mod tests {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
@@ -439,7 +443,7 @@ mod tests {
         let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
@@ -450,7 +454,7 @@ mod tests {
         let data = b"<< /Length 3 /F (data.bin) >> stream\nabc\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abc");
