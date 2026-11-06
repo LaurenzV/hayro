@@ -12,18 +12,19 @@ pub(crate) mod flate {
 
     #[cfg(feature = "unsafe")]
     pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
-        let decoded = inflate(data, true)
-            .or_else(|| inflate(data, false))
+        let decoded = zlib_body(data)
+            .and_then(inflate)
+            .or_else(|| inflate(data))
             .or_else(|| fallback::decode(data))?;
         let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
 
     #[cfg(feature = "unsafe")]
-    fn inflate(data: &[u8], zlib_header: bool) -> Option<Vec<u8>> {
+    fn inflate(data: &[u8]) -> Option<Vec<u8>> {
         use flate2::{Decompress, FlushDecompress, Status};
 
-        let mut decompress = Decompress::new(zlib_header);
+        let mut decompress = Decompress::new(false);
         let mut out = Vec::new();
 
         loop {
@@ -53,6 +54,17 @@ pub(crate) mod flate {
         apply_predictor(decoded, &params)
     }
 
+    fn zlib_body(data: &[u8]) -> Option<&[u8]> {
+        let [cmf, flg, body @ ..] = data else {
+            return None;
+        };
+
+        ((cmf & 0x0f) == 0x08
+            && (u16::from(*cmf) << 8 | u16::from(*flg)).is_multiple_of(31)
+            && (flg & 0x20) == 0)
+            .then_some(body)
+    }
+
     /// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/flate_stream.js>
     /// TODO: Rewrite this in idiomatic Rust.
     mod fallback {
@@ -64,20 +76,7 @@ pub(crate) mod flate {
         }
 
         fn flate_decode(data: &[u8]) -> Option<Vec<u8>> {
-            if data.len() >= 2 {
-                let cmf = data[0];
-                let flg = data[1];
-
-                if (cmf & 0x0f) == 0x08
-                    && ((cmf as u16) << 8 | flg as u16).is_multiple_of(31)
-                    && (flg & 0x20) == 0
-                {
-                    let mut stream = FlateStream::new(&data[2..]);
-                    return stream.decode();
-                }
-            }
-
-            let mut stream = FlateStream::new(data);
+            let mut stream = FlateStream::new(super::zlib_body(data).unwrap_or(data));
             stream.decode()
         }
 
