@@ -26,6 +26,7 @@ mod load;
 mod raster;
 mod svg;
 mod text;
+mod text_layer;
 mod write;
 
 pub(crate) static WORKSPACE_PATH: LazyLock<PathBuf> =
@@ -113,6 +114,7 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
+        .chain(text_layer::tests())
         .chain([Test::unit("visibility", visibility)])
         .filter(|test| args.matches(&test.name))
         .collect();
@@ -189,6 +191,7 @@ fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) ->
 pub(crate) fn svg_render_settings() -> SvgRenderSettings {
     SvgRenderSettings {
         bg_color: [0, 0, 0, 0],
+        text_layer: false,
     }
 }
 
