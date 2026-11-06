@@ -12,7 +12,7 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Dict, Object};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::Affine;
+use kurbo::{Affine, Rect};
 use smallvec::smallvec;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -35,7 +35,7 @@ struct Repr<'a> {
     mask_type: MaskType,
     parent_resources: Resources<'a>,
     root_transform: Affine,
-    bbox: kurbo::Rect,
+    bbox: Rect,
     interpreter_cache: InterpreterCache<'a>,
     transfer_function: Option<TransferFunction>,
     settings: InterpreterSettings,
@@ -134,10 +134,21 @@ impl<'a> SoftMask<'a> {
 
     /// Interpret the contents of the mask into the given device.
     pub fn interpret(&self, device: &mut impl Device<'a>) {
-        let state = State::new(self.0.root_transform);
+        self.interpret_with_transform(device, Affine::IDENTITY);
+    }
+
+    /// Interpret the contents of the mask into the given device, with
+    /// `transform` applied in device space after the transform of the mask.
+    ///
+    /// This allows drawing a part of the mask into a device whose origin isn't
+    /// the origin of the page, such as the region given by
+    /// [`group_bbox`](Self::group_bbox).
+    pub fn interpret_with_transform(&self, device: &mut impl Device<'a>, transform: Affine) {
+        let root_transform = transform * self.0.root_transform;
+        let state = State::new(root_transform);
         let mut ctx = Context::new_with(
-            self.0.root_transform,
-            self.0.bbox,
+            root_transform,
+            transform.transform_rect_bbox(self.0.bbox),
             &self.0.interpreter_cache,
             self.0.xref,
             self.0.settings.clone(),
@@ -147,6 +158,18 @@ impl<'a> SoftMask<'a> {
         self.0
             .group
             .draw(&self.0.parent_resources, &mut ctx, device);
+    }
+
+    /// Return the bounding box of the mask's group in device space.
+    ///
+    /// The group is clipped to its bounding box, so outside of it, the mask
+    /// only consists of the backdrop given by
+    /// [`background_color`](Self::background_color) (or transparency, for
+    /// an alpha mask).
+    pub fn group_bbox(&self) -> Rect {
+        let [x0, y0, x1, y1] = self.0.group.bbox.map(f64::from);
+
+        (self.0.root_transform * self.0.group.matrix).transform_rect_bbox(Rect::new(x0, y0, x1, y1))
     }
 
     /// Return the underlying mask type.
