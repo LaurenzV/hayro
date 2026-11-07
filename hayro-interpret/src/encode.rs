@@ -187,6 +187,20 @@ impl EncodedShadingPattern {
 impl ShadingPattern {
     /// Encode the shading pattern.
     pub fn encode(&self) -> EncodedShadingPattern {
+        self.encode_impl(None)
+    }
+
+    /// Like [`Self::encode`], but a mesh shading (types 4 to 7) is sampled only inside `area`, in the
+    /// coordinates the shading's matrix maps to (device space).
+    ///
+    /// A mesh is sampled once per device pixel over the bounding box of each triangle, so a mesh that reaches
+    /// far beyond what is painted (a clip of a few points on a page-sized mesh) costs memory for every pixel
+    /// of the whole mesh: 3.4 GB for one 20x14 pt clip in a real file. The other shading types ignore `area`.
+    pub fn encode_within(&self, area: Rect) -> EncodedShadingPattern {
+        self.encode_impl(Some(area))
+    }
+
+    fn encode_impl(&self, area: Option<Rect>) -> EncodedShadingPattern {
         let base_transform;
 
         let shading_type = match self.shading.shading_type.as_ref() {
@@ -217,7 +231,7 @@ impl ShadingPattern {
                 function,
             } => {
                 let full_transform = self.matrix;
-                let samples = sample_triangles(triangles, full_transform);
+                let samples = sample_triangles(triangles, full_transform, area);
 
                 base_transform = Affine::IDENTITY;
 
@@ -227,13 +241,22 @@ impl ShadingPattern {
                 })
             }
             ShadingType::CoonsPatchMesh { patches, function } => {
+                // One patch at a time: 722 triangles each, so a mesh of thousands of patches would
+                // otherwise hold gigabytes of triangles before sampling them. A patch lies inside the hull
+                // of its control points, so a patch whose points miss `area` is skipped.
+                let full_transform = self.matrix;
+                let mut samples = FxHashMap::default();
                 let mut triangles = vec![];
                 for patch in patches {
+                    if let Some(area) = area
+                        && !points_bbox(&patch.control_points, full_transform).overlaps(area)
+                    {
+                        continue;
+                    }
+                    triangles.clear();
                     patch.to_triangles(&mut triangles);
+                    sample_triangles_into(&mut samples, &triangles, full_transform, area);
                 }
-
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
 
                 base_transform = Affine::IDENTITY;
 
@@ -243,13 +266,22 @@ impl ShadingPattern {
                 })
             }
             ShadingType::TensorProductPatchMesh { patches, function } => {
+                // One patch at a time: 722 triangles each, so a mesh of thousands of patches would
+                // otherwise hold gigabytes of triangles before sampling them. A patch lies inside the hull
+                // of its control points, so a patch whose points miss `area` is skipped.
+                let full_transform = self.matrix;
+                let mut samples = FxHashMap::default();
                 let mut triangles = vec![];
                 for patch in patches {
+                    if let Some(area) = area
+                        && !points_bbox(&patch.control_points, full_transform).overlaps(area)
+                    {
+                        continue;
+                    }
+                    triangles.clear();
                     patch.to_triangles(&mut triangles);
+                    sample_triangles_into(&mut samples, &triangles, full_transform, area);
                 }
-
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
 
                 base_transform = Affine::IDENTITY;
 
@@ -329,11 +361,30 @@ fn encode_axial_shading(
     )
 }
 
+fn points_bbox(points: &[Point], transform: Affine) -> Rect {
+    let mut r = Rect::from_points(transform * points[0], transform * points[0]);
+    for p in &points[1..] {
+        r = r.union_pt(transform * *p);
+    }
+    r
+}
+
 fn sample_triangles(
     triangles: &[Triangle],
     transform: Affine,
+    area: Option<Rect>,
 ) -> FxHashMap<(u16, u16), ColorComponents> {
     let mut map = FxHashMap::default();
+    sample_triangles_into(&mut map, triangles, transform, area);
+    map
+}
+
+fn sample_triangles_into(
+    map: &mut FxHashMap<(u16, u16), ColorComponents>,
+    triangles: &[Triangle],
+    transform: Affine,
+    area: Option<Rect>,
+) {
 
     for t in triangles {
         let t = {
@@ -351,7 +402,13 @@ fn sample_triangles(
             Triangle::new(v0, v1, v2)
         };
 
-        let bbox = t.bounding_box();
+        let mut bbox = t.bounding_box();
+        if let Some(area) = area {
+            bbox = bbox.intersect(area);
+            if bbox.width() <= 0.0 || bbox.height() <= 0.0 {
+                continue;
+            }
+        }
 
         for y in (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16) {
             for x in (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16) {
@@ -362,8 +419,6 @@ fn sample_triangles(
             }
         }
     }
-
-    map
 }
 
 fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> EncodedShadingType {
