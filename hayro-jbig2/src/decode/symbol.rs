@@ -73,6 +73,8 @@ pub(crate) fn decode(
         }
     };
 
+    let mut remaining_empty_height_classes = num_new_symbols;
+
     while ctx.symbols_decoded_count < num_new_symbols {
         let height_class_delta =
             read_height_class_delta(&mut ctx)?.ok_or(SymbolError::UnexpectedOob)?;
@@ -133,6 +135,12 @@ pub(crate) fn decode(
             }
 
             ctx.symbols_decoded_count += 1;
+        }
+
+        if ctx.symbols_decoded_count == ctx.height_class_first_symbol {
+            remaining_empty_height_classes = remaining_empty_height_classes
+                .checked_sub(1)
+                .ok_or(SymbolError::Invalid)?;
         }
 
         if ctx.header.flags.use_huffman && !ctx.header.flags.use_refagg {
