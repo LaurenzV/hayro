@@ -18,6 +18,7 @@ This crate forbids unsafe code via a crate-level attribute.
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
@@ -34,23 +35,6 @@ pub struct DecoderContext {
 #[derive(Default)]
 pub(crate) struct ScratchBuffers {
     pub(crate) contexts: Vec<ArithmeticDecoderContext>,
-}
-
-/// A decoder for JBIG2 images.
-pub trait Decoder {
-    /// Push a single pixel to the output.
-    fn push_pixel(&mut self, black: bool);
-    /// Push multiple chunks of 8 pixels of the same color.
-    ///
-    /// The `chunk_count` parameter indicates how many 8-pixel chunks to push.
-    /// For example, if this method is called with `white = true` and
-    /// `chunk_count = 10`, 80 white pixels are pushed (10 × 8 = 80).
-    ///
-    /// You can assume that this method is only called if the number of already
-    /// pushed pixels is a multiple of 8 (i.e. byte-aligned).
-    fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32);
-    /// Called when a row has been completed.
-    fn next_line(&mut self);
 }
 
 #[cfg(feature = "image")]
@@ -324,15 +308,8 @@ impl<'a> Page<'a> {
         self.size.height
     }
 
-    /// Decode the page through the given [`Decoder`].
-    pub fn decode<D: Decoder>(&self, decoder: &mut D) -> Result<()> {
-        let mut ctx = DecoderContext::default();
-
-        self.decode_with(decoder, &mut ctx)
-    }
-
-    /// Like [`Page::decode`], but reuses the allocations in `ctx` across pages.
-    pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
+    /// Decode the page into the bitmap of `ctx` and return it.
+    pub fn decode<'c>(&self, ctx: &'c mut DecoderContext) -> Result<PageBitmap<'c>> {
         let segments = match &self.segments {
             PageSegments::Owned(segments) => segments,
             PageSegments::Borrowed(segments) => *segments,
@@ -350,11 +327,92 @@ impl<'a> Page<'a> {
             self.strict,
             ctx,
         )?;
-        emit_bitmap(&ctx.page_bitmap, decoder);
 
-        Ok(())
+        Ok(PageBitmap {
+            bitmap: &ctx.page_bitmap,
+        })
     }
 }
+
+/// The decoded pixels of a page, as rows of `u32` words with the first pixel in the most
+/// significant bit and black pixels set to 1.
+pub struct PageBitmap<'a> {
+    bitmap: &'a Bitmap,
+}
+
+impl<'a> PageBitmap<'a> {
+    /// The width of the bitmap in pixels.
+    pub fn width(&self) -> u32 {
+        self.bitmap.width
+    }
+
+    /// The height of the bitmap in pixels.
+    pub fn height(&self) -> u32 {
+        self.bitmap.height
+    }
+
+    /// The rows of the bitmap. Bits past the width of the bitmap are unspecified.
+    pub fn rows(&self) -> core::slice::ChunksExact<'a, u32> {
+        self.bitmap.data.chunks_exact(self.bitmap.stride as usize)
+    }
+
+    /// Return the pixels as 8-bit samples, with black as 0 and white as 255.
+    pub fn data_u8(&self) -> Vec<u8> {
+        let mut buf = vec![0xFF; self.width() as usize * self.height() as usize];
+        self.store_black_u8(&mut buf);
+
+        buf
+    }
+
+    /// Store the pixels as 8-bit samples into `buf`, which must have `width × height` bytes.
+    pub fn store_u8_into(&self, buf: &mut [u8]) {
+        assert_eq!(
+            buf.len(),
+            self.width() as usize * self.height() as usize,
+            "buffer has the wrong size"
+        );
+
+        buf.fill(0xFF);
+        self.store_black_u8(buf);
+    }
+
+    fn store_black_u8(&self, buf: &mut [u8]) {
+        for (row, out) in self.rows().zip(buf.chunks_exact_mut(self.width() as usize)) {
+            for (word, out) in row.iter().zip(out.chunks_mut(32)) {
+                if *word == 0 {
+                    continue;
+                }
+
+                for (byte, out) in word.to_be_bytes().into_iter().zip(out.chunks_mut(8)) {
+                    if byte != 0 {
+                        out.copy_from_slice(&U8_PIXELS[byte as usize][..out.len()]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static U8_PIXELS: [[u8; 8]; 256] = {
+    let mut table = [[0xFF; 8]; 256];
+    let mut byte = 0;
+
+    while byte < 256 {
+        let mut bit = 0;
+
+        while bit < 8 {
+            if byte & (0x80 >> bit) != 0 {
+                table[byte][bit] = 0x00;
+            }
+
+            bit += 1;
+        }
+
+        byte += 1;
+    }
+
+    table
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 struct PageSize {
@@ -402,63 +460,6 @@ impl PageSize {
             height,
             height_from_stripes,
         })
-    }
-}
-
-fn emit_bitmap<D: Decoder>(bitmap: &Bitmap, decoder: &mut D) {
-    let width = bitmap.width;
-    let bytes_per_row = width.div_ceil(8) as usize;
-
-    for row in bitmap.data.chunks_exact(bitmap.stride as usize) {
-        let mut x = 0_u32;
-        let mut chunk_byte: Option<u8> = None;
-        let mut chunk_count = 0_u32;
-
-        let bytes = row.iter().flat_map(|w| w.to_be_bytes()).take(bytes_per_row);
-
-        for byte in bytes {
-            let remaining = width - x;
-
-            if remaining >= 8 && (byte == 0x00 || byte == 0xFF) {
-                // Continue the previous chunk.
-                if chunk_byte == Some(byte) {
-                    chunk_count += 1;
-                    x += 8;
-                    continue;
-                }
-
-                // Flush previous chunk if any, then start new one.
-                if let Some(b) = chunk_byte {
-                    decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-                }
-
-                chunk_byte = Some(byte);
-                chunk_count = 1;
-                x += 8;
-
-                continue;
-            }
-
-            // Can't continue/start chunk, flush any existing chunk first.
-            if let Some(b) = chunk_byte.take() {
-                decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-                chunk_count = 0;
-            }
-
-            // Emit individual pixels.
-            let count = remaining.min(8);
-            for i in 0..count {
-                decoder.push_pixel((byte >> (7 - i)) & 1 != 0);
-            }
-            x += count;
-        }
-
-        // Flush any remaining chunk at end of row.
-        if let Some(b) = chunk_byte {
-            decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-        }
-
-        decoder.next_line();
     }
 }
 
