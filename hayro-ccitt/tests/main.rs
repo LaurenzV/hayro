@@ -11,7 +11,7 @@ mod modes;
 mod recovery;
 mod settings;
 
-use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode, decode};
+use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode, decode};
 use std::path::PathBuf;
 
 const G3_1D: EncodingMode = EncodingMode::Group3_1D;
@@ -93,8 +93,7 @@ fn check_consumed(
     configure(&mut settings);
 
     let mut collector = Collector::new(settings.columns);
-    let mut ctx = DecoderContext::new(settings.clone());
-    let read = decode(&data, &mut collector, &mut ctx)
+    let read = decode(&data, &mut collector, &settings)
         .unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
 
     let expected_rows = if settings.rows == 0 {
@@ -150,6 +149,5 @@ fn check_malformed(
     };
     configure(&mut settings);
 
-    let mut ctx = DecoderContext::new(settings);
-    let _ = decode(&data, &mut Collector::new(columns), &mut ctx);
+    let _ = decode(&data, &mut Collector::new(columns), &settings);
 }

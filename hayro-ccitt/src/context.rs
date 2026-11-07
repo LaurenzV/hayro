@@ -4,8 +4,7 @@ use crate::{DecodeError, DecodeSettings, Decoder, Result};
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// A reusable context for decoding CCITT images.
-pub struct DecoderContext {
+pub(crate) struct DecoderContext<'a> {
     /// Positions of the color changes in the reference line (previous line).
     ///
     /// Since colors alternate and each line starts with white, changes at even
@@ -27,14 +26,13 @@ pub struct DecoderContext {
     /// How many rows have been decoded so far.
     pub(crate) decoded_rows: u32,
     /// The settings to apply during decoding.
-    pub(crate) settings: DecodeSettings,
+    pub(crate) settings: &'a DecodeSettings,
     /// Whether the data contains EOLs.
     pub(crate) has_eols: bool,
 }
 
-impl DecoderContext {
-    /// Creates a new decoder context using the provided decode settings.
-    pub fn new(settings: DecodeSettings) -> Self {
+impl<'a> DecoderContext<'a> {
+    pub(crate) fn new(settings: &'a DecodeSettings) -> Self {
         Self {
             ref_changes: vec![],
             ref_pos: 0,
@@ -48,18 +46,6 @@ impl DecoderContext {
             settings,
             has_eols: false,
         }
-    }
-
-    pub(crate) fn reset(&mut self) {
-        self.ref_changes.clear();
-        self.ref_pos = 0;
-        self.b1_idx = 0;
-        self.coding_changes.clear();
-        self.pixels_decoded = 0;
-        self.line_width = self.settings.columns;
-        self.color = Color::White;
-        self.decoded_rows = 0;
-        self.has_eols = false;
     }
 
     #[inline(always)]
@@ -164,7 +150,10 @@ impl DecoderContext {
 
 /// Decode a single 1D-coded line (T.4 Section 4.1.1, T.6 Section 2.2.4).
 #[inline(always)]
-pub(crate) fn decode_1d_line(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<()> {
+pub(crate) fn decode_1d_line(
+    ctx: &mut DecoderContext<'_>,
+    reader: &mut BitReader<'_>,
+) -> Result<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.color)?;
         ctx.push_pixels(run_length)?;
@@ -176,7 +165,10 @@ pub(crate) fn decode_1d_line(ctx: &mut DecoderContext, reader: &mut BitReader<'_
 
 /// Decode a single 2D-coded line (T.4 Section 4.2, T.6 Section 2.2).
 #[inline(always)]
-pub(crate) fn decode_2d_line(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<()> {
+pub(crate) fn decode_2d_line(
+    ctx: &mut DecoderContext<'_>,
+    reader: &mut BitReader<'_>,
+) -> Result<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
 
