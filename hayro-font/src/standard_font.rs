@@ -247,12 +247,15 @@ impl StandardKind {
     fn lookup_glyph(&self, code: u8) -> GlyphId {
         self.code_to_ps_name(code)
             .and_then(|c| {
-                self.program.glyph_by_name(c).or_else(|| {
-                    // If the font doesn't have a POST table, try to map via unicode instead.
-                    glyph_names::get(c)
-                        .and_then(|c| c.chars().next())
-                        .and_then(|c| self.program.cmap_glyph(c))
-                })
+                self.program
+                    .glyph_by_name(c)
+                    .or_else(|| self.program.glyph_by_name(normalized_glyph_name(c)))
+                    .or_else(|| {
+                        // If the font doesn't have a POST table, try to map via unicode instead.
+                        glyph_names::get(c)
+                            .and_then(|c| c.chars().next())
+                            .and_then(|c| self.program.cmap_glyph(c))
+                    })
             })
             .unwrap_or(GlyphId::NOTDEF)
     }
