@@ -87,6 +87,38 @@ impl EncodedRadialAxialShading {
         })
     }
 
+    /// The SVG-like gradient of an axial or radial shading whatever area it fills, and which of its ends the
+    /// PDF extends (`[start, end]`).
+    ///
+    /// [`Self::as_svg_gradient`] gives up when an end is not extended and the path reaches past it, because an
+    /// SVG gradient pads. A writer that knows the area can still draw that case exactly: stretch the gradient
+    /// over the area and put transparent stops beyond the ends that are not extended. Radial shadings with a
+    /// background colour are not returned (the background fills where the shading does not).
+    pub fn as_svg_gradient_with_extend(
+        &self,
+        pattern: &EncodedShadingPattern,
+        tolerance: f32,
+    ) -> Option<(SvgGradient, [bool; 2])> {
+        if matches!(self.params, RadialAxialParams::Radial { .. })
+            && pattern.background_color.components()[3] > 0.0
+        {
+            return None;
+        }
+
+        Some((
+            SvgGradient {
+                kind: self.native_gradient_kind(),
+                transform: pattern.base_transform.inverse(),
+                stops: approximate_gradient_stops(
+                    |t| self.sample_t(pattern, t),
+                    &self.normalized_stitching_bounds(),
+                    tolerance,
+                ),
+            },
+            self.extend,
+        ))
+    }
+
     fn native_gradient_kind(&self) -> SvgGradientKind {
         match &self.params {
             RadialAxialParams::Axial => SvgGradientKind::Linear {
