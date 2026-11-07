@@ -62,10 +62,10 @@ impl Type1Font {
         }
     }
 
-    pub(crate) fn program(&self) -> FontProgram {
+    pub(crate) fn program(&self) -> Option<FontProgram> {
         match &self.0 {
             Kind::Standard(s) => s.program.clone(),
-            Kind::Embedded(e) => e.program.clone(),
+            Kind::Embedded(e) => Some(e.program.clone()),
         }
     }
 

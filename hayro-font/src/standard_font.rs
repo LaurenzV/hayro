@@ -179,7 +179,7 @@ impl StandardFont {
 #[derive(Debug)]
 pub(crate) struct StandardKind {
     base_font: StandardFont,
-    pub(crate) program: FontProgram,
+    pub(crate) program: Option<FontProgram>,
     encoding: Encoding,
     widths: Vec<Width>,
     missing_width: f32,
@@ -211,7 +211,7 @@ impl StandardKind {
             encoding = Encoding::BuiltIn;
         }
 
-        let program = loader.resolve(&FontQuery::Standard(base_font))?;
+        let program = loader.resolve(&FontQuery::Standard(base_font));
 
         let mut kind = Self {
             base_font,
@@ -223,7 +223,10 @@ impl StandardKind {
             fallback,
             encoding,
         };
-        kind.code_to_glyph = Box::new(std::array::from_fn(|code| kind.lookup_glyph(code as u8)));
+        if kind.program.is_some() {
+            kind.code_to_glyph =
+                Box::new(std::array::from_fn(|code| kind.lookup_glyph(code as u8)));
+        }
 
         Some(kind)
     }
@@ -245,13 +248,17 @@ impl StandardKind {
     }
 
     fn lookup_glyph(&self, code: u8) -> GlyphId {
+        let Some(program) = &self.program else {
+            return GlyphId::NOTDEF;
+        };
+
         self.code_to_ps_name(code)
             .and_then(|c| {
-                self.program.glyph_by_name(c).or_else(|| {
+                program.glyph_by_name(c).or_else(|| {
                     // If the font doesn't have a POST table, try to map via unicode instead.
                     glyph_names::get(c)
                         .and_then(|c| c.chars().next())
-                        .and_then(|c| self.program.cmap_glyph(c))
+                        .and_then(|c| program.cmap_glyph(c))
                 })
             })
             .unwrap_or(GlyphId::NOTDEF)
@@ -260,7 +267,11 @@ impl StandardKind {
     // The substitute font might have different metrics than the standard font it
     // replaces, so its glyphs need to be stretched to the expected widths.
     pub(crate) fn glyph_stretch(&self, glyph: GlyphId, code: u8) -> f64 {
-        let Some(actual_width) = self.program.advance_width(glyph).or_else(|| {
+        let Some(program) = &self.program else {
+            return 1.0;
+        };
+
+        let Some(actual_width) = program.advance_width(glyph).or_else(|| {
             self.code_to_ps_name(code)
                 .and_then(|name| self.base_font.get_width(name))
         }) else {

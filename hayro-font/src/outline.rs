@@ -32,11 +32,11 @@ pub(crate) enum OutlineFont {
 }
 
 impl OutlineFont {
-    pub(crate) fn program(&self) -> FontProgram {
+    pub(crate) fn program(&self) -> Option<FontProgram> {
         match self {
             Self::Type1(t) => t.program(),
             Self::TrueType(t) => t.program(),
-            Self::Type0(t) => t.program(),
+            Self::Type0(t) => Some(t.program()),
         }
     }
 
@@ -71,7 +71,7 @@ impl OutlineFont {
     ///
     /// Returns None for Type1 fonts and non-embedded TrueType fonts.
     pub(crate) fn font_data(&self) -> Option<OutlineFontData> {
-        let cache_key = self.program().content_hash();
+        let cache_key = self.program()?.content_hash();
 
         match self {
             Self::Type1(_) => None,
