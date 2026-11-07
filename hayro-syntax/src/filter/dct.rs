@@ -75,8 +75,22 @@ pub(crate) fn decode(
         }
     }
 
-    let width = decoder.dimensions().unwrap().0 as u32;
-    let height = decoder.dimensions().unwrap().1 as u32;
+    let mut width = decoder.dimensions().unwrap().0 as u32;
+    let mut height = decoder.dimensions().unwrap().1 as u32;
+
+    // A caller that wants a much smaller image (a huge scan drawn small) gets it reduced by a whole factor
+    // here, in the JPEG's own colour space: the colour conversion and every copy after it then work on the
+    // small image. A 10800 x 21600 CMYK JPEG is 933 MB decoded; its RGB and RGBA copies were 1.6 GB more.
+    if let Some((tw, th)) = image_params.target_dimension {
+        let factor = (width / tw.max(1)).min(height / th.max(1));
+        let pixels = (width as usize).checked_mul(height as usize)?;
+        if factor >= 2 && pixels > 0 && decoded.len() % pixels == 0 {
+            let components = decoded.len() / pixels;
+            decoded = box_reduce(&decoded, width, height, components, factor);
+            width = width.div_ceil(factor);
+            height = height.div_ceil(factor);
+        }
+    }
 
     let image_data = ImageData {
         alpha: None,
@@ -96,6 +110,42 @@ pub(crate) fn decode(
         data: Cow::Owned(decoded),
         image_data: Some(image_data),
     })
+}
+
+/// Average `factor` x `factor` blocks of interleaved 8-bit samples (the last row and column of blocks may be
+/// smaller).
+fn box_reduce(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    components: usize,
+    factor: u32,
+) -> Vec<u8> {
+    let (w, h, f) = (width as usize, height as usize, factor as usize);
+    let (ow, oh) = (w.div_ceil(f), h.div_ceil(f));
+    let mut out = Vec::with_capacity(ow * oh * components);
+    let mut acc = alloc::vec![0_u32; ow * components];
+    for by in 0..oh {
+        acc.iter_mut().for_each(|a| *a = 0);
+        let rows = (by * f..((by + 1) * f).min(h)).len();
+        for y in by * f..by * f + rows {
+            let row = &data[y * w * components..(y + 1) * w * components];
+            for (x, px) in row.chunks_exact(components).enumerate() {
+                let o = (x / f) * components;
+                for (a, &v) in acc[o..o + components].iter_mut().zip(px) {
+                    *a += v as u32;
+                }
+            }
+        }
+        for bx in 0..ow {
+            let cols = (bx * f..((bx + 1) * f).min(w)).len();
+            let n = (rows * cols) as u32;
+            for c in 0..components {
+                out.push(((acc[bx * components + c] + n / 2) / n) as u8);
+            }
+        }
+    }
+    out
 }
 
 fn maybe_patch_jpeg_dimensions<'a>(
@@ -178,4 +228,16 @@ fn find_sof_marker(data: &[u8]) -> Option<usize> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::box_reduce;
+
+    #[test]
+    fn box_reduce_averages_whole_and_partial_blocks() {
+        // 3 x 2 pixels, 2 components; factor 2 gives 2 x 1: a 2 x 2 block and a 1 x 2 block.
+        let data = [0, 100, 10, 100, 50, 0, 20, 100, 30, 100, 70, 0];
+        assert_eq!(box_reduce(&data, 3, 2, 2, 2), [15, 100, 60, 0]);
+    }
 }
