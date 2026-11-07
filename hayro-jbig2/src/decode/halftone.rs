@@ -276,24 +276,24 @@ fn render_patterns(
     };
 
     macro_rules! blit_rows {
-        ($data:expr, $shifted:expr, $yu:expr, $first_word:expr, $two:expr,
+        ($data:expr, $pattern:expr, $offset:expr, $yu:expr, $first_word:expr, $two:expr,
          |$d0:ident, $s0:ident| $op0:expr, |$d1:ident, $s1:ident| $op1:expr) => {
             if $two {
                 for row in 0..ph {
                     let base = (($yu + row) * stride + $first_word) as usize;
-                    let si = row as usize * 2;
+                    let word = $pattern[row as usize];
                     let $d0 = $data[base];
-                    let $s0 = $shifted[si];
+                    let $s0 = word >> $offset;
                     $data[base] = $op0;
                     let $d1 = $data[base + 1];
-                    let $s1 = $shifted[si + 1];
+                    let $s1 = word << (WORD_BITS - $offset);
                     $data[base + 1] = $op1;
                 }
             } else {
                 for row in 0..ph {
                     let base = (($yu + row) * stride + $first_word) as usize;
                     let $d0 = $data[base];
-                    let $s0 = $shifted[row as usize * 2];
+                    let $s0 = $pattern[row as usize] >> $offset;
                     $data[base] = $op0;
                 }
             }
@@ -316,15 +316,17 @@ fn render_patterns(
 
             let pattern_index = gray_value.min(num_patterns - 1);
 
-            // Check whether we can use the blit fast path.
-            let shifted =
-                if x >= 0 && y >= 0 && x + pw as i32 <= region_w && y + ph as i32 <= region_h {
-                    pattern_dict.shifted_pattern(pattern_index, x as u32 % WORD_BITS)
-                } else {
-                    None
-                };
+            let pattern = &pattern_dict.patterns[pattern_index];
 
-            if let Some(shifted) = shifted {
+            // Patterns that are at most one word wide and lie inside the region
+            // can be blitted row by row.
+            if pw <= WORD_BITS
+                && x >= 0
+                && y >= 0
+                && x + pw as i32 <= region_w
+                && y + ph as i32 <= region_h
+            {
+                let pattern = &pattern.data;
                 let xu = x as u32;
                 let yu = y as u32;
                 let first_word = xu / WORD_BITS;
@@ -335,7 +337,8 @@ fn render_patterns(
                     CombinationOperator::Or => {
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -346,7 +349,8 @@ fn render_patterns(
                     CombinationOperator::Xor => {
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -363,7 +367,8 @@ fn render_patterns(
                         };
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -380,7 +385,8 @@ fn render_patterns(
                         };
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -399,7 +405,8 @@ fn render_patterns(
                         let inv_mask1 = !mask1;
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -409,7 +416,6 @@ fn render_patterns(
                     }
                 }
             } else {
-                let pattern = &pattern_dict.patterns[pattern_index];
                 region.combine(pattern, x, y, op);
             }
 
