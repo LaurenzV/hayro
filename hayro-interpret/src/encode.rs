@@ -6,8 +6,9 @@ use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
 use crate::util::x_y_advances;
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Point, Rect, Shape};
 use rustc_hash::FxHashMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 /// A shading pattern that was encoded so it can be sampled.
@@ -55,7 +56,7 @@ pub struct EncodedRadialAxialShading {
 /// Encoded sampled mesh shading.
 #[derive(Clone, Debug)]
 pub struct EncodedSampledShading {
-    pub(crate) samples: Arc<FxHashMap<(u16, u16), ColorComponents>>,
+    pub(crate) samples: Arc<MeshSamples>,
     pub(crate) function: Option<ShadingFunction>,
 }
 
@@ -187,6 +188,12 @@ impl EncodedShadingPattern {
 impl ShadingPattern {
     /// Encode the shading pattern.
     pub fn encode(&self) -> EncodedShadingPattern {
+        self.encode_within(Rect::new(0.0, 0.0, 65536.0, 65536.0))
+    }
+
+    /// Encode the shading pattern for drawing within `target`, in device pixels. Mesh
+    /// shadings, which are sampled at device pixels, are only sampled within it.
+    pub fn encode_within(&self, target: Rect) -> EncodedShadingPattern {
         let base_transform;
 
         let shading_type = match self.shading.shading_type.as_ref() {
@@ -217,7 +224,7 @@ impl ShadingPattern {
                 function,
             } => {
                 let full_transform = self.matrix;
-                let samples = sample_triangles(triangles, full_transform);
+                let samples = sample_triangles(triangles, full_transform, target);
 
                 base_transform = Affine::IDENTITY;
 
@@ -233,7 +240,7 @@ impl ShadingPattern {
                 }
 
                 let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
+                let samples = sample_triangles(&triangles, full_transform, target);
 
                 base_transform = Affine::IDENTITY;
 
@@ -249,7 +256,7 @@ impl ShadingPattern {
                 }
 
                 let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
+                let samples = sample_triangles(&triangles, full_transform, target);
 
                 base_transform = Affine::IDENTITY;
 
@@ -329,38 +336,175 @@ fn encode_axial_shading(
     )
 }
 
-fn sample_triangles(
-    triangles: &[Triangle],
-    transform: Affine,
-) -> FxHashMap<(u16, u16), ColorComponents> {
-    let mut map = FxHashMap::default();
+/// Mesh shadings whose triangles span at most this many device pixels are sampled into a
+/// grid; larger ones keep only the pixels their triangles cover.
+const MAX_DENSE_MESH_PIXELS: usize = 1 << 25;
 
-    for t in triangles {
-        let t = {
-            let p0 = transform * t.p0.point;
-            let p1 = transform * t.p1.point;
-            let p2 = transform * t.p2.point;
+/// The colors of a mesh shading at the device pixels its triangles cover.
+#[derive(Debug)]
+pub(crate) enum MeshSamples {
+    Dense {
+        x0: u16,
+        y0: u16,
+        width: usize,
+        height: usize,
+        /// The number of components of each pixel.
+        stride: usize,
+        components: Vec<f32>,
+        covered: Vec<bool>,
+    },
+    Sparse(FxHashMap<(u16, u16), ColorComponents>),
+}
 
-            let mut v0 = t.p0.clone();
-            v0.point = p0;
-            let mut v1 = t.p1.clone();
-            v1.point = p1;
-            let mut v2 = t.p2.clone();
-            v2.point = p2;
-
-            Triangle::new(v0, v1, v2)
-        };
-
-        let bbox = t.bounding_box();
-
-        for y in (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16) {
-            for x in (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16) {
-                let point = Point::new(x as f64, y as f64);
-                if t.contains_point(point) {
-                    map.insert((x, y), t.interpolate(point));
+impl MeshSamples {
+    #[inline]
+    fn get(&self, (x, y): (u16, u16)) -> Option<&[f32]> {
+        match self {
+            Self::Dense {
+                x0,
+                y0,
+                width,
+                height,
+                stride,
+                components,
+                covered,
+            } => {
+                let x = x.checked_sub(*x0)? as usize;
+                let y = y.checked_sub(*y0)? as usize;
+                if x >= *width || y >= *height {
+                    return None;
                 }
+
+                let i = y * width + x;
+                covered[i].then(|| &components[i * stride..][..*stride])
+            }
+            Self::Sparse(map) => map.get(&(x, y)).map(|c| c.as_slice()),
+        }
+    }
+}
+
+/// The device pixels a triangle's bounding box covers, as in [`sample_triangles`].
+fn pixel_span(bbox: Rect) -> (Range<u16>, Range<u16>) {
+    (
+        (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16),
+        (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16),
+    )
+}
+
+/// The part of a span of pixels within another.
+fn clip(span: Range<u16>, within: &Range<u16>) -> Range<u16> {
+    span.start.max(within.start)..span.end.min(within.end)
+}
+
+/// Call `f` with each pixel within `xs` by `ys` that the triangle, mapped by `transform`,
+/// covers, and the weights of its three vertices' colors there.
+fn for_each_pixel(
+    t: &Triangle,
+    transform: Affine,
+    xs: &Range<u16>,
+    ys: &Range<u16>,
+    mut f: impl FnMut(u16, u16, [f32; 3]),
+) {
+    let [a, b, c] = [t.p0.point, t.p1.point, t.p2.point].map(|p| transform * p);
+    let triangle = kurbo::Triangle::new(a, b, c);
+    let (t_xs, t_ys) = pixel_span(triangle.bounding_box());
+    let (t_xs, t_ys) = (clip(t_xs, xs), clip(t_ys, ys));
+    if t_xs.is_empty() || t_ys.is_empty() {
+        return;
+    }
+
+    // As in `Triangle::interpolate`.
+    let (v0, v1) = (b - a, c - a);
+    let (d00, d01, d11) = (v0.dot(v0), v0.dot(v1), v1.dot(v1));
+    let denom = d00 * d11 - d01 * d01;
+
+    for y in t_ys {
+        for x in t_xs.clone() {
+            let point = Point::new(x as f64, y as f64);
+            if triangle.winding(point) != 0 {
+                let v2 = point - a;
+                let (d20, d21) = (v2.dot(v0), v2.dot(v1));
+                let v = (d11 * d20 - d01 * d21) / denom;
+                let w = (d00 * d21 - d01 * d20) / denom;
+                f(x, y, [(1.0 - v - w) as f32, v as f32, w as f32]);
             }
         }
+    }
+}
+
+/// The color at a point of a triangle, from its vertices' weights there.
+#[inline]
+fn interpolate(t: &Triangle, [u, v, w]: [f32; 3], out: &mut [f32]) {
+    for (i, out) in out.iter_mut().enumerate() {
+        *out = u * t.p0.colors[i] + v * t.p1.colors[i] + w * t.p2.colors[i];
+    }
+}
+
+fn sample_triangles(triangles: &[Triangle], transform: Affine, target: Rect) -> MeshSamples {
+    // The transformed bounds of all the vertices contain every triangle's pixels.
+    let stride = triangles.first().map_or(0, |t| t.p0.colors.len());
+    let mut same_stride = true;
+    let (mut min, mut max) = (
+        Point::new(f64::MAX, f64::MAX),
+        Point::new(f64::MIN, f64::MIN),
+    );
+    for vertex in triangles.iter().flat_map(|t| [&t.p0, &t.p1, &t.p2]) {
+        let p = vertex.point;
+        (min.x, min.y, max.x, max.y) = (
+            min.x.min(p.x),
+            min.y.min(p.y),
+            max.x.max(p.x),
+            max.y.max(p.y),
+        );
+        same_stride &= vertex.colors.len() == stride;
+    }
+    let bounds = transform.transform_rect_bbox(Rect::from_points(min, max));
+    let (target_xs, target_ys) = pixel_span(target);
+    let (xs, ys) = pixel_span(bounds);
+    let (xs, ys) = (clip(xs, &target_xs), clip(ys, &target_ys));
+    let (x0, y0) = (xs.start, ys.start);
+    let (width, height) = (xs.len(), ys.len());
+
+    if !same_stride || width * height > MAX_DENSE_MESH_PIXELS {
+        return MeshSamples::Sparse(sample_triangles_sparse(triangles, transform, target));
+    }
+
+    let mut components = vec![0.0; width * height * stride];
+    let mut covered = vec![false; width * height];
+
+    for t in triangles {
+        for_each_pixel(t, transform, &xs, &ys, |x, y, weights| {
+            let i = (y - y0) as usize * width + (x - x0) as usize;
+            interpolate(t, weights, &mut components[i * stride..][..stride]);
+            covered[i] = true;
+        });
+    }
+
+    MeshSamples::Dense {
+        x0,
+        y0,
+        width,
+        height,
+        stride,
+        components,
+        covered,
+    }
+}
+
+fn sample_triangles_sparse(
+    triangles: &[Triangle],
+    transform: Affine,
+    target: Rect,
+) -> FxHashMap<(u16, u16), ColorComponents> {
+    let mut map = FxHashMap::default();
+    let (xs, ys) = pixel_span(target);
+
+    for t in triangles {
+        for_each_pixel(t, transform, &xs, &ys, |x, y, weights| {
+            let mut color = ColorComponents::from_elem(0.0, t.p0.colors.len());
+            interpolate(t, weights, &mut color);
+            map.insert((x, y), color);
+        });
     }
 
     map
@@ -449,7 +593,7 @@ impl EncodedShadingType {
             Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
-                if let Some(color) = samples.get(&sample_point) {
+                if let Some(color) = samples.get(sample_point) {
                     if let Some(function) = function {
                         let mut val = [0.0; MAX_COMPONENTS];
                         let val = &mut val[..function.num_outputs()];
