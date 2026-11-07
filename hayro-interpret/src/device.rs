@@ -25,6 +25,10 @@ pub trait Device<'a> {
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
     );
+    /// The isolated (`I`) and knockout (`K`) entries of a form `XObject`'s transparency group, called right
+    /// after the `push_transparency_group` that opens it. Groups pushed for any other reason are neither.
+    /// Devices that do not composite groups themselves can ignore this.
+    fn set_group_flags(&mut self, _isolated: bool, _knockout: bool) {}
     /// Draw a run of positioned glyphs.
     fn draw_glyph_run(
         &mut self,
