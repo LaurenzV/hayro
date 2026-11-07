@@ -362,6 +362,12 @@ impl OutlineGlyph {
         self.font.font_data()
     }
 
+    /// A key that identifies the font program the glyph comes from, for every font type (Type 1
+    /// included, which has no [`Self::font_data`]). Glyph ids are unique only within one program.
+    pub fn font_key(&self) -> u128 {
+        self.program.content_hash()
+    }
+
     /// Get the glyph ID within the font.
     pub fn glyph_id(&self) -> GlyphId {
         self.id
