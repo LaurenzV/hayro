@@ -143,3 +143,88 @@ pub enum EncodingMode {
     /// Group 3 2D (MR).
     Group3_2D,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+    use alloc::vec::Vec;
+
+    #[derive(Default)]
+    struct RowCollector {
+        rows: Vec<Vec<u32>>,
+    }
+
+    impl Decoder for RowCollector {
+        fn push_row(&mut self, changes: &[u32]) {
+            self.rows.push(changes.to_vec());
+        }
+    }
+
+    #[test]
+    fn lenient_disables_byte_align_on_nonzero_padding() {
+        // Row 0: V(0) = `1` (all 4 pixels white).
+        // Row 1 (immediately packed without zero-padding): V(-2) = `000010`, V(0) = `1`
+        // (2 white pixels, 2 black pixels -> changes = [2]).
+        // Combined bits: `1_000010_1` = 0x85.
+        let data = [0x85];
+
+        let mut lenient = RowCollector::default();
+        let mut lenient_ctx = DecoderContext::new(DecodeSettings {
+            columns: 4,
+            rows: 2,
+            end_of_block: false,
+            end_of_line: false,
+            rows_are_byte_aligned: true,
+            encoding: EncodingMode::Group4,
+            strict: false,
+            cancel: None,
+        });
+        assert_eq!(decode(&data, &mut lenient, &mut lenient_ctx), Ok(1));
+        assert_eq!(lenient.rows, vec![vec![], vec![2]]);
+
+        let mut strict = RowCollector::default();
+        let mut strict_ctx = DecoderContext::new(DecodeSettings {
+            strict: true,
+            ..lenient_ctx.settings.clone()
+        });
+        assert_eq!(decode(&data, &mut strict, &mut strict_ctx), Ok(1));
+        assert_eq!(strict.rows, vec![vec![]]);
+    }
+
+    #[test]
+    fn lenient_group4_flushes_white_padded_partial_row_on_error() {
+        // Row 0: V(0) = `1` (4 white pixels).
+        // Row 1: V(-3) = `0000010` (1 white pixel), V(-1) = `010` (2 black pixels),
+        // followed by invalid mode `0000000...` before the 4th pixel is decoded.
+        let data = [0x82, 0x40, 0x00];
+
+        let mut lenient = RowCollector::default();
+        let mut lenient_ctx = DecoderContext::new(DecodeSettings {
+            columns: 4,
+            rows: 2,
+            end_of_block: false,
+            end_of_line: false,
+            rows_are_byte_aligned: false,
+            encoding: EncodingMode::Group4,
+            strict: false,
+            cancel: None,
+        });
+        assert_eq!(
+            decode(&data, &mut lenient, &mut lenient_ctx),
+            Err(DecodeError::InvalidCode)
+        );
+        assert_eq!(lenient.rows, vec![vec![], vec![1, 3]]);
+
+        let mut strict = RowCollector::default();
+        let mut strict_ctx = DecoderContext::new(DecodeSettings {
+            strict: true,
+            ..lenient_ctx.settings.clone()
+        });
+        assert_eq!(
+            decode(&data, &mut strict, &mut strict_ctx),
+            Err(DecodeError::InvalidCode)
+        );
+        assert_eq!(strict.rows, vec![vec![]]);
+    }
+}
