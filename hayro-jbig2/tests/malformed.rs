@@ -26,3 +26,8 @@ fn text_placement_out_of_range() {
 fn symbol_dictionary_empty_export_runs() {
     check_malformed("malformed_symbol_dictionary_empty_export_runs");
 }
+
+#[test]
+fn symbol_dictionary_empty_height_classes() {
+    check_malformed("malformed_symbol_dictionary_empty_height_classes");
+}
