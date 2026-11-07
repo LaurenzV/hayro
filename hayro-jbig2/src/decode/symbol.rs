@@ -33,12 +33,13 @@ pub(crate) fn decode(
     input_contexts: Option<&RetainedContexts>,
 ) -> Result<SymbolDictionary> {
     let num_new_symbols = header.num_new_symbols;
+    let capacity = (num_new_symbols as usize).min(header.data.len());
 
     let mut ctx = SymbolDecodeContext {
         a_ctx: ArithmeticContext::new(header.data, header, input_contexts)?,
         h_ctx: HuffmanContext::new(header.data, header, referred_tables, standard_tables)?,
-        symbols: Symbols::new(input_symbols, num_new_symbols as usize),
-        symbol_widths: Vec::with_capacity(num_new_symbols as usize),
+        symbols: Symbols::new(input_symbols, capacity),
+        symbol_widths: Vec::with_capacity(capacity),
         height_class_first_symbol: 0,
         symbols_decoded_count: 0,
         total_width: 0,
@@ -710,7 +711,8 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<Bitmap>> {
 
         u32::try_from(value).map_err(|_| HuffmanError::InvalidCode.into())
     };
-    let mut exported = Vec::with_capacity(ctx.header.num_exported_symbols as usize);
+    let mut exported =
+        Vec::with_capacity(ctx.header.num_exported_symbols.min(total_symbols) as usize);
     let mut index: u32 = 0;
     let mut should_export = false;
     let mut remaining_runs = total_symbols.saturating_mul(2).saturating_add(2);
