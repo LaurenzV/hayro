@@ -15,7 +15,7 @@ pub use embedded::load_embedded;
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata,
-    PartitionedRanges, Range, WritingMode, parse,
+    PartitionedRanges, Range, WritingMode, inherit_base_codespace_ranges, parse,
 };
 use huffman::HuffmanTable;
 use reader::Reader;
@@ -73,7 +73,7 @@ pub(crate) fn parse<'a>(
     let mut character_collection = None;
     let mut writing_mode = None;
     let mut base: Option<Box<CMap>> = None;
-    let mut _codespace_ranges = Vec::new();
+    let mut codespace_ranges = Vec::new();
     let mut cid_ranges = PartitionedRanges::new();
     let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
@@ -123,7 +123,7 @@ pub(crate) fn parse<'a>(
                 };
             }
             SEGMENT_CODESPACE => {
-                parse_codespace(payload, &mut _codespace_ranges)?;
+                parse_codespace(payload, &mut codespace_ranges)?;
             }
             SEGMENT_NOTDEF => {
                 parse_notdef(payload, &mut notdef_ranges)?;
@@ -188,13 +188,15 @@ pub(crate) fn parse<'a>(
     notdef_ranges.sort();
     bf_entries.sort_by_key(|a| a.range.start);
 
+    inherit_base_codespace_ranges(&mut codespace_ranges, base.as_deref());
+
     Some(CMap {
         metadata: Metadata {
             character_collection,
             name: cmap_name,
             writing_mode,
         },
-        _codespace_ranges,
+        codespace_ranges,
         cid_ranges,
         notdef_ranges,
         bf_entries,
@@ -211,11 +213,7 @@ fn parse_codespace(payload: &[u8], ranges: &mut Vec<CodespaceRange>) -> Option<(
         let low = r.read_n_bytes(bw)?;
         let high = r.read_n_bytes(bw)?;
 
-        ranges.push(CodespaceRange {
-            number_bytes: bw as u8,
-            low,
-            high,
-        });
+        ranges.push(CodespaceRange::from_raw(bw as u8, low, high));
     }
 
     Some(())

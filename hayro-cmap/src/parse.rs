@@ -8,6 +8,7 @@ use crate::bcmap;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange,
     MAX_NESTING_DEPTH, Metadata, PartitionedRanges, Range, WritingMode,
+    inherit_base_codespace_ranges,
 };
 
 struct Context<F> {
@@ -36,7 +37,7 @@ pub(crate) fn parse_inner<'a>(
         buf: Vec::new(),
         get_cmap,
     };
-    let mut _codespace_ranges = Vec::new();
+    let mut codespace_ranges = Vec::new();
     let mut ranges = PartitionedRanges::new();
     let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
@@ -80,7 +81,7 @@ pub(crate) fn parse_inner<'a>(
         } else {
             match name.as_str() {
                 Some("begincodespacerange") => {
-                    parse_codespace_range(&mut scanner, &mut _codespace_ranges, &mut ctx)?;
+                    parse_codespace_range(&mut scanner, &mut codespace_ranges, &mut ctx)?;
                 }
                 Some("begincidrange") => {
                     parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
@@ -146,9 +147,11 @@ pub(crate) fn parse_inner<'a>(
         writing_mode,
     };
 
+    inherit_base_codespace_ranges(&mut codespace_ranges, base.as_deref());
+
     Some(CMap {
         metadata,
-        _codespace_ranges,
+        codespace_ranges,
         cid_ranges: ranges,
         notdef_ranges,
         bf_entries,
@@ -199,11 +202,7 @@ fn parse_codespace_range<F>(
             return None;
         }
 
-        ranges.push(CodespaceRange {
-            number_bytes: n_bytes,
-            low,
-            high,
-        });
+        ranges.push(CodespaceRange::from_raw(n_bytes, low, high));
     }
 }
 

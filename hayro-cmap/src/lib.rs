@@ -2,6 +2,7 @@
 A parser for cmap files, as they are found in PDFs.
 
 This crate provides a parser for cmap files and allows you to
+- Inspect valid character code byte bounds (`begincodespacerange`).
 - Map character codes from text-showing operators to CID identifiers.
 - Map CIDs to Unicode characters or strings.
 
@@ -359,9 +360,7 @@ const MAX_NESTING_DEPTH: u32 = 16;
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
-    // Note that we don't actually use this, because Acrobat _seems_ to ignore
-    // it, too.
-    _codespace_ranges: Vec<CodespaceRange>,
+    codespace_ranges: Vec<CodespaceRange>,
     cid_ranges: PartitionedRanges,
     notdef_ranges: PartitionedRanges,
     bf_entries: Vec<BfRange>,
@@ -400,7 +399,7 @@ impl CMap {
                 name: Some(Vec::from(name)),
                 writing_mode: Some(writing_mode),
             },
-            _codespace_ranges: Vec::new(),
+            codespace_ranges: alloc::vec![CodespaceRange::from_raw(2, 0x0000, 0xFFFF)],
             cid_ranges: {
                 let mut r = PartitionedRanges::new();
                 r.push(
@@ -424,6 +423,18 @@ impl CMap {
     /// Return the metadata of this cmap.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
+    }
+
+    /// Return the codespace ranges defining valid character code byte sequences
+    /// for this cmap (inheriting from `usecmap` when none are declared locally).
+    pub fn codespace_ranges(&self) -> &[CodespaceRange] {
+        if !self.codespace_ranges.is_empty() {
+            &self.codespace_ranges
+        } else if let Some(base) = &self.base {
+            base.codespace_ranges()
+        } else {
+            &[]
+        }
     }
 
     /// Look up the CID code of a character code.
@@ -588,12 +599,141 @@ impl HasRange for BfRange {
 }
 
 /// A codespace range defining valid character code byte sequences.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct CodespaceRange {
-    pub(crate) number_bytes: u8,
-    pub(crate) low: u32,
-    pub(crate) high: u32,
+///
+/// Per ISO 32000-1 §9.7.6.2 and Adobe Technical Note #5014, a codespace range
+/// specifies a `1..=4`-byte multi-dimensional rectangle: a character code of
+/// length [`Self::byte_len`] belongs to the range when each byte `k` lies
+/// inclusively between `low_bytes()[k]` and `high_bytes()[k]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CodespaceRange {
+    byte_len: u8,
+    low: [u8; 4],
+    high: [u8; 4],
+}
+
+impl CodespaceRange {
+    /// Create a codespace range from `1..=4`-byte big-endian bounds.
+    ///
+    /// Returns `None` if `byte_len` is outside `1..=4`, if `low` or `high` sets
+    /// bits above `byte_len` bytes, or if any byte of `low` exceeds the
+    /// corresponding byte of `high`.
+    pub fn new(byte_len: u8, low: u32, high: u32) -> Option<Self> {
+        if !(1..=4).contains(&byte_len) {
+            return None;
+        }
+
+        if byte_len < 4 {
+            let shift = u32::from(byte_len) * 8;
+            if (low >> shift) != 0 || (high >> shift) != 0 {
+                return None;
+            }
+        }
+
+        let range = Self::from_raw(byte_len, low, high);
+        if range
+            .low_bytes()
+            .iter()
+            .zip(range.high_bytes())
+            .all(|(l, h)| l <= h)
+        {
+            Some(range)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn from_raw(byte_len: u8, low: u32, high: u32) -> Self {
+        let n = usize::from(byte_len);
+        let low_be = low.to_be_bytes();
+        let high_be = high.to_be_bytes();
+        let mut low_arr = [0_u8; 4];
+        let mut high_arr = [0_u8; 4];
+        low_arr[..n].copy_from_slice(&low_be[4 - n..]);
+        high_arr[..n].copy_from_slice(&high_be[4 - n..]);
+
+        Self {
+            byte_len,
+            low: low_arr,
+            high: high_arr,
+        }
+    }
+
+    /// Return the byte length (`1..=4`) of character codes in this range.
+    #[inline]
+    pub fn byte_len(&self) -> u8 {
+        self.byte_len
+    }
+
+    /// Return the big-endian lower bound packed into the low [`Self::byte_len`] bytes.
+    #[inline]
+    pub fn low(&self) -> u32 {
+        self.low_bytes()
+            .iter()
+            .fold(0_u32, |acc, &b| (acc << 8) | u32::from(b))
+    }
+
+    /// Return the big-endian upper bound packed into the low [`Self::byte_len`] bytes.
+    #[inline]
+    pub fn high(&self) -> u32 {
+        self.high_bytes()
+            .iter()
+            .fold(0_u32, |acc, &b| (acc << 8) | u32::from(b))
+    }
+
+    /// Return the per-byte lower bounds of length [`Self::byte_len`].
+    #[inline]
+    pub fn low_bytes(&self) -> &[u8] {
+        &self.low[..usize::from(self.byte_len)]
+    }
+
+    /// Return the per-byte upper bounds of length [`Self::byte_len`].
+    #[inline]
+    pub fn high_bytes(&self) -> &[u8] {
+        &self.high[..usize::from(self.byte_len)]
+    }
+
+    /// Return whether a `byte_len`-byte big-endian character `code` falls within
+    /// every per-byte bound of this codespace range.
+    #[inline]
+    pub fn contains(&self, code: u32, byte_len: u8) -> bool {
+        if byte_len != self.byte_len || (byte_len < 4 && (code >> (u32::from(byte_len) * 8)) != 0) {
+            return false;
+        }
+
+        let n = usize::from(byte_len);
+        let be = code.to_be_bytes();
+        self.matching_prefix_len(&be[4 - n..]) == n
+    }
+
+    /// Return the number of leading bytes in `bytes` (up to [`Self::byte_len`])
+    /// that fall within this range's per-byte bounds.
+    ///
+    /// A return value equal to `usize::from(self.byte_len())` indicates that the
+    /// leading bytes of `bytes` form a complete character code in this range;
+    /// shorter prefixes support multi-byte undefined-character (`.notdef`)
+    /// advancement per ISO 32000-1 §9.7.6.3.
+    #[inline]
+    pub fn matching_prefix_len(&self, bytes: &[u8]) -> usize {
+        let n = usize::from(self.byte_len).min(bytes.len());
+        (0..n)
+            .take_while(|&i| bytes[i] >= self.low[i] && bytes[i] <= self.high[i])
+            .count()
+    }
+}
+
+pub(crate) fn inherit_base_codespace_ranges(
+    codespace_ranges: &mut Vec<CodespaceRange>,
+    base: Option<&CMap>,
+) {
+    if !codespace_ranges.is_empty()
+        && let Some(base) = base
+    {
+        for &range in base.codespace_ranges() {
+            if !codespace_ranges.contains(&range) {
+                codespace_ranges.push(range);
+            }
+        }
+    }
 }
 
 /// A Unicode value decoded from a cmap.
@@ -1306,6 +1446,87 @@ endbfrange
             Some(BfString::Char('\u{007F}'))
         );
     }
+
+    #[test]
+    fn codespace_range_validation_and_per_byte_bounds() {
+        assert_eq!(CodespaceRange::new(0, 0, 0), None);
+        assert_eq!(CodespaceRange::new(5, 0, 0), None);
+        assert_eq!(CodespaceRange::new(1, 0x0100, 0x01FF), None);
+        assert_eq!(CodespaceRange::new(2, 0x81FF, 0x9F40), None);
+
+        let sjis_lead = CodespaceRange::new(2, 0x8140, 0x9FFC).unwrap();
+        assert_eq!(sjis_lead.byte_len(), 2);
+        assert_eq!(sjis_lead.low(), 0x8140);
+        assert_eq!(sjis_lead.high(), 0x9FFC);
+        assert_eq!(sjis_lead.low_bytes(), &[0x81, 0x40]);
+        assert_eq!(sjis_lead.high_bytes(), &[0x9F, 0xFC]);
+
+        assert!(sjis_lead.contains(0x8140, 2));
+        assert!(sjis_lead.contains(0x889F, 2));
+        assert!(sjis_lead.contains(0x9FFC, 2));
+        // Scalar 0x81FF lies between 0x8140 and 0x9FFC, but trailing byte 0xFF
+        // exceeds the second dimension's upper bound 0xFC.
+        assert!(!sjis_lead.contains(0x81FF, 2));
+        assert!(!sjis_lead.contains(0x813F, 2));
+        assert!(!sjis_lead.contains(0x81, 1));
+
+        assert_eq!(sjis_lead.matching_prefix_len(&[0x81, 0x40, 0x20]), 2);
+        assert_eq!(sjis_lead.matching_prefix_len(&[0x81, 0xFF]), 1);
+        assert_eq!(sjis_lead.matching_prefix_len(&[0x20, 0x40]), 0);
+        assert_eq!(sjis_lead.matching_prefix_len(&[]), 0);
+    }
+
+    #[test]
+    fn codespace_ranges_parsed_identity_and_usecmap_inheritance() {
+        assert_eq!(
+            CMap::identity_h().codespace_ranges(),
+            &[CodespaceRange::new(2, 0x0000, 0xFFFF).unwrap()]
+        );
+        assert_eq!(
+            CMap::identity_v().codespace_ranges(),
+            &[CodespaceRange::new(2, 0x0000, 0xFFFF).unwrap()]
+        );
+
+        let base_data = br#"
+2 begincodespacerange
+<00> <80>
+<8140> <9FFC>
+endcodespacerange
+"#;
+        let inherit_only = br#"/Base usecmap /WMode 1 def"#;
+        let extended_child = br#"
+/Base usecmap
+1 begincodespacerange
+<E040> <FCFC>
+endcodespacerange
+"#;
+        let resolver = |name: CMapName<'_>| {
+            if name.to_bytes() == b"Base" {
+                Some(base_data.as_slice())
+            } else {
+                None
+            }
+        };
+
+        let inherited = CMap::parse(inherit_only, resolver).unwrap();
+        assert_eq!(
+            inherited.codespace_ranges(),
+            &[
+                CodespaceRange::new(1, 0x00, 0x80).unwrap(),
+                CodespaceRange::new(2, 0x8140, 0x9FFC).unwrap(),
+            ]
+        );
+
+        let extended = CMap::parse(extended_child, resolver).unwrap();
+        assert_eq!(
+            extended.codespace_ranges(),
+            &[
+                CodespaceRange::new(2, 0xE040, 0xFCFC).unwrap(),
+                CodespaceRange::new(1, 0x00, 0x80).unwrap(),
+                CodespaceRange::new(2, 0x8140, 0x9FFC).unwrap(),
+            ]
+        );
+    }
 }
 
 #[cfg(all(test, feature = "embed-cmaps"))]
@@ -1609,5 +1830,29 @@ mod bcmap_tests {
         assert_eq!(cmap.lookup_cid_code(0xA158, 2), Some(99 + 0x58 - 0x40));
         assert_eq!(cmap.lookup_cid_code(0xD040, 2), Some(7094));
         assert_eq!(cmap.lookup_cid_code(0xF9FE, 2), Some(14056 + 0xFE - 0xD6));
+    }
+
+    #[test]
+    fn embedded_codespace_ranges_and_usecmap() {
+        let sjis = CMap::parse(
+            load_embedded(CMapName::N90msRksjH).unwrap(),
+            get_embedded_cmap,
+        )
+        .unwrap();
+        assert!(
+            sjis.codespace_ranges()
+                .iter()
+                .any(|r| r.contains(0x20, 1) && !r.contains(0x81, 1))
+        );
+        assert!(
+            sjis.codespace_ranges()
+                .iter()
+                .any(|r| r.contains(0x8140, 2) && !r.contains(0x81FF, 2))
+        );
+
+        let h = CMap::parse(load_embedded(CMapName::H).unwrap(), get_embedded_cmap).unwrap();
+        let v = CMap::parse(load_embedded(CMapName::V).unwrap(), get_embedded_cmap).unwrap();
+        assert!(!h.codespace_ranges().is_empty());
+        assert_eq!(v.codespace_ranges(), h.codespace_ranges());
     }
 }
