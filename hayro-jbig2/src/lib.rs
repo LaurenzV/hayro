@@ -94,7 +94,7 @@ use huffman_table::{HuffmanTable, StandardHuffmanTables};
 use page_info::{PageInformation, parse_page_information};
 use reader::Reader;
 use segment::{Segment, SegmentType};
-use sync::OnceLock;
+use sync::{Arc, OnceLock};
 
 /// Settings for decoding JBIG2 images.
 #[derive(Debug, Clone, Copy, Default)]
@@ -942,7 +942,7 @@ impl Dictionaries {
         referred_segments: &[u32],
         globals: Option<&'a Globals>,
         strict: bool,
-    ) -> Result<(Vec<&'a Bitmap>, Vec<HuffmanTable>)> {
+    ) -> Result<(Vec<&'a Arc<Bitmap>>, Vec<HuffmanTable>)> {
         let mut symbols = Vec::new();
         let mut tables = Vec::new();
 
