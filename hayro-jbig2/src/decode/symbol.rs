@@ -708,8 +708,10 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<Bitmap>> {
     let mut exported = Vec::with_capacity(ctx.header.num_exported_symbols as usize);
     let mut index: u32 = 0;
     let mut should_export = false;
+    let mut remaining_runs = total_symbols.saturating_mul(2).saturating_add(2);
 
     while index < total_symbols {
+        remaining_runs = remaining_runs.checked_sub(1).ok_or(SymbolError::Invalid)?;
         let run_length = read_run_length()?;
 
         let end_index = index.checked_add(run_length).ok_or(OverflowError::Index)?;
