@@ -16,11 +16,12 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
+use crate::sync::Arc;
 
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     scratch: &mut ScratchBuffers,
@@ -50,7 +51,7 @@ pub(crate) fn decode(
 
 pub(crate) fn decode_into(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
@@ -88,20 +89,22 @@ pub(crate) fn decode_into(
 
 #[derive(Clone, Copy)]
 pub(crate) struct SymbolBitmaps<'a> {
-    first: &'a [&'a Bitmap],
-    second: &'a [Bitmap],
+    first: &'a [&'a Arc<Bitmap>],
+    second: &'a [Arc<Bitmap>],
 }
 
 impl<'a> SymbolBitmaps<'a> {
-    pub(crate) fn new(first: &'a [&'a Bitmap], second: &'a [Bitmap]) -> Self {
+    pub(crate) fn new(first: &'a [&'a Arc<Bitmap>], second: &'a [Arc<Bitmap>]) -> Self {
         Self { first, second }
     }
 
     fn get(self, index: usize) -> Option<&'a Bitmap> {
-        match self.first.get(index) {
-            Some(bitmap) => Some(bitmap),
-            None => self.second.get(index - self.first.len()),
-        }
+        let bitmap = match self.first.get(index) {
+            Some(bitmap) => bitmap,
+            None => self.second.get(index - self.first.len())?,
+        };
+
+        Some(bitmap)
     }
 }
 
