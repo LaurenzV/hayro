@@ -188,13 +188,12 @@ impl Bitmap {
         let dest_x_start = dest_x_start as u32;
         let dest_x_end = dest_x_end as u32;
 
-        for src_y in 0..other.height {
-            let dest_y = y.saturating_add(src_y as i32);
-            if dest_y < 0 || dest_y >= self.height as i32 {
-                continue;
-            }
+        let src_height = i64::from(other.height);
+        let src_y_start = (-i64::from(y)).clamp(0, src_height) as u32;
+        let src_y_end = (i64::from(self.height) - i64::from(y)).clamp(0, src_height) as u32;
 
-            let dest_y = dest_y as u32;
+        for src_y in src_y_start..src_y_end {
+            let dest_y = (i64::from(y) + i64::from(src_y)) as u32;
 
             let first_word = dest_x_start / WORD_BITS;
             let last_word = (dest_x_end - 1) / WORD_BITS;
