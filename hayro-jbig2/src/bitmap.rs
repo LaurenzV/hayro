@@ -5,6 +5,7 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
+use crate::cancel::{Cancel, row_mask};
 use crate::decode::CombinationOperator;
 use crate::error::{OverflowError, Result, bail};
 use crate::memory::MemoryBudget;
@@ -168,6 +169,107 @@ impl Bitmap {
         let src_height = i64::from(other.height);
         let src_y_start = (-i64::from(y)).clamp(0, src_height) as u32;
         let src_y_end = (i64::from(self.height) - i64::from(y)).clamp(0, src_height) as u32;
+
+        for src_y in src_y_start..src_y_end {
+            let dest_y = (i64::from(y) + i64::from(src_y)) as u32;
+
+            let first_word = dest_x_start / WORD_BITS;
+            let last_word = (dest_x_end - 1) / WORD_BITS;
+
+            for word_idx in first_word..=last_word {
+                let word_start_x = word_idx * WORD_BITS;
+                let word_end_x = word_start_x + WORD_BITS;
+
+                let px_start = dest_x_start.max(word_start_x);
+                let px_end = dest_x_end.min(word_end_x);
+
+                let bit_start = px_start - word_start_x;
+                let bit_end = px_end - word_start_x;
+
+                let mask: Word = if bit_end == WORD_BITS {
+                    !0 >> bit_start
+                } else {
+                    (!0 >> bit_start) & !(!0 >> bit_end)
+                };
+
+                let src_x_for_range = src_x_start + (px_start - dest_x_start);
+                let src_word_idx = src_x_for_range / WORD_BITS;
+                let src_bit_offset = src_x_for_range % WORD_BITS;
+
+                let src_word1 = other.get_word(src_y, src_word_idx);
+                let src_word2 = other.get_word(src_y, src_word_idx + 1);
+
+                let src_raw = if src_bit_offset == 0 {
+                    src_word1
+                } else {
+                    (src_word1 << src_bit_offset) | (src_word2 >> (WORD_BITS - src_bit_offset))
+                };
+                let src_aligned = src_raw >> bit_start;
+
+                let dest_idx = (dest_y * self.stride + word_idx) as usize;
+                let dest_word = self.data[dest_idx];
+
+                let result = match operator {
+                    CombinationOperator::Or => dest_word | src_aligned,
+                    CombinationOperator::And => dest_word & src_aligned,
+                    CombinationOperator::Xor => dest_word ^ src_aligned,
+                    CombinationOperator::Xnor => !(dest_word ^ src_aligned),
+                    CombinationOperator::Replace => src_aligned,
+                };
+
+                self.data[dest_idx] = (dest_word & !mask) | (result & mask);
+            }
+        }
+    }
+
+    pub(crate) fn combine_cancellable(
+        &mut self,
+        other: &Self,
+        x: i32,
+        y: i32,
+        operator: CombinationOperator,
+        cancel: Cancel<'_>,
+    ) -> Result<()> {
+        let rows = row_mask(other.width) + 1;
+        let mut start = 0;
+
+        while start < other.height {
+            cancel.check()?;
+            let end = other.height.min(start.saturating_add(rows));
+            self.combine_rows(other, x, y, operator, start, end);
+            start = end;
+        }
+
+        Ok(())
+    }
+
+    // A copy of `combine` restricted to a band of rows. Sharing the code
+    // measurably slows down `combine`, which places every symbol and pattern.
+    fn combine_rows(
+        &mut self,
+        other: &Self,
+        x: i32,
+        y: i32,
+        operator: CombinationOperator,
+        row_start: u32,
+        row_end: u32,
+    ) {
+        let dest_x_start = x.max(0);
+        let dest_x_end = x.saturating_add(other.width as i32).min(self.width as i32);
+
+        if dest_x_start >= dest_x_end {
+            return;
+        }
+
+        let src_x_start = (dest_x_start - x) as u32;
+        let dest_x_start = dest_x_start as u32;
+        let dest_x_end = dest_x_end as u32;
+
+        let src_height = i64::from(other.height);
+        let src_y_start = (-i64::from(y)).clamp(0, src_height) as u32;
+        let src_y_end = (i64::from(self.height) - i64::from(y)).clamp(0, src_height) as u32;
+        let src_y_start = src_y_start.max(row_start);
+        let src_y_end = src_y_end.min(row_end);
 
         for src_y in src_y_start..src_y_end {
             let dest_y = (i64::from(y) + i64::from(src_y)) as u32;

@@ -36,7 +36,7 @@ impl ImageDecoder for Page<'_> {
 }
 
 fn decode_into_buf(page: &Page<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    page.decode()?.store_u8_into(buf);
+    page.decode()?.store_u8_into(buf)?;
 
     Ok(())
 }
@@ -108,6 +108,12 @@ impl From<crate::DecodeError> for DecodingError {
 impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
         Self::Decoding(value.into())
+    }
+}
+
+impl From<crate::Cancelled> for ImageError {
+    fn from(value: crate::Cancelled) -> Self {
+        crate::DecodeError::from(value).into()
     }
 }
 

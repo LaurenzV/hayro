@@ -8,6 +8,7 @@ use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::DecodeState;
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
+use crate::cancel::Cancel;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image};
 use crate::memory::MemoryBudget;
@@ -17,7 +18,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
-    ctx: &mut DecodeState,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -42,7 +43,7 @@ pub(crate) fn decode_into(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
-    ctx: &mut DecodeState,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
         Some(compute_skip_bitmap(
@@ -50,6 +51,7 @@ pub(crate) fn decode_into(
             pattern_dict,
             htreg,
             &mut ctx.budget,
+            ctx.cancel,
         )?)
     } else {
         None
@@ -76,7 +78,14 @@ pub(crate) fn decode_into(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
-    render_patterns(htreg, &gi, header, pattern_dict, &mut ctx.budget)?;
+    render_patterns(
+        htreg,
+        &gi,
+        header,
+        pattern_dict,
+        &mut ctx.budget,
+        ctx.cancel,
+    )?;
 
     Ok(())
 }
@@ -223,6 +232,7 @@ fn compute_skip_bitmap(
     pattern_dict: &PatternDictionary,
     htreg: &Bitmap,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<Vec<u32>> {
     let grid = &header.grid_position_and_size;
 
@@ -235,7 +245,13 @@ fn compute_skip_bitmap(
     let mut coords = GridCoords::new(grid, &header.grid_vector);
 
     for m_g in 0..grid.height {
+        cancel.check()?;
+
         for n_g in 0..grid.width {
+            if n_g % 1024 == 1023 {
+                cancel.check()?;
+            }
+
             let (x, y) = coords.get();
 
             if lies_outside(x, y, pattern_dict, htreg) {
@@ -266,6 +282,7 @@ fn render_patterns(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
     let op = header.flags.combination_operator;
@@ -311,9 +328,14 @@ fn render_patterns(
     let mut gray_values = vec![0; grid.width as usize];
 
     for m_g in 0..grid.height {
+        cancel.check()?;
         gi.row_values(m_g, &mut gray_values);
 
-        for &gray_value in &gray_values {
+        for (n_g, &gray_value) in gray_values.iter().enumerate() {
+            if n_g % 1024 == 1023 {
+                cancel.check()?;
+            }
+
             let (x, y) = coords.get();
             let gray_value = gray_value as usize;
 

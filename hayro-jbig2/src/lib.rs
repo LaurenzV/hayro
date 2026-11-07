@@ -18,23 +18,24 @@ This crate forbids unsafe code via a crate-level attribute.
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
 use crate::arithmetic_decoder::ArithmeticDecoderContext;
 use crate::memory::MemoryBudget;
 
-pub(crate) struct DecodeState {
+pub(crate) struct DecodeState<'a> {
     pub(crate) contexts: Vec<ArithmeticDecoderContext>,
     pub(crate) budget: MemoryBudget,
+    pub(crate) cancel: Cancel<'a>,
 }
 
-impl DecodeState {
-    fn new(memory_limit: Option<usize>) -> Self {
+impl<'a> DecodeState<'a> {
+    fn new(memory_limit: Option<usize>, cancel: Cancel<'a>) -> Self {
         Self {
             contexts: Vec::new(),
             budget: MemoryBudget::new(memory_limit),
+            cancel,
         }
     }
 }
@@ -44,6 +45,7 @@ pub mod integration;
 
 mod arithmetic_decoder;
 mod bitmap;
+mod cancel;
 mod decode;
 mod error;
 mod file;
@@ -61,12 +63,14 @@ mod sync;
 
 use error::bail;
 pub use error::{
-    DecodeError, FormatError, HuffmanError, OverflowError, ParseError, RegionError, Result,
-    SegmentError, SymbolError, TemplateError,
+    Cancelled, DecodeError, FormatError, HuffmanError, OverflowError, ParseError, RegionError,
+    Result, SegmentError, SymbolError, TemplateError,
 };
 
 use crate::file::parse_segments_sequential;
 use bitmap::Bitmap;
+use cancel::Cancel;
+pub use cancel::{CancelCheck, CancelHandle};
 use decode::CombinationOperator;
 use decode::generic;
 use decode::generic_refinement;
@@ -84,7 +88,7 @@ use segment::{Segment, SegmentType};
 use sync::{Arc, OnceLock};
 
 /// Settings for decoding JBIG2 images.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DecodeSettings {
     /// Whether to reject data that violates the specification, instead of
     /// decoding it as well as possible.
@@ -96,6 +100,8 @@ pub struct DecodeSettings {
     ///
     /// Defaults to 1 GiB.
     pub memory_limit: Option<usize>,
+    /// A check for cancelling decoding.
+    pub cancel: Option<CancelHandle>,
 }
 
 impl Default for DecodeSettings {
@@ -103,6 +109,7 @@ impl Default for DecodeSettings {
         Self {
             strict: false,
             memory_limit: Some(1 << 30),
+            cancel: None,
         }
     }
 }
@@ -127,9 +134,18 @@ struct LazyGlobals<'a> {
 }
 
 impl LazyGlobals<'_> {
-    fn get(&self, strict: bool) -> Result<&Globals> {
+    fn get(&self, settings: &DecodeSettings) -> Result<&Globals> {
+        if let Some(decoded) = self.decoded.get() {
+            return decoded.as_ref().map_err(|e| *e);
+        }
+
+        let decoded = Globals::from_segments(&self.segments, settings);
+        if matches!(decoded, Err(DecodeError::Cancelled)) {
+            return Err(DecodeError::Cancelled);
+        }
+
         self.decoded
-            .get_or_init(|| Globals::from_segments(&self.segments, strict))
+            .get_or_init(|| decoded)
             .as_ref()
             .map_err(|e| *e)
     }
@@ -198,7 +214,7 @@ impl<'a> File<'a> {
                 segments: globals,
                 decoded: OnceLock::new(),
             }),
-            settings: *settings,
+            settings: settings.clone(),
         })
     }
 
@@ -216,7 +232,7 @@ impl<'a> File<'a> {
             segments: PageSegments::Borrowed(&page.segments),
             globals: self.globals.as_ref().map(GlobalsRef::Lazy),
             size: page.size,
-            settings: self.settings,
+            settings: self.settings.clone(),
         })
     }
 
@@ -240,15 +256,18 @@ impl Globals {
         parse_segments_sequential(&mut reader, &mut segments, settings.strict)?;
         segments.sort_by_key(|seg| seg.header.segment_number);
 
-        Self::from_segments(&segments, settings.strict)
+        Self::from_segments(&segments, settings)
     }
 
-    fn from_segments(segments: &[Segment<'_>], strict: bool) -> Result<Self> {
+    fn from_segments(segments: &[Segment<'_>], settings: &DecodeSettings) -> Result<Self> {
+        let strict = settings.strict;
         let mut dictionaries = Dictionaries::default();
         let standard_tables = StandardHuffmanTables::default();
-        let mut state = DecodeState::new(None);
+        let cancel = Cancel::new(settings.cancel.as_ref());
+        let mut state = DecodeState::new(None, cancel);
 
         for seg in segments {
+            cancel.check()?;
             decode_dictionary_segment(
                 seg,
                 &mut dictionaries,
@@ -306,7 +325,7 @@ impl<'a> Page<'a> {
             segments: PageSegments::Owned(segments),
             globals: globals.map(GlobalsRef::Decoded),
             size,
-            settings: *settings,
+            settings: settings.clone(),
         })
     }
 
@@ -333,13 +352,17 @@ impl<'a> Page<'a> {
         };
         let globals = match self.globals {
             Some(GlobalsRef::Decoded(globals)) => Some(globals),
-            Some(GlobalsRef::Lazy(globals)) => Some(globals.get(self.settings.strict)?),
+            Some(GlobalsRef::Lazy(globals)) => Some(globals.get(&self.settings)?),
             None => None,
         };
 
-        let bitmap = decode_segments(segments, globals, self.size, &self.settings)?;
+        let cancel = Cancel::new(self.settings.cancel.as_ref());
+        let bitmap = decode_segments(segments, globals, self.size, &self.settings, cancel)?;
 
-        Ok(PageBitmap { bitmap })
+        Ok(PageBitmap {
+            bitmap,
+            cancel: self.settings.cancel.clone(),
+        })
     }
 }
 
@@ -347,6 +370,7 @@ impl<'a> Page<'a> {
 /// significant bit and black pixels set to 1.
 pub struct PageBitmap {
     bitmap: Bitmap,
+    cancel: Option<CancelHandle>,
 }
 
 impl PageBitmap {
@@ -366,27 +390,55 @@ impl PageBitmap {
     }
 
     /// Return the pixels as 8-bit samples, with black as 0 and white as 255.
-    pub fn data_u8(&self) -> Vec<u8> {
-        let mut buf = vec![0xFF; self.width() as usize * self.height() as usize];
-        self.store_black_u8(&mut buf);
+    pub fn data_u8(&self) -> core::result::Result<Vec<u8>, Cancelled> {
+        let cancel = Cancel::new(self.cancel.as_ref());
+        let len = self.width() as usize * self.height() as usize;
+        let mut buf = Vec::with_capacity(len);
 
-        buf
+        while buf.len() < len {
+            cancel.check()?;
+            buf.resize(len.min(buf.len() + FILL_CHUNK), 0xFF);
+        }
+
+        self.store_black_u8(&mut buf, cancel)?;
+
+        Ok(buf)
     }
 
     /// Store the pixels as 8-bit samples into `buf`, which must have `width × height` bytes.
-    pub fn store_u8_into(&self, buf: &mut [u8]) {
+    pub fn store_u8_into(&self, buf: &mut [u8]) -> core::result::Result<(), Cancelled> {
         assert_eq!(
             buf.len(),
             self.width() as usize * self.height() as usize,
             "buffer has the wrong size"
         );
 
-        buf.fill(0xFF);
-        self.store_black_u8(buf);
+        let cancel = Cancel::new(self.cancel.as_ref());
+
+        for chunk in buf.chunks_mut(FILL_CHUNK) {
+            cancel.check()?;
+            chunk.fill(0xFF);
+        }
+
+        self.store_black_u8(buf, cancel)
     }
 
-    fn store_black_u8(&self, buf: &mut [u8]) {
-        for (row, out) in self.rows().zip(buf.chunks_exact_mut(self.width() as usize)) {
+    fn store_black_u8(
+        &self,
+        buf: &mut [u8],
+        cancel: Cancel<'_>,
+    ) -> core::result::Result<(), Cancelled> {
+        let mask = cancel::row_mask(self.width()) as usize;
+
+        for (y, (row, out)) in self
+            .rows()
+            .zip(buf.chunks_exact_mut(self.width() as usize))
+            .enumerate()
+        {
+            if y & mask == mask {
+                cancel.check()?;
+            }
+
             for (word, out) in row.iter().zip(out.chunks_mut(32)) {
                 if *word == 0 {
                     continue;
@@ -399,8 +451,12 @@ impl PageBitmap {
                 }
             }
         }
+
+        Ok(())
     }
 }
+
+const FILL_CHUNK: usize = 1 << 22;
 
 static U8_PIXELS: [[u8; 8]; 256] = {
     let mut table = [[0xFF; 8]; 256];
@@ -474,9 +530,10 @@ fn decode_segments(
     globals: Option<&Globals>,
     size: PageSize,
     settings: &DecodeSettings,
+    cancel: Cancel<'_>,
 ) -> Result<Bitmap> {
     let strict = settings.strict;
-    let mut state = DecodeState::new(settings.memory_limit);
+    let mut state = DecodeState::new(settings.memory_limit, cancel);
     // "Bit 2: Page default pixel value. This bit contains the initial value
     // for every pixel in the page, before any region segments are decoded
     // or drawn." (7.4.8.5)
@@ -493,6 +550,7 @@ fn decode_segments(
     let standard_tables = StandardHuffmanTables::default();
 
     for seg in segments {
+        cancel.check()?;
         let result = decode_segment(
             seg,
             &mut page_bitmap,
@@ -512,6 +570,7 @@ fn decode_segments(
             Err(e)
                 if !strict
                     && e != DecodeError::MemoryLimitExceeded
+                    && e != DecodeError::Cancelled
                     && seg.header.segment_type.is_immediate_region() =>
             {
                 // It might have been decoded directly into the page.
@@ -530,7 +589,7 @@ fn decode_segment(
     page_state: &mut PageState,
     globals: Option<&Globals>,
     standard_tables: &StandardHuffmanTables,
-    state: &mut DecodeState,
+    state: &mut DecodeState<'_>,
     strict: bool,
 ) -> Result<ControlFlow<()>> {
     let mut reader = Reader::new(seg.data);
@@ -545,12 +604,13 @@ fn decode_segment(
                 generic::decode_into(&header, page_bitmap, state)?;
             } else {
                 let region = generic::decode(&header, state)?;
-                page_bitmap.combine(
+                page_bitmap.combine_cancellable(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
                     region.combination_operator,
-                );
+                    state.cancel,
+                )?;
             }
             page_state.page_pristine = false;
         }
@@ -596,12 +656,13 @@ fn decode_segment(
             } else {
                 let region =
                     text::decode(&header, &symbols, &referred_tables, standard_tables, state)?;
-                page_bitmap.combine(
+                page_bitmap.combine_cancellable(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
                     region.combination_operator,
-                );
+                    state.cancel,
+                )?;
             }
             page_state.page_pristine = false;
         }
@@ -634,12 +695,13 @@ fn decode_segment(
                 halftone::decode_into(&header, pattern_dict, page_bitmap, state)?;
             } else {
                 let region = halftone::decode(&header, pattern_dict, state)?;
-                page_bitmap.combine(
+                page_bitmap.combine_cancellable(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
                     region.combination_operator,
-                );
+                    state.cancel,
+                )?;
             }
             page_state.page_pristine = false;
         }
@@ -670,8 +732,12 @@ fn decode_segment(
             let reference = match referred_segment {
                 Some(referred_segment) => referred_segment,
                 None => {
-                    page_area =
-                        page_bitmap_area(page_bitmap, &header.region_info, &mut state.budget)?;
+                    page_area = page_bitmap_area(
+                        page_bitmap,
+                        &header.region_info,
+                        &mut state.budget,
+                        state.cancel,
+                    )?;
                     &page_area
                 }
             };
@@ -703,18 +769,23 @@ fn decode_segment(
                 let reference = match referred_segment {
                     Some(referred_segment) => referred_segment,
                     None => {
-                        page_area =
-                            page_bitmap_area(page_bitmap, &header.region_info, &mut state.budget)?;
+                        page_area = page_bitmap_area(
+                            page_bitmap,
+                            &header.region_info,
+                            &mut state.budget,
+                            state.cancel,
+                        )?;
                         &page_area
                     }
                 };
                 let region = generic_refinement::decode(&header, reference, state)?;
-                page_bitmap.combine(
+                page_bitmap.combine_cancellable(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
                     region.combination_operator,
-                );
+                    state.cancel,
+                )?;
             }
 
             page_state.page_pristine = false;
@@ -734,7 +805,7 @@ fn decode_dictionary_segment(
     dictionaries: &mut Dictionaries,
     globals: Option<&Globals>,
     standard_tables: &StandardHuffmanTables,
-    state: &mut DecodeState,
+    state: &mut DecodeState<'_>,
     strict: bool,
 ) -> Result<()> {
     let mut reader = Reader::new(seg.data);
@@ -774,6 +845,7 @@ fn decode_dictionary_segment(
                 standard_tables,
                 retained_contexts,
                 &mut state.budget,
+                state.cancel,
             )?;
             dictionaries.store_symbol_dictionary(seg.header.segment_number, dictionary);
         }
@@ -968,6 +1040,7 @@ fn page_bitmap_area(
     page: &Bitmap,
     region_info: &decode::RegionSegmentInfo,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<Bitmap> {
     let mut area = Bitmap::new_with(
         region_info.width,
@@ -977,12 +1050,13 @@ fn page_bitmap_area(
         false,
         budget,
     )?;
-    area.combine(
+    area.combine_cancellable(
         page,
         -i32::try_from(region_info.x_location).unwrap_or(i32::MAX),
         -i32::try_from(region_info.y_location).unwrap_or(i32::MAX),
         CombinationOperator::Replace,
-    );
+        cancel,
+    )?;
 
     Ok(area)
 }

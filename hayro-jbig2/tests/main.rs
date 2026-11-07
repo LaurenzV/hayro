@@ -1,6 +1,7 @@
 //! Each test decodes a JBIG2 file from `streams` and compares the result
 //! against an image in `references`.
 
+mod cancel;
 mod composite;
 mod file;
 mod generic;

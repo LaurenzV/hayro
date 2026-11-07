@@ -48,7 +48,7 @@ pub(crate) fn decode(
 
         (packed, 1)
     } else {
-        (bitmap.data_u8(), 8)
+        (bitmap.data_u8().ok()?, 8)
     };
 
     Some(FilterResult {
