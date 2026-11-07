@@ -1,7 +1,7 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
 use super::{AdaptiveTemplatePixel, Template, generic};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, Word};
 use crate::error::{OverflowError, ParseError, Result};
@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 pub(crate) fn decode(
     header: &PatternDictionaryHeader<'_>,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState,
 ) -> Result<PatternDictionary> {
     let pattern_width = header.pattern_width as u32;
     let pattern_height = header.pattern_height as u32;
@@ -27,7 +27,7 @@ pub(crate) fn decode(
         .checked_mul(pattern_width)
         .ok_or(OverflowError::BitmapDimension)?;
 
-    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height)?;
+    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height, &mut scratch.budget)?;
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
@@ -84,7 +84,7 @@ pub(crate) fn decode(
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
         // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
-        let mut pattern = Bitmap::new(pattern_width, pattern_height)?;
+        let mut pattern = Bitmap::new(pattern_width, pattern_height, &mut scratch.budget)?;
 
         let src_word_idx = start_x / WORD_BITS;
         let src_bit_offset = start_x % WORD_BITS;

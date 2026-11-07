@@ -6,17 +6,18 @@ use alloc::vec::Vec;
 use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image};
+use crate::memory::MemoryBudget;
 use crate::reader::Reader;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -26,6 +27,7 @@ pub(crate) fn decode(
         region.x_location,
         region.y_location,
         header.flags.initial_pixel_color,
+        &mut ctx.budget,
     )?;
 
     decode_into(header, pattern_dict, &mut htreg, ctx)?;
@@ -40,10 +42,15 @@ pub(crate) fn decode_into(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_skip_bitmap(header, pattern_dict, htreg)?)
+        Some(compute_skip_bitmap(
+            header,
+            pattern_dict,
+            htreg,
+            &mut ctx.budget,
+        )?)
     } else {
         None
     };
@@ -69,7 +76,7 @@ pub(crate) fn decode_into(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
-    render_patterns(htreg, &gi, header, pattern_dict)?;
+    render_patterns(htreg, &gi, header, pattern_dict, &mut ctx.budget)?;
 
     Ok(())
 }
@@ -191,8 +198,8 @@ impl GridCoords {
     }
 
     #[inline]
-    fn get(&self) -> (i32, i32) {
-        ((self.x >> 8) as i32, (self.y >> 8) as i32)
+    fn get(&self) -> (i64, i64) {
+        (self.x >> 8, self.y >> 8)
     }
 
     #[inline]
@@ -215,17 +222,15 @@ fn compute_skip_bitmap(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &Bitmap,
+    budget: &mut MemoryBudget,
 ) -> Result<Vec<u32>> {
     let grid = &header.grid_position_and_size;
-    let pattern_width = pattern_dict.pattern_width as i32;
-    let pattern_height = pattern_dict.pattern_height as i32;
-    let region_width = htreg.width as i32;
-    let region_height = htreg.height as i32;
 
     let stride = grid.width.div_ceil(32);
     let len = stride
         .checked_mul(grid.height)
         .ok_or(OverflowError::BitmapDimension)? as usize;
+    budget.charge(len * size_of::<u32>())?;
     let mut hskip = vec![0_u32; len];
     let mut coords = GridCoords::new(grid, &header.grid_vector);
 
@@ -233,12 +238,7 @@ fn compute_skip_bitmap(
         for n_g in 0..grid.width {
             let (x, y) = coords.get();
 
-            let skip = (x + pattern_width <= 0)
-                || (x >= region_width)
-                || (y + pattern_height <= 0)
-                || (y >= region_height);
-
-            if skip {
+            if lies_outside(x, y, pattern_dict, htreg) {
                 let word_idx = (m_g * stride + n_g / 32) as usize;
                 let bit_pos = 31 - (n_g % 32);
                 hskip[word_idx] |= 1 << bit_pos;
@@ -252,19 +252,25 @@ fn compute_skip_bitmap(
     Ok(hskip)
 }
 
+fn lies_outside(x: i64, y: i64, pattern_dict: &PatternDictionary, region: &Bitmap) -> bool {
+    x + i64::from(pattern_dict.pattern_width) <= 0
+        || x >= i64::from(region.width)
+        || y + i64::from(pattern_dict.pattern_height) <= 0
+        || y >= i64::from(region.height)
+}
+
 /// Render patterns into the target region (6.6.5.2).
 fn render_patterns(
     region: &mut Bitmap,
     gi: &GrayScaleImage,
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
+    budget: &mut MemoryBudget,
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
     let op = header.flags.combination_operator;
     let pw = pattern_dict.pattern_width;
     let ph = pattern_dict.pattern_height;
-    let region_w = region.width as i32;
-    let region_h = region.height as i32;
     let stride = region.stride;
     let num_patterns = pattern_dict.patterns.len();
 
@@ -301,6 +307,7 @@ fn render_patterns(
     }
 
     let mut coords = GridCoords::new(grid, &header.grid_vector);
+    budget.charge(grid.width as usize * size_of::<u32>())?;
     let mut gray_values = vec![0; grid.width as usize];
 
     for m_g in 0..grid.height {
@@ -318,13 +325,18 @@ fn render_patterns(
 
             let pattern = &pattern_dict.patterns[pattern_index];
 
+            if lies_outside(x, y, pattern_dict, region) {
+                coords.advance_col();
+                continue;
+            }
+
             // Patterns that are at most one word wide and lie inside the region
             // can be blitted row by row.
             if pw <= WORD_BITS
                 && x >= 0
                 && y >= 0
-                && x + pw as i32 <= region_w
-                && y + ph as i32 <= region_h
+                && x + i64::from(pw) <= i64::from(region.width)
+                && y + i64::from(ph) <= i64::from(region.height)
             {
                 let pattern = &pattern.data;
                 let xu = x as u32;
@@ -416,7 +428,7 @@ fn render_patterns(
                     }
                 }
             } else {
-                region.combine(pattern, x, y, op);
+                region.combine(pattern, x as i32, y as i32, op);
             }
 
             coords.advance_col();

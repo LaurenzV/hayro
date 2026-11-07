@@ -2,12 +2,13 @@
 
 use alloc::vec::Vec;
 
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, ParseError, Result, bail};
+use crate::memory::MemoryBudget;
 use crate::simd::{self, Level, Simd, u32x8};
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
@@ -35,11 +36,11 @@ pub(crate) struct GrayScaleParams<'a> {
 pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<GrayScaleImage> {
     // Table C.1: "GSMMR specifies whether MMR is used."
     if params.use_mmr {
-        decode_mmr(data, params)
+        decode_mmr(data, params, &mut ctx.budget)
     } else {
         decode_arithmetic(data, params, ctx)
     }
@@ -48,7 +49,11 @@ pub(crate) fn decode_gray_scale_image(
 /// The gray-scale image decoding procedure using MMR (Annex C, C.5).
 ///
 /// Table C.4: "MMR = GSMMR"
-fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<GrayScaleImage> {
+fn decode_mmr(
+    data: &[u8],
+    params: &GrayScaleParams<'_>,
+    budget: &mut MemoryBudget,
+) -> Result<GrayScaleImage> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
     // `GSH` - The height of the gray-scale image.
@@ -57,7 +62,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<GrayScaleImag
     let bits_per_pixel = params.bits_per_pixel;
 
     let mut offset = 0;
-    decode_bitplanes(width, height, bits_per_pixel, |_, bitplane| {
+    decode_bitplanes(width, height, bits_per_pixel, budget, |_, bitplane| {
         // Table C.4: "GBW = GSW, GBH = GSH"
         offset += decode_bitmap_mmr(bitplane, &data[offset..], params.strict)?;
 
@@ -71,7 +76,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<GrayScaleImag
 fn decode_arithmetic(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<GrayScaleImage> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
@@ -123,44 +128,50 @@ fn decode_arithmetic(
 
     macro_rules! gs_decode_loop {
         ($gather:expr) => {
-            decode_bitplanes(width, height, bits_per_pixel, |_, bitplane| {
-                // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
-                let mut gatherer = ContextGatherer::new(template, &at_pixels);
+            decode_bitplanes(
+                width,
+                height,
+                bits_per_pixel,
+                &mut ctx.budget,
+                |_, bitplane| {
+                    // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
+                    let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
-                for y in 0..height {
-                    if decoder.is_exhausted() {
-                        bail!(ParseError::UnexpectedEof);
-                    }
+                    for y in 0..height {
+                        if decoder.is_exhausted() {
+                            bail!(ParseError::UnexpectedEof);
+                        }
 
-                    gatherer.start_row(bitplane, y);
-                    for x in 0..width {
-                        gatherer.maybe_reload_buffers(bitplane, x);
+                        gatherer.start_row(bitplane, y);
+                        for x in 0..width {
+                            gatherer.maybe_reload_buffers(bitplane, x);
 
-                        // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
-                        if let Some(mask) = skip_mask {
-                            let word_idx = (y * skip_stride + x / 32) as usize;
-                            let bit_pos = 31 - (x % 32);
-                            if (mask[word_idx] >> bit_pos) & 1 != 0 {
-                                // Still need to update the context.
-                                let _ = ($gather)(&mut gatherer, bitplane, x);
+                            // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
+                            if let Some(mask) = skip_mask {
+                                let word_idx = (y * skip_stride + x / 32) as usize;
+                                let bit_pos = 31 - (x % 32);
+                                if (mask[word_idx] >> bit_pos) & 1 != 0 {
+                                    // Still need to update the context.
+                                    let _ = ($gather)(&mut gatherer, bitplane, x);
 
-                                continue;
+                                    continue;
+                                }
+                            }
+
+                            let context = ($gather)(&mut gatherer, bitplane, x);
+                            let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
+                            let value = pixel as u8;
+
+                            if value != 0 {
+                                bitplane.set_pixel(x, y, value);
+                                gatherer.update_current_row(x, value);
                             }
                         }
-
-                        let context = ($gather)(&mut gatherer, bitplane, x);
-                        let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
-                        let value = pixel as u8;
-
-                        if value != 0 {
-                            bitplane.set_pixel(x, y, value);
-                            gatherer.update_current_row(x, value);
-                        }
                     }
-                }
 
-                Ok(())
-            })
+                    Ok(())
+                },
+            )
         };
     }
 
@@ -200,6 +211,7 @@ fn decode_bitplanes<F>(
     width: u32,
     height: u32,
     bits_per_pixel: u32,
+    budget: &mut MemoryBudget,
     mut decode_next: F,
 ) -> Result<GrayScaleImage>
 where
@@ -209,7 +221,7 @@ where
 
     simd::dispatch!(Level::new(), simd => {
         for j in (0..bits_per_pixel).rev() {
-            let mut bitplane = Bitmap::new(width, height)?;
+            let mut bitplane = Bitmap::new(width, height, budget)?;
             decode_next(j, &mut bitplane)?;
 
             // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"

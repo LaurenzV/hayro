@@ -7,12 +7,13 @@
 
 use crate::decode::CombinationOperator;
 use crate::error::{OverflowError, Result, bail};
+use crate::memory::MemoryBudget;
 use alloc::vec;
 use alloc::vec::Vec;
 
-// To guard better against malicious files, we limit bitmap dimensions
-// to `u16::MAX`, which should be more than enough.
-pub(crate) const MAX_DIMENSION: u32 = u16::MAX as u32;
+// Keeps pixel coordinates plus offsets within `i32`.
+pub(crate) const MAX_DIMENSION: u32 = 1 << 28;
+const MAX_AREA: u64 = (u16::MAX as u64).pow(2);
 
 /// The underlying word type for packed pixel storage.
 /// Change this to `u32` to switch back to 32-bit words.
@@ -46,29 +47,23 @@ pub(crate) struct Bitmap {
     pub(crate) y_location: u32,
 }
 
+pub(crate) fn check_size(width: u32, height: u32) -> Result<()> {
+    if width > MAX_DIMENSION
+        || height > MAX_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_AREA
+    {
+        bail!(OverflowError::BitmapDimension);
+    }
+
+    Ok(())
+}
+
 impl Bitmap {
     /// Create a new bitmap filled with white pixels (false).
     ///
     /// The bitmap is positioned at (0, 0).
-    pub(crate) fn new(width: u32, height: u32) -> Result<Self> {
-        Self::new_with(width, height, 0, 0, false)
-    }
-
-    pub(crate) fn new_wide(width: u32, height: u32) -> Result<Self> {
-        if u64::from(width) * u64::from(height) > u64::from(MAX_DIMENSION).pow(2) {
-            bail!(OverflowError::BitmapDimension);
-        }
-
-        let stride = width.div_ceil(WORD_BITS);
-
-        Ok(Self {
-            width,
-            height,
-            stride,
-            data: vec![0; stride as usize * height as usize],
-            x_location: 0,
-            y_location: 0,
-        })
+    pub(crate) fn new(width: u32, height: u32, budget: &mut MemoryBudget) -> Result<Self> {
+        Self::new_with(width, height, 0, 0, false, budget)
     }
 
     /// Create a new bitmap with full configuration.
@@ -78,14 +73,16 @@ impl Bitmap {
         x_location: u32,
         y_location: u32,
         default_pixel: bool,
+        budget: &mut MemoryBudget,
     ) -> Result<Self> {
-        if width > MAX_DIMENSION || height > MAX_DIMENSION {
-            bail!(OverflowError::BitmapDimension);
-        }
+        check_size(width, height)?;
 
         let stride = width.div_ceil(WORD_BITS);
+        let len = stride as usize * height as usize;
+        budget.charge(Self::memory_size_for(len))?;
+
         let default_word: Word = if default_pixel { !0 } else { 0 };
-        let data = vec![default_word; stride as usize * height as usize];
+        let data = vec![default_word; len];
         let mut bitmap = Self {
             width,
             height,
@@ -100,6 +97,14 @@ impl Bitmap {
         }
 
         Ok(bitmap)
+    }
+
+    pub(crate) fn memory_size(&self) -> usize {
+        Self::memory_size_for(self.data.len())
+    }
+
+    fn memory_size_for(words: usize) -> usize {
+        words * WORD_BYTES as usize + size_of::<Self>()
     }
 
     fn clear_padding(&mut self) {
@@ -232,8 +237,9 @@ mod tests {
 
     #[test]
     fn combine_far_away() {
-        let mut page = Bitmap::new(8, 8).unwrap();
-        let region = Bitmap::new_with(8, 8, 0, 0, true).unwrap();
+        let budget = &mut MemoryBudget::new(None);
+        let mut page = Bitmap::new(8, 8, budget).unwrap();
+        let region = Bitmap::new_with(8, 8, 0, 0, true, budget).unwrap();
         page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or);
         page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or);
         assert!(page.data.iter().all(|&w| w == 0));
