@@ -621,18 +621,18 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     let collective_bitmap = if bitmap_size == 0 {
         // Bitmap is stored uncompressed, so we basically just copy-paste
         // each byte. Rows are padded to the byte boundary.
-        let row_bytes = ctx.total_width.div_ceil(8);
+        let row_bytes = ctx.total_width.div_ceil(8) as usize;
+        let data = row_bytes
+            .checked_mul(ctx.height_class_height as usize)
+            .and_then(|len| ctx.h_ctx.reader.read_bytes(len))
+            .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap = Bitmap::new_wide(ctx.total_width, ctx.height_class_height)?;
         for y in 0..ctx.height_class_height {
-            for byte_x in 0..row_bytes {
-                let byte = ctx
-                    .h_ctx
-                    .reader
-                    .read_byte()
-                    .ok_or(ParseError::UnexpectedEof)?;
+            let row = &data[y as usize * row_bytes..][..row_bytes];
+            for (byte_x, byte) in row.iter().enumerate() {
                 for bit in 0..8 {
-                    let x = byte_x * 8 + bit;
+                    let x = byte_x as u32 * 8 + bit;
                     if x < ctx.total_width {
                         let pixel = (byte >> (7 - bit)) & 1;
                         bitmap.set_pixel(x, y, pixel);
