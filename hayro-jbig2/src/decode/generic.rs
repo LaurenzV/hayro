@@ -305,8 +305,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8], strict: bool) 
     //
     // hayro-ccitt already aligns to the byte boundary before returning, so
     // nothing else to do here.
-    let mut context = hayro_ccitt::DecoderContext::new(settings);
-    let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+    let result = hayro_ccitt::decode(data, &mut decoder, &settings);
 
     if strict && (result.is_err() || decoder.y < height) {
         bail!(RegionError::InvalidMmrData);

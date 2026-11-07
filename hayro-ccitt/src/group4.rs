@@ -3,7 +3,7 @@ use crate::context::{DecoderContext, decode_2d_line};
 use crate::{DecodeError, Decoder, Result};
 
 pub(crate) fn decode(
-    ctx: &mut DecoderContext,
+    ctx: &mut DecoderContext<'_>,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
 ) -> Result<()> {
