@@ -93,8 +93,10 @@ fn fallback_xref_map_inner<'a>(
             if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
                 let mut cloned = r.clone();
                 // Check that the object following it is actually valid before inserting it.
+                // An object that nests too deeply is kept, so that reading it is reported
+                // instead of falling back to an earlier definition or to none.
                 cloned.skip_white_spaces_and_comments();
-                if cloned.skip::<Object<'_>>(false).is_some() {
+                if cloned.skip::<Object<'_>>(false).is_some() || cloned.nesting_exceeded() {
                     xref_map.insert(obj_id, EntryType::Normal(cur_pos));
                     last_obj_num = Some(obj_id);
                     dummy_ctx.set_obj_number(obj_id);
@@ -287,7 +289,11 @@ impl XRef {
 
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
             data: Arc::new(Data::new(data)),
-            map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
+            map: Arc::new(RwLock::new(MapRepr {
+                xref_map,
+                repaired,
+                nesting_exceeded: false,
+            })),
             decryptor: Arc::new(Decryptor::None),
             has_ocgs: false,
             metadata: Arc::new(Metadata::default()),
@@ -466,6 +472,24 @@ impl XRef {
         }
     }
 
+    /// Returns `true` if an object was read as absent because its arrays and
+    /// dictionaries nest beyond the supported depth.
+    ///
+    /// The flag is set by any read of the document so far, including those made
+    /// while interpreting a page, and is never cleared.
+    pub fn nesting_exceeded(&self) -> bool {
+        match &self.0 {
+            Inner::Dummy => false,
+            Inner::Some(r) => r.map.get().nesting_exceeded,
+        }
+    }
+
+    fn set_nesting_exceeded(&self) {
+        if let Inner::Some(r) = &self.0 {
+            r.map.put().nesting_exceeded = true;
+        }
+    }
+
     pub(crate) fn repair(&self) {
         let Inner::Some(r) = &self.0 else {
             unreachable!();
@@ -560,6 +584,17 @@ impl XRef {
                     if r.skip::<IndirectObject<Object<'_>>>(false).is_some() {
                         return None;
                     }
+
+                    // The object is there but nests too deeply to be read. Repairing the
+                    // xref table would find it again.
+                    if r.nesting_exceeded()
+                        && Reader::new_with(r.data, offset)
+                            .read_without_context::<ObjectIdentifier>()
+                            == Some(id)
+                    {
+                        self.set_nesting_exceeded();
+                        return None;
+                    }
                 };
 
                 self.repair_and_get(id, caller_ctx, was_repaired)
@@ -586,7 +621,13 @@ impl XRef {
                 let object_stream = repr.data.object_stream(obj_stream_id, &ctx)?;
 
                 if object_stream.obj_number(index) == Some(id.obj_number) {
-                    return object_stream.get(index, &ctx);
+                    let object = object_stream.get(index, &ctx);
+
+                    if object.is_none() && object_stream.nests_too_deeply(index) {
+                        self.set_nesting_exceeded();
+                    }
+
+                    return object;
                 }
 
                 self.repair_and_get(id, caller_ctx, was_repaired)
@@ -660,6 +701,7 @@ type XrefMap = FxHashMap<ObjectIdentifier, EntryType>;
 struct MapRepr {
     xref_map: XrefMap,
     repaired: bool,
+    nesting_exceeded: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1081,6 +1123,18 @@ impl ObjectStream {
         Some(self.offsets.get(index as usize)?.0)
     }
 
+    /// Whether the member at `index` stops at an array or dictionary nested beyond the
+    /// supported depth.
+    fn nests_too_deeply(&self, index: u32) -> bool {
+        let Some(Some(offset)) = self.offsets.get(index as usize).map(|o| o.1) else {
+            return false;
+        };
+        let mut r = Reader::new(&self.data);
+        r.jump(offset);
+
+        r.skip::<Object<'_>>(false).is_none() && r.nesting_exceeded()
+    }
+
     fn get<'a, T>(&'a self, index: u32, ctx: &ReaderContext<'a>) -> Option<T>
     where
         T: ObjectLike<'a>,
@@ -1170,5 +1224,174 @@ mod tests {
             xref_stream_subsection(&mut Reader::new(&data), u32::MAX, 2, 1, 1, 0, &mut xref_map);
         assert!(result.is_none());
         assert!(xref_map.contains_key(&ObjectIdentifier::new(u32::MAX, 0)));
+    }
+
+    const MAX_DEPTH: usize = 512;
+    const CATALOG: &str = "<< /Type /Catalog /Pages 2 0 R >>";
+    const PAGES: &str = "<< /Type /Pages /Kids [] /Count 0 >>";
+
+    fn nested_arrays(depth: usize) -> String {
+        format!("{}{}", "[".repeat(depth), "]".repeat(depth))
+    }
+
+    fn nested_dicts(depth: usize) -> String {
+        format!("{}0{}", "<< /A ".repeat(depth), " >>".repeat(depth))
+    }
+
+    /// A document whose object `n` is `objects[n - 1]`, with a cross-reference table.
+    fn document(objects: &[&str]) -> crate::Pdf {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+        for (index, body) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", index + 1).as_bytes());
+        }
+        let xref_pos = pdf.len();
+        let size = objects.len() + 1;
+        pdf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+        for offset in offsets {
+            pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        pdf.extend_from_slice(
+            format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF")
+                .as_bytes(),
+        );
+        crate::Pdf::new(pdf).unwrap()
+    }
+
+    /// A document whose object 3 is `member`, stored in object stream 4, with a
+    /// cross-reference stream.
+    fn document_with_object_stream(member: &str) -> crate::Pdf {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+        for (number, body) in [(1, CATALOG), (2, PAGES)] {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(format!("{number} 0 obj\n{body}\nendobj\n").as_bytes());
+        }
+        let content = format!("3 0 {member}");
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(
+            format!(
+                "4 0 obj\n<< /Type /ObjStm /N 1 /First 4 /Length {} >>\nstream\n{content}\nendstream\nendobj\n",
+                content.len()
+            )
+            .as_bytes(),
+        );
+        let xref_pos = pdf.len();
+        let mut entries = vec![0, 0, 0, 0, 0, 0xff, 0xff];
+        for (index, offset) in offsets.iter().enumerate() {
+            if index == 2 {
+                // Object 3, member 0 of object stream 4.
+                entries.extend_from_slice(&[2, 0, 0, 0, 4, 0, 0]);
+            }
+            entries.push(1);
+            entries.extend_from_slice(&(*offset as u32).to_be_bytes());
+            entries.extend_from_slice(&[0, 0]);
+        }
+        entries.push(1);
+        entries.extend_from_slice(&(xref_pos as u32).to_be_bytes());
+        entries.extend_from_slice(&[0, 0]);
+        pdf.extend_from_slice(
+            format!(
+                "5 0 obj\n<< /Type /XRef /Size 6 /W [1 4 2] /Root 1 0 R /Length {} >>\nstream\n",
+                entries.len()
+            )
+            .as_bytes(),
+        );
+        pdf.extend_from_slice(&entries);
+        pdf.extend_from_slice(
+            format!("\nendstream\nendobj\nstartxref\n{xref_pos}\n%%EOF").as_bytes(),
+        );
+        crate::Pdf::new(pdf).unwrap()
+    }
+
+    fn third_object(pdf: &crate::Pdf) -> Option<Object<'_>> {
+        pdf.xref().get::<Object<'_>>(ObjectIdentifier::new(3, 0))
+    }
+
+    #[test]
+    fn object_at_nesting_limit_is_read() {
+        for body in [nested_arrays(MAX_DEPTH), nested_dicts(MAX_DEPTH)] {
+            let pdf = document(&[CATALOG, PAGES, &body]);
+            assert!(third_object(&pdf).is_some());
+            assert!(!pdf.xref().nesting_exceeded());
+            let Inner::Some(repr) = &pdf.xref().0 else {
+                unreachable!();
+            };
+            assert!(!repr.map.get().repaired);
+        }
+    }
+
+    #[test]
+    fn object_beyond_nesting_limit_is_reported() {
+        for body in [nested_arrays(MAX_DEPTH + 1), nested_dicts(MAX_DEPTH + 1)] {
+            let pdf = document(&[CATALOG, PAGES, &body]);
+            assert!(!pdf.xref().nesting_exceeded());
+            assert!(third_object(&pdf).is_none());
+            assert!(pdf.xref().nesting_exceeded());
+        }
+    }
+
+    #[test]
+    fn object_beyond_nesting_limit_does_not_repair_xref() {
+        let pdf = document(&[CATALOG, PAGES, &nested_arrays(MAX_DEPTH + 1)]);
+        assert!(third_object(&pdf).is_none());
+        let Inner::Some(repr) = &pdf.xref().0 else {
+            unreachable!();
+        };
+        assert!(!repr.map.get().repaired);
+    }
+
+    #[test]
+    fn misplaced_object_beyond_nesting_limit_is_reported_after_repair() {
+        // Object 4 is too deep, and the xref table points object 3 at it.
+        let deep = nested_arrays(MAX_DEPTH + 1);
+        let pdf = document(&[CATALOG, PAGES, "null", &deep]);
+        let Inner::Some(repr) = &pdf.xref().0 else {
+            unreachable!();
+        };
+        let id = ObjectIdentifier::new(3, 0);
+        let four = ObjectIdentifier::new(4, 0);
+        let entry = *repr.map.get().xref_map.get(&four).unwrap();
+        repr.map.put().xref_map.insert(id, entry);
+
+        assert!(third_object(&pdf).is_some());
+        assert!(repr.map.get().repaired);
+        assert!(!pdf.xref().nesting_exceeded());
+        assert!(pdf.xref().get::<Object<'_>>(four).is_none());
+        assert!(pdf.xref().nesting_exceeded());
+    }
+
+    #[test]
+    fn nesting_inside_a_shallow_object_is_reported() {
+        // A catalog-level entry that nests too deeply makes the whole object absent.
+        let body = format!("<< /Kids {} >>", nested_arrays(MAX_DEPTH));
+        let pdf = document(&[CATALOG, PAGES, &body]);
+        assert!(
+            pdf.xref()
+                .get::<Dict<'_>>(ObjectIdentifier::new(3, 0))
+                .is_none()
+        );
+        assert!(pdf.xref().nesting_exceeded());
+    }
+
+    #[test]
+    fn other_unreadable_objects_are_not_reported() {
+        for body in ["<< /A", "[1 2", "<< /A 1 >>"] {
+            let pdf = document(&[CATALOG, PAGES, body]);
+            let _ = pdf.xref().get::<Array<'_>>(ObjectIdentifier::new(3, 0));
+            assert!(!pdf.xref().nesting_exceeded());
+        }
+    }
+
+    #[test]
+    fn object_stream_member_beyond_nesting_limit_is_reported() {
+        let pdf = document_with_object_stream(&nested_arrays(MAX_DEPTH));
+        assert!(third_object(&pdf).is_some());
+        assert!(!pdf.xref().nesting_exceeded());
+
+        let pdf = document_with_object_stream(&nested_arrays(MAX_DEPTH + 1));
+        assert!(third_object(&pdf).is_none());
+        assert!(pdf.xref().nesting_exceeded());
     }
 }

@@ -9,19 +9,42 @@ pub struct Reader<'a> {
     pub data: &'a [u8],
     /// The current byte-offset.
     pub offset: usize,
+    /// Whether a skip stopped at an array or dictionary nested beyond the
+    /// supported depth.
+    nesting_exceeded: bool,
 }
 
 impl<'a> Reader<'a> {
     /// Create a new reader.
     #[inline]
     pub fn new(data: &'a [u8]) -> Self {
-        Self { data, offset: 0 }
+        Self {
+            data,
+            offset: 0,
+            nesting_exceeded: false,
+        }
     }
 
     /// Create a new reader at the given offset.
     #[inline]
     pub fn new_with(data: &'a [u8], offset: usize) -> Self {
-        Self { data, offset }
+        Self {
+            data,
+            offset,
+            nesting_exceeded: false,
+        }
+    }
+
+    /// Returns `true` if a skip on this reader stopped at an array or
+    /// dictionary nested beyond the supported depth.
+    #[inline]
+    pub fn nesting_exceeded(&self) -> bool {
+        self.nesting_exceeded
+    }
+
+    #[inline]
+    pub(crate) fn set_nesting_exceeded(&mut self) {
+        self.nesting_exceeded = true;
     }
 
     /// Returns `true` if the reader has reached the end of the data.

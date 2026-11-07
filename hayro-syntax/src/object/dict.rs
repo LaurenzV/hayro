@@ -170,6 +170,7 @@ impl Skippable for Dict<'_> {
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
         if depth >= super::MAX_OBJECT_NESTING_DEPTH {
+            r.set_nesting_exceeded();
             return None;
         }
 
