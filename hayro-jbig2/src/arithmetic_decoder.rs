@@ -18,24 +18,12 @@ pub(crate) struct ArithmeticDecoder<'a> {
     base_pointer: u32,
     /// The bit shift counter.
     shift_count: u32,
-    /// How many times `BYTEIN` has run into a marker, i.e. into the end of
-    /// the coded data (see `is_exhausted`).
+    /// How often `BYTEIN` ran into the marker that ends the data.
     markers_seen: u32,
 }
 
-/// How many times the decoder may run into the end of its data before the
-/// data counts as exhausted.
-///
-/// "BYTEIN" treats a 0xFF followed by a byte larger than 0x8F as a marker:
-/// the coded data has ended, and from then on the decoder shifts in 1-bits
-/// forever (E.3.4). An encoder may drop trailing bytes and rely on this, so a
-/// conforming stream can run into the marker a lot: the region in
-/// `bitmap-trailing-7fff-stripped-harder.jbig2` has two bytes of data and
-/// runs into it 12 336 times. Garbage data never ends, though: the decoder
-/// keeps producing decisions, and a symbol dictionary whose symbol sizes come
-/// from that garbage turns a few kilobytes into seconds of work and hundreds
-/// of megabytes of bitmaps. The limit leaves a wide margin above the test
-/// suite and stops such a dictionary within milliseconds.
+// Encoders may trim trailing 0xFF 0x7F pairs (E.2.10), so valid data can also
+// run into its end many times.
 const MAX_MARKERS: u32 = 65_536;
 
 impl<'a> ArithmeticDecoder<'a> {
@@ -54,9 +42,6 @@ impl<'a> ArithmeticDecoder<'a> {
         decoder
     }
 
-    /// Whether the coded data has run out: the decoder has run into its end
-    /// more often than any conforming stream needs to. Decoding loops check
-    /// this once per row and give up instead of decoding garbage.
     #[inline(always)]
     pub(crate) fn is_exhausted(&self) -> bool {
         self.markers_seen > MAX_MARKERS

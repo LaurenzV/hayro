@@ -64,7 +64,7 @@ pub(crate) fn decode_into(
                 &mut ctx.contexts,
                 header.tpgdon,
                 at_pixels,
-            ),
+            )?,
         }
     }
 
@@ -667,7 +667,7 @@ fn decode_bitmap_extended_template(
     contexts: &mut [ArithmeticDecoderContext],
     tpgdon: bool,
     at_pixels: &[AdaptiveTemplatePixel; 12],
-) {
+) -> Result<()> {
     let default_at_pixels = TEMPLATE0_DEFAULT.map(|(x, y)| AdaptiveTemplatePixel { x, y });
     let mut ctx_gatherer = ContextGatherer::new(Template::Template0, &default_at_pixels);
 
@@ -695,6 +695,8 @@ fn decode_bitmap_extended_template(
         sltp_context(Template::Template0),
         gather
     );
+
+    Ok(())
 }
 
 pub(crate) struct ContextGatherer<'a> {

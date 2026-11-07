@@ -141,6 +141,10 @@ pub(crate) fn decode_with(
         let mut current_s = 0;
 
         loop {
+            if ctx.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -352,6 +356,13 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             decoder,
             contexts,
             gr_contexts,
+        }
+    }
+
+    fn is_exhausted(&self) -> bool {
+        match self {
+            DecodeContext::Huffman { .. } => false,
+            DecodeContext::Arithmetic { decoder, .. } => decoder.is_exhausted(),
         }
     }
 

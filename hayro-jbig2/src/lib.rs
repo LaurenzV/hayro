@@ -1033,8 +1033,6 @@ mod tests {
         fn next_line(&mut self) {}
     }
 
-    /// A segment header (7.2) with the short form of referred-to segments,
-    /// referring to nothing and associated with page 1, followed by its data.
     fn segment(number: u32, kind: u8, data: &[u8]) -> Vec<u8> {
         let mut out = number.to_be_bytes().to_vec();
         out.extend([kind, 0, 1]);
@@ -1043,15 +1041,12 @@ mod tests {
         out
     }
 
-    /// A page information segment (7.4.8) for a page of the given size.
     fn page(width: u32, height: u32) -> Vec<u8> {
         let mut data = [width, height, 0, 0].map(u32::to_be_bytes).concat();
         data.extend([0; 3]);
         segment(0, 48, &data)
     }
 
-    /// Deterministic pseudo-random bytes (xorshift), standing in for garbage
-    /// in place of arithmetically coded data.
     fn garbage(len: usize) -> Vec<u8> {
         let mut state = 0x2545_f491_4f6c_dd1d_u64;
         (0..len)
@@ -1064,18 +1059,13 @@ mod tests {
             .collect()
     }
 
-    fn decode(stream: &[u8]) -> Result<()> {
-        let image = Image::new_embedded(stream, None)?;
-        image.decode(&mut NullDecoder)
+    fn decode(stream: &[u8], strict: bool) -> Result<()> {
+        Page::new_embedded(stream, None, &DecodeSettings { strict })?.decode(&mut NullDecoder)
     }
 
-    /// A symbol dictionary declares only the number of its symbols; their sizes
-    /// are coded in the data. Past the end of the data the arithmetic decoder
-    /// keeps producing decisions (E.3.4), so garbage under a dictionary of 2000
-    /// symbols used to be decoded for seconds and hundreds of megabytes.
     #[test]
     fn symbol_dictionary_stops_at_the_end_of_its_data() {
-        // Arithmetic coding, template 0, its four AT pixels.
+        // Arithmetic coding, template 0 and its AT pixels.
         let mut data = vec![0x00, 0x00, 3, 0xff, 0xfd, 0xff, 2, 0xfe, 0xfe, 0xfe];
         data.extend(1_u32.to_be_bytes()); // SDNUMEXSYMS
         data.extend(2000_u32.to_be_bytes()); // SDNUMNEWSYMS
@@ -1084,12 +1074,11 @@ mod tests {
         stream.extend(segment(1, 0, &data));
 
         assert_eq!(
-            decode(&stream),
+            decode(&stream, false),
             Err(DecodeError::Parse(ParseError::UnexpectedEof))
         );
     }
 
-    /// A generic region of 65535 × 3072 pixels backed by 90 bytes of garbage.
     #[test]
     fn generic_region_stops_at_the_end_of_its_data() {
         let mut data = [65_535_u32, 3_072, 0, 0].map(u32::to_be_bytes).concat();
@@ -1101,7 +1090,7 @@ mod tests {
         stream.extend(segment(1, 38, &data));
 
         assert_eq!(
-            decode(&stream),
+            decode(&stream, true),
             Err(DecodeError::Parse(ParseError::UnexpectedEof))
         );
     }
