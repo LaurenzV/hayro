@@ -71,7 +71,7 @@ pub(crate) fn decode_into(
             standard_tables,
             &mut scratch.contexts,
         )?;
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -80,16 +80,35 @@ pub(crate) fn decode_into(
         let mut contexts = TextRegionContexts::new(symbol_code_length);
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
     }
 
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct SymbolBitmaps<'a> {
+    first: &'a [&'a Bitmap],
+    second: &'a [Bitmap],
+}
+
+impl<'a> SymbolBitmaps<'a> {
+    pub(crate) fn new(first: &'a [&'a Bitmap], second: &'a [Bitmap]) -> Self {
+        Self { first, second }
+    }
+
+    fn get(self, index: usize) -> Option<&'a Bitmap> {
+        match self.first.get(index) {
+            Some(bitmap) => Some(bitmap),
+            None => self.second.get(index - self.first.len()),
+        }
+    }
+}
+
 /// Decode a text region segment with a decode context (6.4).
 pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     region: &mut Bitmap,
 ) -> Result<()> {
@@ -554,7 +573,7 @@ enum SymbolBitmap {
 /// Decode the symbol instance bitmap (6.4.11).
 fn decode_symbol_instance_bitmap(
     ctx: &mut DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     symbol_id: usize,
 ) -> Result<SymbolBitmap> {

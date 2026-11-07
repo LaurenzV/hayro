@@ -7,8 +7,8 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
-    DecodeContext, ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
-    TextRegionHuffmanFlags, decode_with,
+    DecodeContext, ReferenceCorner, SymbolBitmaps, TextRegionContexts, TextRegionFlags,
+    TextRegionHeader, TextRegionHuffmanFlags, decode_with,
 };
 use crate::decode::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo, Template,
@@ -320,14 +320,6 @@ fn decode_aggregation_bitmap(
 ) -> Result<Bitmap> {
     let use_huffman = ctx.header.flags.use_huffman;
 
-    // Concatenate input and new symbols.
-    let mut all_symbols: Vec<&Bitmap> =
-        Vec::with_capacity(ctx.symbols.input.len() + ctx.symbols.new.len());
-    all_symbols.extend(ctx.symbols.input.iter().copied());
-    for sym in &ctx.symbols.new {
-        all_symbols.push(sym);
-    }
-
     // Set all parameters according to Table 17.
 
     let symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
@@ -416,7 +408,12 @@ fn decode_aggregation_bitmap(
         header.region_info.y_location,
         header.flags.default_pixel,
     )?;
-    decode_with(decode_ctx, &all_symbols, &header, &mut bitmap)?;
+    decode_with(
+        decode_ctx,
+        SymbolBitmaps::new(ctx.symbols.input, &ctx.symbols.new),
+        &header,
+        &mut bitmap,
+    )?;
     Ok(bitmap)
 }
 
