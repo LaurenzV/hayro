@@ -9,7 +9,7 @@ use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segme
 use crate::ScratchBuffers;
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
-use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
+use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
@@ -255,7 +255,7 @@ fn compute_skip_bitmap(
 /// Render patterns into the target region (6.6.5.2).
 fn render_patterns(
     region: &mut Bitmap,
-    gi: &[u32],
+    gi: &GrayScaleImage,
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
 ) -> Result<()> {
@@ -301,14 +301,14 @@ fn render_patterns(
     }
 
     let mut coords = GridCoords::new(grid, &header.grid_vector);
-    let mut gi_idx = 0;
+    let mut gray_values = vec![0; grid.width as usize];
 
-    for _ in 0..grid.height {
-        for _ in 0..grid.width {
+    for m_g in 0..grid.height {
+        gi.row_values(m_g, &mut gray_values);
+
+        for &gray_value in &gray_values {
             let (x, y) = coords.get();
-
-            let gray_value = gi[gi_idx] as usize;
-            gi_idx += 1;
+            let gray_value = gray_value as usize;
 
             if header.strict && gray_value >= num_patterns {
                 bail!(RegionError::GrayScaleOutOfRange);
