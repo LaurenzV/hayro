@@ -42,7 +42,6 @@ mod group3;
 mod group4;
 mod sync;
 mod tables;
-mod util;
 
 pub use cancel::CancelCheck;
 pub use context::DecoderContext;
