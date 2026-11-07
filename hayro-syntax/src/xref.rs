@@ -744,6 +744,22 @@ fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) ->
 /// Maximum number of allowed xref `Prev` pointers before we abort.
 const MAX_XREF_CHAIN_DEPTH: usize = 256;
 
+/// Follow a `Prev` or `XRefStm` link. A section that was already read is skipped rather than failing the whole
+/// table: in an incremental update of a hybrid file, the new section's `XRefStm` stream has a `Prev` that
+/// points at the section its trailer's `Prev` already read (pdfium's `bug_332462378.pdf`). The `visited` set still
+/// ends a real cycle.
+fn populate_linked(
+    data: &[u8],
+    pos: usize,
+    xref_map: &mut XrefMap,
+    visited: &mut BTreeSet<usize>,
+) -> Option<()> {
+    if visited.contains(&pos) {
+        return Some(());
+    }
+    populate_xref_impl_inner(data, pos, xref_map, visited).map(|_| ())
+}
+
 fn populate_xref_impl_inner<'a>(
     data: &'a [u8],
     pos: usize,
@@ -812,13 +828,13 @@ fn populate_from_xref_table<'a>(
 
     if let Some(prev) = trailer.get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
+        populate_linked(data, prev as usize, insert_map, visited)?;
     }
 
     // In hybrid files, entries in `XRefStm` should have higher priority, therefore we insert them
     // after looking at `PREV`.
     if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
-        populate_xref_impl_inner(data, xref_stm as usize, insert_map, visited)?;
+        populate_linked(data, xref_stm as usize, insert_map, visited)?;
     }
 
     while let Some(header) = reader.read_without_context::<SubsectionHeader>() {
@@ -858,7 +874,7 @@ fn populate_from_xref_stream<'a>(
 
     if let Some(prev) = stream.dict().get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        let _ = populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
+        populate_linked(data, prev as usize, insert_map, visited)?;
     }
 
     let size = stream.dict().get::<u32>(SIZE)?;
@@ -1147,6 +1163,54 @@ mod tests {
         let mut xref_map = FxHashMap::default();
         let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
         let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+    }
+
+    /// An incremental update of a hybrid file: the new trailer's `Prev` and its `XRefStm` stream's `Prev` both
+    /// point at the first section. The second visit is skipped, and the table is not given up on (which made
+    /// the reconstruction pick a later, unused copy of an object).
+    #[test]
+    fn hybrid_update_whose_xref_stream_points_back_at_a_read_section() {
+        let mut pdf = b"%PDF-1.5\n".to_vec();
+        let o1 = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog >>\nendobj\n");
+        let o4 = pdf.len();
+        pdf.extend_from_slice(b"4 0 obj\n(used)\nendobj\n");
+        let t1 = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n0 2\n0000000000 65535 f\r\n{o1:010} 00000 n\r\n4 1\n{o4:010} 00000 n\r\n\
+                 trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{t1}\n%%EOF\n"
+            )
+            .as_bytes(),
+        );
+        let s2 = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] /W [1 2 1] /Prev {t1} /Length 4 >>\nstream\n"
+            )
+            .as_bytes(),
+        );
+        pdf.extend_from_slice(&[1, (s2 >> 8) as u8, s2 as u8, 0]);
+        pdf.extend_from_slice(b"\nendstream\nendobj\n");
+        let t2 = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "xref\n5 1\n{s2:010} 00000 n\r\n\
+                 trailer\n<< /Size 6 /Root 1 0 R /Prev {t1} /XRefStm {s2} >>\nstartxref\n{t2}\n%%EOF"
+            )
+            .as_bytes(),
+        );
+
+        let mut xref_map = FxHashMap::default();
+        assert!(populate_xref_impl(pdf.as_ref(), t2, &mut xref_map).is_some());
+        assert!(matches!(
+            xref_map.get(&ObjectIdentifier::new(4, 0)),
+            Some(EntryType::Normal(off)) if *off == o4
+        ));
+        assert!(matches!(
+            xref_map.get(&ObjectIdentifier::new(5, 0)),
+            Some(EntryType::Normal(off)) if *off == s2
+        ));
     }
 
     #[test]
