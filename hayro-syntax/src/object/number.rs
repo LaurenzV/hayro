@@ -1,6 +1,5 @@
 //! Numbers.
 
-use crate::math::powi_f64;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -9,10 +8,13 @@ use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 #[rustfmt::skip]
-static POWERS_OF_10: [f64; 20] = [
+static POWERS_OF_10: [f64; 23] = [
     1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
     1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+    1e20, 1e21, 1e22,
 ];
+
+const MAX_EXACT_MANTISSA: u64 = 1 << 53;
 
 /// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,27 +159,31 @@ impl Number {
             return None;
         }
 
-        Some(Self::from_parts(negative, mantissa, decimal_shift))
+        Self::from_parts(negative, mantissa, decimal_shift)
     }
 
     #[inline(always)]
-    fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Self {
+    fn from_parts(negative: bool, mantissa: u64, decimal_shift: Option<u32>) -> Option<Self> {
         match decimal_shift {
             None => {
                 let value = mantissa as i64;
-                Self(InternalNumber::Integer(if negative {
+                Some(Self(InternalNumber::Integer(if negative {
                     value.wrapping_neg()
                 } else {
                     value
-                }))
+                })))
             }
             Some(shift) => {
-                let divisor = match POWERS_OF_10.get(shift as usize) {
-                    Some(power) => *power,
-                    None => powi_f64(10.0, shift),
-                };
-                let value = mantissa as f64 / divisor;
-                Self(InternalNumber::Real(if negative { -value } else { value }))
+                if mantissa > MAX_EXACT_MANTISSA {
+                    return None;
+                }
+
+                let value = mantissa as f64 / POWERS_OF_10.get(shift as usize)?;
+                Some(Self(InternalNumber::Real(if negative {
+                    -value
+                } else {
+                    value
+                })))
             }
         }
     }
@@ -255,23 +261,23 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
 
     let integer_overflow = !has_dot && mantissa > i64::MAX as u64;
 
-    if overflowed || integer_overflow {
-        let end_offset = number_end.unwrap_or_else(|| r.offset());
-        let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
-
-        if !has_dot && let Ok(value) = number.parse::<i64>() {
-            return Some(Number(InternalNumber::Integer(value)));
-        }
-
-        let value = number.parse::<f64>().ok()?;
-        return Some(Number(InternalNumber::Real(value)));
+    if !overflowed
+        && !integer_overflow
+        && let Some(number) =
+            Number::from_parts(negative, mantissa, has_dot.then_some(decimal_shift))
+    {
+        return Some(number);
     }
 
-    Some(Number::from_parts(
-        negative,
-        mantissa,
-        has_dot.then_some(decimal_shift),
-    ))
+    let end_offset = number_end.unwrap_or_else(|| r.offset());
+    let number = core::str::from_utf8(r.range(start_offset..end_offset)?).ok()?;
+
+    if !has_dot && let Ok(value) = number.parse::<i64>() {
+        return Some(Number(InternalNumber::Integer(value)));
+    }
+
+    let value = number.parse::<f64>().ok()?;
+    Some(Number(InternalNumber::Real(value)))
 }
 
 object!(Number, Number);
@@ -697,5 +703,18 @@ mod tests {
         let got = reader.read_without_context::<Number>().unwrap().as_f64();
         assert_eq!(got, 1.234_567_890_123_456_8e24);
         assert_eq!(reader.offset(), input.len());
+    }
+
+    #[test]
+    fn reals_are_correctly_rounded() {
+        let tiny = format!("0.{}1", "0".repeat(309));
+
+        for input in ["519188.22107137204", "-0.000123", &tiny] {
+            let got = Reader::new(input.as_bytes())
+                .read_without_context::<Number>()
+                .unwrap()
+                .as_f64();
+            assert_eq!(got, input.parse::<f64>().unwrap());
+        }
     }
 }
