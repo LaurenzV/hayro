@@ -1,7 +1,6 @@
 //! A simple bit reader and writer.
 
 use core::fmt::Debug;
-use smallvec::{SmallVec, smallvec};
 
 /// A bit reader.
 #[derive(Debug, Clone)]
@@ -149,21 +148,6 @@ impl<'a> BitWriter<'a> {
         })
     }
 
-    /// Split off the already-written parts and return a new bit writer for the tail.
-    #[inline]
-    pub fn split_off(self) -> (&'a [u8], Self) {
-        // Assumes that we are currently aligned to a byte boundary!
-        let (left, right) = self.data.split_at_mut(self.cur_pos / 8);
-        (
-            left,
-            BitWriter {
-                data: right,
-                cur_pos: 0,
-                bit_size: self.bit_size,
-            },
-        )
-    }
-
     /// Align the writer to the next byte boundary.
     #[inline]
     pub fn align(&mut self) {
@@ -178,12 +162,6 @@ impl<'a> BitWriter<'a> {
     #[inline]
     pub fn cur_pos(&self) -> usize {
         self.cur_pos
-    }
-
-    /// Return the whole underlying buffer.
-    #[inline]
-    pub fn get_data(&self) -> &[u8] {
-        self.data
     }
 
     fn bit_pos(&self) -> usize {
@@ -219,106 +197,6 @@ impl<'a> BitWriter<'a> {
         self.cur_pos += bit_size;
 
         Some(())
-    }
-
-    /// Fill bytes with a repeated value when at a byte boundary.
-    #[inline]
-    pub fn fill_bytes(&mut self, byte: u8, count: usize) -> Option<()> {
-        debug_assert_eq!(self.cur_pos % 8, 0);
-
-        let start = self.cur_pos / 8;
-        let end = start + count;
-        self.data.get_mut(start..end)?.fill(byte);
-        self.cur_pos += count * 8;
-        Some(())
-    }
-
-    /// Write multiple numbers at once.
-    #[inline]
-    pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u32>) -> Option<()> {
-        for bit in bits {
-            let value: u32 = bit;
-            self.write(value)?;
-        }
-
-        Some(())
-    }
-}
-
-/// An iterator over bit chunks.
-pub struct BitChunks<'a> {
-    reader: BitReader<'a>,
-    bit_size: u8,
-    chunk_len: usize,
-}
-
-impl<'a> BitChunks<'a> {
-    /// Create a new iterator over bit chunks.
-    pub fn new(data: &'a [u8], bit_size: u8, chunk_len: usize) -> Option<Self> {
-        if !(1..=16).contains(&bit_size) || chunk_len == 0 {
-            return None;
-        }
-
-        let reader = BitReader::new(data);
-
-        Some(Self {
-            reader,
-            bit_size,
-            chunk_len,
-        })
-    }
-}
-
-impl Iterator for BitChunks<'_> {
-    type Item = BitChunk;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut bits = SmallVec::new();
-
-        for _ in 0..self.chunk_len {
-            bits.push(self.reader.read(self.bit_size)? as u16);
-        }
-
-        Some(BitChunk { bits })
-    }
-}
-
-/// A chunk of bits.
-#[derive(Debug, Clone)]
-pub struct BitChunk {
-    bits: SmallVec<[u16; 4]>,
-}
-
-impl BitChunk {
-    /// Return an iterator over the numbers in the chunk.
-    pub fn iter(&self) -> impl Iterator<Item = u16> + '_ {
-        self.bits.iter().copied()
-    }
-
-    /// Create a new bit chunk with the given value being repeated `count` times.
-    pub fn new(val: u8, count: usize) -> Self {
-        Self {
-            bits: smallvec![val as u16; count],
-        }
-    }
-
-    /// Create a new bit chunk from the given reader.
-    pub fn from_reader(
-        bit_reader: &mut BitReader<'_>,
-        bit_size: u8,
-        chunk_len: usize,
-    ) -> Option<Self> {
-        if !(1..=16).contains(&bit_size) || chunk_len == 0 {
-            return None;
-        }
-
-        let mut bits = SmallVec::new();
-
-        for _ in 0..chunk_len {
-            bits.push(bit_reader.read(bit_size)? as u16);
-        }
-
-        Some(Self { bits })
     }
 }
 
@@ -522,17 +400,6 @@ mod tests {
         assert_eq!(reader.read(1).unwrap(), 0b0);
         assert_eq!(reader.read(1).unwrap(), 0b0);
         assert_eq!(reader.read(1).unwrap(), 0b0);
-    }
-
-    #[test]
-    fn bit_reader_chunks() {
-        let data = [0b10011000, 0b00010000];
-        let mut reader = BitChunks::new(&data, 1, 3).unwrap();
-        assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b1, 0b0, 0b0]);
-        assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b1, 0b1, 0b0]);
-        assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b0, 0b0, 0b0]);
-        assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b0, 0b0, 0b1]);
-        assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b0, 0b0, 0b0]);
     }
 
     #[test]

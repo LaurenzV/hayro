@@ -105,7 +105,7 @@ raster/corpus/0506179_p4.png 92135069c50a7ffaa4a622f9f9c0f89e
 raster/corpus/0518325.png 7d1d47c09bbabcad454bea2b8b42345b
 raster/corpus/0554304.png 8d265790ecea3c6ba3a5cc2429853442
 raster/corpus/0605516.png b62e272fa4cfbab7d32e54faa427ef8a
-raster/corpus/0688054.png ee6375cd0b79bc915424cdec370f9922
+raster/corpus/0688054.png 35533ee8234a1fbe9c2784b1b90bd9b3
 raster/corpus/0731182.png cb0f9132d05dcc2d1ea65a49527b108a
 raster/corpus/0755501_p0.png e2fee84e856d1e8e14797983ee2b53c7
 raster/corpus/0755501_p1.png e6d6ea142fa513eb6f2b5f599b808990
@@ -465,6 +465,9 @@ raster/custom/pdftc_900k_0917_page_1_reduced.png 2a6c123a7fefb3b9d52ad33b3800f60
 raster/custom/pdftc_900k_0930_reduced.png 1c8c3d91831fbc4a061c6a1c7b4fdbdc
 raster/custom/pdftc_900k_0974_page_1.png e560b026dc57776ede81f31d1d523786
 raster/custom/pdftc_900k_1016_page_3.png 9e2f3d599cfe66740fba5c000b2fdb38
+raster/custom/predictor_last_row_cut_short.png 29d7fe570bd5640d472a97d7a013b282
+raster/custom/predictor_png_row_ends_inside_pixel.png c6636ab637769d5edfab8a2db1be444a
+raster/custom/predictor_tiff_row_ends_inside_byte.png 1a3eb1d7d3c49addfd4c9783a7e073b5
 raster/custom/rendering_conflation_artifacts.png ca70b4e20e997150cdf96c1dfb931708
 raster/custom/resvg_masking_clipPath_mixed_clip_rule.png ca0caaf33e3c5957e1ee7d3186d3708c
 raster/custom/resvg_masking_clipPath_nested_clip_path.png 2419740f9e4520effa4d05df1684fa1e
@@ -2065,7 +2068,7 @@ raster/pdfjs/issue6387.png b2ae4a3860fbdb0a0cbae6c95d297665
 raster/pdfjs/issue6410.png 3b8c6515d6d00ce5e4c86bbe9e979d4d
 raster/pdfjs/issue6413.png 0b7e18204d70ac7b9974dfbfc671280c
 raster/pdfjs/issue6541.png da32baf68e1ad1e383115a147b2311ed
-raster/pdfjs/issue6549_p0.png 04d47cce946f7ff167cdfd47bde93391
+raster/pdfjs/issue6549_p0.png 716084cab9c55496dfb5ee56d29184ec
 raster/pdfjs/issue6549_p1.png 834aac19c829b4146614e0c45d71f9a6
 raster/pdfjs/issue6652.png 9511cdf94a09c9f7dbfb5a7152fc604b
 raster/pdfjs/issue6692.png fa16c72183391961a45babae8b9d979b
