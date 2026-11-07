@@ -1,7 +1,7 @@
-use crate::Renderer;
+use crate::{CmykPass, Renderer};
 use fearless_simd::{Level, Select, Simd, SimdBase, SimdInto, mask8x32, u8x32, u16x16};
 use hayro_interpret::util::x_y_advances;
-use hayro_interpret::{FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
+use hayro_interpret::{CmykData, FillRule, ImageData, ImageDrawProps, LumaData, Paint, RgbData};
 use kurbo::{Affine, Rect};
 use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
@@ -458,7 +458,7 @@ impl Renderer<'_> {
 
                         match paint {
                             Paint::Color(c) => {
-                                let color = c.to_rgba().to_rgba8();
+                                let color = self.color(c).to_rgba8().to_u8_array();
                                 let alpha = color[3];
 
                                 let blend_mode = self.ctx.blend_mode();
@@ -551,20 +551,62 @@ impl Renderer<'_> {
                 );
             }
             hayro_interpret::Image::Raster(r) => {
-                r.with_rgba(
-                    |image, alpha| {
-                        let (sx, sy) = image.scale_factors();
-                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
-                        self.ctx.set_transform(transform);
-                        self.draw_image(image, alpha);
-                    },
-                    Some((target_width, target_height)),
-                );
+                let cmyk = self.cmyk.clone();
+                let mut draw = |image: RenderImageData, alpha, (sx, sy): (f32, f32)| {
+                    transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
+                    self.ctx.set_transform(transform);
+                    self.draw_image(image, alpha);
+                };
+                let target_dimension = Some((target_width, target_height));
+
+                match cmyk {
+                    Some(pass) => r.with_cmyk(
+                        pass.profile.as_ref(),
+                        |image, alpha| {
+                            let scale_factors = image.scale_factors;
+                            draw(cmyk_lanes(&pass, image), alpha, scale_factors);
+                        },
+                        target_dimension,
+                    ),
+                    None => r.with_rgba(
+                        |image, alpha| {
+                            let scale_factors = image.scale_factors();
+                            draw(image.into(), alpha, scale_factors);
+                        },
+                        target_dimension,
+                    ),
+                }
             }
         }
 
         self.ctx
             .set_aliasing_threshold(self.global.aliasing_threshold);
+    }
+}
+
+/// Return the image that a pass of `render_cmyk` paints for a CMYK image.
+fn cmyk_lanes(pass: &CmykPass, image: CmykData) -> RenderImageData {
+    let pixels = image.data.as_chunks::<4>().0;
+
+    if pass.black {
+        RenderImageData::Luma(LumaData {
+            data: pixels.iter().map(|[_, _, _, k]| 255 - k).collect(),
+            width: image.width,
+            height: image.height,
+            interpolate: image.interpolate,
+            scale_factors: image.scale_factors,
+        })
+    } else {
+        RenderImageData::Rgb(RgbData {
+            data: pixels
+                .iter()
+                .flat_map(|[c, m, y, _]| [255 - c, 255 - m, 255 - y])
+                .collect(),
+            width: image.width,
+            height: image.height,
+            interpolate: image.interpolate,
+            scale_factors: image.scale_factors,
+        })
     }
 }
 

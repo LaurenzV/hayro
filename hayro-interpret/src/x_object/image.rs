@@ -1,8 +1,10 @@
-use super::decode::{DecodedImage, DecodedMask, decode_image, decode_mask};
+use super::decode::{
+    DecodedCmykImage, DecodedImage, DecodedMask, decode_cmyk_image, decode_image, decode_mask,
+};
 use super::xobject_oc;
 use crate::WarningSinkFn;
 use crate::cache::Cache;
-use crate::color::ColorSpace;
+use crate::color::{CmykProfile, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::ActiveTransferFunction;
@@ -218,6 +220,18 @@ impl<'a> ImageXObject<'a> {
         }
 
         decode_image(self, target_dimension)
+    }
+
+    pub(crate) fn decoded_cmyk_image(
+        &self,
+        target_dimension: Option<(u32, u32)>,
+        profile: Option<&CmykProfile>,
+    ) -> Option<DecodedCmykImage> {
+        if self.kind.is_mask() {
+            return None;
+        }
+
+        decode_cmyk_image(self, target_dimension, profile)
     }
 
     pub(crate) fn width(&self) -> u32 {

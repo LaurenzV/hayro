@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup};
+use super::{CmykProfile, ColorSpace, ToRgb, U8Lookup, tints_to_cmyk};
 use crate::cache::Cache;
 use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
@@ -32,6 +32,56 @@ impl Separation {
     }
 
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        self.alternate_space.convert(&self.evaluate(input), output)
+    }
+
+    pub(super) fn to_cmyk(
+        &self,
+        input: &[f32],
+        opacity: f32,
+        profile: Option<&CmykProfile>,
+    ) -> [f32; 5] {
+        // See `ColorSpace::to_alpha_color`.
+        let opacity = if self.is_none_separation {
+            0.0
+        } else {
+            opacity
+        };
+
+        tints_to_cmyk(
+            &self.tint_transform,
+            &self.alternate_space,
+            input,
+            1,
+            opacity,
+            profile,
+        )
+    }
+
+    pub(super) fn convert_cmyk(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+        profile: Option<&CmykProfile>,
+    ) -> Option<()> {
+        // Evaluate each possible tint only once for large inputs, such as images.
+        if input.len() > 256 {
+            let tints: [u8; 256] = core::array::from_fn(|index| index as u8);
+            let mut lookup = [[0; 4]; 256];
+            self.convert_cmyk(&tints, lookup.as_flattened_mut(), profile)?;
+
+            for (input, output) in input.iter().zip(output.as_chunks_mut::<4>().0) {
+                *output = lookup[*input as usize];
+            }
+
+            return Some(());
+        }
+
+        self.alternate_space
+            .convert_cmyk(&self.evaluate(input), output, profile)
+    }
+
+    fn evaluate(&self, input: &[u8]) -> Vec<u8> {
         let mut values = [0.0; MAX_COMPONENTS];
         let values = &mut values[..self.tint_transform.num_outputs()];
         let mut evaluated = Vec::with_capacity(input.len() * values.len());
@@ -51,7 +101,7 @@ impl Separation {
             }
         }
 
-        self.alternate_space.convert(&evaluated, output)
+        evaluated
     }
 
     fn u8_lookup(&self) -> Option<&[[u8; 3]; 256]> {

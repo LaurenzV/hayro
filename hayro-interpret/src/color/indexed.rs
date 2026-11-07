@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToLuma, ToRgb, U8Lookup};
+use super::{CmykProfile, ColorSpace, ToLuma, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use hayro_syntax::object::{self, Array, Name, Object, Stream};
 use std::borrow::Cow;
@@ -77,6 +77,23 @@ impl Indexed {
     fn u8_lookup(&self) -> Option<&[[u8; 3]; 256]> {
         self.lookup
             .get_or_init(|input, output| self.convert_inner(input, output))
+    }
+
+    pub(super) fn convert_cmyk(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+        profile: Option<&CmykProfile>,
+    ) -> Option<()> {
+        let mut palette = vec![[0; 4]; self.values.len()];
+        self.base
+            .convert_cmyk(&self.values.concat(), palette.as_flattened_mut(), profile)?;
+
+        for (input, output) in input.iter().zip(output.as_chunks_mut::<4>().0) {
+            *output = palette[(*input).min(self.hival) as usize];
+        }
+
+        Some(())
     }
 
     fn u8_luma_lookup(&self) -> Option<&[u8; 256]> {

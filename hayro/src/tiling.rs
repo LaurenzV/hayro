@@ -61,6 +61,7 @@ impl Renderer<'_> {
         let mut ctx = self.child_context(x.size, y.size);
         let mut renderer = Renderer::new(&mut ctx, self.global);
         renderer.inside_pattern = true;
+        renderer.cmyk = self.cmyk.clone();
 
         for j in y.copies.clone() {
             for i in x.copies.clone() {

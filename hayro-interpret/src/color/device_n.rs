@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup};
+use super::{CmykProfile, ColorSpace, ToRgb, U8Lookup, tints_to_cmyk};
 use crate::cache::Cache;
 use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
@@ -111,6 +111,36 @@ impl DeviceN {
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         let evaluated = self.evaluate(input);
         self.alternate_space.convert(&evaluated, output)
+    }
+
+    pub(super) fn convert_cmyk(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+        profile: Option<&CmykProfile>,
+    ) -> Option<()> {
+        let evaluated = self.evaluate(input);
+        self.alternate_space
+            .convert_cmyk(&evaluated, output, profile)
+    }
+
+    pub(super) fn to_cmyk(
+        &self,
+        input: &[f32],
+        opacity: f32,
+        profile: Option<&CmykProfile>,
+    ) -> [f32; 5] {
+        // See `ColorSpace::to_alpha_color`.
+        let opacity = if self.is_none { 0.0 } else { opacity };
+
+        tints_to_cmyk(
+            &self.tint_transform,
+            &self.alternate_space,
+            input,
+            self.num_components as usize,
+            opacity,
+            profile,
+        )
     }
 
     fn u8_lookup(&self) -> Option<&[[u8; 3]; 256]> {
