@@ -35,8 +35,7 @@ fn load_reference(name: &str) -> Bitmap {
 }
 
 fn decode(page: &hayro_jbig2::Page<'_>) -> hayro_jbig2::Result<Bitmap> {
-    let mut ctx = hayro_jbig2::DecoderContext::default();
-    let bitmap = page.decode(&mut ctx)?;
+    let bitmap = page.decode()?;
     let width = bitmap.width() as usize;
 
     Ok(bitmap

@@ -24,14 +24,6 @@ use core::ops::ControlFlow;
 
 use crate::arithmetic_decoder::ArithmeticDecoderContext;
 
-/// A reusable context for decoding JBIG2 images.
-#[derive(Default)]
-pub struct DecoderContext {
-    pub(crate) page_state: PageState,
-    pub(crate) scratch_buffers: ScratchBuffers,
-    pub(crate) page_bitmap: Bitmap,
-}
-
 #[derive(Default)]
 pub(crate) struct ScratchBuffers {
     pub(crate) contexts: Vec<ArithmeticDecoderContext>,
@@ -75,7 +67,7 @@ use decode::symbol::{MAX_SYMBOLS, SymbolDictionary};
 use decode::text;
 use file::parse_file;
 use huffman_table::{HuffmanTable, StandardHuffmanTables};
-use page_info::{PageInformation, parse_page_information};
+use page_info::parse_page_information;
 use reader::Reader;
 use segment::{Segment, SegmentType};
 use sync::{Arc, OnceLock};
@@ -308,8 +300,8 @@ impl<'a> Page<'a> {
         self.size.height
     }
 
-    /// Decode the page into the bitmap of `ctx` and return it.
-    pub fn decode<'c>(&self, ctx: &'c mut DecoderContext) -> Result<PageBitmap<'c>> {
+    /// Decode the page.
+    pub fn decode(&self) -> Result<PageBitmap> {
         let segments = match &self.segments {
             PageSegments::Owned(segments) => segments,
             PageSegments::Borrowed(segments) => *segments,
@@ -320,27 +312,19 @@ impl<'a> Page<'a> {
             None => None,
         };
 
-        decode_segments(
-            segments,
-            globals,
-            self.size.height_from_stripes,
-            self.strict,
-            ctx,
-        )?;
+        let bitmap = decode_segments(segments, globals, self.size, self.strict)?;
 
-        Ok(PageBitmap {
-            bitmap: &ctx.page_bitmap,
-        })
+        Ok(PageBitmap { bitmap })
     }
 }
 
 /// The decoded pixels of a page, as rows of `u32` words with the first pixel in the most
 /// significant bit and black pixels set to 1.
-pub struct PageBitmap<'a> {
-    bitmap: &'a Bitmap,
+pub struct PageBitmap {
+    bitmap: Bitmap,
 }
 
-impl<'a> PageBitmap<'a> {
+impl PageBitmap {
     /// The width of the bitmap in pixels.
     pub fn width(&self) -> u32 {
         self.bitmap.width
@@ -352,7 +336,7 @@ impl<'a> PageBitmap<'a> {
     }
 
     /// The rows of the bitmap. Bits past the width of the bitmap are unspecified.
-    pub fn rows(&self) -> core::slice::ChunksExact<'a, u32> {
+    pub fn rows(&self) -> core::slice::ChunksExact<'_, u32> {
         self.bitmap.data.chunks_exact(self.bitmap.stride as usize)
     }
 
@@ -418,8 +402,7 @@ static U8_PIXELS: [[u8; 8]; 256] = {
 struct PageSize {
     width: u32,
     height: u32,
-    /// The height determined from `EndOfStripe` segments, if applicable.
-    height_from_stripes: Option<u32>,
+    default_pixel: bool,
 }
 
 impl PageSize {
@@ -458,7 +441,7 @@ impl PageSize {
         Ok(Self {
             width: page_info.width,
             height,
-            height_from_stripes,
+            default_pixel: page_info.flags.default_pixel != 0,
         })
     }
 }
@@ -466,37 +449,25 @@ impl PageSize {
 fn decode_segments(
     segments: &[Segment<'_>],
     globals: Option<&Globals>,
-    height_from_stripes: Option<u32>,
+    size: PageSize,
     strict: bool,
-    decoder_ctx: &mut DecoderContext,
-) -> Result<()> {
-    // Find and parse page information segment first.
-    if let Some(page_info) = segments
-        .iter()
-        .find(|s| s.header.segment_type == SegmentType::PageInformation)
-    {
-        let mut reader = Reader::new(page_info.data);
-        init_page(
-            &mut reader,
-            height_from_stripes,
-            &mut decoder_ctx.page_state,
-            &mut decoder_ctx.page_bitmap,
-        )?;
-    } else {
-        bail!(FormatError::MissingPageInfo);
-    }
-
-    let page_bitmap = &mut decoder_ctx.page_bitmap;
-    let page_state = &mut decoder_ctx.page_state;
-    let scratch_buffers = &mut decoder_ctx.scratch_buffers;
+) -> Result<Bitmap> {
+    // "Bit 2: Page default pixel value. This bit contains the initial value
+    // for every pixel in the page, before any region segments are decoded
+    // or drawn." (7.4.8.5)
+    let mut page_bitmap = Bitmap::new_with(size.width, size.height, 0, 0, size.default_pixel)?;
+    let mut page_state = PageState::new(size.default_pixel);
+    let standard_tables = StandardHuffmanTables::default();
+    let mut scratch_buffers = ScratchBuffers::default();
 
     for seg in segments {
         match decode_segment(
             seg,
-            page_bitmap,
-            page_state,
+            &mut page_bitmap,
+            &mut page_state,
             globals,
-            scratch_buffers,
+            &standard_tables,
+            &mut scratch_buffers,
             strict,
         ) {
             Ok(ControlFlow::Continue(())) => {}
@@ -511,7 +482,7 @@ fn decode_segments(
         }
     }
 
-    Ok(())
+    Ok(page_bitmap)
 }
 
 fn decode_segment(
@@ -519,15 +490,14 @@ fn decode_segment(
     page_bitmap: &mut Bitmap,
     page_state: &mut PageState,
     globals: Option<&Globals>,
+    standard_tables: &StandardHuffmanTables,
     scratch_buffers: &mut ScratchBuffers,
     strict: bool,
 ) -> Result<ControlFlow<()>> {
     let mut reader = Reader::new(seg.data);
 
     match seg.header.segment_type {
-        SegmentType::PageInformation => {
-            // Already processed above, skip.
-        }
+        SegmentType::PageInformation => {}
         SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
             let had_unknown_length = seg.header.data_length.is_none();
             let header = generic::parse(&mut reader, had_unknown_length, strict)?;
@@ -558,7 +528,7 @@ fn decode_segment(
             seg,
             &mut page_state.dictionaries,
             globals,
-            &page_state.standard_tables,
+            standard_tables,
             scratch_buffers,
             strict,
         )?,
@@ -580,7 +550,7 @@ fn decode_segment(
                     &header,
                     &symbols,
                     &referred_tables,
-                    &page_state.standard_tables,
+                    standard_tables,
                     page_bitmap,
                     scratch_buffers,
                 )?;
@@ -589,7 +559,7 @@ fn decode_segment(
                     &header,
                     &symbols,
                     &referred_tables,
-                    &page_state.standard_tables,
+                    standard_tables,
                     scratch_buffers,
                 )?;
                 page_bitmap.combine(
@@ -613,7 +583,7 @@ fn decode_segment(
                 &header,
                 &symbols,
                 &referred_tables,
-                &page_state.standard_tables,
+                standard_tables,
                 scratch_buffers,
             )?;
             page_state.store_region(seg.header.segment_number, region.bitmap);
@@ -798,27 +768,25 @@ fn decode_dictionary_segment(
 }
 
 /// Page-level decoding state for a JBIG2 page.
-#[derive(Default)]
 pub(crate) struct PageState {
-    /// The parsed page information.
-    pub(crate) page_info: PageInformation,
+    /// The page's default pixel value.
+    pub(crate) default_pixel: bool,
     /// Whether the page bitmap is still in its initial state (not yet painted to).
     pub(crate) page_pristine: bool,
     /// Decoded intermediate regions, stored as (`segment_number`, region) pairs.
     pub(crate) referred_segments: Vec<(u32, Bitmap)>,
     /// The dictionaries and tables of the page.
     pub(crate) dictionaries: Dictionaries,
-    /// Standard Huffman tables (`TABLE_A` through `TABLE_O`).
-    pub(crate) standard_tables: StandardHuffmanTables,
 }
 
 impl PageState {
-    fn reset(&mut self, page_info: PageInformation) {
-        self.page_info = page_info;
-        self.page_pristine = true;
-        self.referred_segments.clear();
-        self.dictionaries.clear();
-        // Standard tables are lazily built and reused across images.
+    fn new(default_pixel: bool) -> Self {
+        Self {
+            default_pixel,
+            page_pristine: true,
+            referred_segments: Vec::new(),
+            dictionaries: Dictionaries::default(),
+        }
     }
 
     /// Check if an immediate region can be decoded directly into the page bitmap.
@@ -841,7 +809,7 @@ impl PageState {
             return false;
         }
 
-        let page_default_is_zero = self.page_info.flags.default_pixel == 0;
+        let page_default_is_zero = !self.default_pixel;
 
         if region_default_pixel == page_default_is_zero {
             return false;
@@ -893,12 +861,6 @@ pub(crate) struct Dictionaries {
 }
 
 impl Dictionaries {
-    fn clear(&mut self) {
-        self.pattern_dictionaries.clear();
-        self.symbol_dictionaries.clear();
-        self.huffman_tables.clear();
-    }
-
     fn store_pattern_dictionary(&mut self, segment_number: u32, dictionary: PatternDictionary) {
         self.pattern_dictionaries.push((segment_number, dictionary));
     }
@@ -988,32 +950,4 @@ fn page_bitmap_area(page: &Bitmap, region_info: &decode::RegionSegmentInfo) -> R
     );
 
     Ok(area)
-}
-
-/// Parse page information and initialize the page bitmap.
-fn init_page(
-    reader: &mut Reader<'_>,
-    height_from_stripes: Option<u32>,
-    page: &mut PageState,
-    bitmap: &mut Bitmap,
-) -> Result<()> {
-    let page_info = parse_page_information(reader)?;
-
-    // "A page's bitmap height may be declared in its page information segment
-    // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
-    // page must be striped." (7.4.8.2)
-    let height = if page_info.height == 0xFFFF_FFFF {
-        height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
-    } else {
-        page_info.height
-    };
-
-    // "Bit 2: Page default pixel value. This bit contains the initial value
-    // for every pixel in the page, before any region segments are decoded
-    // or drawn." (7.4.8.5)
-    bitmap.reinitialize(page_info.width, height, page_info.flags.default_pixel != 0)?;
-
-    page.reset(page_info);
-
-    Ok(())
 }

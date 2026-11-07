@@ -24,8 +24,7 @@ pub(crate) fn decode(
         .transpose()
         .ok()?;
     let page = hayro_jbig2::Page::new_embedded(data, globals.as_ref(), &settings).ok()?;
-    let mut ctx = hayro_jbig2::DecoderContext::default();
-    let bitmap = page.decode(&mut ctx).ok()?;
+    let bitmap = page.decode().ok()?;
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
