@@ -1256,6 +1256,18 @@
     "file": "pdfs/custom/flate_predictor_invalid.pdf"
   },
   {
+    "id": "predictor_last_row_cut_short",
+    "file": "pdfs/custom/predictor_last_row_cut_short.pdf"
+  },
+  {
+    "id": "predictor_png_row_ends_inside_pixel",
+    "file": "pdfs/custom/predictor_png_row_ends_inside_pixel.pdf"
+  },
+  {
+    "id": "predictor_tiff_row_ends_inside_byte",
+    "file": "pdfs/custom/predictor_tiff_row_ends_inside_byte.pdf"
+  },
+  {
     "id": "issue141",
     "link": true
   },
