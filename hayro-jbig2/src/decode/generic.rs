@@ -64,7 +64,7 @@ pub(crate) fn decode_into(
                 &mut ctx.contexts,
                 header.tpgdon,
                 at_pixels,
-            ),
+            )?,
         }
     }
 
@@ -362,6 +362,10 @@ macro_rules! decode_loop {
 
         // "3) Decode each row as follows:" (6.2.5.7)
         for y in 0..height {
+            if decoder.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
             // coder" (6.2.5.7)
             if $tpgdon {
@@ -437,6 +441,10 @@ macro_rules! decode_default_template_fast_loop {
         let last_byte_bits = (($bitmap.width - 1) & (BYTE_BITS - 1)) + 1;
 
         for y in 0..$bitmap.height {
+            if $decoder.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             if $tpgdon {
                 let sltp = $decoder.read_bit(&mut $contexts[$sltp_context as usize]);
                 ltp = ltp != (sltp != 0);
@@ -659,7 +667,7 @@ fn decode_bitmap_extended_template(
     contexts: &mut [ArithmeticDecoderContext],
     tpgdon: bool,
     at_pixels: &[AdaptiveTemplatePixel; 12],
-) {
+) -> Result<()> {
     let default_at_pixels = TEMPLATE0_DEFAULT.map(|(x, y)| AdaptiveTemplatePixel { x, y });
     let mut ctx_gatherer = ContextGatherer::new(Template::Template0, &default_at_pixels);
 
@@ -687,6 +695,8 @@ fn decode_bitmap_extended_template(
         sltp_context(Template::Template0),
         gather
     );
+
+    Ok(())
 }
 
 pub(crate) struct ContextGatherer<'a> {

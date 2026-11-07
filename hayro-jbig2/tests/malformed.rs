@@ -31,3 +31,8 @@ fn symbol_dictionary_empty_export_runs() {
 fn symbol_dictionary_empty_height_classes() {
     check_malformed("malformed_symbol_dictionary_empty_height_classes");
 }
+
+#[test]
+fn symbol_dictionary_garbage_data() {
+    check_malformed("malformed_symbol_dictionary_garbage_data");
+}

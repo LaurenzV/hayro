@@ -117,13 +117,6 @@ pub(crate) fn decode_with(
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
-    // Inspired by Chromium's limit:
-    // https://pdfium.googlesource.com/pdfium/%2B/refs/heads/main/core/fxcodec/jbig2/jbig2_context.cpp#666
-    let max_instances = header.segment_data_len.saturating_mul(32);
-    if header.num_instances as usize > max_instances {
-        bail!(SymbolError::TooManyInstances);
-    }
-
     let mut strip_t = ctx
         .read_strip_delta_t(strip_size)?
         .checked_neg()
@@ -141,6 +134,10 @@ pub(crate) fn decode_with(
         let mut current_s = 0;
 
         loop {
+            if ctx.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -352,6 +349,13 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             decoder,
             contexts,
             gr_contexts,
+        }
+    }
+
+    fn is_exhausted(&self) -> bool {
+        match self {
+            DecodeContext::Huffman { .. } => false,
+            DecodeContext::Arithmetic { decoder, .. } => decoder.is_exhausted(),
         }
     }
 
@@ -845,7 +849,6 @@ pub(crate) struct TextRegionHeader<'a> {
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
     pub(crate) symbol_id_table: Option<HuffmanTable>,
-    pub(crate) segment_data_len: usize,
     pub(crate) data: &'a [u8],
     pub(crate) strict: bool,
 }
@@ -920,7 +923,6 @@ pub(crate) fn parse<'a>(
     num_symbols: u32,
     strict: bool,
 ) -> Result<TextRegionHeader<'a>> {
-    let segment_data_len = reader.tail().ok_or(ParseError::UnexpectedEof)?.len();
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
     let huffman_flags = if flags.use_huffman {
@@ -953,7 +955,6 @@ pub(crate) fn parse<'a>(
         refinement_at_pixels,
         num_instances,
         symbol_id_table,
-        segment_data_len,
         data,
         strict,
     })
