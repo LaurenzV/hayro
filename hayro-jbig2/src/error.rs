@@ -21,6 +21,8 @@ pub enum DecodeError {
     Symbol(SymbolError),
     /// Arithmetic overflow in calculations.
     Overflow(OverflowError),
+    /// Decoding would need more memory than the limit in the decode settings.
+    MemoryLimitExceeded,
     /// Feature not yet implemented.
     Unsupported,
 }
@@ -154,6 +156,7 @@ impl fmt::Display for DecodeError {
             Self::Template(e) => write!(f, "{e}"),
             Self::Symbol(e) => write!(f, "{e}"),
             Self::Overflow(e) => write!(f, "{e}"),
+            Self::MemoryLimitExceeded => write!(f, "memory limit exceeded"),
             Self::Unsupported => write!(f, "unsupported feature"),
         }
     }

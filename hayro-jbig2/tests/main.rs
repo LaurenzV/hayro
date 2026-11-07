@@ -8,6 +8,7 @@ mod halftone;
 mod huffman;
 mod lenient;
 mod malformed;
+mod memory;
 mod page;
 mod refinement;
 mod symbol;
@@ -53,6 +54,35 @@ fn check(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), true);
 }
 
+/// Decode `stream` in lenient mode with the given memory limit and check that
+/// it matches `reference`.
+fn check_with_memory_limit(stream: &str, reference: &str, memory_limit: usize) {
+    let settings = hayro_jbig2::DecodeSettings {
+        memory_limit: Some(memory_limit),
+        ..Default::default()
+    };
+    compare_with(stream, load_reference(reference), &settings);
+}
+
+/// Decode `stream` in lenient mode with the given memory limit and check that
+/// decoding fails because the limit is exceeded.
+fn check_memory_limit_exceeded(stream: &str, memory_limit: usize) {
+    let data = read_stream(stream);
+    let settings = hayro_jbig2::DecodeSettings {
+        memory_limit: Some(memory_limit),
+        ..Default::default()
+    };
+    let file = hayro_jbig2::File::new(&data, &settings)
+        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
+
+    assert_eq!(
+        page.decode().err(),
+        Some(hayro_jbig2::DecodeError::MemoryLimitExceeded),
+        "{stream}: memory limit not exceeded"
+    );
+}
+
 /// Decode `stream`, which is invalid, in lenient mode and check that it
 /// matches `reference`.
 fn check_lenient(stream: &str, reference: &str) {
@@ -71,8 +101,14 @@ fn check_pages_lenient(stream: &str, references: &[&str]) {
 
 fn compare_pages(stream: &str, references: &[&str], strict: bool) {
     let data = read_stream(stream);
-    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
-        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let file = hayro_jbig2::File::new(
+        &data,
+        &hayro_jbig2::DecodeSettings {
+            strict,
+            ..Default::default()
+        },
+    )
+    .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     assert_eq!(
         file.page_count(),
         references.len(),
@@ -102,8 +138,16 @@ fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usiz
 }
 
 fn compare(stream: &str, reference: Bitmap, strict: bool) {
+    let settings = hayro_jbig2::DecodeSettings {
+        strict,
+        ..Default::default()
+    };
+    compare_with(stream, reference, &settings);
+}
+
+fn compare_with(stream: &str, reference: Bitmap, settings: &hayro_jbig2::DecodeSettings) {
     let data = read_stream(stream);
-    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
+    let file = hayro_jbig2::File::new(&data, settings)
         .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
     compare_page(stream, &page, reference);

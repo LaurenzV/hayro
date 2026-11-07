@@ -6,7 +6,7 @@ use super::{
     AdaptiveTemplatePixel, RefinementTemplate, RegionBitmap, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT, Word};
 use crate::decode::generic::ContextGatherer;
@@ -17,7 +17,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<RegionBitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -25,6 +25,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         false,
+        &mut ctx.budget,
     )?;
 
     decode_into(header, reference, &mut region, ctx)?;
@@ -40,7 +41,7 @@ pub(crate) fn decode_into(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
     region: &mut Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<()> {
     let data = header.data;
 

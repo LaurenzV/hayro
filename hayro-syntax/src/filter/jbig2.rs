@@ -18,7 +18,7 @@ pub(crate) fn decode(
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .and_then(|g| g.decoded_data().ok());
 
-    let settings = hayro_jbig2::DecodeSettings { strict: false };
+    let settings = hayro_jbig2::DecodeSettings::default();
     let globals = globals
         .map(|globals| hayro_jbig2::Globals::new(&globals, &settings))
         .transpose()

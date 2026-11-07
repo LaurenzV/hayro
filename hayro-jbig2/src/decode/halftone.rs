@@ -6,17 +6,18 @@ use alloc::vec::Vec;
 use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image};
+use crate::memory::MemoryBudget;
 use crate::reader::Reader;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -26,6 +27,7 @@ pub(crate) fn decode(
         region.x_location,
         region.y_location,
         header.flags.initial_pixel_color,
+        &mut ctx.budget,
     )?;
 
     decode_into(header, pattern_dict, &mut htreg, ctx)?;
@@ -40,10 +42,15 @@ pub(crate) fn decode_into(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_skip_bitmap(header, pattern_dict, htreg)?)
+        Some(compute_skip_bitmap(
+            header,
+            pattern_dict,
+            htreg,
+            &mut ctx.budget,
+        )?)
     } else {
         None
     };
@@ -69,7 +76,7 @@ pub(crate) fn decode_into(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
-    render_patterns(htreg, &gi, header, pattern_dict)?;
+    render_patterns(htreg, &gi, header, pattern_dict, &mut ctx.budget)?;
 
     Ok(())
 }
@@ -192,7 +199,10 @@ impl GridCoords {
 
     #[inline]
     fn get(&self) -> (i32, i32) {
-        ((self.x >> 8) as i32, (self.y >> 8) as i32)
+        // Coordinates this far out lie outside every bitmap, and clamping them
+        // leaves room for adding pattern sizes within `i32`.
+        let clamp = |v: i64| (v >> 8).clamp(-(1 << 30), 1 << 30) as i32;
+        (clamp(self.x), clamp(self.y))
     }
 
     #[inline]
@@ -215,6 +225,7 @@ fn compute_skip_bitmap(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &Bitmap,
+    budget: &mut MemoryBudget,
 ) -> Result<Vec<u32>> {
     let grid = &header.grid_position_and_size;
     let pattern_width = pattern_dict.pattern_width as i32;
@@ -226,6 +237,7 @@ fn compute_skip_bitmap(
     let len = stride
         .checked_mul(grid.height)
         .ok_or(OverflowError::BitmapDimension)? as usize;
+    budget.charge(len * size_of::<u32>())?;
     let mut hskip = vec![0_u32; len];
     let mut coords = GridCoords::new(grid, &header.grid_vector);
 
@@ -258,6 +270,7 @@ fn render_patterns(
     gi: &GrayScaleImage,
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
+    budget: &mut MemoryBudget,
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
     let op = header.flags.combination_operator;
@@ -301,6 +314,7 @@ fn render_patterns(
     }
 
     let mut coords = GridCoords::new(grid, &header.grid_vector);
+    budget.charge(grid.width as usize * size_of::<u32>())?;
     let mut gray_values = vec![0; grid.width as usize];
 
     for m_g in 0..grid.height {

@@ -3,7 +3,7 @@
 use super::{
     AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
 };
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, WORD_BYTES, WORD_SHIFT, Word};
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
@@ -12,7 +12,7 @@ use crate::reader::Reader;
 /// Generic region decoding procedure (6.2).
 pub(crate) fn decode(
     header: &GenericRegionHeader<'_>,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -20,6 +20,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         false,
+        &mut ctx.budget,
     )?;
 
     decode_into(header, &mut bitmap, ctx)?;
@@ -33,7 +34,7 @@ pub(crate) fn decode(
 pub(crate) fn decode_into(
     header: &GenericRegionHeader<'_>,
     bitmap: &mut Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState,
 ) -> Result<()> {
     let data = header.data;
 

@@ -8,12 +8,13 @@ use super::{
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use super::{RegionBitmap, generic_refinement};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{HuffmanError, OverflowError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
+use crate::memory::MemoryBudget;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
 use crate::sync::Arc;
@@ -24,7 +25,7 @@ pub(crate) fn decode(
     symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -32,6 +33,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         header.flags.default_pixel,
+        &mut scratch.budget,
     )?;
 
     decode_into(
@@ -55,7 +57,7 @@ pub(crate) fn decode_into(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState,
 ) -> Result<()> {
     let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
     scratch.contexts.clear();
@@ -72,7 +74,13 @@ pub(crate) fn decode_into(
             standard_tables,
             &mut scratch.contexts,
         )?;
-        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
+        decode_with(
+            ctx,
+            SymbolBitmaps::new(symbols, &[]),
+            header,
+            bitmap,
+            &mut scratch.budget,
+        )?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -81,7 +89,13 @@ pub(crate) fn decode_into(
         let mut contexts = TextRegionContexts::new(symbol_code_length);
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
-        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
+        decode_with(
+            ctx,
+            SymbolBitmaps::new(symbols, &[]),
+            header,
+            bitmap,
+            &mut scratch.budget,
+        )?;
     }
 
     Ok(())
@@ -114,6 +128,7 @@ pub(crate) fn decode_with(
     symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     region: &mut Bitmap,
+    budget: &mut MemoryBudget,
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
@@ -173,7 +188,7 @@ pub(crate) fn decode_with(
             let symbol_id = ctx.read_symbol_id()?;
 
             let symbol_bitmap =
-                decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
+                decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id, budget)?;
 
             let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => match symbols.get(*idx) {
@@ -234,6 +249,10 @@ pub(crate) fn decode_with(
             };
 
             region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
+
+            if let SymbolBitmap::Owned(bitmap) = &symbol_bitmap {
+                budget.release(bitmap.memory_size());
+            }
 
             if !header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
@@ -583,6 +602,7 @@ fn decode_symbol_instance_bitmap(
     symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     symbol_id: usize,
+    budget: &mut MemoryBudget,
 ) -> Result<SymbolBitmap> {
     if !header.flags.use_refinement || ctx.read_refinement_flag()? == 0 {
         return Ok(SymbolBitmap::Reference(symbol_id));
@@ -614,7 +634,7 @@ fn decode_symbol_instance_bitmap(
         .checked_add(rdy)
         .ok_or(OverflowError::ReferenceOffset)?;
 
-    let mut refined_bitmap = Bitmap::new(refined_width, refined_height)?;
+    let mut refined_bitmap = Bitmap::new(refined_width, refined_height, budget)?;
 
     ctx.decode_refinement_bitmap(
         &mut refined_bitmap,
