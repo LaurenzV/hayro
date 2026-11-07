@@ -198,11 +198,8 @@ impl GridCoords {
     }
 
     #[inline]
-    fn get(&self) -> (i32, i32) {
-        // Coordinates this far out lie outside every bitmap, and clamping them
-        // leaves room for adding pattern sizes within `i32`.
-        let clamp = |v: i64| (v >> 8).clamp(-(1 << 30), 1 << 30) as i32;
-        (clamp(self.x), clamp(self.y))
+    fn get(&self) -> (i64, i64) {
+        (self.x >> 8, self.y >> 8)
     }
 
     #[inline]
@@ -228,10 +225,6 @@ fn compute_skip_bitmap(
     budget: &mut MemoryBudget,
 ) -> Result<Vec<u32>> {
     let grid = &header.grid_position_and_size;
-    let pattern_width = pattern_dict.pattern_width as i32;
-    let pattern_height = pattern_dict.pattern_height as i32;
-    let region_width = htreg.width as i32;
-    let region_height = htreg.height as i32;
 
     let stride = grid.width.div_ceil(32);
     let len = stride
@@ -245,12 +238,7 @@ fn compute_skip_bitmap(
         for n_g in 0..grid.width {
             let (x, y) = coords.get();
 
-            let skip = (x + pattern_width <= 0)
-                || (x >= region_width)
-                || (y + pattern_height <= 0)
-                || (y >= region_height);
-
-            if skip {
+            if lies_outside(x, y, pattern_dict, htreg) {
                 let word_idx = (m_g * stride + n_g / 32) as usize;
                 let bit_pos = 31 - (n_g % 32);
                 hskip[word_idx] |= 1 << bit_pos;
@@ -262,6 +250,13 @@ fn compute_skip_bitmap(
     }
 
     Ok(hskip)
+}
+
+fn lies_outside(x: i64, y: i64, pattern_dict: &PatternDictionary, region: &Bitmap) -> bool {
+    x + i64::from(pattern_dict.pattern_width) <= 0
+        || x >= i64::from(region.width)
+        || y + i64::from(pattern_dict.pattern_height) <= 0
+        || y >= i64::from(region.height)
 }
 
 /// Render patterns into the target region (6.6.5.2).
@@ -276,8 +271,6 @@ fn render_patterns(
     let op = header.flags.combination_operator;
     let pw = pattern_dict.pattern_width;
     let ph = pattern_dict.pattern_height;
-    let region_w = region.width as i32;
-    let region_h = region.height as i32;
     let stride = region.stride;
     let num_patterns = pattern_dict.patterns.len();
 
@@ -332,13 +325,18 @@ fn render_patterns(
 
             let pattern = &pattern_dict.patterns[pattern_index];
 
+            if lies_outside(x, y, pattern_dict, region) {
+                coords.advance_col();
+                continue;
+            }
+
             // Patterns that are at most one word wide and lie inside the region
             // can be blitted row by row.
             if pw <= WORD_BITS
                 && x >= 0
                 && y >= 0
-                && x + pw as i32 <= region_w
-                && y + ph as i32 <= region_h
+                && x + i64::from(pw) <= i64::from(region.width)
+                && y + i64::from(ph) <= i64::from(region.height)
             {
                 let pattern = &pattern.data;
                 let xu = x as u32;
@@ -430,7 +428,7 @@ fn render_patterns(
                     }
                 }
             } else {
-                region.combine(pattern, x, y, op);
+                region.combine(pattern, x as i32, y as i32, op);
             }
 
             coords.advance_col();

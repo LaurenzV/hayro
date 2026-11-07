@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 
 // Keeps pixel coordinates plus offsets within `i32`.
 pub(crate) const MAX_DIMENSION: u32 = 1 << 28;
+const MAX_AREA: u64 = (u16::MAX as u64).pow(2);
 
 /// The underlying word type for packed pixel storage.
 /// Change this to `u32` to switch back to 32-bit words.
@@ -46,6 +47,17 @@ pub(crate) struct Bitmap {
     pub(crate) y_location: u32,
 }
 
+pub(crate) fn check_size(width: u32, height: u32) -> Result<()> {
+    if width > MAX_DIMENSION
+        || height > MAX_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_AREA
+    {
+        bail!(OverflowError::BitmapDimension);
+    }
+
+    Ok(())
+}
+
 impl Bitmap {
     /// Create a new bitmap filled with white pixels (false).
     ///
@@ -63,18 +75,11 @@ impl Bitmap {
         default_pixel: bool,
         budget: &mut MemoryBudget,
     ) -> Result<Self> {
+        check_size(width, height)?;
+
         let stride = width.div_ceil(WORD_BITS);
-
-        // Word indices are computed in `u32`.
-        if width > MAX_DIMENSION
-            || height > MAX_DIMENSION
-            || u64::from(stride) * u64::from(height) > u64::from(u32::MAX)
-        {
-            bail!(OverflowError::BitmapDimension);
-        }
-
         let len = stride as usize * height as usize;
-        budget.charge(Self::memory_size_for(len).ok_or(OverflowError::BitmapDimension)?)?;
+        budget.charge(Self::memory_size_for(len))?;
 
         let default_word: Word = if default_pixel { !0 } else { 0 };
         let data = vec![default_word; len];
@@ -95,13 +100,11 @@ impl Bitmap {
     }
 
     pub(crate) fn memory_size(&self) -> usize {
-        Self::memory_size_for(self.data.len()).unwrap_or(usize::MAX)
+        Self::memory_size_for(self.data.len())
     }
 
-    fn memory_size_for(words: usize) -> Option<usize> {
-        words
-            .checked_mul(WORD_BYTES as usize)?
-            .checked_add(size_of::<Self>())
+    fn memory_size_for(words: usize) -> usize {
+        words * WORD_BYTES as usize + size_of::<Self>()
     }
 
     fn clear_padding(&mut self) {
