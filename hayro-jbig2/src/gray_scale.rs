@@ -136,6 +136,7 @@ fn decode_arithmetic(
                     if decoder.is_exhausted() {
                         bail!(ParseError::UnexpectedEof);
                     }
+
                     gatherer.start_row(bitplane, y);
                     for x in 0..width {
                         gatherer.maybe_reload_buffers(bitplane, x);
