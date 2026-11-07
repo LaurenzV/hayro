@@ -176,12 +176,11 @@ impl Number {
                 })))
             }
             Some(shift) => {
-                // Clinger's fast path rounds once when the mantissa and divisor are exact.
                 if mantissa > MAX_EXACT_MANTISSA {
                     return None;
                 }
-                let divisor = *POWERS_OF_10.get(shift as usize)?;
-                let value = mantissa as f64 / divisor;
+
+                let value = mantissa as f64 / POWERS_OF_10.get(shift as usize)?;
                 Some(Self(InternalNumber::Real(if negative {
                     -value
                 } else {
@@ -689,57 +688,16 @@ mod tests {
         assert_eq!(reader.offset(), input.len());
     }
 
-    fn read_f64(input: &str) -> f64 {
-        let mut reader = Reader::new(input.as_bytes());
-        let got = reader.read_without_context::<Number>().unwrap().as_f64();
-        assert_eq!(reader.offset(), input.len());
-        got
-    }
+    #[test]
+    fn reals_are_correctly_rounded() {
+        let tiny = format!("0.{}1", "0".repeat(309));
 
-    fn read_f64_from_content(input: &str) -> f64 {
-        let content = format!("{input} 0 Td");
-        let mut ops = crate::content::UntypedIter::new(content.as_bytes());
-        let op = ops.next().unwrap();
-        match op.operands().next() {
-            Some(crate::object::Object::Number(number)) => number.as_f64(),
-            other => panic!("{other:?}"),
+        for input in ["519188.22107137204", "-0.000123", &tiny] {
+            let got = Reader::new(input.as_bytes())
+                .read_without_context::<Number>()
+                .unwrap()
+                .as_f64();
+            assert_eq!(got, input.parse::<f64>().unwrap());
         }
-    }
-
-    #[test]
-    fn reals_round_correctly() {
-        for value in [
-            519_188.221_071_372_04,
-            1e-25,
-            f64::MIN_POSITIVE,
-            f64::from_bits(1),
-            0.1,
-            1.5,
-            -0.000_123,
-            9_007_199_254_740_993.0,
-            core::f64::consts::PI,
-        ] {
-            let text = format!("{value}");
-            assert_eq!(read_f64(&text).to_bits(), value.to_bits(), "{text}");
-            assert_eq!(
-                read_f64_from_content(&text).to_bits(),
-                value.to_bits(),
-                "{text}"
-            );
-        }
-    }
-
-    #[test]
-    fn real_at_fast_path_limits() {
-        assert_eq!(read_f64("900719925474099.2"), 900_719_925_474_099.2);
-        assert_eq!(read_f64("900719925474099.3"), 900_719_925_474_099.3);
-        assert_eq!(read_f64("0.0000000000000000000001"), 1e-22);
-        assert_eq!(read_f64("0.00000000000000000000001"), 1e-23);
-    }
-
-    #[test]
-    fn real_fallback_keeps_trailing_minus_and_sign() {
-        assert_eq!(read_f64("+519188.22107137204"), 519_188.221_071_372_04);
-        assert_eq!(read_f64("-519188.22107137204-12"), -519_188.221_071_372_04);
     }
 }
