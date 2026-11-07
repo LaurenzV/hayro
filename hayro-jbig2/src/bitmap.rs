@@ -27,7 +27,7 @@ pub(crate) const WORD_SHIFT: u32 = WORD_BITS - 1;
 /// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
 /// as having the value 1. Pixels decoded by the MMR decoder having the value
 /// 'white' shall be treated as having the value 0." (6.2.6)
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct Bitmap {
     /// Width in pixels.
     pub(crate) width: u32,
@@ -100,34 +100,6 @@ impl Bitmap {
         }
 
         Ok(bitmap)
-    }
-
-    pub(crate) fn reinitialize(
-        &mut self,
-        width: u32,
-        height: u32,
-        default_pixel: bool,
-    ) -> Result<()> {
-        if width > MAX_DIMENSION || height > MAX_DIMENSION {
-            return Err(OverflowError::BitmapDimension.into());
-        }
-
-        let stride = width.div_ceil(WORD_BITS);
-        let default_word: Word = if default_pixel { !0 } else { 0 };
-        self.width = width;
-        self.height = height;
-        self.stride = stride;
-        self.x_location = 0;
-        self.y_location = 0;
-        self.data.clear();
-        self.data
-            .resize(stride as usize * height as usize, default_word);
-
-        if default_pixel {
-            self.clear_padding();
-        }
-
-        Ok(())
     }
 
     fn clear_padding(&mut self) {

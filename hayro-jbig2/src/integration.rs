@@ -5,7 +5,7 @@ use std::{
     io::{BufRead, Seek},
 };
 
-use crate::{DecodeSettings, DecoderContext, File, FormatError, Page};
+use crate::{DecodeSettings, File, FormatError, Page};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
@@ -36,8 +36,7 @@ impl ImageDecoder for Page<'_> {
 }
 
 fn decode_into_buf(page: &Page<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    let mut ctx = DecoderContext::default();
-    page.decode(&mut ctx)?.store_u8_into(buf);
+    page.decode()?.store_u8_into(buf);
 
     Ok(())
 }
