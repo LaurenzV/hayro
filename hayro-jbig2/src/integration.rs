@@ -5,7 +5,7 @@ use std::{
     io::{BufRead, Seek},
 };
 
-use crate::{DecodeSettings, File, FormatError, Page};
+use crate::{DecodeSettings, DecoderContext, File, FormatError, Page};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
@@ -36,29 +36,8 @@ impl ImageDecoder for Page<'_> {
 }
 
 fn decode_into_buf(page: &Page<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    struct LumaDecoder<'a> {
-        buf: &'a mut [u8],
-        pos: usize,
-    }
-
-    impl crate::Decoder for LumaDecoder<'_> {
-        fn push_pixel(&mut self, black: bool) {
-            self.buf[self.pos] = if black { 0 } else { 255 };
-            self.pos += 1;
-        }
-
-        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-            let luma = if black { 0 } else { 255 };
-            let count = chunk_count as usize * 8;
-            self.buf[self.pos..self.pos + count].fill(luma);
-            self.pos += count;
-        }
-
-        fn next_line(&mut self) {}
-    }
-
-    let mut decoder = LumaDecoder { buf, pos: 0 };
-    page.decode(&mut decoder)?;
+    let mut ctx = DecoderContext::default();
+    page.decode(&mut ctx)?.store_u8_into(buf);
 
     Ok(())
 }
