@@ -1,6 +1,5 @@
 use crate::bit_reader::BitReader;
 use crate::codes::Mode;
-use crate::util::VecExt;
 use crate::{DecodeError, DecodeSettings, Decoder, Result};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -79,7 +78,7 @@ impl DecoderContext {
             let last_is_white = self.coding_changes.len().is_multiple_of(2);
 
             if last_is_white != self.color.is_white() {
-                self.coding_changes.try_push(self.pixels_decoded)?;
+                self.coding_changes.push(self.pixels_decoded);
             }
 
             self.pixels_decoded += count;
