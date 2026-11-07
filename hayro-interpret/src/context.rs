@@ -66,6 +66,8 @@ pub struct Context<'a> {
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
     pub(crate) glyph_scratch: Vec<PositionedGlyph<'a>>,
+    // The `TJ` adjustments applied since the last character code was read.
+    pub(crate) glyph_adjustment: f32,
 }
 
 impl<'a> Context<'a> {
@@ -112,6 +114,7 @@ impl<'a> Context<'a> {
             ocg_state,
             nesting_depth,
             glyph_scratch: Vec::new(),
+            glyph_adjustment: 0.0,
         }
     }
 
