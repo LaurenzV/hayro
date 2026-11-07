@@ -185,14 +185,23 @@ pub enum Rotation {
     FlippedHorizontal,
 }
 
-/// A PDF page.
-pub struct Page<'a> {
-    inner: Dict<'a>,
+/// The boxes and the rotation of a page.
+#[derive(Debug, Copy, Clone)]
+struct Geometry {
     media_box: Rect,
     crop_box: Rect,
     rotation: Rotation,
+}
+
+/// A PDF page.
+pub struct Page<'a> {
+    inner: Dict<'a>,
+    // The geometry and the resources are only read on first use, so that loading
+    // a document doesn't have to read them for every page.
+    inherited: PagesContext<'a>,
+    geometry: OnceLock<Geometry>,
     page_streams: OnceLock<Option<Vec<u8>>>,
-    resources: Resources<'a>,
+    resources: OnceLock<Resources<'a>>,
     ctx: ReaderContext<'a>,
 }
 
@@ -209,39 +218,46 @@ impl<'a> Page<'a> {
             return None;
         }
 
-        let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
-
-        let crop_box = dict
-            .get::<Rect>(CROP_BOX)
-            .or(ctx.crop_box)
-            .unwrap_or(media_box);
-
-        let rotation = match dict
-            .get::<i32>(ROTATE)
-            .or(ctx.rotate)
-            .unwrap_or(0)
-            .rem_euclid(360)
-        {
-            0 => Rotation::None,
-            90 => Rotation::Horizontal,
-            180 => Rotation::Flipped,
-            270 => Rotation::FlippedHorizontal,
-            _ => Rotation::None,
-        };
-
-        let resources = Resources::new(
-            dict.get::<Dict<'a>>(RESOURCES)
-                .unwrap_or_else(|| ctx.resources.clone()),
-        );
-
         Some(Self {
             inner: dict.clone(),
-            media_box,
-            crop_box,
-            rotation,
+            inherited: ctx.clone(),
+            geometry: OnceLock::new(),
             page_streams: OnceLock::new(),
-            resources,
+            resources: OnceLock::new(),
             ctx: reader_ctx.clone(),
+        })
+    }
+
+    fn geometry(&self) -> &Geometry {
+        self.geometry.get_or_init(|| {
+            let dict = &self.inner;
+            let ctx = &self.inherited;
+
+            let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
+
+            let crop_box = dict
+                .get::<Rect>(CROP_BOX)
+                .or(ctx.crop_box)
+                .unwrap_or(media_box);
+
+            let rotation = match dict
+                .get::<i32>(ROTATE)
+                .or(ctx.rotate)
+                .unwrap_or(0)
+                .rem_euclid(360)
+            {
+                0 => Rotation::None,
+                90 => Rotation::Horizontal,
+                180 => Rotation::Flipped,
+                270 => Rotation::FlippedHorizontal,
+                _ => Rotation::None,
+            };
+
+            Geometry {
+                media_box,
+                crop_box,
+                rotation,
+            }
         })
     }
 
@@ -288,22 +304,28 @@ impl<'a> Page<'a> {
 
     /// Get the resources of the page.
     pub fn resources(&self) -> &Resources<'a> {
-        &self.resources
+        self.resources.get_or_init(|| {
+            Resources::new(
+                self.inner
+                    .get::<Dict<'a>>(RESOURCES)
+                    .unwrap_or_else(|| self.inherited.resources.clone()),
+            )
+        })
     }
 
     /// Get the media box of the page.
     pub fn media_box(&self) -> Rect {
-        self.media_box
+        self.geometry().media_box
     }
 
     /// Get the rotation of the page.
     pub fn rotation(&self) -> Rotation {
-        self.rotation
+        self.geometry().rotation
     }
 
     /// Get the crop box of the page.
     pub fn crop_box(&self) -> Rect {
-        self.crop_box
+        self.geometry().crop_box
     }
 
     /// Return the intersection of crop box and media box.
@@ -537,7 +559,77 @@ pub(crate) mod cached {
         }
 
         pub(crate) fn get(&self) -> &Pages<'_> {
-            &self.pages
+            // SAFETY: A page caches its resources in a `OnceLock`, which makes `Pages`
+            // invariant over its lifetime, so the 'static lifetime has to be rewritten
+            // explicitly. This is sound because a page only ever caches objects it read
+            // from `xref`, which lives as long as `self`.
+            unsafe { core::mem::transmute::<&Pages<'static>, &Pages<'_>>(&self.pages) }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::object::Rect;
+    use crate::page::Rotation;
+    use crate::pdf::Pdf;
+
+    /// A document of the given objects, numbered from 1, with a valid xref table.
+    fn document(objects: &[&str]) -> Vec<u8> {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", index + 1).as_bytes());
+        }
+
+        let xref_pos = pdf.len();
+        let size = objects.len() + 1;
+        pdf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \r\n").as_bytes());
+        for offset in offsets {
+            pdf.extend_from_slice(format!("{offset:010} 00000 n \r\n").as_bytes());
+        }
+        pdf.extend_from_slice(
+            format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF")
+                .as_bytes(),
+        );
+
+        pdf
+    }
+
+    fn coords(rect: Rect) -> (f64, f64, f64, f64) {
+        (rect.x0, rect.y0, rect.x1, rect.y1)
+    }
+
+    #[test]
+    fn page_attributes_are_inherited_or_overridden() {
+        let pdf = Pdf::new(document(&[
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 200 100] /Rotate 90 \
+             /Resources << /Font << /F1 5 0 R >> >> >>",
+            "<< /Type /Page /Parent 2 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /CropBox [10 10 50 50] /Rotate 0 /Resources 6 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            "<< /XObject << /X1 7 0 R >> >>",
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 1 1] /Length 0 >>\nstream\n\nendstream",
+        ]))
+        .unwrap();
+        let pages = pdf.pages();
+        assert_eq!(pages.len(), 2);
+
+        let inheriting = &pages[0];
+        assert_eq!(coords(inheriting.media_box()), (0.0, 0.0, 200.0, 100.0));
+        assert_eq!(coords(inheriting.crop_box()), (0.0, 0.0, 200.0, 100.0));
+        assert!(matches!(inheriting.rotation(), Rotation::Horizontal));
+        assert!(inheriting.resources().fonts.contains_key(b"F1"));
+        assert!(inheriting.resources().x_objects.is_empty());
+
+        let overriding = &pages[1];
+        assert_eq!(coords(overriding.media_box()), (0.0, 0.0, 200.0, 100.0));
+        assert_eq!(coords(overriding.crop_box()), (10.0, 10.0, 50.0, 50.0));
+        assert!(matches!(overriding.rotation(), Rotation::None));
+        assert!(overriding.resources().fonts.is_empty());
+        assert!(overriding.resources().x_objects.contains_key(b"X1"));
     }
 }
