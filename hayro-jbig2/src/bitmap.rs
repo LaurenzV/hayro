@@ -54,6 +54,23 @@ impl Bitmap {
         Self::new_with(width, height, 0, 0, false)
     }
 
+    pub(crate) fn new_wide(width: u32, height: u32) -> Result<Self> {
+        if u64::from(width) * u64::from(height) > u64::from(MAX_DIMENSION).pow(2) {
+            bail!(OverflowError::BitmapDimension);
+        }
+
+        let stride = width.div_ceil(WORD_BITS);
+
+        Ok(Self {
+            width,
+            height,
+            stride,
+            data: vec![0; stride as usize * height as usize],
+            x_location: 0,
+            y_location: 0,
+        })
+    }
+
     /// Create a new bitmap with full configuration.
     pub(crate) fn new_with(
         width: u32,
@@ -69,14 +86,20 @@ impl Bitmap {
         let stride = width.div_ceil(WORD_BITS);
         let default_word: Word = if default_pixel { !0 } else { 0 };
         let data = vec![default_word; stride as usize * height as usize];
-        Ok(Self {
+        let mut bitmap = Self {
             width,
             height,
             stride,
             data,
             x_location,
             y_location,
-        })
+        };
+
+        if default_pixel {
+            bitmap.clear_padding();
+        }
+
+        Ok(bitmap)
     }
 
     pub(crate) fn reinitialize(
@@ -100,7 +123,25 @@ impl Bitmap {
         self.data
             .resize(stride as usize * height as usize, default_word);
 
+        if default_pixel {
+            self.clear_padding();
+        }
+
         Ok(())
+    }
+
+    fn clear_padding(&mut self) {
+        let trailing = self.width % WORD_BITS;
+        if trailing == 0 {
+            return;
+        }
+
+        let mask: Word = !0 << (WORD_BITS - trailing);
+        for row in self.data.chunks_exact_mut(self.stride as usize) {
+            if let Some(last) = row.last_mut() {
+                *last &= mask;
+            }
+        }
     }
 
     /// Get a pixel value at (x, y).
@@ -137,7 +178,7 @@ impl Bitmap {
         // TODO: Figure out how we can optimize this, especially since this is a
         // bottleneck for symbols/patterns.
         let dest_x_start = x.max(0);
-        let dest_x_end = (x + other.width as i32).min(self.width as i32);
+        let dest_x_end = x.saturating_add(other.width as i32).min(self.width as i32);
 
         if dest_x_start >= dest_x_end {
             return;
@@ -147,13 +188,12 @@ impl Bitmap {
         let dest_x_start = dest_x_start as u32;
         let dest_x_end = dest_x_end as u32;
 
-        for src_y in 0..other.height {
-            let dest_y = y + src_y as i32;
-            if dest_y < 0 || dest_y >= self.height as i32 {
-                continue;
-            }
+        let src_height = i64::from(other.height);
+        let src_y_start = (-i64::from(y)).clamp(0, src_height) as u32;
+        let src_y_end = (i64::from(self.height) - i64::from(y)).clamp(0, src_height) as u32;
 
-            let dest_y = dest_y as u32;
+        for src_y in src_y_start..src_y_end {
+            let dest_y = (i64::from(y) + i64::from(src_y)) as u32;
 
             let first_word = dest_x_start / WORD_BITS;
             let last_word = (dest_x_end - 1) / WORD_BITS;
@@ -211,5 +251,19 @@ impl Bitmap {
         }
 
         self.data[(row * self.stride + word_idx) as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combine_far_away() {
+        let mut page = Bitmap::new(8, 8).unwrap();
+        let region = Bitmap::new_with(8, 8, 0, 0, true).unwrap();
+        page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or);
+        page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or);
+        assert!(page.data.iter().all(|&w| w == 0));
     }
 }

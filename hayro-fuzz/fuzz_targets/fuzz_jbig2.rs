@@ -3,13 +3,10 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    if let Ok(image) = hayro_jbig2::Image::new(data) {
-        struct NullDecoder;
-        impl hayro_jbig2::Decoder for NullDecoder {
-            fn push_pixel(&mut self, _black: bool) {}
-            fn push_pixel_chunk(&mut self, _black: bool, _chunk_count: u32) {}
-            fn next_line(&mut self) {}
+    if let Ok(file) = hayro_jbig2::File::new(data, &hayro_jbig2::DecodeSettings::default()) {
+        let mut ctx = hayro_jbig2::DecoderContext::default();
+        for page in file.pages() {
+            let _ = page.decode(&mut ctx);
         }
-        let _ = image.decode(&mut NullDecoder);
     }
 });

@@ -37,10 +37,12 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 16] {
 
     message.extend_from_slice(&(original_len as u64 * 8).to_le_bytes());
 
-    for chunk in message.chunks_exact(64) {
+    for chunk in message.as_chunks::<64>().0 {
         let words: Vec<u32> = chunk
-            .chunks_exact(4)
-            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|bytes| u32::from_le_bytes(*bytes))
             .collect();
 
         let mut working_vars = state;

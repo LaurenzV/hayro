@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
@@ -40,17 +40,7 @@ jobs:
         with:
           targets: thumbv6m-none-eabi
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p hayro-ccitt --target thumbv6m-none-eabi
+      - run: cargo check -p hayro-ccitt --no-default-features --target thumbv6m-none-eabi
       - run: cargo check -p hayro-jbig2 --no-default-features --target thumbv6m-none-eabi
       - run: cargo check -p hayro-jpeg2000 --no-default-features --target thumbv6m-none-eabi
       - run: cargo check -p hayro-syntax --no-default-features --target thumbv6m-none-eabi
-    
-
-  load_tests:
-    name: Run CI tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.92.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p hayro-tests -- "load::"

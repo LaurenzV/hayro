@@ -7,15 +7,15 @@ use hayro_interpret::font::GlyphRun;
 use hayro_interpret::{
     BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageData, ImageDrawProps,
     InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
+    kurbo::{Affine, BezPath, Rect},
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
-use kurbo::{Affine, BezPath, Rect};
 use std::path::PathBuf;
 
 fn main() {
     let data = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/image_rgb8.pdf"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/pdfs/custom/image_rgb8.pdf"),
     )
     .unwrap();
 

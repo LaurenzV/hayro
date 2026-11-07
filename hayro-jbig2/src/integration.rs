@@ -5,12 +5,12 @@ use std::{
     io::{BufRead, Seek},
 };
 
-use crate::Image;
+use crate::{DecodeSettings, DecoderContext, File, FormatError, Page};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
 
-impl ImageDecoder for Image<'_> {
+impl ImageDecoder for Page<'_> {
     fn dimensions(&self) -> (u32, u32) {
         (self.width(), self.height())
     }
@@ -35,30 +35,9 @@ impl ImageDecoder for Image<'_> {
     }
 }
 
-fn decode_into_buf(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    struct LumaDecoder<'a> {
-        buf: &'a mut [u8],
-        pos: usize,
-    }
-
-    impl crate::Decoder for LumaDecoder<'_> {
-        fn push_pixel(&mut self, black: bool) {
-            self.buf[self.pos] = if black { 0 } else { 255 };
-            self.pos += 1;
-        }
-
-        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-            let luma = if black { 0 } else { 255 };
-            let count = chunk_count as usize * 8;
-            self.buf[self.pos..self.pos + count].fill(luma);
-            self.pos += count;
-        }
-
-        fn next_line(&mut self) {}
-    }
-
-    let mut decoder = LumaDecoder { buf, pos: 0 };
-    image.decode(&mut decoder)?;
+fn decode_into_buf(page: &Page<'_>, buf: &mut [u8]) -> ImageResult<()> {
+    let mut ctx = DecoderContext::default();
+    page.decode(&mut ctx)?.store_u8_into(buf);
 
     Ok(())
 }
@@ -78,11 +57,12 @@ impl Jbig2Decoder {
         let mut r = r;
         r.read_to_end(&mut input)?;
 
-        let image = Image::new(&input)?;
+        let file = File::new(&input, &DecodeSettings::default())?;
+        let page = first_page(&file)?;
 
         Ok(Self {
-            width: image.width(),
-            height: image.height(),
+            width: page.width(),
+            height: page.height(),
             input,
         })
     }
@@ -105,14 +85,18 @@ impl ImageDecoder for Jbig2Decoder {
     where
         Self: Sized,
     {
-        let image = Image::new(&self.input)?;
-        decode_into_buf(&image, buf)
+        let file = File::new(&self.input, &DecodeSettings::default())?;
+        decode_into_buf(&first_page(&file)?, buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        let image = Image::new(&self.input)?;
-        decode_into_buf(&image, buf)
+        let file = File::new(&self.input, &DecodeSettings::default())?;
+        decode_into_buf(&first_page(&file)?, buf)
     }
+}
+
+fn first_page<'a>(file: &'a File<'_>) -> Result<Page<'a>, crate::DecodeError> {
+    file.page(0).ok_or(FormatError::MissingPageInfo.into())
 }
 
 impl From<crate::DecodeError> for DecodingError {

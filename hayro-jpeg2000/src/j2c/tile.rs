@@ -4,7 +4,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::build::{PrecinctData, SubBandType};
-use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
+use super::codestream::{
+    ComponentInfo, Header, ProgressionChange, ProgressionOrder, markers, skip_marker_segment,
+};
 use super::rect::IntRect;
 use crate::error::{MarkerError, Result, TileError, ValidationError, bail, err};
 use crate::j2c::codestream;
@@ -13,8 +15,6 @@ use crate::reader::BitReader;
 /// A single tile in the image.
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    /// The index of the tile, in row-major order.
-    pub(crate) idx: u32,
     /// The concatenated tile parts that contain all the information for all
     /// constituent codeblocks.
     pub(crate) tile_parts: Vec<TilePart<'a>>,
@@ -26,6 +26,9 @@ pub(crate) struct Tile<'a> {
     /// exclusive.
     pub(crate) rect: IntRect,
     pub(crate) progression_order: ProgressionOrder,
+    /// The progression order changes from the tile-part headers. If there
+    /// are any, they override the ones from the main header.
+    pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) num_layers: u8,
     pub(crate) mct: bool,
 }
@@ -75,7 +78,7 @@ impl<'a> TilePart<'a> {
 }
 
 impl<'a> Tile<'a> {
-    fn new(idx: u32, header: &Header<'_>) -> Self {
+    fn new(idx: u32, header: &Header) -> Self {
         let rect = {
             let size_data = &header.size_data;
 
@@ -108,7 +111,6 @@ impl<'a> Tile<'a> {
         };
 
         Tile {
-            idx,
             // Will be filled once we start parsing.
             tile_parts: vec![],
             rect,
@@ -117,6 +119,7 @@ impl<'a> Tile<'a> {
             // might be overridden.
             component_infos: header.component_infos.clone(),
             progression_order: header.global_coding_style.progression_order,
+            progression_changes: vec![],
             mct: header.global_coding_style.mct,
             num_layers: header.global_coding_style.num_layers,
         }
@@ -132,7 +135,7 @@ impl<'a> Tile<'a> {
 /// Create the tiles and parse their constituent tile parts.
 pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header<'a>,
+    main_header: &'a Header,
 ) -> Result<Vec<Tile<'a>>> {
     let tile_count = main_header.size_data.num_tiles()?;
     let mut tiles = (0..tile_count)
@@ -158,7 +161,7 @@ pub(crate) fn parse<'a>(
 
 fn parse_tile_part<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header<'a>,
+    main_header: &'a Header,
     tiles: &mut [Tile<'a>],
     tile_part_idx: usize,
 ) -> Result<()> {
@@ -190,6 +193,17 @@ fn parse_tile_part<'a>(
     let mut ppt_headers = vec![];
 
     loop {
+        // Tile-parts need to contain at least an SOD marker (see Table A.5),
+        // but some files contain tile-parts that only consist of the SOT
+        // marker segment. Those don't contain any data and can be skipped.
+        if reader.offset() - start >= data_len {
+            return if main_header.strict {
+                err!(MarkerError::Expected("SOD"))
+            } else {
+                Ok(())
+            };
+        }
+
         let Some(marker) = reader.peek_marker() else {
             return if main_header.strict {
                 err!(MarkerError::Invalid)
@@ -259,6 +273,24 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
                 ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::ParseFailure("PPT"))?);
             }
+            markers::RGN => {
+                reader.read_marker()?;
+                let (component_index, roi_shift) =
+                    codestream::rgn_marker(reader, num_components as u16)
+                        .ok_or(MarkerError::ParseFailure("RGN"))?;
+
+                tile.component_infos
+                    .get_mut(component_index as usize)
+                    .ok_or(ValidationError::InvalidComponentMetadata)?
+                    .roi_shift = roi_shift;
+            }
+            markers::POC => {
+                reader.read_marker()?;
+                tile.progression_changes.extend(
+                    codestream::poc_marker(reader, num_components as u16)
+                        .ok_or(MarkerError::ParseFailure("POC"))?,
+                );
+            }
             markers::PLT => {
                 // Can be inferred ourselves.
                 reader.read_marker()?;
@@ -291,16 +323,24 @@ fn parse_tile_part<'a>(
         };
     };
 
-    ppt_headers.sort_by(|p1, p2| p1.sequence_idx.cmp(&p2.sequence_idx));
+    ppt_headers.sort_by_key(|p1| p1.sequence_idx);
     let mut headers: Vec<_> = ppt_headers.iter().map(|i| BitReader::new(i.data)).collect();
 
     if let Some(ppm_marker) = main_header.ppm_packets.get(tile_part_idx) {
-        headers.push(BitReader::new(ppm_marker.data));
+        headers.push(BitReader::new(ppm_marker));
     }
 
-    let data = reader
-        .read_bytes(remaining_bytes)
-        .ok_or(TileError::Invalid)?;
+    let data = match reader.read_bytes(remaining_bytes) {
+        Some(data) => data,
+        // The codestream might be truncated, in which case we decode as much
+        // as is available.
+        None if !main_header.strict => {
+            let data = reader.tail().ok_or(TileError::Invalid)?;
+            reader.jump_to_end();
+            data
+        }
+        None => bail!(TileError::Invalid),
+    };
 
     let tile_part = if !headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {
@@ -607,14 +647,14 @@ impl<'a> ResolutionTile<'a> {
         // as the start of the precinct, but instead have to advance to the
         // next multiple.
         if !r_x.is_multiple_of(precinct_x_step)
-            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(precinct_x_step)
+            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
         {
             r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
         }
 
         // Same as above.
         if !r_y.is_multiple_of(precinct_y_step)
-            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(precinct_y_step)
+            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
         {
             r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
         }
@@ -767,6 +807,7 @@ mod tests {
             size_info: component_size_info_0,
             coding_style: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
+            roi_shift: 0,
         };
 
         let component_size_info_1 = ComponentSizeInfo {
@@ -779,6 +820,7 @@ mod tests {
             size_info: component_size_info_1,
             coding_style: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
+            roi_shift: 0,
         };
 
         let size_data = SizeData {
@@ -826,6 +868,7 @@ mod tests {
             },
             component_infos: vec![],
             ppm_packets: vec![],
+            progression_changes: vec![],
             skipped_resolution_levels: 0,
             strict: false,
         };

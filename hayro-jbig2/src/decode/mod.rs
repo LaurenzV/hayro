@@ -9,7 +9,7 @@ pub(crate) mod text;
 
 use crate::bitmap::Bitmap;
 use crate::decode::RefinementTemplate::{Template0, Template1};
-use crate::error::{ParseError, RegionError, Result, bail, err};
+use crate::error::{DecodeError, ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -136,9 +136,6 @@ pub(crate) struct RegionSegmentInfo {
     pub(crate) y_location: u32,
     /// "Bits 0-2: External combination operator." (7.4.1.5)
     pub(crate) combination_operator: CombinationOperator,
-    /// "Bit 3: Colour extension flag (COLEXTFLAG). This field specifies whether
-    /// the region segment is extended to represent coloured bitmap." (7.4.1.5)
-    pub(crate) _colour_extension: bool,
 }
 
 /// Parse the region segment information field (7.4.1).
@@ -159,11 +156,8 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
     let combination_operator = CombinationOperator::from_value(flags)?;
 
     // "Bit 3: Colour extension flag (COLEXTFLAG)."
-    let colour_extension = flags & 0x08 != 0;
-
-    // "Bits 4-7: Reserved; must be 0."
-    if flags & 0xF0 != 0 {
-        bail!(RegionError::InvalidCombinationOperator);
+    if flags & 0x08 != 0 {
+        bail!(DecodeError::Unsupported);
     }
 
     Ok(RegionSegmentInfo {
@@ -172,7 +166,6 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
         x_location,
         y_location,
         combination_operator,
-        _colour_extension: colour_extension,
     })
 }
 

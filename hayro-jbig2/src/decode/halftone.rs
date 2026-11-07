@@ -63,6 +63,7 @@ pub(crate) fn decode_into(
         height: header.grid_position_and_size.height,
         template: header.flags.template,
         skip_mask: skip_bitmap.as_deref(),
+        strict: header.strict,
     };
     let gi = decode_gray_scale_image(header.data, &gs_params, ctx)?;
 
@@ -74,10 +75,11 @@ pub(crate) fn decode_into(
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
-pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<'a>> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<HalftoneRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags_byte & 0x01 != 0;
+
     let template = Template::from_byte(flags_byte >> 1);
     let enable_skip = flags_byte & 0x08 != 0;
     let combination_operator = CombinationOperator::from_value(flags_byte >> 4)?;
@@ -97,8 +99,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<
     if grid_width > MAX_DIMENSION || grid_height > MAX_DIMENSION {
         bail!(OverflowError::GridDimension);
     }
-
-    // TODO: Check grid offsets as well.
 
     let grid_horizontal_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
     let grid_vertical_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
@@ -126,6 +126,7 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<
         grid_position_and_size,
         grid_vector,
         data,
+        strict,
     })
 }
 
@@ -165,6 +166,7 @@ pub(crate) struct HalftoneRegionHeader<'a> {
     pub(crate) grid_position_and_size: HalftoneGridPositionAndSize,
     pub(crate) grid_vector: HalftoneGridVector,
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 struct GridCoords {
@@ -274,24 +276,24 @@ fn render_patterns(
     };
 
     macro_rules! blit_rows {
-        ($data:expr, $shifted:expr, $yu:expr, $first_word:expr, $two:expr,
+        ($data:expr, $pattern:expr, $offset:expr, $yu:expr, $first_word:expr, $two:expr,
          |$d0:ident, $s0:ident| $op0:expr, |$d1:ident, $s1:ident| $op1:expr) => {
             if $two {
                 for row in 0..ph {
                     let base = (($yu + row) * stride + $first_word) as usize;
-                    let si = row as usize * 2;
+                    let word = $pattern[row as usize];
                     let $d0 = $data[base];
-                    let $s0 = $shifted[si];
+                    let $s0 = word >> $offset;
                     $data[base] = $op0;
                     let $d1 = $data[base + 1];
-                    let $s1 = $shifted[si + 1];
+                    let $s1 = word << (WORD_BITS - $offset);
                     $data[base + 1] = $op1;
                 }
             } else {
                 for row in 0..ph {
                     let base = (($yu + row) * stride + $first_word) as usize;
                     let $d0 = $data[base];
-                    let $s0 = $shifted[row as usize * 2];
+                    let $s0 = $pattern[row as usize] >> $offset;
                     $data[base] = $op0;
                 }
             }
@@ -305,36 +307,38 @@ fn render_patterns(
         for _ in 0..grid.width {
             let (x, y) = coords.get();
 
-            let pattern_index = gi[gi_idx] as usize;
+            let gray_value = gi[gi_idx] as usize;
             gi_idx += 1;
 
-            if pattern_index >= num_patterns {
+            if header.strict && gray_value >= num_patterns {
                 bail!(RegionError::GrayScaleOutOfRange);
             }
 
-            // Check whether we can use the blit fast path.
-            let shifted =
-                if x >= 0 && y >= 0 && x + pw as i32 <= region_w && y + ph as i32 <= region_h {
-                    pattern_dict.shifted_pattern(pattern_index, x as u32 % WORD_BITS)
-                } else {
-                    None
-                };
+            let pattern_index = gray_value.min(num_patterns - 1);
 
-            if let Some(shifted) = shifted {
+            let pattern = &pattern_dict.patterns[pattern_index];
+
+            // Patterns that are at most one word wide and lie inside the region
+            // can be blitted row by row.
+            if pw <= WORD_BITS
+                && x >= 0
+                && y >= 0
+                && x + pw as i32 <= region_w
+                && y + ph as i32 <= region_h
+            {
+                let pattern = &pattern.data;
                 let xu = x as u32;
                 let yu = y as u32;
                 let first_word = xu / WORD_BITS;
                 let offset = xu % WORD_BITS;
                 let two = offset != 0 && first_word + 1 < stride;
 
-                // TODO: It seems our current test suite only triggers for
-                // `Or`.
-
                 match op {
                     CombinationOperator::Or => {
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -345,7 +349,8 @@ fn render_patterns(
                     CombinationOperator::Xor => {
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -362,7 +367,8 @@ fn render_patterns(
                         };
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -379,7 +385,8 @@ fn render_patterns(
                         };
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -398,7 +405,8 @@ fn render_patterns(
                         let inv_mask1 = !mask1;
                         blit_rows!(
                             region.data,
-                            shifted,
+                            pattern,
+                            offset,
                             yu,
                             first_word,
                             two,
@@ -408,7 +416,6 @@ fn render_patterns(
                     }
                 }
             } else {
-                let pattern = &pattern_dict.patterns[pattern_index];
                 region.combine(pattern, x, y, op);
             }
 

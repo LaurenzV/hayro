@@ -37,20 +37,19 @@ use crate::content::ops::TypedInstruction;
 use crate::object;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
-use crate::object::{Array, Null, Number, Object, Stream};
+use crate::object::{Array, Number, Object, Stream};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use crate::trivia::is_white_space_character;
+use crate::trivia::{is_regular_character, is_white_space_character};
 use crate::util::find_needle;
-use core::array;
+use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
-// 6 operands are used for example for ctm or cubic curves,
-// but anything above should be pretty rare (only for example for
-// DeviceN color spaces, or invalid PDF files). So we settle on 10.
-const OPERANDS_THRESHOLD: usize = 10;
+// `scn` with 32 DeviceN components and a pattern name.
+const OPERANDS_THRESHOLD: usize = 33;
+const INLINE_COLOR_COMPONENTS: usize = 4;
 
 impl Debug for Operator<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -85,20 +84,29 @@ impl Skippable for Operator<'_> {
 impl<'a> Readable<'a> for Operator<'a> {
     fn read(r: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
-        skip_name_like(r, false)?;
-        let end = r.offset();
-        let data = r.range(start..end)?;
+        let mut escaped = false;
+        while let Some(b) = r.peek_byte().filter(|b| is_regular_character(*b)) {
+            escaped |= b == b'#';
+            r.forward();
+        }
 
+        let data = r.range(start..r.offset())?;
         if data.is_empty() {
             return None;
         }
 
-        Some(Self(Name::new(data)?))
+        let name = if escaped {
+            Name::new_escaped(data)?
+        } else {
+            Name::new_unescaped(data)
+        };
+
+        Some(Self(name))
     }
 }
 
 /// An iterator over operators in the PDF content streams, providing raw access to the instructions.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
@@ -128,189 +136,261 @@ impl<'a> UntypedIter<'a> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
         self.stack.clear();
-        self.operator = None;
 
-        self.reader.skip_white_spaces_and_comments();
+        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        self.operator = Some(operator);
+        Some(Instruction {
+            operands: &self.stack,
+            operator: self.operator.as_ref().unwrap(),
+        })
+    }
+}
 
-        while !self.reader.at_end() {
-            // I believe booleans/null never appear as an operator?
-            if matches!(
-                self.reader.peek_byte()?,
-                b'/' | b'.' | b'+' | b'-' | b'0'..=b'9' | b'[' | b'<' | b'('
-            ) {
-                // See issue 994. In all sane scenarios, if the next byte is a number
-                // it has to be an operand (a number). However, it's possible that
-                // the number is followed by a regular character, in which case it
-                // should behave more like an operator (even though there exists
-                // no operator that starts with a number). In order to preserve
-                // similar behavior to Acrobat and Chromium, we try to consume
-                // such an operator and then simply skip it.
-                if let Some(object) = self.reader.read_without_context::<Object<'_>>() {
-                    self.stack.push(object)?;
-                } else if self.reader.read_without_context::<Operator<'_>>().is_some() {
-                    self.stack.clear();
-                } else {
-                    return None;
-                }
-            } else {
-                let operator = match self.reader.read_without_context::<Operator<'_>>() {
-                    Some(o) => o,
-                    None => {
-                        warn!("failed to read operator in content stream");
+fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Operator<'a>> {
+    // Keeps the read position in a register; must be written back before calling out.
+    let mut cur = r.clone();
 
-                        self.reader.jump_to_end();
+    loop {
+        cur.skip_white_spaces_and_comments();
+
+        let Some(first) = cur.peek_byte() else {
+            *r = cur;
+            return None;
+        };
+
+        if matches!(first, b'.' | b'+' | b'-' | b'0'..=b'9') {
+            let start = cur.offset();
+            match Number::read_simple(&mut cur) {
+                Some(number) => {
+                    if stack.push(Object::Number(number)).is_none() {
+                        *r = cur;
                         return None;
                     }
+                    continue;
+                }
+                None => cur.jump(start),
+            }
+        }
+
+        match first {
+            // I believe booleans/null never appear as an operator?
+            b'.' | b'+' | b'-' | b'0'..=b'9' | b'/' | b'[' | b'<' | b'(' => {
+                *r = cur;
+                read_operand(r, stack)?;
+                cur = r.clone();
+            }
+            _ => {
+                *r = cur;
+                let Some(operator) = r.read_without_context::<Operator<'a>>() else {
+                    r.jump_to_end();
+                    return None;
                 };
 
                 // Inline images need special casing...
                 if operator.as_ref() == b"BI" {
-                    // The ID operator will already be consumed by this.
-                    let inline_dict = self.reader.read_without_context::<InlineImageDict<'_>>()?;
-                    let dict = inline_dict.get_dict().clone();
+                    read_inline_image(r, stack)?;
+                }
 
-                    // One whitespace after "ID".
-                    self.reader.read_white_space()?;
+                return Some(operator);
+            }
+        }
+    }
+}
 
-                    let stream_data = self.reader.tail()?;
-                    let start_offset = self.reader.offset();
+fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
+    // See issue 994. In all sane scenarios, if the next byte is a number
+    // it has to be an operand (a number). However, it's possible that
+    // the number is followed by a regular character, in which case it
+    // should behave more like an operator (even though there exists
+    // no operator that starts with a number). In order to preserve
+    // similar behavior to Acrobat and Chromium, we try to consume
+    // such an operator and then simply skip it.
+    if let Some(object) = r.read_without_context::<Object<'a>>() {
+        stack.push(object)
+    } else if r.read_without_context::<Operator<'a>>().is_some() {
+        stack.clear();
+        Some(())
+    } else {
+        None
+    }
+}
 
-                    'outer: while let Some(pos) = find_needle(self.reader.tail()?, b"EI") {
-                        self.reader.read_bytes(pos)?;
+fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
+    // The ID operator will already be consumed by this.
+    let inline_dict = r.read_without_context::<InlineImageDict<'_>>()?;
+    let dict = inline_dict.get_dict().clone();
 
-                        if self.reader.peek_bytes(2) == Some(b"EI") {
-                            // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
-                            if self
-                                .reader
-                                .peek_bytes(3)
-                                .is_some_and(|b| !is_white_space_character(b[2]))
-                            {
-                                self.reader.read_bytes(3)?;
+    // One whitespace after "ID".
+    r.read_white_space()?;
 
-                                continue;
-                            }
+    let stream_data = r.tail()?;
+    let start_offset = r.offset();
 
-                            let end_offset = self.reader.offset() - start_offset;
-                            let image_data = &stream_data[..end_offset];
+    'outer: while let Some(pos) = find_needle(r.tail()?, b"EI") {
+        r.read_bytes(pos)?;
 
-                            let stream = Stream::new(image_data, dict.clone());
+        if r.peek_bytes(2) == Some(b"EI") {
+            // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
+            if r.peek_bytes(3)
+                .is_some_and(|b| !is_white_space_character(b[2]))
+            {
+                r.read_bytes(3)?;
 
-                            // Note that there is a possibility that the encoded stream data
-                            // contains the "EI" operator as part of the data, in which case we
-                            // cannot confidently know whether we have hit the actual end of the
-                            // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
-                            // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
-                            // new we don't bother trying to read it.
-                            let tail = &self.reader.tail()?[2..];
-                            let mut find_reader = Reader::new(tail);
+                continue;
+            }
 
-                            while !find_reader.at_end() {
-                                let remaining = find_reader.tail()?;
-                                let next_ei = find_needle(remaining, b"EI");
-                                let next_bi = find_needle(remaining, b"BI");
+            let end_offset = r.offset() - start_offset;
+            let image_data = &stream_data[..end_offset];
 
-                                let (next_pos, is_ei) = match (next_ei, next_bi) {
-                                    (Some(ei), Some(bi)) if ei <= bi => (ei, true),
-                                    (Some(_), Some(bi)) => (bi, false),
-                                    (Some(ei), None) => (ei, true),
-                                    (None, Some(bi)) => (bi, false),
-                                    (None, None) => break,
-                                };
+            let stream = Stream::new(image_data, dict.clone());
 
-                                find_reader.read_bytes(next_pos)?;
+            // Note that there is a possibility that the encoded stream data
+            // contains the "EI" operator as part of the data, in which case we
+            // cannot confidently know whether we have hit the actual end of the
+            // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
+            // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
+            // new we don't bother trying to read it.
+            let tail = &r.tail()?[2..];
+            let mut find_reader = Reader::new(tail);
+            let mut binary = BinaryTracker::default();
+            let mut is_content = None;
+            let mut next_bi = find_needle(tail, b"BI");
 
-                                if is_ei {
-                                    let analyze_data = &tail[..find_reader.offset()];
+            while !find_reader.at_end() {
+                let offset = find_reader.offset();
 
-                                    // If there is any binary data in-between, we for sure
-                                    // have not reached the end.
-                                    if analyze_data.iter().any(|c| !c.is_ascii()) {
-                                        self.reader.read_bytes(2)?;
-                                        continue 'outer;
-                                    }
+                if next_bi.is_some_and(|bi| bi < offset) {
+                    next_bi = find_needle(&tail[offset..], b"BI").map(|bi| offset + bi);
+                }
 
-                                    // Otherwise, the only possibility that we reached an
-                                    // "EI", even though the previous one was valid, is
-                                    // that it's part of a string in the content
-                                    // stream that follows the inline image. Therefore,
-                                    // it should be valid to interpret `tail` as a content
-                                    // stream and there should be at least one text-related
-                                    // operator that can be parsed correctly.
+                let next_ei = find_needle(&tail[offset..], b"EI").map(|ei| offset + ei);
 
-                                    let mut iter = TypedIter::new(tail);
-                                    let mut found = false;
-                                    let mut counter = 0;
+                let (next_pos, is_ei) = match (next_ei, next_bi) {
+                    (Some(ei), Some(bi)) if ei <= bi => (ei, true),
+                    (Some(_), Some(bi)) => (bi, false),
+                    (Some(ei), None) => (ei, true),
+                    (None, Some(bi)) => (bi, false),
+                    (None, None) => break,
+                };
 
-                                    while let Some(op) = iter.next() {
-                                        // If we have read more than 20 valid operators, it should be
-                                        // safe to assume that we are in a content stream, so abort
-                                        // early. The only situation where this could reasonably
-                                        // be violated is if we have 20 subsequent instances of
-                                        // q/Q in the image data, which seems very unlikely.
-                                        if counter >= 20 {
-                                            found = true;
-                                            break;
-                                        }
+                find_reader.read_bytes(next_pos - offset)?;
 
-                                        if matches!(
-                                            op,
-                                            TypedInstruction::NextLineAndShowText(_)
-                                                | TypedInstruction::ShowText(_)
-                                                | TypedInstruction::ShowTexts(_)
-                                                | TypedInstruction::ShowTextWithParameters(_)
-                                        ) {
-                                            // Now it should be safe to assume that the
-                                            // previous `EI` was the correct one.
-                                            found = true;
-                                            break;
-                                        }
+                if is_ei {
+                    // If there is any binary data in-between, we for sure
+                    // have not reached the end.
+                    if binary.found_before(tail, next_pos) {
+                        r.read_bytes(2)?;
+                        continue 'outer;
+                    }
 
-                                        counter += 1;
-                                    }
-
-                                    if !found {
-                                        // Seems like the data in-between is not a valid content
-                                        // stream, so we are likely still within the image data.
-                                        self.reader.read_bytes(2)?;
-                                        continue 'outer;
-                                    }
-                                } else {
-                                    // Possibly another inline image, if so, the previously found "EI"
-                                    // is indeed the end of data.
-                                    let mut cloned = find_reader.clone();
-                                    cloned.read_bytes(2)?;
-                                    if cloned
-                                        .read_without_context::<InlineImageDict<'_>>()
-                                        .is_some()
-                                    {
-                                        break;
-                                    }
-                                }
-
-                                find_reader.read_byte()?;
-                            }
-
-                            self.stack.push(Object::Stream(stream))?;
-
-                            self.reader.read_bytes(2)?;
-                            self.reader.skip_white_spaces();
-
-                            break;
-                        }
+                    // Otherwise, the only possibility that we reached an
+                    // "EI", even though the previous one was valid, is
+                    // that it's part of a string in the content
+                    // stream that follows the inline image. Therefore,
+                    // it should be valid to interpret `tail` as a content
+                    // stream.
+                    if !*is_content.get_or_insert_with(|| starts_with_content(tail)) {
+                        // Seems like the data in-between is not a valid content
+                        // stream, so we are likely still within the image data.
+                        r.read_bytes(2)?;
+                        continue 'outer;
+                    }
+                } else {
+                    // Possibly another inline image, if so, the previously found "EI"
+                    // is indeed the end of data.
+                    let mut cloned = find_reader.clone();
+                    cloned.read_bytes(2)?;
+                    if cloned
+                        .read_without_context::<InlineImageDict<'_>>()
+                        .is_some()
+                    {
+                        break;
                     }
                 }
 
-                self.operator = Some(operator);
-                return Some(Instruction {
-                    operands: &self.stack,
-                    operator: self.operator.as_ref().unwrap(),
-                });
+                find_reader.read_byte()?;
             }
 
-            self.reader.skip_white_spaces_and_comments();
+            stack.push(Object::Stream(stream))?;
+
+            r.read_bytes(2)?;
+            r.skip_white_spaces();
+
+            break;
+        }
+    }
+
+    Some(())
+}
+
+fn starts_with_content(data: &[u8]) -> bool {
+    let mut iter = TypedIter::new(data);
+    let mut counter = 0;
+
+    while let Some(op) = iter.next() {
+        // If we have read more than 20 valid operators, it should be
+        // safe to assume that we are in a content stream, so abort
+        // early. The only situation where this could reasonably
+        // be violated is if we have 20 subsequent instances of
+        // q/Q in the image data, which seems very unlikely.
+        if counter >= 20 {
+            return true;
         }
 
-        None
+        if matches!(
+            op,
+            TypedInstruction::NextLineAndShowText(_)
+                | TypedInstruction::ShowText(_)
+                | TypedInstruction::ShowTexts(_)
+                | TypedInstruction::ShowTextWithParameters(_)
+        ) {
+            return true;
+        }
+
+        counter += 1;
+    }
+
+    false
+}
+
+// Content streams only hold non-ASCII bytes within strings, so one outside
+// of them means that we are still within binary image data.
+#[derive(Default)]
+struct BinaryTracker {
+    pos: usize,
+    string_depth: usize,
+    escaped: bool,
+    found: bool,
+}
+
+impl BinaryTracker {
+    fn found_before(&mut self, data: &[u8], end: usize) -> bool {
+        if self.found || end <= self.pos {
+            return self.found;
+        }
+
+        for (i, &b) in data[self.pos..end].iter().enumerate() {
+            if self.string_depth > 0 {
+                if self.escaped {
+                    self.escaped = false;
+                } else if b == b'\\' {
+                    self.escaped = true;
+                } else if b == b'(' {
+                    self.string_depth += 1;
+                } else if b == b')' {
+                    self.string_depth -= 1;
+                }
+            } else if !b.is_ascii() {
+                self.found = true;
+                self.pos += i;
+                return true;
+            } else if b == b'(' {
+                self.string_depth = 1;
+            }
+        }
+
+        self.pos = end;
+        false
     }
 }
 
@@ -366,6 +446,7 @@ impl<'a> TypedIter<'a> {
 }
 
 /// An instruction (= operator and its operands) in a content stream.
+#[derive(Debug)]
 pub struct Instruction<'b, 'a> {
     /// The stack containing the operands.
     pub operands: &'b Stack<'a>,
@@ -381,11 +462,11 @@ impl<'b, 'a> Instruction<'b, 'a> {
 }
 
 /// A stack holding the arguments of an operator.
+#[derive(Clone, PartialEq)]
 pub struct Stack<'a> {
     // TODO: Explore using an object pool to avoid repeatedly
     // allocating/deallocating objects.
-    data: [Object<'a>; OPERANDS_THRESHOLD],
-    len: usize,
+    data: Vec<Object<'a>>,
 }
 
 impl<'a> Default for Stack<'a> {
@@ -397,32 +478,28 @@ impl<'a> Default for Stack<'a> {
 impl<'a> Stack<'a> {
     /// Create a new, empty stack.
     pub fn new() -> Self {
-        Self {
-            data: array::from_fn(|_| Object::Null(Null)),
-            len: 0,
-        }
+        Self { data: Vec::new() }
     }
 
     fn push(&mut self, operand: Object<'a>) -> Option<()> {
-        if self.len >= OPERANDS_THRESHOLD {
+        if self.data.len() >= OPERANDS_THRESHOLD {
             return None;
         }
 
-        self.data[self.len] = operand;
-        self.len += 1;
+        self.data.push(operand);
         Some(())
     }
 
     fn clear(&mut self) {
-        self.len = 0;
+        self.data.clear();
     }
 
     fn len(&self) -> usize {
-        self.len
+        self.data.len()
     }
 
     fn as_slice(&self) -> &[Object<'a>] {
-        &self.data[..self.len]
+        &self.data
     }
 
     fn get<'b, T>(&'b self, index: usize) -> Option<T>
@@ -432,7 +509,7 @@ impl<'a> Stack<'a> {
         self.as_slice().get(index).and_then(T::from_object)
     }
 
-    fn get_all<'b, T>(&'b self) -> Option<SmallVec<[T; OPERANDS_THRESHOLD]>>
+    fn get_all<'b, T>(&'b self) -> Option<SmallVec<[T; INLINE_COLOR_COMPONENTS]>>
     where
         T: Operand<'b, 'a>,
     {
@@ -450,22 +527,6 @@ impl<'a> Stack<'a> {
 impl Debug for Stack<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()
-    }
-}
-
-impl Clone for Stack<'_> {
-    fn clone(&self) -> Self {
-        let mut stack = Self::new();
-        for item in self.as_slice() {
-            stack.push(item.clone()).unwrap();
-        }
-        stack
-    }
-}
-
-impl PartialEq for Stack<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_slice() == other.as_slice()
     }
 }
 
@@ -554,8 +615,6 @@ impl<'b, 'a> Iterator for OperandIterator<'b, 'a> {
 }
 
 pub(crate) trait OperatorTrait<'b, 'a>: Sized {
-    const OPERATOR: &'static str;
-
     fn from_stack(stack: &'b Stack<'a>) -> Option<Self>;
 }
 
@@ -606,15 +665,9 @@ mod macros {
     macro_rules! op_impl {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr, $n:expr, |$stack:ident : $stack_ty:ty| $body:block) => {
             impl<'b, 'a> OperatorTrait<'b, 'a> for $t$(<$($l),+>)? {
-                const OPERATOR: &'static str = $e;
-
                 #[inline(always)]
                 fn from_stack($stack: $stack_ty) -> Option<Self> {
-                    $body.or_else(|| {
-                        warn!("failed to convert operands for operator {}", Self::OPERATOR);
-
-                        None
-                    })
+                    $body
                 }
             }
 

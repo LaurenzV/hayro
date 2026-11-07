@@ -1,6 +1,5 @@
 use crate::bit_reader::BitWriter;
 use crate::filter::FilterResult;
-use crate::math::round_f32;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
 use alloc::vec;
@@ -25,13 +24,18 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         resolve_palette_indices: false,
         strict: false,
         target_resolution: params.target_dimension,
+        cancel: None,
     };
 
     let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
 
     let width = image.width();
     let height = image.height();
-    let bpc = params.bpc.unwrap_or(image.original_bit_depth());
+    let bpc = if params.is_indexed {
+        params.bpc.unwrap_or(image.original_bit_depth())
+    } else {
+        8
+    };
     let cs = match image.color_space() {
         ColorSpace::Gray => ImageColorSpace::Gray,
         ColorSpace::RGB => ImageColorSpace::Rgb,
@@ -49,7 +53,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     };
     let has_alpha = image.has_alpha();
     let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
-    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8();
+    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8().ok()?;
 
     let (mut data, mut alpha) = if !has_alpha {
         (bitmap, None)
@@ -113,7 +117,7 @@ fn scale(
 
     for bytes in data.chunks_exact(components_per_row) {
         for byte in bytes {
-            let scaled = round_f32((*byte as f32 / div_factor) * mul_factor) as u32;
+            let scaled = ((*byte as f32 / div_factor) * mul_factor + 0.5) as u32;
             writer.write(scaled)?;
         }
 

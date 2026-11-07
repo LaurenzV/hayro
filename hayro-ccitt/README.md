@@ -11,12 +11,9 @@ This crate implements the CCITT Group 3 and Group 4 fax compression algorithms
 as defined in ITU-T Recommendations T.4 and T.6. These encodings are commonly
 used for bi-level (black and white) images in PDF documents and fax transmissions.
 
-The main entry point is the [`decode`] function, which takes the encoded data and a
-[`DecoderContext`], and outputs the decoded pixels through a [`Decoder`] trait
-that can be implemented according to your needs. For example, you could implement
-the trait such that the decoded pixels are written into a vector, but you could also
-configure it to instead print the pixels to standard output, without any intermediate
-allocations.
+The main entry point is the [`decode`] function, which takes encoded data, a
+[`DecoderContext`], and outputs each decoded row as a list of color changes
+through a [`Decoder`] trait that can be implemented according to your needs.
 
 The crate is `no_std` compatible but requires an allocator to be available.
 

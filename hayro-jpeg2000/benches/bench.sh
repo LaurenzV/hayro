@@ -1,1 +1,0 @@
-cargo bench -p hayro-jpeg2000 --bench decode -- --quick --warm-up-time 0.1 --measurement-time 0.5

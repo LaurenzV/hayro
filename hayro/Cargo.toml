@@ -1,6 +1,6 @@
 [package]
 name = "hayro"
-version = "0.7.0"
+version = "0.9.0"
 description = "A rasterizer for PDF files."
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -10,26 +10,22 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
+ab_glyph_rasterizer = { workspace = true }
 hayro-interpret = { workspace = true }
 kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
 bytemuck = { workspace = true, features = ["bytemuck_derive"] }
 vello_cpu = { workspace = true }
-pic-scale = { workspace = true }
+# We don't use `rdm` because it causes larger discrepancies between platforms.
+pic-scale = { workspace = true, features = ["neon", "sse", "avx"] }
 rustc-hash = { workspace = true }
 fearless_simd = { workspace = true }
 
-[dev-dependencies]
-log = { workspace = true }
-
 [features]
-default = ["embed-fonts", "embed-cmaps", "simd"]
+default = ["embed-fonts", "embed-cmaps"]
 embed-fonts = ["hayro-interpret/embed-fonts"]
 # Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["hayro-interpret/embed-cmaps"]
-logging = ["hayro-interpret/logging"]
-# Enable SIMD-accelerated image resizing in pic-scale.
-simd = ["pic-scale/neon", "pic-scale/rdm", "pic-scale/sse", "pic-scale/avx"]
 
 [lints]
 workspace = true

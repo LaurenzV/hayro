@@ -1,5 +1,10 @@
 //! Taken from the png crate, see <https://github.com/image-rs/image-png/blob/master/src/filter/paeth.rs>
 
+#![allow(
+    clippy::chunks_exact_to_as_chunks,
+    reason = "Kept identical to the code from the png crate"
+)]
+
 use super::BytesPerPixel;
 
 // This code path is used on non-x86_64 architectures but we allow dead code

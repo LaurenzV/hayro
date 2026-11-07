@@ -265,7 +265,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         for pixel in components.chunks_exact(num_components) {
             let mut value = 0;
 
-            for (component, min_max) in pixel.iter().zip(color_key_mask.chunks_exact(2)) {
+            for (component, min_max) in pixel.iter().zip(color_key_mask.as_chunks::<2>().0) {
                 if *component > min_max[1] || *component < min_max[0] {
                     value = 255;
                 }
@@ -290,7 +290,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
 fn unpremultiply(image: &mut ImageData, alpha: &[u8], matte_rgb: &[u8]) {
     match image {
         ImageData::Rgb(rgb) => {
-            for (pixel, &a) in rgb.data.chunks_exact_mut(3).zip(alpha.iter()) {
+            for (pixel, &a) in rgb.data.as_chunks_mut::<3>().0.iter_mut().zip(alpha.iter()) {
                 if a == 0 {
                     continue;
                 }

@@ -99,10 +99,9 @@ impl<'a> Dict<'a> {
     pub fn entries(&self) -> impl Iterator<Item = (Name<'a>, MaybeRef<Object<'a>>)> + '_ {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
-        sorted_keys.into_iter().map(|k| {
-            let obj = self.get_raw(k.deref()).unwrap();
-            (k, obj)
-        })
+        sorted_keys
+            .into_iter()
+            .filter_map(|k| self.get_raw(k.deref()).map(|obj| (k, obj)))
     }
 
     /// Return the object identifier of the dict, if it's an indirect object.
@@ -140,17 +139,8 @@ impl Debug for Dict<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let mut debug_struct = f.debug_struct("Dict");
 
-        if let Some(offsets) = self.offsets() {
-            let mut r = Reader::new(self.data());
-
-            for (key, val) in offsets {
-                r.jump(*val);
-                debug_struct.field(
-                    &format!("{:?}", key.as_str()),
-                    &r.read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
-                        .unwrap(),
-                );
-            }
+        for (key, value) in self.entries() {
+            debug_struct.field(&format!("{:?}", key.as_str()), &value);
         }
 
         debug_struct.finish()
@@ -175,6 +165,14 @@ impl Display for Dict<'_> {
 
 impl Skippable for Dict<'_> {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
+        Self::skip_with_depth(r, is_content_stream, 0)
+    }
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        if depth >= super::MAX_OBJECT_NESTING_DEPTH {
+            return None;
+        }
+
         r.forward_tag(b"<<")?;
 
         loop {
@@ -185,16 +183,16 @@ impl Skippable for Dict<'_> {
             } else {
                 let Some(_) = r.skip::<Name<'_>>(is_content_stream) else {
                     // In case there is garbage in-between, be lenient and just try to skip it.
-                    r.skip::<Object<'_>>(is_content_stream)?;
+                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
                     continue;
                 };
 
                 r.skip_white_spaces_and_comments();
 
                 if is_content_stream {
-                    r.skip::<Object<'_>>(is_content_stream)?;
+                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
                 } else {
-                    r.skip::<MaybeRef<Object<'_>>>(is_content_stream)?;
+                    r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
                 }
             }
         }
@@ -293,6 +291,7 @@ fn parse_dict_with<'a, F>(
 where
     F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
 {
+    let depth = usize::from(start_tag.is_some());
     let dict_data = r.tail()?;
     let start_offset = r.offset();
 
@@ -316,7 +315,7 @@ where
                     // In case there is garbage in-between, be lenient and just try to skip it.
                     // But only do this if we are parsing a proper dictionary as opposed to an
                     // inline dictionary.
-                    r.read::<Object<'_>>(ctx)?;
+                    r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
                     continue;
                 } else {
                     return None;
@@ -335,9 +334,9 @@ where
             on_entry(name, offset, r)?;
 
             if ctx.in_content_stream() {
-                r.skip::<Object<'_>>(ctx.in_content_stream())?;
+                r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
             } else {
-                r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream())?;
+                r.skip_with_depth::<MaybeRef<Object<'_>>>(ctx.in_content_stream(), depth)?;
             }
         }
     }
@@ -1184,5 +1183,12 @@ mod tests {
 
         assert_eq!(format!("{dict}"), "<< /A << /X true >> /B [1 2] >>");
         assert_eq!(format!("{}", Dict::empty()), "<<>>");
+    }
+
+    #[test]
+    fn dict_with_unreadable_value() {
+        let dict = Dict::from_bytes(b"<< /A <<>>stream /B true >>").unwrap();
+        let _ = dict.entries().count();
+        let _ = format!("{dict:?}");
     }
 }

@@ -1,5 +1,7 @@
 //! This example shows you how you can render a PDF file to PNG.
 
+#![allow(dead_code)]
+
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -8,22 +10,18 @@ use hayro::hayro_syntax::Pdf;
 use hayro::kurbo::Affine;
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
-use hayro::{RenderCache, RenderSettings, render, render_into};
+use hayro::{PixmapSettings, RenderCache, RenderSettings, render, render_into};
 use std::path::Path;
 use std::sync::Arc;
 
 fn load_asset(name: &str) -> Option<(FontData, u32)> {
-    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/assets");
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/assets");
     let path = base.join(name);
     let data = std::fs::read(&path).ok()?;
     Some((Arc::new(data), 0))
 }
 
 fn main() {
-    if let Ok(()) = log::set_logger(&LOGGER) {
-        log::set_max_level(log::LevelFilter::Trace);
-    }
-
     let file = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
     let output_dir = std::env::args().nth(2).unwrap_or_else(|| ".".to_string());
 
@@ -81,36 +79,56 @@ fn main() {
         ..Default::default()
     };
 
+    // There are two different ways of using the render APIs for hayro, see the comments in the methods.
+    render_simple(&pdf, &interpreter_settings, &output_dir);
+    // render_advanced(&pdf, &interpreter_settings, &output_dir);
+}
+
+fn render_simple(pdf: &Pdf, interpreter_settings: &InterpreterSettings, output_dir: &str) {
+    // If all you need is the ability to convert a PDF page into an RGBA buffer
+    // and just setting a background + scale factor is enough, use `hayro::render`:
+
     // This cache should be reused across multiple pages.
     let cache = RenderCache::new();
+    let render_settings = RenderSettings::default();
+    let pixmap_settings = PixmapSettings {
+        x_scale: 2.0,
+        y_scale: 2.0,
+        bg_color: WHITE,
+    };
+
+    for (idx, page) in pdf.pages().iter().enumerate() {
+        let rendered = render(
+            page,
+            &cache,
+            interpreter_settings,
+            &render_settings,
+            &pixmap_settings,
+        );
+        let output_path = format!("{}/rendered_{idx}.png", output_dir);
+        std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
+    }
+}
+
+fn render_advanced(pdf: &Pdf, interpreter_settings: &InterpreterSettings, output_dir: &str) {
+    // If you need/want:
+    // - Support for rendering a page with arbitrary affine transforms or
+    // - more control over rendering and  the ability to more effectively reuse allocations
+    //   for render buffers
+    // You can instead use `hayro::render_into` to directly render into a `vello_cpu`
+    // `RenderContext`. However, this requires some more setup.
+    // The example below shows how you can render a page zoomed 50% into the center,
+    // and while reusing the `vello_cpu` `RenderContext` and `Pixmap`, which avoids
+    // unnecessary reallocations when rendering multiple pages.
+
+    // This cache should be reused across multiple pages.
+    let cache = RenderCache::new();
+    let render_settings = RenderSettings::default();
     let mut ctx = RenderContext::new(0, 0);
     let mut pixmap = Pixmap::new(0, 0);
     let mut resources = Resources::default();
 
     for (idx, page) in pdf.pages().iter().enumerate() {
-        // hayro provides two entry points for rendering PDFs.
-
-        // If all you need is the ability to convert a PDF page into an RGBA buffer
-        // and just setting a background + scale factor is enough, use `hayro::render`:
-        let settings = RenderSettings {
-            x_scale: 2.0,
-            y_scale: 2.0,
-            bg_color: WHITE,
-        };
-        let rendered = render(page, &cache, &interpreter_settings, &settings);
-        let output_path = format!("{}/rendered_{idx}.png", output_dir);
-        std::fs::write(output_path, rendered.into_png().unwrap()).unwrap();
-
-        // If you need/want:
-        // - Support for rendering a page with arbitrary affine transforms or
-        // - more control over rendering and  the ability to more effectively reuse allocations
-        //   for render buffers
-        // You can instead use `hayro::render_into` to directly render into a `vello_cpu`
-        // `RenderContext`. However, this requires some more setup.
-        // The example below shows how you can render a page zoomed 50% into the center,
-        // and while reusing the `vello_cpu` `RenderContext` and `Pixmap`, which avoids
-        // unnecessary reallocations when rendering multiple pages.
-
         // You can choose any size you desire, but in most cases you will likely want
         // to base it on the dimensions of the PDF page.
         let (width, height) = page.render_dimensions();
@@ -128,7 +146,14 @@ fn main() {
             * page.initial_transform(true).to_kurbo();
 
         // Render into the render context.
-        render_into(page, &cache, &interpreter_settings, &mut ctx, transform);
+        render_into(
+            page,
+            &cache,
+            interpreter_settings,
+            &render_settings,
+            &mut ctx,
+            transform,
+        );
 
         // In case the `vello_cpu` `RenderContext` is multi-threaded, make sure to
         // flush.
@@ -168,36 +193,4 @@ fn pick_standard_font(font: &StandardFont) -> &'static str {
         StandardFont::ZapfDingBats => "FoxitDingbats.pfb",
         StandardFont::Symbol => "FoxitSymbol.pfb",
     }
-}
-
-/// A simple stderr logger.
-static LOGGER: SimpleLogger = SimpleLogger;
-struct SimpleLogger;
-impl log::Log for SimpleLogger {
-    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        metadata.level() <= log::LevelFilter::Warn
-    }
-
-    fn log(&self, record: &log::Record<'_>) {
-        if self.enabled(record.metadata()) {
-            let target = if !record.target().is_empty() {
-                record.target()
-            } else {
-                record.module_path().unwrap_or_default()
-            };
-
-            let line = record.line().unwrap_or(0);
-            let args = record.args();
-
-            match record.level() {
-                log::Level::Error => eprintln!("Error (in {target}:{line}): {args}"),
-                log::Level::Warn => eprintln!("Warning (in {target}:{line}): {args}"),
-                log::Level::Info => eprintln!("Info (in {target}:{line}): {args}"),
-                log::Level::Debug => eprintln!("Debug (in {target}:{line}): {args}"),
-                log::Level::Trace => eprintln!("Trace (in {target}:{line}): {args}"),
-            }
-        }
-    }
-
-    fn flush(&self) {}
 }

@@ -1,5 +1,6 @@
 use crate::util::hash128;
 use hayro_syntax::object::{Array, Dict, MaybeRef, Name, Null, ObjRef, Object, Stream};
+use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect};
 use rustc_hash::FxHashMap;
 use std::any::Any;
@@ -70,7 +71,27 @@ impl CacheKey for Dict<'_> {
 
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
-        self.dict().cache_key()
+        match self.dict().obj_id() {
+            Some(obj_id) => hash128(&obj_id),
+            None => hash128(&(self.dict().data(), self.raw_data().as_ref())),
+        }
+    }
+}
+
+impl CacheKey for Resources<'_> {
+    fn cache_key(&self) -> u128 {
+        hash128(
+            &[
+                &self.ext_g_states,
+                &self.fonts,
+                &self.properties,
+                &self.color_spaces,
+                &self.x_objects,
+                &self.patterns,
+                &self.shadings,
+            ]
+            .map(Dict::cache_key),
+        )
     }
 }
 

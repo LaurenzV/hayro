@@ -16,15 +16,15 @@ pub(crate) struct FormXObject<'a> {
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
-    resources: Dict<'a>,
+    pub(crate) resources: Option<Resources<'a>>,
 }
 
 impl<'a> FormXObject<'a> {
     pub(crate) fn new(stream: &Stream<'a>) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded().ok()?;
-        let resources = dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default();
+        let decoded = stream.decoded_data().ok()?;
+        let resources = dict.get(RESOURCES).map(Resources::new);
 
         let matrix = Affine::new(
             dict.get::<[f64; 6]>(MATRIX)
@@ -75,17 +75,17 @@ impl<'a> FormXObject<'a> {
 
         if self.is_transparency_group {
             device.push_transparency_group(
-                context.get().graphics_state.non_stroke_alpha,
-                std::mem::take(&mut context.get_mut().graphics_state.soft_mask),
-                std::mem::take(&mut context.get_mut().graphics_state.blend_mode),
+                context.fill_paint().alpha,
+                std::mem::take(&mut context.compositing_mut().soft_mask),
+                std::mem::take(&mut context.compositing_mut().blend_mode),
             );
 
-            context.get_mut().graphics_state.non_stroke_alpha = 1.0;
-            context.get_mut().graphics_state.stroke_alpha = 1.0;
+            context.fill_paint_mut().alpha = 1.0;
+            context.stroke_paint_mut().alpha = 1.0;
         }
 
         device.push_clip_path(&ClipPath {
-            path: context.get().ctm
+            path: context.ctm()
                 * Rect::new(
                     self.bbox[0] as f64,
                     self.bbox[1] as f64,
@@ -98,7 +98,7 @@ impl<'a> FormXObject<'a> {
 
         interpret(
             iter,
-            &Resources::from_parent(self.resources.clone(), resources.clone()),
+            self.resources.as_ref().unwrap_or(resources),
             context,
             device,
         );

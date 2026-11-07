@@ -132,10 +132,10 @@ pub(super) fn calculate_with_initial_values(data: &[u8], h: &mut [u64; 8]) {
     let len_bytes = bit_len.to_be_bytes();
     padded[padded_len - 16..].copy_from_slice(&len_bytes);
 
-    for chunk in padded.chunks_exact(128) {
+    for chunk in padded.as_chunks::<128>().0 {
         let mut w = [0_u64; 80];
 
-        for (i, word_bytes) in chunk.chunks_exact(8).enumerate() {
+        for (i, word_bytes) in chunk.as_chunks::<8>().0.iter().enumerate() {
             w[i] = u64::from_be_bytes([
                 word_bytes[0],
                 word_bytes[1],

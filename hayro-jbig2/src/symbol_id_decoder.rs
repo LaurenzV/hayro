@@ -27,9 +27,7 @@ impl SymbolIdDecoder {
         let mut prev = 1_u32;
 
         for _ in 0..self.code_len {
-            let ctx_mask = (1_u32 << (self.code_len + 1)) - 1;
-            let ctx_idx = (prev & ctx_mask) as usize;
-            let d = decoder.read_bit(&mut self.contexts[ctx_idx]);
+            let d = decoder.read_bit(&mut self.contexts[prev as usize]);
 
             prev = (prev << 1) | d;
         }

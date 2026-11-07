@@ -570,7 +570,7 @@ impl PartitionedRanges {
 
     pub(crate) fn sort(&mut self) {
         for bucket in &mut self.buckets {
-            bucket.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+            bucket.sort_by_key(|a| a.range.start);
         }
     }
 }
@@ -617,7 +617,7 @@ pub struct Metadata {
 }
 
 /// The registry+ordering family of a CID character collection.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CidFamily {
     /// Adobe-Japan1
     AdobeJapan1,
@@ -686,7 +686,7 @@ impl CidFamily {
 }
 
 /// A CID character collection identifying the character set and ordering.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CharacterCollection {
     /// The registry+ordering family.
     pub family: CidFamily,
@@ -817,6 +817,41 @@ endcidchar
         assert_eq!(cmap.lookup_cid_code(0x03, 1), Some(1));
         assert_eq!(cmap.lookup_cid_code(0x04, 1), Some(2));
         assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(50));
+    }
+
+    #[test]
+    fn empty_bfchar_destination_keeps_the_other_entries() {
+        let cmap = parse_with_preamble(
+            br#"
+2 beginbfchar
+<00> <0041>
+<01> <>
+endbfchar
+"#,
+        );
+
+        assert_eq!(cmap.lookup_bf_string(0x00), Some(BfString::Char('A')));
+        assert_eq!(cmap.lookup_bf_string(0x01), None);
+    }
+
+    #[test]
+    fn empty_bfrange_destination_keeps_the_other_entries() {
+        let cmap = parse_with_preamble(
+            br#"
+3 beginbfrange
+<02> <03> <>
+<04> <05> <0042>
+<06> <07> [<> <0044>]
+endbfrange
+"#,
+        );
+
+        assert_eq!(cmap.lookup_bf_string(0x02), None);
+        assert_eq!(cmap.lookup_bf_string(0x03), None);
+        assert_eq!(cmap.lookup_bf_string(0x04), Some(BfString::Char('B')));
+        assert_eq!(cmap.lookup_bf_string(0x05), Some(BfString::Char('C')));
+        assert_eq!(cmap.lookup_bf_string(0x06), None);
+        assert_eq!(cmap.lookup_bf_string(0x07), Some(BfString::Char('D')));
     }
 
     #[test]

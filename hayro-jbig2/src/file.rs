@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use crate::error::{FormatError, ParseError, Result, bail};
+use crate::error::{DecodeError, FormatError, ParseError, Result, bail};
 use crate::reader::Reader;
 use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
@@ -37,7 +37,7 @@ pub(crate) struct FileHeader {
     /// The file organization type.
     pub(crate) organization: FileOrganization,
     /// The number of pages in the file, if known.
-    pub(crate) _number_of_pages: Option<u32>,
+    pub(crate) number_of_pages: Option<u32>,
     /// "If this bit is 0, no generic region segments uses the templates with
     /// 12 AT pixels. If the file contains one or more generic region segments
     /// using such templates, this bit must be 1." (D.4.2, Bit 2)
@@ -52,7 +52,7 @@ pub(crate) struct FileHeader {
 #[derive(Debug)]
 pub(crate) struct File<'a> {
     /// The file header.
-    pub(crate) _header: FileHeader,
+    pub(crate) header: FileHeader,
     /// The segments in the file.
     pub(crate) segments: Vec<Segment<'a>>,
 }
@@ -62,20 +62,17 @@ pub(crate) struct File<'a> {
 const FILE_HEADER_ID: [u8; 8] = [0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// Parse a standalone JBIG2 file.
-pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>> {
+pub(crate) fn parse_file(data: &[u8], strict: bool) -> Result<File<'_>> {
     let mut reader = Reader::new(data);
 
     let header = parse_file_header(&mut reader)?;
-    let mut segments = parse_segments(&mut reader, header.organization)?;
+    let mut segments = parse_segments(&mut reader, header.organization, strict)?;
 
     // Technically shouldn't be necessary because the spec mandates that segments
     // are in sorted order, but just to be safe.
     segments.sort_by_key(|seg| seg.header.segment_number);
 
-    Ok(File {
-        _header: header,
-        segments,
-    })
+    Ok(File { header, segments })
 }
 
 fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
@@ -127,7 +124,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
 
     Ok(FileHeader {
         organization,
-        _number_of_pages: number_of_pages,
+        number_of_pages,
         _uses_extended_templates: uses_extended_templates,
         _contains_coloured_regions: contains_coloured_regions,
     })
@@ -136,12 +133,15 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
 fn parse_segments<'a>(
     reader: &mut Reader<'a>,
     organization: FileOrganization,
+    strict: bool,
 ) -> Result<Vec<Segment<'a>>> {
     let mut segments = Vec::new();
 
     match organization {
-        FileOrganization::Sequential => parse_segments_sequential(reader, &mut segments)?,
-        FileOrganization::RandomAccess => parse_segments_random_access(reader, &mut segments)?,
+        FileOrganization::Sequential => parse_segments_sequential(reader, &mut segments, strict)?,
+        FileOrganization::RandomAccess => {
+            parse_segments_random_access(reader, &mut segments, strict)?;
+        }
     }
 
     Ok(segments)
@@ -155,13 +155,18 @@ fn parse_segments<'a>(
 pub(crate) fn parse_segments_sequential<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
+    strict: bool,
 ) -> Result<()> {
     loop {
         if reader.at_end() {
             break;
         }
 
-        let segment = parse_segment(reader)?;
+        let segment = match parse_segment(reader, strict) {
+            Ok(segment) => segment,
+            Err(DecodeError::Parse(ParseError::UnexpectedEof)) if !strict => break,
+            Err(e) => return Err(e),
+        };
 
         // "If a file contains an end of file segment, it must be the last segment."
         // (7.4.11)
@@ -185,6 +190,7 @@ pub(crate) fn parse_segments_sequential<'a>(
 fn parse_segments_random_access<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
+    strict: bool,
 ) -> Result<()> {
     let mut headers = Vec::new();
 
@@ -193,7 +199,7 @@ fn parse_segments_random_access<'a>(
             break;
         }
 
-        let header = parse_segment_header(reader)?;
+        let header = parse_segment_header(reader, strict)?;
 
         // "If a file contains an end of file segment, it must be the last segment."
         // (7.4.11)

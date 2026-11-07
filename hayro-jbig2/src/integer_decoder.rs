@@ -70,7 +70,7 @@ impl IntegerDecoder {
         if s == 0 {
             Some(v as i32)
         } else if v > 0 {
-            Some(-(v as i32))
+            Some((v as i32).wrapping_neg())
         } else {
             None
         }

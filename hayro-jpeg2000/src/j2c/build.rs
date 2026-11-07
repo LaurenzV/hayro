@@ -4,6 +4,7 @@ use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
+use crate::cancel::Cancel;
 use crate::error::{DecodingError, Result, ValidationError};
 use alloc::vec;
 use core::iter;
@@ -15,20 +16,29 @@ pub(crate) fn build(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
-    build_decompositions(tile, storage, skipped_resolution_levels)
+    build_decompositions(tile, storage, skipped_resolution_levels, cancel)
 }
 
 fn build_decompositions(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
     skipped_resolution_levels: u8,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
-        let decoded_resolutions =
-            component_tile.component_info.num_resolution_levels() - skipped_resolution_levels;
+        // The number of skipped resolution levels is determined from the main
+        // header, but tile-part headers can reduce the number of resolution
+        // levels further.
+        let decoded_resolutions = component_tile
+            .component_info
+            .num_resolution_levels()
+            .checked_sub(skipped_resolution_levels)
+            .filter(|r| *r > 0)
+            .ok_or(ValidationError::InvalidComponentMetadata)?;
         let top_resolution = ResolutionTile::new(component_tile, decoded_resolutions - 1);
         component_samples.push(
             usize::try_from(top_resolution.rect.area())
@@ -41,7 +51,7 @@ fn build_decompositions(
         // Fast path that requests pre-zeroed memory from the OS where available.
         storage.coefficients = vec![0.0; max_coefficients];
     } else {
-        storage.coefficients.resize(max_coefficients, 0.0);
+        cancel.resize(&mut storage.coefficients, max_coefficients)?;
     }
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
@@ -57,23 +67,7 @@ fn build_decompositions(
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-            trace!(
-                "r {} making sub-band {} for component {}",
-                resolution_tile.resolution, sub_band_type as u8, component_idx
-            );
-            trace!(
-                "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                sub_band_rect.x0,
-                sub_band_rect.y0,
-                sub_band_rect.width(),
-                sub_band_rect.height(),
-                resolution_tile.rect.x0,
-                resolution_tile.rect.y0,
-                resolution_tile.rect.width(),
-                resolution_tile.rect.height(),
-            );
-
-            let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
+            let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage, cancel)?;
 
             // No need to allocate coefficients for skipped resolution levels.
             let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
@@ -134,6 +128,7 @@ fn build_precincts(
     sub_band_rect: IntRect,
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
+    cancel: Cancel<'_>,
 ) -> Result<Range<usize>> {
     let start = storage.precincts.len();
 
@@ -141,6 +136,8 @@ fn build_precincts(
         .precincts()
         .ok_or(DecodingError::InvalidPrecinct)?
     {
+        cancel.check()?;
+
         let precinct_rect = precinct_data.rect;
 
         let cb_width = resolution_tile.code_block_width();
@@ -170,16 +167,6 @@ fn build_precincts(
             code_block_area.height() / cb_height
         };
 
-        trace!(
-            "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-            precinct_rect.x0,
-            precinct_rect.y0,
-            precinct_rect.width(),
-            precinct_rect.height(),
-            code_blocks_x,
-            code_blocks_y
-        );
-
         let blocks = build_code_blocks(
             code_block_area,
             sub_band_rect,
@@ -188,7 +175,8 @@ fn build_precincts(
             code_blocks_y,
             tile,
             storage,
-        );
+            cancel,
+        )?;
 
         let code_inclusion_tree =
             TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
@@ -215,7 +203,8 @@ fn build_code_blocks(
     code_blocks_y: u32,
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
-) -> Range<usize> {
+    cancel: Cancel<'_>,
+) -> Result<Range<usize>> {
     let mut y = code_block_area.y0;
 
     let code_block_width = tile_instance.code_block_width();
@@ -224,6 +213,8 @@ fn build_code_blocks(
     let start = storage.code_blocks.len();
 
     for y_idx in 0..code_blocks_y {
+        cancel.check()?;
+
         let mut x = code_block_area.x0;
 
         for x_idx in 0..code_blocks_x {
@@ -233,14 +224,6 @@ fn build_code_blocks(
             // described in Annex D."
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
-
-            trace!(
-                "Codeblock rect: [{},{} {}x{}]",
-                area.x0,
-                area.y0,
-                area.width(),
-                area.height(),
-            );
 
             let start = storage.layers.len();
             storage.layers.extend(iter::repeat_n(
@@ -273,7 +256,7 @@ fn build_code_blocks(
 
     let end = storage.code_blocks.len();
 
-    start..end
+    Ok(start..end)
 }
 
 pub(crate) struct Decomposition {

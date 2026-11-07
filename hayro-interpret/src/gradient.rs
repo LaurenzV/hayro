@@ -6,9 +6,8 @@
 
 use crate::color::AlphaColor;
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
-use crate::function::StitchingBounds;
+use crate::function::MAX_COMPONENTS;
 use kurbo::{Affine, Circle, Point, Rect, Shape};
-use smallvec::smallvec;
 
 const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
 const RADIAL_EPSILON: f64 = 1.0e-6;
@@ -106,10 +105,12 @@ impl EncodedRadialAxialShading {
     fn sample_t(&self, pattern: &EncodedShadingPattern, t: f32) -> [f32; 4] {
         let (t0, t1) = (self.domain[0], self.domain[1]);
         let t = t0 + (t1 - t0) * t;
-        let Some(out) = self.function.eval(&smallvec![t]) else {
+        let mut out = [0.0; MAX_COMPONENTS];
+        let out = &mut out[..self.function.num_outputs()];
+        if self.function.eval(&[t], out).is_none() {
             return [0.0, 0.0, 0.0, 0.0];
-        };
-        let mut components = pattern.color_space.to_rgba(&out, 1.0).components();
+        }
+        let mut components = pattern.color_space.to_rgba(out, 1.0).components();
         components[3] *= pattern.opacity;
 
         if let Some(tf) = &pattern.transfer_function {
@@ -164,11 +165,11 @@ impl EncodedRadialAxialShading {
         inner_extend_ok && outer_extend_ok
     }
 
-    fn normalized_stitching_bounds(&self) -> StitchingBounds {
+    fn normalized_stitching_bounds(&self) -> Vec<f32> {
         let [t0, t1] = self.domain;
         let dt = t1 - t0;
         if dt.abs() <= f32::EPSILON {
-            return StitchingBounds::new();
+            return vec![];
         }
 
         let mut bounds = self
@@ -177,7 +178,7 @@ impl EncodedRadialAxialShading {
             .into_iter()
             .map(|bound| (bound - t0) / dt)
             .filter(|bound| *bound > 0.0 && *bound < 1.0)
-            .collect::<StitchingBounds>();
+            .collect::<Vec<_>>();
 
         if dt < 0.0 {
             bounds.reverse();

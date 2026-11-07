@@ -177,11 +177,11 @@ pub struct ColorSpaceNonStroke<'b, 'a>(pub &'b Name<'a>);
 op1!(ColorSpaceNonStroke<'b, 'a>, "cs");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct StrokeColor(pub SmallVec<[Number; OPERANDS_THRESHOLD]>);
+pub struct StrokeColor(pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>);
 op_all!(StrokeColor, "SC");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NonStrokeColor(pub SmallVec<[Number; OPERANDS_THRESHOLD]>);
+pub struct NonStrokeColor(pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>);
 op_all!(NonStrokeColor, "sc");
 
 #[derive(Debug, PartialEq, Clone)]

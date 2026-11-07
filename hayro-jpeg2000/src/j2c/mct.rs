@@ -3,6 +3,7 @@
 
 use super::ComponentData;
 use super::codestream::{Header, WaveletTransform};
+use crate::cancel::{CHUNK, Cancel};
 use crate::error::{ColorError, Result, bail, err};
 use crate::math::{Level, Simd, dispatch, f32x8};
 
@@ -10,7 +11,8 @@ use crate::math::{Level, Simd, dispatch, f32x8};
 pub(crate) fn apply_inverse(
     components: &mut [ComponentData],
     component_infos: &[super::codestream::ComponentInfo],
-    header: &Header<'_>,
+    header: &Header,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     if components.len() < 3 {
         return if header.strict {
@@ -35,12 +37,16 @@ pub(crate) fn apply_inverse(
         bail!(ColorError::Mct);
     }
 
-    apply_inner(
-        transform,
-        &mut s0.container,
-        &mut s1.container,
-        &mut s2.container,
-    );
+    for ((c0, c1), c2) in s0
+        .container
+        .chunks_mut(CHUNK)
+        .zip(s1.container.chunks_mut(CHUNK))
+        .zip(s2.container.chunks_mut(CHUNK))
+    {
+        cancel.check()?;
+
+        apply_inner(transform, c0, c1, c2);
+    }
 
     Ok(())
 }
@@ -61,9 +67,11 @@ fn apply_inner_impl<S: Simd>(
         // Irreversible MCT, specified in G.3.
         WaveletTransform::Irreversible97 => {
             for ((y0, y1), y2) in s0
-                .chunks_exact_mut(8)
-                .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8))
+                .as_chunks_mut::<8>()
+                .0
+                .iter_mut()
+                .zip(s1.as_chunks_mut::<8>().0)
+                .zip(s2.as_chunks_mut::<8>().0)
             {
                 let y_0 = f32x8::from_slice(simd, y0);
                 let y_1 = f32x8::from_slice(simd, y1);
@@ -84,9 +92,11 @@ fn apply_inner_impl<S: Simd>(
         // Reversible MCT, specified in G.2.
         WaveletTransform::Reversible53 => {
             for ((y0, y1), y2) in s0
-                .chunks_exact_mut(8)
-                .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8))
+                .as_chunks_mut::<8>()
+                .0
+                .iter_mut()
+                .zip(s1.as_chunks_mut::<8>().0)
+                .zip(s2.as_chunks_mut::<8>().0)
             {
                 let y_0 = f32x8::from_slice(simd, y0);
                 let y_1 = f32x8::from_slice(simd, y1);

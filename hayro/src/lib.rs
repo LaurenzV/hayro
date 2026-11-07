@@ -34,17 +34,18 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 use fearless_simd::Level;
+use glyph_cache::GlyphCache;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
-use hayro_interpret::font::GlyphRun;
+use hayro_interpret::font::{GlyphRun, HintingCache};
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context, DrawMode, DrawProps, ImageDrawProps, SoftMask};
 use hayro_interpret::{ClipPath, interpret_page};
-use kurbo::{Affine, BezPath, Rect, Shape};
+use kurbo::{Affine, BezPath, Rect};
 use pic_scale::Scaler;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -63,23 +64,39 @@ use vello_cpu::{Mask, Pixmap, RenderContext, peniko};
 
 mod clip;
 mod glyph;
+mod glyph_cache;
 mod image;
 mod mask;
 mod paint;
 mod path;
+mod tiling;
+
+type OutlineCache = FxHashMap<(u128, u32), Option<Rc<BezPath>>>;
 
 pub(crate) struct GlobalState {
     level: Level,
-    outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    outline_cache: Rc<RefCell<OutlineCache>>,
+    glyph_cache: Rc<RefCell<GlyphCache>>,
+    hinting_cache: HintingCache,
     scaler: Scaler,
+    force_image_interpolation: bool,
+    aliasing_threshold: Option<u8>,
+    hinting: bool,
+    glyph_caching: bool,
 }
 
 impl GlobalState {
-    pub(crate) fn new(cache: &RenderCache<'_>) -> Self {
+    pub(crate) fn new(cache: &RenderCache<'_>, settings: &RenderSettings) -> Self {
         Self {
             level: Level::new(),
             outline_cache: cache.outline_cache.clone(),
+            glyph_cache: cache.glyph_cache.clone(),
+            hinting_cache: cache.hinting_cache.clone(),
             scaler: Scaler::new(image::RESAMPLING_FUNCTION),
+            force_image_interpolation: settings.force_image_interpolation,
+            aliasing_threshold: settings.aliasing_threshold,
+            hinting: settings.hinting,
+            glyph_caching: settings.glyph_caching,
         }
     }
 }
@@ -103,8 +120,16 @@ impl<'r> Renderer<'r> {
         }
     }
 
+    fn misses_target(&self, bbox: Rect) -> bool {
+        let target = Rect::new(0.0, 0.0, self.ctx.width() as f64, self.ctx.height() as f64);
+        !bbox.overlaps(target)
+    }
+
     fn child_context(&self, width: u16, height: u16) -> RenderContext {
-        RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()))
+        let mut ctx =
+            RenderContext::new_with(width, height, derive_settings(self.ctx.render_settings()));
+        ctx.set_aliasing_threshold(self.global.aliasing_threshold);
+        ctx
     }
 
     fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
@@ -174,10 +199,13 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple render invocations on the same document.
-#[derive(Clone, Default)]
+// TODO: Allow clearing the cache.
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
-    pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<BezPath>>>>,
+    pub(crate) outline_cache: Rc<RefCell<OutlineCache>>,
+    pub(crate) glyph_cache: Rc<RefCell<GlyphCache>>,
+    pub(crate) hinting_cache: HintingCache,
 }
 
 impl<'a> RenderCache<'a> {
@@ -186,13 +214,42 @@ impl<'a> RenderCache<'a> {
         Self {
             interpreter_cache: InterpreterCache::new(),
             outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            glyph_cache: Rc::new(RefCell::new(GlyphCache::default())),
+            hinting_cache: HintingCache::new(),
         }
     }
 }
 
-/// Settings for rendering a page to a pixmap.
+/// Settings for rendering a page.
 #[derive(Clone, Copy)]
 pub struct RenderSettings {
+    /// Whether all images should forcibly be rendered with bilinear interpolation.
+    pub force_image_interpolation: bool,
+    /// The aliasing threshold for fills and strokes.
+    ///
+    /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
+    /// whose coverage exceeds the threshold.
+    pub aliasing_threshold: Option<u8>,
+    /// Whether text should be hinted.
+    pub hinting: bool,
+    /// Whether rasterized glyphs should be cached and reused.
+    pub glyph_caching: bool,
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            force_image_interpolation: false,
+            aliasing_threshold: None,
+            hinting: true,
+            glyph_caching: true,
+        }
+    }
+}
+
+/// Settings for the output pixmap.
+#[derive(Clone, Copy)]
+pub struct PixmapSettings {
     /// Horizontal scale factor.
     pub x_scale: f32,
     /// Vertical scale factor.
@@ -201,7 +258,7 @@ pub struct RenderSettings {
     pub bg_color: AlphaColor<Srgb>,
 }
 
-impl Default for RenderSettings {
+impl Default for PixmapSettings {
     fn default() -> Self {
         Self {
             x_scale: 1.0,
@@ -223,17 +280,25 @@ pub fn render<'a>(
     cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &RenderSettings,
+    pixmap_settings: &PixmapSettings,
 ) -> Pixmap {
     let (width, height) = page.render_dimensions();
     let mut ctx = RenderContext::new(
-        (width * render_settings.x_scale) as u16,
-        (height * render_settings.y_scale) as u16,
+        (width * pixmap_settings.x_scale) as u16,
+        (height * pixmap_settings.y_scale) as u16,
     );
     let transform = Affine::scale_non_uniform(
-        render_settings.x_scale as f64,
-        render_settings.y_scale as f64,
+        pixmap_settings.x_scale as f64,
+        pixmap_settings.y_scale as f64,
     ) * page.initial_transform(true).to_kurbo();
-    render_into(page, cache, interpreter_settings, &mut ctx, transform);
+    render_into(
+        page,
+        cache,
+        interpreter_settings,
+        render_settings,
+        &mut ctx,
+        transform,
+    );
     ctx.flush();
 
     let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
@@ -241,7 +306,7 @@ pub fn render<'a>(
         &mut pixmap,
         &mut vello_cpu::Resources::default(),
         vello_cpu::RasterizerSettings {
-            target_init: vello_cpu::TargetInit::Clear(render_settings.bg_color),
+            target_init: vello_cpu::TargetInit::Clear(pixmap_settings.bg_color),
             ..Default::default()
         },
     );
@@ -257,12 +322,14 @@ pub fn render_into<'a>(
     page: &'a Page<'a>,
     cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
     ctx: &mut RenderContext,
     transform: Affine,
 ) {
+    let target = Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64);
     let mut state = Context::new(
         transform,
-        Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64),
+        target,
         &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
@@ -270,19 +337,28 @@ pub fn render_into<'a>(
     ctx.take_current_state();
     ctx.reset_mask();
     ctx.reset_filter_effect();
+    ctx.set_aliasing_threshold(render_settings.aliasing_threshold);
 
-    let global = GlobalState::new(cache);
+    let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
-    let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
-    clip_path.apply_affine(transform);
-    device.push_clip_path(&ClipPath {
-        path: clip_path,
-        fill: FillRule::NonZero,
-    });
+    let crop_box = page.intersected_crop_box().to_kurbo();
+    let [a, b, c, d, _, _] = transform.as_coeffs();
+    let axis_aligned = (b == 0.0 && c == 0.0) || (a == 0.0 && d == 0.0);
+    let mapped_crop_box = transform
+        .transform_rect_bbox(crop_box)
+        .inflate(1.0 / 256.0, 1.0 / 256.0);
+    let clip_crop_box = !axis_aligned || !mapped_crop_box.contains_rect(target);
+
+    if clip_crop_box {
+        device.ctx.set_transform(transform);
+        device.ctx.push_clip_rect(&crop_box);
+    }
 
     interpret_page(page, &mut state, &mut device);
 
-    device.pop_clip();
+    if clip_crop_box {
+        device.pop_clip();
+    }
 }
 
 // Just a convenience method for testing.
@@ -291,6 +367,7 @@ pub fn render_pdf(
     pdf: &Pdf,
     scale: f32,
     settings: InterpreterSettings,
+    render_settings: &RenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
     let cache = RenderCache::new();
@@ -307,7 +384,8 @@ pub fn render_pdf(
                 page,
                 &cache,
                 &settings,
-                &RenderSettings {
+                render_settings,
+                &PixmapSettings {
                     x_scale: scale,
                     y_scale: scale,
                     bg_color: WHITE,

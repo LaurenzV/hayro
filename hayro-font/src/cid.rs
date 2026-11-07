@@ -1,0 +1,510 @@
+use crate::CMapResolverFn;
+use crate::FontLoader;
+use crate::GlyphId;
+use crate::generated::glyph_names;
+use crate::program::{FontProgram, ProgramKind};
+use crate::standard_font::select_standard_font;
+use crate::{
+    FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, stretch_factor, strip_subset_prefix,
+};
+use hayro_cmap::{BfString, CMap, CharacterCollection, CidFamily, WritingMode};
+use hayro_syntax::object;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Name;
+use hayro_syntax::object::Stream;
+use hayro_syntax::object::dict::keys::*;
+use hayro_syntax::object::{Array, Object};
+use kurbo::Vec2;
+use rustc_hash::FxHashMap;
+use std::ops::Deref;
+
+#[derive(Debug)]
+pub(crate) struct Type0Font {
+    program: FontProgram,
+    horizontal: bool,
+    dw: f32,
+    dw2: (f32, f32),
+    widths: FxHashMap<u32, f32>,
+    encoding: CMap,
+    to_unicode: Option<CMap>,
+    widths2: FxHashMap<u32, [f32; 3]>,
+    cid_to_gid_map: CidToGIdMap,
+    /// PostScript name from the PDF.
+    postscript_name: Option<String>,
+    /// Font flags from the font descriptor.
+    font_flags: Option<FontFlags>,
+    /// Whether this font is using a fallback (non-embedded) font.
+    fallback: bool,
+    /// Whether the `to_unicode` map is a UCS2 `CMap` (CID-indexed) rather than
+    /// a `ToUnicode` `CMap` (code-indexed).
+    to_unicode_is_cid_indexed: bool,
+}
+
+impl Type0Font {
+    pub(crate) fn new(dict: &Dict<'_>, loader: &FontLoader<'_>) -> Option<Self> {
+        let cmap_resolver = loader.cmap_resolver;
+        let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?, cmap_resolver)?;
+
+        let horizontal = cmap.metadata().writing_mode != Some(WritingMode::Vertical);
+
+        let descendant_font = dict
+            .get::<Array<'_>>(DESCENDANT_FONTS)?
+            .iter::<Dict<'_>>()
+            .next()?;
+        let font_descriptor = descendant_font
+            .get::<Dict<'_>>(FONT_DESC)
+            .unwrap_or_default();
+
+        let character_collection = cmap
+            .metadata()
+            .character_collection
+            .clone()
+            .filter(|cc| cc.family != CidFamily::AdobeIdentity)
+            .or_else(|| read_cid_system_info(&descendant_font));
+
+        let (program, fallback, _is_standard_fallback) =
+            match load_program(&font_descriptor, loader) {
+                Some(program) => (program, false, false),
+                None => {
+                    let (query, is_standard) =
+                        if let Some((standard, _)) = select_standard_font(dict, &font_descriptor) {
+                            (FontQuery::Standard(standard), true)
+                        } else {
+                            let mut query = FallbackFontQuery::new(dict);
+                            query.character_collection = character_collection.clone();
+
+                            (FontQuery::Fallback(query), false)
+                        };
+
+                    (loader.programs.resolve(&query)?, true, is_standard)
+                }
+            };
+
+        let default_width = descendant_font.get::<f32>(DW).unwrap_or(1000.0);
+        let dw2 = descendant_font
+            .get::<[f32; 2]>(DW2)
+            .map(|v| (v[0], v[1]))
+            .unwrap_or((880.0, -1000.0));
+
+        let widths = descendant_font
+            .get::<Array<'_>>(W)
+            .and_then(|a| read_widths(&a))
+            .unwrap_or_default();
+        let widths2 = descendant_font
+            .get::<Array<'_>>(W2)
+            .and_then(|a| read_widths2(&a))
+            .unwrap_or_default();
+        let needs_inverse = program.kind() == ProgramKind::Cff && program.is_cid_keyed();
+        let cid_to_gid_map = CidToGIdMap::new(&descendant_font, needs_inverse).unwrap_or_default();
+        let mut to_unicode = read_to_unicode(dict, cmap_resolver);
+        let mut to_unicode_is_cid_indexed = false;
+
+        // If there is no ToUnicode map, try to get the UCS2 CMap.
+        if fallback
+            && to_unicode.is_none()
+            && let Some(cc) = character_collection.as_ref()
+            && let Some(ucs2_name) = cc.family.ucs2_cmap()
+            && let Some(data) = (cmap_resolver)(ucs2_name)
+        {
+            let resolver = cmap_resolver.clone();
+            if let Some(ucs2_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
+                to_unicode = Some(ucs2_cmap);
+                to_unicode_is_cid_indexed = true;
+            }
+        }
+
+        let postscript_name = dict
+            .get::<Name<'_>>(BASE_FONT)
+            .map(|n| strip_subset_prefix(n.as_str()).to_string());
+
+        // Extract font flags from descriptor
+        let font_flags = font_descriptor
+            .get::<u32>(FLAGS)
+            .and_then(FontFlags::from_bits);
+
+        Some(Self {
+            horizontal,
+            encoding: cmap,
+            to_unicode,
+            program,
+            dw: default_width,
+            dw2,
+            widths,
+            widths2,
+            cid_to_gid_map,
+            postscript_name,
+            font_flags,
+            fallback,
+            to_unicode_is_cid_indexed,
+        })
+    }
+
+    pub(crate) fn map_code(&self, code: u32) -> GlyphId {
+        let Some(cid) = self.code_to_cid(code) else {
+            return GlyphId::NOTDEF;
+        };
+
+        // UCS2 maps are indexed by CIDs, while embededd `ToUnicode` maps are
+        // indexed by character code.
+        let to_unicode_key = if self.to_unicode_is_cid_indexed {
+            cid
+        } else {
+            code
+        };
+
+        if self.fallback
+            && let Some(glyph) = self.map_via_unicode(to_unicode_key)
+        {
+            // Yay, Unicode worked!
+            return glyph;
+        }
+
+        // At this point, not much we can do anymore. Just hope that the
+        // selected font has the right glyph order, and map via that.
+
+        match self.program.kind() {
+            ProgramKind::Sfnt => self.cid_to_gid_map.map(cid as u16),
+            ProgramKind::Cff => {
+                if self.program.is_cid_keyed() {
+                    // Very confusing stuff going on here, see https://github.com/mozilla/pdf.js/pull/15563.
+                    // The PDF spec makes it sounds like cid-to-gid map should only be used for TrueType fonts,
+                    // but Acrobat also seems to support it for CFF fonts with some weird behavior.
+                    if matches!(self.cid_to_gid_map, CidToGIdMap::Identity) {
+                        self.program.glyph_by_cid(cid).unwrap_or(GlyphId::NOTDEF)
+                    } else {
+                        GlyphId::new(self.cid_to_gid_map.inverse_map(GlyphId::new(cid)) as u32)
+                    }
+                } else {
+                    self.cid_to_gid_map.map(cid as u16)
+                }
+            }
+            // Maybe we need similar processing to CFF fonts? But since
+            // Type1 fonts are invalid anyway, let's just ignore for now.
+            ProgramKind::Type1 => GlyphId::new(cid),
+        }
+    }
+
+    /// Map a character code (or CID) to a glyph ID
+    /// by first getting its Unicode and then looking up the codepoint in the
+    /// font's cmap.
+    fn map_via_unicode(&self, key: u32) -> Option<GlyphId> {
+        let to_unicode = self.to_unicode.as_ref()?;
+
+        let character = to_unicode
+            .lookup_bf_string(key)
+            .or_else(|| {
+                for len in 0..4 {
+                    if let Some(code) = to_unicode.lookup_cid_code(key, len)
+                        && let Some(code) = char::from_u32(code)
+                    {
+                        return Some(BfString::Char(code));
+                    }
+                }
+
+                None
+            })
+            .and_then(|bf| match bf {
+                BfString::Char(c) => Some(c),
+                BfString::String(_) => None,
+            })?;
+
+        match self.program.kind() {
+            ProgramKind::Sfnt => self.program.cmap_glyph(character),
+            // Map the character to a glyph name via the AGL, and then look it up.
+            ProgramKind::Cff | ProgramKind::Type1 => glyph_names::get_reverse(character)
+                .and_then(|name| self.program.glyph_by_name(name)),
+        }
+    }
+
+    fn code_to_cid(&self, code: u32) -> Option<u32> {
+        for byte_len in 1..=4_u8 {
+            if let Some(cid) = self.encoding.lookup_cid_code(code, byte_len) {
+                return Some(cid);
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn program(&self) -> FontProgram {
+        self.program.clone()
+    }
+
+    pub(crate) fn glyph_stretch(&self, glyph: GlyphId, code: u32) -> f64 {
+        if self.fallback
+            && let Some(cid) = self.code_to_cid(code)
+            && let Some(actual_width) = self.program.advance_width(glyph)
+            // Only use an expected width if there is an explicit /W array,
+            // not the default width, as it leads to weird results from my testing.
+            && let Some(expected_width) = self.widths.get(&cid).copied()
+        {
+            return stretch_factor(expected_width, actual_width);
+        }
+
+        1.0
+    }
+
+    pub(crate) fn font_data(&self) -> Option<crate::FontData> {
+        match self.program.kind() {
+            ProgramKind::Sfnt | ProgramKind::Cff => Some(self.program.data().clone()),
+            ProgramKind::Type1 => None,
+        }
+    }
+
+    /// Get the PostScript name.
+    pub(crate) fn postscript_name(&self) -> Option<&str> {
+        self.postscript_name.as_deref()
+    }
+
+    /// Get the font weight (100-900, 400=normal, 700=bold).
+    ///
+    /// Returns `None` if weight cannot be determined (CFF fonts or invalid weight).
+    pub(crate) fn weight(&self) -> Option<u32> {
+        self.program.weight()
+    }
+
+    /// Check if font is italic based on font flags or font attributes.
+    pub(crate) fn is_italic(&self) -> bool {
+        if let Some(flags) = &self.font_flags
+            && flags.contains(FontFlags::ITALIC)
+        {
+            return true;
+        }
+        self.program.is_italic()
+    }
+
+    /// Check if font is serif based on font flags.
+    pub(crate) fn is_serif(&self) -> bool {
+        self.font_flags
+            .as_ref()
+            .is_some_and(|f| f.contains(FontFlags::SERIF))
+    }
+
+    /// Check if font is monospace based on font flags or font metrics.
+    pub(crate) fn is_monospace(&self) -> bool {
+        if let Some(flags) = &self.font_flags
+            && flags.contains(FontFlags::FIXED_PITCH)
+        {
+            return true;
+        }
+        self.program.is_monospace()
+    }
+
+    pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
+        let cid = self.code_to_cid(code).unwrap_or(0);
+        if self.horizontal {
+            Vec2::new(self.horizontal_width(cid) as f64, 0.0)
+        } else if let Some([w, _, _]) = self.widths2.get(&cid) {
+            Vec2::new(0.0, *w as f64)
+        } else {
+            Vec2::new(0.0, self.dw2.1 as f64)
+        }
+    }
+
+    fn horizontal_width(&self, cid: u32) -> f32 {
+        self.widths.get(&cid).copied().unwrap_or(self.dw)
+    }
+
+    pub(crate) fn is_horizontal(&self) -> bool {
+        self.horizontal
+    }
+
+    pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
+        let mut code = 0_u32;
+        let remaining = bytes.len() - offset;
+
+        for n in 0..4.min(remaining) {
+            code = (code << 8) | bytes[offset + n] as u32;
+
+            if self.encoding.lookup_cid_code(code, (n + 1) as u8).is_some() {
+                return (code, n + 1);
+            }
+        }
+
+        (0, 1)
+    }
+
+    pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
+        let cid = self.code_to_cid(code).unwrap_or(0);
+
+        if self.is_horizontal() {
+            Vec2::default()
+        } else if let Some([_, v1, v2]) = self.widths2.get(&cid) {
+            Vec2::new(-*v1 as f64, -*v2 as f64)
+        } else {
+            Vec2::new(-self.horizontal_width(cid) as f64 / 2.0, -self.dw2.0 as f64)
+        }
+    }
+
+    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
+        let to_unicode = self.to_unicode.as_ref()?;
+
+        if self.to_unicode_is_cid_indexed {
+            return to_unicode.lookup_bf_string(self.code_to_cid(code).unwrap_or(0));
+        }
+
+        to_unicode.lookup_bf_string(code).or_else(|| {
+            // See pdfjs_issue9367, whose `ToUnicode` map has its Unicode values
+            // in `cidrange`s rather than `bfrange`s.
+            let value = (1..=4).find_map(|len| to_unicode.lookup_cid_code(code, len))?;
+            char::from_u32(value).map(BfString::Char)
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+enum CidToGIdMap {
+    #[default]
+    Identity,
+    Mapped {
+        forward: Vec<u16>,
+        inverse: FxHashMap<GlyphId, u16>,
+    },
+}
+
+impl CidToGIdMap {
+    fn new(dict: &Dict<'_>, with_inverse: bool) -> Option<Self> {
+        if let Some(name) = dict.get::<Name<'_>>(CID_TO_GID_MAP) {
+            if name.deref() == IDENTITY {
+                Some(Self::Identity)
+            } else {
+                None
+            }
+        } else if let Some(stream) = dict.get::<Stream<'_>>(CID_TO_GID_MAP) {
+            let decoded = stream.decoded_data().ok()?;
+            let forward: Vec<u16> = decoded
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .take(usize::from(u16::MAX) + 1)
+                .map(|gid| u16::from_be_bytes(*gid))
+                .collect();
+
+            let mut inverse = FxHashMap::default();
+            if with_inverse {
+                inverse.reserve(forward.len());
+                for (cid, gid) in forward.iter().enumerate() {
+                    inverse.insert(GlyphId::new(u32::from(*gid)), cid as u16);
+                }
+            }
+
+            Some(Self::Mapped { forward, inverse })
+        } else {
+            None
+        }
+    }
+
+    fn map(&self, code: u16) -> GlyphId {
+        match self {
+            Self::Identity => GlyphId::new(code as u32),
+            Self::Mapped { forward, .. } => forward
+                .get(usize::from(code))
+                .map_or(GlyphId::NOTDEF, |gid| GlyphId::new(u32::from(*gid))),
+        }
+    }
+
+    fn inverse_map(&self, gid: GlyphId) -> u16 {
+        match self {
+            Self::Identity => gid.to_u32() as u16,
+            Self::Mapped { inverse, .. } => {
+                inverse.get(&gid).copied().unwrap_or(gid.to_u32() as u16)
+            }
+        }
+    }
+}
+
+fn load_program(descriptor: &Dict<'_>, loader: &FontLoader<'_>) -> Option<FontProgram> {
+    // PDF has a distinction between CIDFontType0 and CIDFontType 2, with
+    // specific requirements what font type can appear where. However, some
+    // PDFs use wrong metadata, so we simply bruteforce without even looking
+    // at the metadata.
+    let stream = descriptor
+        .get::<Stream<'_>>(FONT_FILE2)
+        .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE3))
+        // See PDFBOX-2599. Apparently, Acrobat accepts this as well.
+        .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE))?;
+
+    loader.programs.load(&stream)
+}
+
+fn read_widths(arr: &Array<'_>) -> Option<FxHashMap<u32, f32>> {
+    let mut map = FxHashMap::default();
+    let mut iter = arr.flex_iter();
+
+    loop {
+        if let Some((mut first, range)) = iter.next::<(u32, Array<'_>)>() {
+            for width in range.iter::<f32>() {
+                map.insert(first, width);
+                first = first.checked_add(1)?;
+            }
+        } else if let Some((first, second, width)) = iter.next::<(u32, u32, f32)>() {
+            for i in first..=second {
+                map.insert(i, width);
+            }
+        } else {
+            break;
+        }
+    }
+
+    Some(map)
+}
+
+fn read_widths2(arr: &Array<'_>) -> Option<FxHashMap<u32, [f32; 3]>> {
+    let mut map = FxHashMap::default();
+    let mut iter = arr.flex_iter();
+
+    loop {
+        if let Some((mut first, range)) = iter.next::<(u32, Array<'_>)>() {
+            let mut iter = range.iter::<f32>();
+
+            while let Some(w) = iter.next() {
+                let v1 = iter.next()?;
+                let v2 = iter.next()?;
+                map.insert(first, [w, v1, v2]);
+                first = first.checked_add(1)?;
+            }
+        } else if let Some((first, second, w, v1, v2)) = iter.next::<(u32, u32, f32, f32, f32)>() {
+            for i in first..=second {
+                map.insert(i, [w, v1, v2]);
+            }
+        } else {
+            break;
+        }
+    }
+
+    Some(map)
+}
+
+fn read_cid_system_info(descendant_font: &Dict<'_>) -> Option<CharacterCollection> {
+    let info = descendant_font.get::<Dict<'_>>(CIDSYSTEMINFO)?;
+    let registry = info.get::<object::String<'_>>(REGISTRY)?;
+    let ordering = info.get::<object::String<'_>>(ORDERING)?;
+    let supplement = info.get::<i32>(SUPPLEMENT).unwrap_or(0);
+    let family = CidFamily::from_registry_ordering(registry.deref(), ordering.deref());
+
+    Some(CharacterCollection { family, supplement })
+}
+
+fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
+    // TODO: Support fetching CMaps referenced via `usecmap` in the PDF.
+    match object {
+        Object::Name(n) => {
+            let cmap_type = hayro_cmap::CMapName::from_bytes(n.deref());
+            match cmap_type {
+                hayro_cmap::CMapName::IdentityH => Some(CMap::identity_h()),
+                hayro_cmap::CMapName::IdentityV => Some(CMap::identity_v()),
+                _ => {
+                    let data = (cmap_resolver)(cmap_type)?;
+                    let resolver = cmap_resolver.clone();
+                    CMap::parse(data, move |n| (resolver)(n))
+                }
+            }
+        }
+        Object::Stream(s) => {
+            let decoded = s.decoded_data().ok()?;
+            let resolver = cmap_resolver.clone();
+            CMap::parse(&decoded, move |n| (resolver)(n))
+        }
+        _ => None,
+    }
+}

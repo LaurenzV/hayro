@@ -1,0 +1,49 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Contents 4 0 R /Resources << /ExtGState << /G << /ca 0.5 /CA 0.5 >> /H << /ca 1 /CA 1 >> /K << /ca 1 /CA 0.5 >> >> /ColorSpace << /PR [/Pattern /DeviceRGB] >> /Pattern << /S 5 0 R /C 6 0 R /O 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 202 >>
+stream
+q /G gs /Pattern cs /S scn /H gs 0 0 100 100 re f Q
+q /K gs /Pattern CS /S SCN 80 w 100 50 m 200 50 l S Q
+q /G gs /Pattern cs /C scn 200 0 100 100 re f Q
+q /G gs /PR cs 1 0 0 /O scn 300 0 100 100 re f Q
+endstream
+endobj
+5 0 obj
+<< /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 1 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [1 0 0] /N 1 >> /Extend [true true] >> >>
+endobj
+6 0 obj
+<< /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >> /Length 23 >>
+stream
+1 0 0 rg 0 0 10 10 re f
+endstream
+endobj
+7 0 obj
+<< /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >> /Length 25 >>
+stream
+0 0 8 8 re f 2 2 8 8 re f
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000391 00000 n 
+0000000644 00000 n 
+0000000846 00000 n 
+0000001016 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1188
+%%EOF

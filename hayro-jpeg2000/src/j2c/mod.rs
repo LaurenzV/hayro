@@ -24,7 +24,7 @@ pub use decode::DecoderContext;
 pub(crate) use decode::decode;
 
 pub(crate) struct ParsedCodestream<'a> {
-    pub(crate) header: Header<'a>,
+    pub(crate) header: Header,
     pub(crate) data: &'a [u8],
 }
 
@@ -53,9 +53,28 @@ pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<I
     let mut boxes = ImageBoxes::default();
 
     // If we are just decoding a raw codestream, we assume greyscale or
-    // RGB.
+    // RGB. The exception are three components where the last two are
+    // subsampled relative to the first one, since that's practically only
+    // done for YCbCr.
+    let subsampling = |c: &codestream::ComponentInfo| {
+        (
+            c.size_info.horizontal_resolution,
+            c.size_info.vertical_resolution,
+        )
+    };
+    let has_subsampled_chroma = matches!(
+        header.component_infos.as_slice(),
+        [y, cb, cr] if {
+            let (y, cb, cr) = (subsampling(y), subsampling(cb), subsampling(cr));
+
+            cb == cr && cb != y && cb.0 >= y.0 && cb.1 >= y.1
+        }
+    );
+
     let cs = if header.component_infos.len() < 3 {
         ColorSpace::Enumerated(EnumeratedColorspace::Greyscale)
+    } else if has_subsampled_chroma {
+        ColorSpace::Enumerated(EnumeratedColorspace::Sycc)
     } else {
         ColorSpace::Enumerated(EnumeratedColorspace::Srgb)
     };
@@ -69,7 +88,7 @@ pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<I
         codestream: parsed_codestream.data,
         header: parsed_codestream.header,
         boxes,
-        settings: *settings,
+        settings: settings.clone(),
         color_space,
         has_alpha,
     })

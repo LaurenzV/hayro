@@ -70,10 +70,10 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
     let len_bytes = bit_len.to_be_bytes();
     padded[padded_len - 8..].copy_from_slice(&len_bytes);
 
-    for chunk in padded.chunks_exact(64) {
+    for chunk in padded.as_chunks::<64>().0 {
         let mut w = [0_u32; 64];
 
-        for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
+        for (i, word_bytes) in chunk.as_chunks::<4>().0.iter().enumerate() {
             w[i] = u32::from_be_bytes([word_bytes[0], word_bytes[1], word_bytes[2], word_bytes[3]]);
         }
 

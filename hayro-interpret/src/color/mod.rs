@@ -33,6 +33,8 @@ use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 
+const MAX_COLOR_SPACE_DEPTH: u8 = 32;
+
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
 
@@ -157,11 +159,15 @@ pub(crate) enum ColorSpaceType {
 }
 
 impl ColorSpaceType {
-    fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
-        Self::new_inner(object, cache)
+    fn new(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
+        if depth >= MAX_COLOR_SPACE_DEPTH {
+            return None;
+        }
+
+        Self::new_inner(object, cache, depth)
     }
 
-    fn new_inner(object: Object<'_>, cache: &Cache) -> Option<Self> {
+    fn new_inner(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         if let Object::Name(name) = object {
             return Self::new_from_name(&name);
         } else if let Object::Array(color_array) = object {
@@ -175,7 +181,7 @@ impl ColorSpaceType {
                     let num_components = dict.get::<usize>(N)?;
 
                     return cache.get_or_insert_with(icc_stream.cache_key(), || {
-                        if let Some(decoded) = icc_stream.decoded().ok().as_ref() {
+                        if let Some(decoded) = icc_stream.decoded_data().ok().as_ref() {
                             ICCProfile::new(decoded, num_components)
                                 .map(|icc| {
                                     // TODO: For SVG and PNG we can assume that the output color space is
@@ -190,7 +196,7 @@ impl ColorSpaceType {
                                 })
                                 .or_else(|| {
                                     dict.get::<Object<'_>>(ALTERNATE)
-                                        .and_then(|o| Self::new(o, cache))
+                                        .and_then(|o| Self::new(o, cache, depth + 1))
                                 })
                                 .or_else(|| match dict.get::<u8>(N) {
                                     Some(1) => Some(Self::DeviceGray(DeviceGray)),
@@ -220,24 +226,26 @@ impl ColorSpaceType {
                     return Some(Self::Lab(Lab::new(&lab_dict)?));
                 }
                 INDEXED | I => {
-                    return Some(Self::Indexed(Indexed::new(&color_array, cache)?));
+                    return Some(Self::Indexed(Indexed::new(&color_array, cache, depth + 1)?));
                 }
                 SEPARATION => {
-                    return Some(Self::Separation(Separation::new(&color_array, cache)?));
+                    return Some(Self::Separation(Separation::new(
+                        &color_array,
+                        cache,
+                        depth + 1,
+                    )?));
                 }
                 DEVICE_N => {
-                    return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
+                    return Some(Self::DeviceN(DeviceN::new(&color_array, cache, depth + 1)?));
                 }
                 PATTERN => {
-                    let _ = iter.next::<Name<'_>>();
                     let cs = iter
                         .next::<Object<'_>>()
-                        .and_then(|o| ColorSpace::new(o, cache))
+                        .and_then(|o| ColorSpace::new_nested(o, cache, depth + 1))
                         .unwrap_or(ColorSpace::device_rgb());
                     return Some(Self::Pattern(Pattern::new(cs)));
                 }
                 _ => {
-                    warn!("unsupported color space: {}", name.as_str());
                     return None;
                 }
             }
@@ -265,7 +273,11 @@ pub struct ColorSpace(Arc<ColorSpaceType>);
 impl ColorSpace {
     /// Create a new color space from the given object.
     pub(crate) fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
-        Some(Self(Arc::new(ColorSpaceType::new(object, cache)?)))
+        Self::new_nested(object, cache, 0)
+    }
+
+    pub(super) fn new_nested(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
+        Some(Self(Arc::new(ColorSpaceType::new(object, cache, depth)?)))
     }
 
     /// Create a new color space from the name.
@@ -375,6 +387,15 @@ impl ColorSpace {
     }
 
     pub(crate) fn encode_values(&self, input: &[f32]) -> SmallVec<[u8; 4]> {
+        let num_components = self.num_components() as usize;
+
+        // Make sure output always has the expected size, even for invalid
+        // conversions.
+        let mut input = ColorComponents::from_slice(&input[..input.len().min(num_components)]);
+        if input.len() < num_components {
+            input.extend_from_slice(&self.initial_color()[input.len()..]);
+        }
+
         if let Some(hival) = self.indexed_hival() {
             return input
                 .iter()
@@ -388,7 +409,7 @@ impl ColorSpace {
             }
             _ => self.component_ranges(),
         };
-        encode_components(input, &ranges)
+        encode_components(&input, &ranges)
     }
 
     /// Get the initial color of the color space.
@@ -414,7 +435,7 @@ impl ColorSpace {
     }
 
     /// Get the number of components of the color space.
-    pub(crate) fn num_components(&self) -> u8 {
+    pub fn num_components(&self) -> u8 {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk(_) => 4,
             ColorSpaceType::DeviceGray(_) => 1,
@@ -568,6 +589,22 @@ impl Color {
         }
     }
 
+    /// Return the color space of the color.
+    ///
+    /// If a transfer function was applied to the color, this is `DeviceRGB`.
+    pub fn color_space(&self) -> &ColorSpace {
+        &self.color_space
+    }
+
+    /// Return the components of the color, in its color space.
+    ///
+    /// These are the values given in the PDF, for example the operands of `scn`,
+    /// so in invalid files there can be fewer or more of them than the color space
+    /// has components.
+    pub fn components(&self) -> &[f32] {
+        &self.components
+    }
+
     /// Return the color as an RGBA color.
     #[inline]
     pub fn to_rgba(&self) -> AlphaColor {
@@ -610,4 +647,53 @@ fn encode_components(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[u8; 4]> 
             (((*value - min) / (max - min)) * 255.0 + 0.5) as u8
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ColorSpace, MAX_COLOR_SPACE_DEPTH};
+    use crate::cache::Cache;
+    use hayro_syntax::Pdf;
+    use hayro_syntax::object::{Object, ObjectIdentifier};
+
+    fn indexed_chain(len: usize) -> Pdf {
+        let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+            .to_vec();
+
+        for i in 0..len {
+            let num = 10 + i;
+            let body = if i + 1 == len {
+                "/DeviceGray".to_string()
+            } else {
+                format!("[/Indexed {} 0 R 0 <00>]", num + 1)
+            };
+            data.extend(format!("{num} 0 obj\n{body}\nendobj\n").as_bytes());
+        }
+
+        data.extend(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        Pdf::new(data).unwrap()
+    }
+
+    fn color_space_of_chain(len: usize) -> Option<ColorSpace> {
+        let pdf = indexed_chain(len);
+        let object = pdf
+            .xref()
+            .get::<Object<'_>>(ObjectIdentifier::new(10, 0))
+            .unwrap();
+
+        ColorSpace::new(object, &Cache::new())
+    }
+
+    #[test]
+    fn color_space_nesting_bound() {
+        assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize).is_some());
+        assert!(color_space_of_chain(MAX_COLOR_SPACE_DEPTH as usize + 1).is_none());
+    }
+
+    #[test]
+    fn deep_color_space_chain_fails() {
+        assert!(color_space_of_chain(20_000).is_none());
+    }
 }

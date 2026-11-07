@@ -158,6 +158,94 @@ mod inner {
             self.inner = self.inner / rhs;
         }
     }
+
+    #[inline(always)]
+    pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
+        simd: S,
+        channels: [&[f32; 16]; N],
+        scale: f32,
+        out: &mut [u8],
+    ) {
+        // TODO: This can be optimized on ARM by specializing it.
+        match N {
+            1 => to_u8(simd, channels[0], scale).store_slice(out),
+            2 => {
+                let (low, high) = simd.interleave_u8x16(
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                );
+                let (out_low, out_high) = out.split_at_mut(16);
+                low.store_slice(out_low);
+                high.store_slice(out_high);
+            }
+            3 => {
+                let (c0, c1, c2) = (
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
+                );
+                for (out, [i0, i1, i2]) in out.as_chunks_mut::<16>().0.iter_mut().zip(THREE_WAY) {
+                    let interleaved = c0.swizzle_dyn_precise(i0)
+                        | c1.swizzle_dyn_precise(i1)
+                        | c2.swizzle_dyn_precise(i2);
+                    interleaved.store_slice(out);
+                }
+            }
+            4 => {
+                let channels = [
+                    to_u8(simd, channels[0], scale),
+                    to_u8(simd, channels[1], scale),
+                    to_u8(simd, channels[2], scale),
+                    to_u8(simd, channels[3], scale),
+                ];
+                simd.store_four_interleaved_u8x16(channels, out.try_into().unwrap());
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline(always)]
+    fn to_u8<S: Simd>(simd: S, values: &[f32; 16], scale: f32) -> fearless_simd::u8x16<S> {
+        let scale = fearless_simd::f32x8::splat(simd, scale);
+        let half = fearless_simd::f32x8::splat(simd, 0.5);
+        let convert = |i: usize| {
+            let v = fearless_simd::f32x8::from_slice(simd, &values[i..i + 8]) * scale + half;
+
+            // On NEON, the unsigned conversion and the narrowing saturate by themselves,
+            // which saves the explicit clamping.
+            #[cfg(target_arch = "aarch64")]
+            {
+                let (a, b) = simd.split_u32x8(simd.cvt_u32_precise_f32x8(v));
+                simd.saturating_narrow_u32x4(a, b)
+            }
+
+            #[cfg(not(target_arch = "aarch64"))]
+            {
+                use fearless_simd::Bytes;
+
+                let zero = fearless_simd::f32x8::splat(simd, 0.0);
+                let max = fearless_simd::f32x8::splat(simd, 255.0);
+                let (a, b) = simd
+                    .split_i32x8(simd.cvt_i32_f32x8(simd.min_f32x8(simd.max_f32x8(v, zero), max)));
+                simd.relaxed_narrow_i32x4(a, b).bitcast()
+            }
+        };
+        // A relaxed narrow here makes LLVM fuse both steps into a 32-to-8-bit truncation,
+        // which it scalarizes on wasm.
+        simd.saturating_narrow_u16x8(convert(0), convert(8))
+    }
+
+    const THREE_WAY: [[[u8; 16]; 3]; 3] = three_way_indices();
+
+    const fn three_way_indices() -> [[[u8; 16]; 3]; 3] {
+        let mut indices = [[[0x80; 16]; 3]; 3];
+        let mut i = 0;
+        while i < 48 {
+            indices[i / 16][i % 3][i % 16] = (i / 3) as u8;
+            i += 1;
+        }
+        indices
+    }
 }
 
 #[cfg(not(feature = "simd"))]
@@ -176,7 +264,7 @@ mod inner {
     impl Level {
         #[inline(always)]
         pub(crate) fn new() -> Self {
-            Level
+            Self
         }
     }
 
@@ -191,7 +279,7 @@ mod inner {
     impl<S: Simd> f32x8<S> {
         #[inline(always)]
         pub(crate) fn from_slice(_simd: S, slice: &[f32]) -> Self {
-            let mut val = [0.0f32; SIMD_WIDTH];
+            let mut val = [0.0_f32; SIMD_WIDTH];
             val.copy_from_slice(&slice[..SIMD_WIDTH]);
             Self {
                 val,
@@ -209,10 +297,8 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn mul_add(self, mul: Self, addend: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::mul_add(self.val[i], mul.val[i], addend.val[i]);
-            }
+            let result =
+                core::array::from_fn(|i| super::mul_add(self.val[i], mul.val[i], addend.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -221,10 +307,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn floor(self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::floor_f32(self.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::floor_f32(self.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -272,10 +355,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn min(self, other: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::min_f32(self.val[i], other.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::min_f32(self.val[i], other.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -284,10 +364,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn max(self, other: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = super::max_f32(self.val[i], other.val[i]);
-            }
+            let result = core::array::from_fn(|i| super::max_f32(self.val[i], other.val[i]));
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -299,10 +376,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn add(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] + rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] + rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -314,10 +388,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn sub(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] - rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] - rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -329,10 +400,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn mul(self, rhs: Self) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] * rhs.val[i];
-            }
+            let result = core::array::from_fn(|i| self.val[i] * rhs.val[i]);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -344,10 +412,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn add(self, rhs: f32) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] + rhs;
-            }
+            let result = core::array::from_fn(|i| self.val[i] + rhs);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -359,10 +424,7 @@ mod inner {
         type Output = Self;
         #[inline(always)]
         fn mul(self, rhs: f32) -> Self {
-            let mut result = [0.0f32; SIMD_WIDTH];
-            for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i] * rhs;
-            }
+            let result = core::array::from_fn(|i| self.val[i] * rhs);
             Self {
                 val: result,
                 _marker: PhantomData,
@@ -402,6 +464,20 @@ mod inner {
         fn div_assign(&mut self, rhs: f32) {
             for i in 0..SIMD_WIDTH {
                 self.val[i] /= rhs;
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn round_and_interleave<S: Simd, const N: usize>(
+        _simd: S,
+        channels: [&[f32; 16]; N],
+        scale: f32,
+        out: &mut [u8],
+    ) {
+        for (i, pixel) in out.as_chunks_mut::<N>().0.iter_mut().enumerate() {
+            for (value, channel) in pixel.iter_mut().zip(channels) {
+                *value = super::round_to_u8(channel[i] * scale);
             }
         }
     }
@@ -467,19 +543,8 @@ pub(crate) fn floor_f32(x: f32) -> f32 {
 }
 
 #[inline(always)]
-pub(crate) fn round_f32(x: f32) -> f32 {
-    #[cfg(feature = "std")]
-    {
-        x.round()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        if x >= 0.0 {
-            floor_f32(x + 0.5)
-        } else {
-            -floor_f32(-x + 0.5)
-        }
-    }
+pub(crate) fn round_to_u8(x: f32) -> u8 {
+    (x + 0.5) as u8
 }
 
 #[inline(always)]

@@ -5,21 +5,6 @@ use siphasher::sip128::{Hasher128, SipHasher13};
 use std::hash::Hash;
 use std::ops::Sub;
 
-pub(crate) trait OptionLog {
-    fn warn_none(self, f: &str) -> Self;
-}
-
-impl<T> OptionLog for Option<T> {
-    #[inline]
-    fn warn_none(self, _f: &str) -> Self {
-        self.or_else(|| {
-            warn!("{_f}");
-
-            None
-        })
-    }
-}
-
 const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 8) as f32;
 
 /// A number of useful methods for f32 numbers.

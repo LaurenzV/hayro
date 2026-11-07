@@ -1,0 +1,28 @@
+[package]
+name = "hayro-font"
+version = "0.5.0"
+description = "A crate for parsing the fonts of PDF files."
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+readme = "README.md"
+
+[dependencies]
+bitflags = { workspace = true }
+hayro-cmap = { workspace = true }
+hayro-syntax = { workspace = true, features = ["std"] }
+kurbo = { workspace = true }
+phf = { workspace = true, features = ["macros"] }
+rustc-hash = { workspace = true }
+siphasher = { workspace = true }
+skrifa = { workspace = true }
+
+[features]
+default = ["embed-fonts"]
+# Embed a light-weight set of fonts (around 240KB) that can be used as a substitute for the 14 PDF standard fonts.
+embed-fonts = []
+
+[lints]
+workspace = true

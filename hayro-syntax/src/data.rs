@@ -4,7 +4,7 @@ use crate::reader::ReaderContext;
 use crate::sync::FxHashMap;
 use crate::sync::{Arc, Mutex, MutexExt};
 use crate::util::SegmentList;
-use alloc::borrow::Cow;
+use crate::xref::ObjectStream;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 
@@ -65,7 +65,7 @@ impl From<Vec<u8>> for PdfData {
 pub(crate) struct Data {
     data: PdfData,
     // 32 segments are more than enough as we can't have more objects than this.
-    decoded: SegmentList<Option<Vec<u8>>, 32>,
+    object_streams: SegmentList<ObjectStream, 32>,
     map: Mutex<FxHashMap<ObjectIdentifier, usize>>,
 }
 
@@ -80,7 +80,7 @@ impl Data {
     pub(crate) fn new(data: PdfData) -> Self {
         Self {
             data,
-            decoded: SegmentList::new(),
+            object_streams: SegmentList::new(),
             map: Mutex::new(FxHashMap::default()),
         }
     }
@@ -90,24 +90,29 @@ impl Data {
         &self.data
     }
 
-    /// Get access to the data of a decoded object stream.
-    pub(crate) fn get_with(&self, id: ObjectIdentifier, ctx: &ReaderContext<'_>) -> Option<&[u8]> {
+    /// Get access to a decoded object stream.
+    pub(crate) fn object_stream(
+        &self,
+        id: ObjectIdentifier,
+        ctx: &ReaderContext<'_>,
+    ) -> Option<&ObjectStream> {
         if let Some(&idx) = self.map.get().get(&id) {
-            self.decoded.get(idx)?.as_deref()
-        } else {
-            // Block scope to keep the lock short-lived.
-            let idx = {
-                let mut locked = self.map.get();
-                let idx = locked.len();
-                locked.insert(id, idx);
-                idx
-            };
-            self.decoded
-                .get_or_init(idx, || {
-                    let stream = ctx.xref().get_with::<Stream<'_>>(id, ctx)?;
-                    stream.decoded().ok().map(Cow::into_owned)
-                })
-                .as_deref()
+            return self.object_streams.get(idx);
         }
+
+        // Decoding may resolve other objects, so do it without holding the cache lock.
+        let stream = ctx.xref().get_with::<Stream<'_>>(id, ctx)?;
+        let object_stream = ObjectStream::new(&stream)?;
+
+        let mut locked = self.map.get();
+        if let Some(&idx) = locked.get(&id) {
+            return self.object_streams.get(idx);
+        }
+
+        let idx = locked.len();
+        let object_stream = self.object_streams.get_or_init(idx, || object_stream);
+        locked.insert(id, idx);
+
+        Some(object_stream)
     }
 }

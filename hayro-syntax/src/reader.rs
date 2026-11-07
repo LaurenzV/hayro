@@ -2,7 +2,7 @@
 
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
-use crate::trivia::{Comment, is_eol_character, is_white_space_character};
+use crate::trivia::{Comment, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
 
@@ -13,10 +13,16 @@ pub trait ReaderExt<'a> {
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_with_context<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T>;
+    fn read_indirect<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]>;
+    fn skip_with_depth<T: Skippable>(
+        &mut self,
+        is_content_stream: bool,
+        depth: usize,
+    ) -> Option<&'a [u8]>;
     fn skip_white_spaces(&mut self);
     fn read_white_space(&mut self) -> Option<()>;
-    fn skip_eol_characters(&mut self);
+    fn read_eol(&mut self) -> Option<()>;
     fn skip_white_spaces_and_comments(&mut self);
 }
 
@@ -51,10 +57,30 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]> {
+    fn read_indirect<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
         let old_offset = self.offset;
 
-        T::skip(self, is_content_stream).or_else(|| {
+        T::read_indirect(self, ctx).or_else(|| {
+            self.offset = old_offset;
+
+            None
+        })
+    }
+
+    #[inline]
+    fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]> {
+        self.skip_with_depth::<T>(is_content_stream, 0)
+    }
+
+    #[inline]
+    fn skip_with_depth<T: Skippable>(
+        &mut self,
+        is_content_stream: bool,
+        depth: usize,
+    ) -> Option<&'a [u8]> {
+        let old_offset = self.offset;
+
+        T::skip_with_depth(self, is_content_stream, depth).or_else(|| {
             self.offset = old_offset;
             None
         })?;
@@ -89,21 +115,24 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     }
 
     #[inline]
-    fn skip_eol_characters(&mut self) {
-        while let Some(b) = self.peek_byte() {
-            if is_eol_character(b) {
+    fn read_eol(&mut self) -> Option<()> {
+        match self.peek_byte()? {
+            b'\n' => self.forward(),
+            b'\r' => {
                 self.forward();
-            } else {
-                return;
+                let _ = self.forward_if(|b| b == b'\n');
             }
+            _ => return None,
         }
+
+        Some(())
     }
 
     #[inline]
     fn skip_white_spaces_and_comments(&mut self) {
         while let Some(b) = self.peek_byte() {
             if is_white_space_character(b) {
-                self.skip_white_spaces();
+                self.forward();
             } else if b == b'%' {
                 Comment::skip(self, true);
             } else {
@@ -230,12 +259,19 @@ impl<'a> ReaderContext<'a> {
 
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Self::read(r, ctx)
+    }
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
         let mut r = Reader::new(b);
-        Self::read(&mut r, &ReaderContext::dummy())
+        Self::read_indirect(&mut r, &ReaderContext::dummy())
     }
 }
 
 pub trait Skippable {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()>;
+
+    fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, _: usize) -> Option<()> {
+        Self::skip(r, is_content_stream)
+    }
 }

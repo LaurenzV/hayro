@@ -1,6 +1,5 @@
 //! Text region segment parsing and decoding (7.4.3, 6.4).
 
-use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
@@ -17,11 +16,12 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
+use crate::sync::Arc;
 
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     scratch: &mut ScratchBuffers,
@@ -51,17 +51,28 @@ pub(crate) fn decode(
 
 pub(crate) fn decode_into(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
     scratch: &mut ScratchBuffers,
 ) -> Result<()> {
+    let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
+    scratch.contexts.clear();
+    scratch
+        .contexts
+        .resize(num_gr_contexts, ArithmeticDecoderContext::default());
+
     if header.flags.use_huffman {
         let mut reader = Reader::new(header.data);
-        let ctx =
-            DecodeContext::new_huffman(&mut reader, header, referred_tables, standard_tables)?;
-        decode_with(ctx, symbols, header, bitmap)?;
+        let ctx = DecodeContext::new_huffman(
+            &mut reader,
+            header,
+            referred_tables,
+            standard_tables,
+            &mut scratch.contexts,
+        )?;
+        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -69,23 +80,38 @@ pub(crate) fn decode_into(
         let symbol_code_length = 32 - num_symbols.saturating_sub(1).leading_zeros();
         let mut contexts = TextRegionContexts::new(symbol_code_length);
 
-        let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
-        scratch.contexts.clear();
-        scratch
-            .contexts
-            .resize(num_gr_contexts, ArithmeticDecoderContext::default());
-
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(ctx, SymbolBitmaps::new(symbols, &[]), header, bitmap)?;
     }
 
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct SymbolBitmaps<'a> {
+    first: &'a [&'a Arc<Bitmap>],
+    second: &'a [Arc<Bitmap>],
+}
+
+impl<'a> SymbolBitmaps<'a> {
+    pub(crate) fn new(first: &'a [&'a Arc<Bitmap>], second: &'a [Arc<Bitmap>]) -> Self {
+        Self { first, second }
+    }
+
+    fn get(self, index: usize) -> Option<&'a Bitmap> {
+        let bitmap = match self.first.get(index) {
+            Some(bitmap) => bitmap,
+            None => self.second.get(index - self.first.len())?,
+        };
+
+        Some(bitmap)
+    }
+}
+
 /// Decode a text region segment with a decode context (6.4).
 pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     region: &mut Bitmap,
 ) -> Result<()> {
@@ -115,11 +141,6 @@ pub(crate) fn decode_with(
         let mut current_s = 0;
 
         loop {
-            // Prevent infinite loop for invalid files.
-            if instance_count > header.num_instances {
-                bail!(SymbolError::TooManySymbols);
-            }
-
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -127,6 +148,14 @@ pub(crate) fn decode_with(
                     .ok_or(OverflowError::PlacementCoordinate)?;
                 current_s = first_s;
                 first_symbol_in_strip = false;
+            } else if instance_count == header.num_instances {
+                let end_of_strip = ctx.read_delta_s();
+
+                if header.strict && end_of_strip?.is_some() {
+                    bail!(SymbolError::TooManyInstances);
+                }
+
+                break;
             } else {
                 let Some(delta_s) = ctx.read_delta_s()? else {
                     // OOB - end of strip.
@@ -150,7 +179,14 @@ pub(crate) fn decode_with(
                 decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
 
             let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
-                SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
+                SymbolBitmap::Reference(idx) => match symbols.get(*idx) {
+                    Some(bitmap) => bitmap,
+                    None if header.strict => bail!(SymbolError::OutOfRange),
+                    None => {
+                        instance_count += 1;
+                        continue;
+                    }
+                },
                 SymbolBitmap::Owned(bitmap) => bitmap,
             };
             let symbol_width = symbol_bitmap_ref.width as i32;
@@ -174,23 +210,29 @@ pub(crate) fn decode_with(
 
             let symbol_s = current_s;
 
+            let start = |end: i32, size: i32| {
+                end.checked_sub(size - 1)
+                    .ok_or(OverflowError::PlacementCoordinate)
+            };
             let (x, y) = if !header.flags.transposed {
                 match header.flags.reference_corner {
                     ReferenceCorner::TopLeft => (symbol_s, symbol_t),
-                    ReferenceCorner::TopRight => (symbol_s - symbol_width + 1, symbol_t),
-                    ReferenceCorner::BottomLeft => (symbol_s, symbol_t - symbol_height + 1),
-                    ReferenceCorner::BottomRight => {
-                        (symbol_s - symbol_width + 1, symbol_t - symbol_height + 1)
-                    }
+                    ReferenceCorner::TopRight => (start(symbol_s, symbol_width)?, symbol_t),
+                    ReferenceCorner::BottomLeft => (symbol_s, start(symbol_t, symbol_height)?),
+                    ReferenceCorner::BottomRight => (
+                        start(symbol_s, symbol_width)?,
+                        start(symbol_t, symbol_height)?,
+                    ),
                 }
             } else {
                 match header.flags.reference_corner {
                     ReferenceCorner::TopLeft => (symbol_t, symbol_s),
-                    ReferenceCorner::TopRight => (symbol_t - symbol_width + 1, symbol_s),
-                    ReferenceCorner::BottomLeft => (symbol_t, symbol_s - symbol_height + 1),
-                    ReferenceCorner::BottomRight => {
-                        (symbol_t - symbol_width + 1, symbol_s - symbol_height + 1)
-                    }
+                    ReferenceCorner::TopRight => (start(symbol_t, symbol_width)?, symbol_s),
+                    ReferenceCorner::BottomLeft => (symbol_t, start(symbol_s, symbol_height)?),
+                    ReferenceCorner::BottomRight => (
+                        start(symbol_t, symbol_width)?,
+                        start(symbol_s, symbol_height)?,
+                    ),
                 }
             };
 
@@ -266,6 +308,7 @@ pub(crate) enum DecodeContext<'a, 'b> {
         reader: &'a mut Reader<'b>,
         tables: TextRegionHuffmanTables<'a>,
         symbol_codes: &'a HuffmanTable,
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     },
     Arithmetic {
         decoder: &'a mut ArithmeticDecoder<'b>,
@@ -280,6 +323,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         header: &'a TextRegionHeader<'_>,
         referred_tables: &'a [HuffmanTable],
         standard_tables: &'a StandardHuffmanTables,
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     ) -> Result<Self> {
         let huffman_flags = header
             .huffman_flags
@@ -295,6 +339,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             reader,
             tables,
             symbol_codes,
+            gr_contexts,
         })
     }
 
@@ -474,7 +519,12 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         refinement_at_pixels: &[AdaptiveTemplatePixel],
     ) -> Result<()> {
         match self {
-            DecodeContext::Huffman { reader, tables, .. } => {
+            DecodeContext::Huffman {
+                reader,
+                tables,
+                gr_contexts,
+                ..
+            } => {
                 let refinement_data_size = tables.refinement_size.decode_no_oob(reader)? as u32;
                 reader.align();
 
@@ -483,12 +533,10 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                     .ok_or(ParseError::UnexpectedEof)?;
 
                 let mut decoder = ArithmeticDecoder::new(refinement_data);
-                let num_context_bits = refinement_template.context_bits();
-                let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
                 generic_refinement::decode_bitmap(
                     &mut decoder,
-                    &mut contexts,
+                    gr_contexts,
                     refined,
                     reference_bitmap,
                     reference_x_offset,
@@ -528,7 +576,7 @@ enum SymbolBitmap {
 /// Decode the symbol instance bitmap (6.4.11).
 fn decode_symbol_instance_bitmap(
     ctx: &mut DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     symbol_id: usize,
 ) -> Result<SymbolBitmap> {
@@ -634,16 +682,16 @@ fn select_huffman_tables<'a>(
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
-    // "6) SBHUFFRDY"
-    let refinement_y = match flags.refinement_y_table {
+    // "6) SBHUFFRDX"
+    let refinement_x = match flags.refinement_x_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
-    // "7) SBHUFFRDX"
-    let refinement_x = match flags.refinement_x_table {
+    // "7) SBHUFFRDY"
+    let refinement_y = match flags.refinement_y_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom()?,
@@ -663,8 +711,8 @@ fn select_huffman_tables<'a>(
         delta_t,
         refinement_width,
         refinement_height,
-        refinement_y,
         refinement_x,
+        refinement_y,
         refinement_size,
     })
 }
@@ -735,8 +783,8 @@ pub(crate) struct TextRegionHuffmanTables<'a> {
     delta_t: &'a HuffmanTable,
     refinement_width: &'a HuffmanTable,
     refinement_height: &'a HuffmanTable,
-    refinement_y: &'a HuffmanTable,
     refinement_x: &'a HuffmanTable,
+    refinement_y: &'a HuffmanTable,
     refinement_size: &'a HuffmanTable,
 }
 
@@ -783,8 +831,8 @@ pub(crate) struct TextRegionHuffmanFlags {
     pub(crate) delta_t_table: u8,
     pub(crate) refinement_width_table: u8,
     pub(crate) refinement_height_table: u8,
-    pub(crate) refinement_y_table: u8,
     pub(crate) refinement_x_table: u8,
+    pub(crate) refinement_y_table: u8,
     pub(crate) refinement_size_table: u8,
 }
 
@@ -799,6 +847,7 @@ pub(crate) struct TextRegionHeader<'a> {
     pub(crate) symbol_id_table: Option<HuffmanTable>,
     pub(crate) segment_data_len: usize,
     pub(crate) data: &'a [u8],
+    pub(crate) strict: bool,
 }
 
 impl TextRegionHeader<'_> {
@@ -849,8 +898,8 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
     let delta_t_table = ((flags_word >> 4) & 0x03) as u8;
     let refinement_width_table = ((flags_word >> 6) & 0x03) as u8;
     let refinement_height_table = ((flags_word >> 8) & 0x03) as u8;
-    let refinement_y_table = ((flags_word >> 10) & 0x03) as u8;
-    let refinement_x_table = ((flags_word >> 12) & 0x03) as u8;
+    let refinement_x_table = ((flags_word >> 10) & 0x03) as u8;
+    let refinement_y_table = ((flags_word >> 12) & 0x03) as u8;
     let refinement_size_table = ((flags_word >> 14) & 0x01) as u8;
 
     Ok(TextRegionHuffmanFlags {
@@ -859,14 +908,18 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
         delta_t_table,
         refinement_width_table,
         refinement_height_table,
-        refinement_y_table,
         refinement_x_table,
+        refinement_y_table,
         refinement_size_table,
     })
 }
 
 /// Parse a text region segment header (7.4.3.1).
-pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<TextRegionHeader<'a>> {
+pub(crate) fn parse<'a>(
+    reader: &mut Reader<'a>,
+    num_symbols: u32,
+    strict: bool,
+) -> Result<TextRegionHeader<'a>> {
     let segment_data_len = reader.tail().ok_or(ParseError::UnexpectedEof)?.len();
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
@@ -902,5 +955,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<Tex
         symbol_id_table,
         segment_data_len,
         data,
+        strict,
     })
 }

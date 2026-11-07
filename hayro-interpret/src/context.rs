@@ -1,21 +1,24 @@
 use crate::cache::{Cache, CacheKey};
 use crate::color::{Color, ColorSpace};
 use crate::convert::convert_transform;
-use crate::font::{Font, PositionedGlyph, StandardFont};
-use crate::interpret::state::{ClipType, State, TextStateFont};
+use crate::font::{FontCache, PositionedGlyph, StandardFont};
+use crate::interpret::stack::StateStack;
+use crate::interpret::state::{
+    ClipType, CompositingState, PaintData, PaintState, State, TextState, TextStateFont,
+};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
-use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, StrokeProps};
+use crate::{
+    ClipPath, Device, DrawProps, FillRule, InterpreterSettings, InterpreterWarning, Paint,
+    StrokeProps,
+};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
-use rustc_hash::FxHashMap;
 use smallvec::smallvec;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 /// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
 pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
@@ -24,9 +27,11 @@ pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple interpreter invocations on the same document.
+// TODO: Cache keys are only unique within a document (streams, for example, are keyed by
+// their object identifier), so a cache shared across documents can mix up their objects.
 #[derive(Clone)]
 pub struct InterpreterCache<'a> {
-    pub(crate) font_cache: Rc<RefCell<FxHashMap<u128, Option<Font<'a>>>>>,
+    pub(crate) font_cache: FontCache<'a>,
     pub(crate) object_cache: Cache,
 }
 
@@ -40,7 +45,7 @@ impl<'a> InterpreterCache<'a> {
     /// Create a new interpreter cache.
     pub fn new() -> Self {
         Self {
-            font_cache: Rc::new(RefCell::new(FxHashMap::default())),
+            font_cache: FontCache::new(),
             object_cache: Cache::new(),
         }
     }
@@ -48,7 +53,7 @@ impl<'a> InterpreterCache<'a> {
 
 /// A per-page interpretation context that borrows shared data from an [`InterpreterCache`].
 pub struct Context<'a> {
-    states: Vec<State<'a>>,
+    stack: StateStack<'a>,
     path: BezPath,
     sub_path_start: Point,
     last_point: Point,
@@ -94,7 +99,7 @@ impl<'a> Context<'a> {
         };
 
         Self {
-            states: vec![state],
+            stack: StateStack::new(state),
             settings,
             xref,
             root_transforms: vec![initial_transform],
@@ -111,20 +116,14 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn save_state(&mut self) {
-        let Some(cur) = self.states.last().cloned() else {
-            warn!("attempted to save state without existing state");
-            return;
-        };
-
-        self.states.push(cur);
+        self.stack.save();
     }
 
     pub(crate) fn bbox(&self) -> Rect {
-        self.bbox.last().copied().unwrap_or_else(|| {
-            warn!("failed to get a bbox");
-
-            Rect::new(0.0, 0.0, 1.0, 1.0)
-        })
+        self.bbox
+            .last()
+            .copied()
+            .unwrap_or_else(|| Rect::new(0.0, 0.0, 1.0, 1.0))
     }
 
     fn push_bbox(&mut self, bbox: Rect) {
@@ -151,13 +150,13 @@ impl<'a> Context<'a> {
                 && cur_bbox.max_x().is_nearly_less_or_equal(clip_rect.max_x())
                 && cur_bbox.max_y().is_nearly_less_or_equal(clip_rect.max_y())
             {
-                self.get_mut().clips.push(ClipType::Dummy);
+                self.stack.push_clip(ClipType::Dummy);
                 return;
             }
 
             device.push_clip_rect(&clip_rect);
             self.push_bbox(clip_rect);
-            self.get_mut().clips.push(ClipType::Real);
+            self.stack.push_clip(ClipType::Real);
             return;
         }
 
@@ -167,11 +166,11 @@ impl<'a> Context<'a> {
             fill,
         });
         self.push_bbox(bbox);
-        self.get_mut().clips.push(ClipType::Real);
+        self.stack.push_clip(ClipType::Real);
     }
 
     pub(crate) fn pop_clip(&mut self, device: &mut impl Device<'a>) {
-        if let Some(ClipType::Real) = self.get_mut().clips.pop() {
+        if let Some(ClipType::Real) = self.stack.pop_clip() {
             device.pop_clip();
             self.pop_bbox();
         }
@@ -182,7 +181,7 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn push_root_transform(&mut self) {
-        self.root_transforms.push(self.get().ctm);
+        self.root_transforms.push(self.ctm());
     }
 
     pub(crate) fn pop_root_transform(&mut self) {
@@ -197,43 +196,44 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn restore_state(&mut self, device: &mut impl Device<'a>) {
-        let Some(target_clips) = self
-            .states
-            .get(self.states.len().saturating_sub(2))
-            .map(|s| s.clips.len())
-        else {
-            warn!("underflowed graphics state");
+        let Some(target_clips) = self.stack.restore_target_clips() else {
             return;
         };
 
-        while self.get().clips.len() > target_clips {
+        while self.stack.num_clips() > target_clips {
             self.pop_clip(device);
         }
 
-        // The first state should never be popped.
-        if self.states.len() > 1 {
-            self.states.pop();
-        }
+        self.stack.restore();
     }
 
     pub(crate) fn draw_props(&self, is_stroke: bool) -> DrawProps<'a> {
         DrawProps {
-            transform: self.get().ctm,
+            transform: self.ctm(),
             paint: self.get_paint(is_stroke),
-            soft_mask: self.get().graphics_state.soft_mask.clone(),
-            blend_mode: self.get().graphics_state.blend_mode,
+            soft_mask: self.compositing().soft_mask.clone(),
+            blend_mode: self.compositing().blend_mode,
         }
     }
 
     pub(crate) fn get_paint(&self, is_stroke: bool) -> Paint<'a> {
-        let data = if is_stroke {
-            self.get().stroke_data()
+        let paint = if is_stroke {
+            self.stroke_paint()
         } else {
-            self.get().non_stroke_data()
+            self.fill_paint()
+        };
+        let data = PaintData {
+            alpha: paint.alpha,
+            color: paint.color.clone(),
+            color_space: paint.color_space.clone(),
+            pattern: paint.pattern.clone(),
+            transfer_function: self.compositing().transfer_function.clone(),
         };
 
         if data.color_space.is_pattern() || data.pattern.is_some() {
             if let Some(mut pattern) = data.pattern {
+                pattern.set_opacity(data.alpha);
+
                 if let Some(tf) = &data.transfer_function {
                     pattern.set_transfer_function(tf.clone());
                 }
@@ -280,20 +280,61 @@ impl<'a> Context<'a> {
         &mut self.last_point
     }
 
-    pub(crate) fn clip(&self) -> &Option<FillRule> {
-        &self.clip
-    }
-
     pub(crate) fn clip_mut(&mut self) -> &mut Option<FillRule> {
         &mut self.clip
     }
 
-    pub(crate) fn get(&self) -> &State<'a> {
-        self.states.last().unwrap()
+    pub(crate) fn ctm(&self) -> Affine {
+        *self.stack.ctm()
     }
 
-    pub(crate) fn get_mut(&mut self) -> &mut State<'a> {
-        self.states.last_mut().unwrap()
+    pub(crate) fn ctm_mut(&mut self) -> &mut Affine {
+        self.stack.ctm_mut()
+    }
+
+    pub(crate) fn stroke_paint(&self) -> &PaintState<'a> {
+        self.stack.stroke()
+    }
+
+    pub(crate) fn stroke_paint_mut(&mut self) -> &mut PaintState<'a> {
+        self.stack.stroke_mut()
+    }
+
+    pub(crate) fn fill_paint(&self) -> &PaintState<'a> {
+        self.stack.fill()
+    }
+
+    pub(crate) fn fill_paint_mut(&mut self) -> &mut PaintState<'a> {
+        self.stack.fill_mut()
+    }
+
+    pub(crate) fn stroke_props(&self) -> &StrokeProps {
+        self.stack.stroke_props()
+    }
+
+    pub(crate) fn stroke_props_mut(&mut self) -> &mut StrokeProps {
+        self.stack.stroke_props_mut()
+    }
+
+    pub(crate) fn text_state(&self) -> &TextState<'a> {
+        self.stack.text()
+    }
+
+    pub(crate) fn text_state_mut(&mut self) -> &mut TextState<'a> {
+        self.stack.text_mut()
+    }
+
+    pub(crate) fn compositing(&self) -> &CompositingState<'a> {
+        self.stack.compositing()
+    }
+
+    pub(crate) fn compositing_mut(&mut self) -> &mut CompositingState<'a> {
+        self.stack.compositing_mut()
+    }
+
+    /// A copy of the current graphics state.
+    pub(crate) fn snapshot(&self) -> State<'a> {
+        self.stack.snapshot()
     }
 
     pub(crate) fn pre_concat_transform(&mut self, transform: Transform) {
@@ -301,7 +342,7 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn pre_concat_affine(&mut self, transform: Affine) {
-        self.get_mut().ctm *= transform;
+        *self.ctm_mut() *= transform;
     }
 
     pub(crate) fn get_color_space(
@@ -317,12 +358,8 @@ impl<'a> Context<'a> {
             })
     }
 
-    pub(crate) fn stroke_props(&self) -> StrokeProps {
-        self.get().graphics_state.stroke_props.clone()
-    }
-
     pub(crate) fn num_states(&self) -> usize {
-        self.states.len()
+        self.stack.len()
     }
 
     pub(crate) fn nesting_depth(&self) -> u32 {
@@ -331,8 +368,6 @@ impl<'a> Context<'a> {
 
     pub(crate) fn begin_nested_interpretation(&mut self) -> bool {
         if self.nesting_depth >= MAX_NESTED_INTERPRETATION_DEPTH {
-            warn!("interpreter nesting depth exceeded");
-
             return false;
         }
 
@@ -344,28 +379,27 @@ impl<'a> Context<'a> {
     pub(crate) fn end_nested_interpretation(&mut self) {
         self.nesting_depth = self.nesting_depth.saturating_sub(1);
     }
-    pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {
-        let cache_key = font_dict.cache_key();
 
-        let resolved = {
-            let mut font_cache = self.interpreter_cache.font_cache.borrow_mut();
-            font_cache
-                .entry(cache_key)
-                .or_insert_with(|| {
-                    Font::new(
-                        font_dict,
-                        &self.settings.font_resolver,
-                        &self.settings.cmap_resolver,
-                    )
-                })
-                .clone()
-        };
+    pub(crate) fn fallback_font(&self) -> Option<TextStateFont<'a>> {
+        self.interpreter_cache
+            .font_cache
+            .standard_font(StandardFont::Helvetica, &self.settings.font_resolver)
+            .map(TextStateFont::Fallback)
+    }
+
+    pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {
+        let resolved = self.interpreter_cache.font_cache.font(
+            font_dict,
+            &self.settings.font_resolver,
+            &self.settings.cmap_resolver,
+        );
 
         if let Some(resolved) = resolved {
             Some(TextStateFont::Font(resolved))
         } else {
-            Font::new_standard(StandardFont::Helvetica, &self.settings.font_resolver)
-                .map(TextStateFont::Fallback)
+            (self.settings.warning_sink)(InterpreterWarning::UnsupportedFont);
+
+            self.fallback_font()
         }
     }
 }

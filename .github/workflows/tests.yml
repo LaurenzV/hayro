@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: macos-latest
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: true
+      CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: tests/downloads
+          key: test-downloads-${{ hashFiles('tests/manifest_*.json') }}
+          restore-keys: test-downloads-
+      - name: Build
+        run: cargo test --release --locked --workspace --exclude hayro-demo --exclude hayro-bench --exclude hayro-fuzz --no-run
+      - name: Test
+        run: cargo test --release --locked --workspace --exclude hayro-demo --exclude hayro-bench --exclude hayro-fuzz --no-fail-fast
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: tests/downloads
+          key: test-downloads-${{ hashFiles('tests/manifest_*.json') }}

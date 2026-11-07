@@ -14,11 +14,12 @@ const MAX_RESOLUTION_COUNT: u8 = 32;
 const MAX_PRECINCT_EXPONENT: u8 = 31;
 
 #[derive(Debug)]
-pub(crate) struct Header<'a> {
+pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
-    pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
+    pub(crate) ppm_packets: Vec<PpmPacket>,
+    pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) skipped_resolution_levels: u8,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
@@ -27,18 +28,16 @@ pub(crate) struct Header<'a> {
 #[derive(Debug, Clone)]
 pub(crate) struct PpmMarkerData<'a> {
     pub(crate) sequence_idx: u8,
-    pub(crate) packets: Vec<PpmPacket<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PpmPacket<'a> {
     pub(crate) data: &'a [u8],
 }
+
+/// The packed packet headers of a single tile-part.
+pub(crate) type PpmPacket = Vec<u8>;
 
 pub(crate) fn read_header<'a>(
     reader: &mut BitReader<'a>,
     settings: &DecodeSettings,
-) -> Result<Header<'a>> {
+) -> Result<Header> {
     if reader.read_marker()? != markers::SIZ {
         bail!(MarkerError::Expected("SIZ"));
     }
@@ -52,7 +51,9 @@ pub(crate) fn read_header<'a>(
     let num_components = size_data.component_sizes.len() as u16;
     let mut cod_components = vec![None; num_components as usize];
     let mut qcd_components = vec![None; num_components as usize];
+    let mut roi_shifts = vec![0; num_components as usize];
     let mut ppm_markers = vec![];
+    let mut progression_changes = vec![];
 
     loop {
         match reader.peek_marker().ok_or(MarkerError::Invalid)? {
@@ -83,7 +84,11 @@ pub(crate) fn read_header<'a>(
             }
             markers::RGN => {
                 reader.read_marker()?;
-                rgn_marker(reader).ok_or(MarkerError::ParseFailure("RGN"))?;
+                let (component_index, roi_shift) =
+                    rgn_marker(reader, num_components).ok_or(MarkerError::ParseFailure("RGN"))?;
+                *roi_shifts
+                    .get_mut(component_index as usize)
+                    .ok_or(MarkerError::ParseFailure("RGN"))? = roi_shift;
             }
             markers::TLM => {
                 reader.read_marker()?;
@@ -96,6 +101,12 @@ pub(crate) fn read_header<'a>(
             markers::PPM => {
                 reader.read_marker()?;
                 ppm_markers.push(ppm_marker(reader).ok_or(MarkerError::ParseFailure("PPM"))?);
+            }
+            markers::POC => {
+                reader.read_marker()?;
+                progression_changes.extend(
+                    poc_marker(reader, num_components).ok_or(MarkerError::ParseFailure("POC"))?,
+                );
             }
             markers::CRG => {
                 reader.read_marker()?;
@@ -132,6 +143,7 @@ pub(crate) fn read_header<'a>(
                 })
                 .unwrap_or(cod.component_parameters.clone()),
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
+            roi_shift: roi_shifts[idx],
         })
         .collect();
 
@@ -167,17 +179,14 @@ pub(crate) fn read_header<'a>(
     size_data.x_resolution_shrink_factor *= 1 << skipped_resolution_levels;
     size_data.y_resolution_shrink_factor *= 1 << skipped_resolution_levels;
 
-    ppm_markers.sort_by(|p0, p1| p0.sequence_idx.cmp(&p1.sequence_idx));
+    let ppm_packets = ppm_packets(ppm_markers).ok_or(MarkerError::ParseFailure("PPM"))?;
 
     let header = Header {
         size_data,
         global_coding_style: cod.clone(),
         component_infos,
-        ppm_packets: ppm_markers
-            .into_iter()
-            .flat_map(|i| i.packets)
-            .filter_map(|p| if p.data.is_empty() { None } else { Some(p) })
-            .collect(),
+        ppm_packets,
+        progression_changes,
         skipped_resolution_levels,
         strict: settings.strict,
     };
@@ -187,7 +196,7 @@ pub(crate) fn read_header<'a>(
     Ok(header)
 }
 
-fn validate(header: &Header<'_>) -> Result<()> {
+fn validate(header: &Header) -> Result<()> {
     for info in &header.component_infos {
         let max_resolution_idx = info.coding_style.parameters.num_resolution_levels - 1;
         let quantization_style = info.quantization_info.quantization_style;
@@ -220,6 +229,8 @@ pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
     pub(crate) coding_style: CodingStyleComponent,
     pub(crate) quantization_info: QuantizationInfo,
+    /// The scaling value of the region of interest, from the RGN marker.
+    pub(crate) roi_shift: u8,
 }
 
 impl ComponentInfo {
@@ -310,6 +321,17 @@ impl ProgressionOrder {
             _ => err!(ValidationError::InvalidProgressionOrder),
         }
     }
+}
+
+/// A progression order change, from the POC marker (A.6.6).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ProgressionChange {
+    pub(crate) resolution_start: u8,
+    pub(crate) component_start: u16,
+    pub(crate) layer_end: u16,
+    pub(crate) resolution_end: u8,
+    pub(crate) component_end: u16,
+    pub(crate) progression_order: ProgressionOrder,
 }
 
 /// Wavelet transformation type (Table A.20).
@@ -513,20 +535,38 @@ impl SizeData {
         Ok(tile_count)
     }
 
+    fn x_divisor(&self) -> u64 {
+        u64::from(self.x_shrink_factor) * u64::from(self.x_resolution_shrink_factor)
+    }
+
+    fn y_divisor(&self) -> u64 {
+        u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor)
+    }
+
+    /// The horizontal offset of the image area in the coordinate system of
+    /// the output image.
+    pub(crate) fn image_x_offset(&self) -> u32 {
+        u64::from(self.image_area_x_offset).div_ceil(self.x_divisor()) as u32
+    }
+
+    /// The vertical offset of the image area in the coordinate system of
+    /// the output image.
+    pub(crate) fn image_y_offset(&self) -> u32 {
+        u64::from(self.image_area_y_offset).div_ceil(self.y_divisor()) as u32
+    }
+
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        let divisor = u64::from(self.x_shrink_factor) * u64::from(self.x_resolution_shrink_factor);
-        let width =
-            u64::from(self.reference_grid_width - self.image_area_x_offset).div_ceil(divisor);
-        width as u32
+        // See B-1 and B-14.
+        u64::from(self.reference_grid_width).div_ceil(self.x_divisor()) as u32
+            - self.image_x_offset()
     }
 
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        let divisor = u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor);
-        let height =
-            u64::from(self.reference_grid_height - self.image_area_y_offset).div_ceil(divisor);
-        height as u32
+        // See B-1 and B-14.
+        u64::from(self.reference_grid_height).div_ceil(self.y_divisor()) as u32
+            - self.image_y_offset()
     }
 }
 
@@ -738,29 +778,51 @@ fn tlm_marker(reader: &mut BitReader<'_>) -> Option<()> {
 fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
     let segment_len = reader.read_u16()?.checked_sub(2)? as usize;
     let ppm_data = reader.read_bytes(segment_len)?;
+
+    let (&sequence_idx, data) = ppm_data.split_first()?;
+
+    Some(PpmMarkerData { sequence_idx, data })
+}
+
+/// Split the data of all PPM markers into the packet headers of each tile-part.
+fn ppm_packets(mut markers: Vec<PpmMarkerData<'_>>) -> Option<Vec<PpmPacket>> {
+    // The packet headers of a tile-part can continue in the next marker
+    // segment (A.7.4), so the segments need to be concatenated first.
+    markers.sort_by_key(|m| m.sequence_idx);
+    let data = markers
+        .iter()
+        .flat_map(|m| m.data)
+        .copied()
+        .collect::<Vec<_>>();
+
+    let mut reader = BitReader::new(&data);
     let mut packets = vec![];
 
-    let mut reader = BitReader::new(ppm_data);
-    let sequence_idx = reader.read_byte()?;
-
-    // TODO: Handle case where next packet doesn't have nppm parameter.
-
     while !reader.at_end() {
-        let packet_len = reader.read_u16()? as usize;
-        let data = reader.read_bytes(packet_len)?;
-
-        packets.push(PpmPacket { data });
+        let length = reader.read_u32()? as usize;
+        packets.push(reader.read_bytes(length)?.to_vec());
     }
 
-    Some(PpmMarkerData {
-        sequence_idx,
-        packets,
-    })
+    Some(packets)
 }
 
 /// RGN marker (A.6.3).
-fn rgn_marker(reader: &mut BitReader<'_>) -> Option<()> {
-    skip_marker_segment(reader)
+pub(crate) fn rgn_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, u8)> {
+    // Length.
+    let _ = reader.read_u16()?;
+
+    let component_index = if csiz < 257 {
+        reader.read_byte()? as u16
+    } else {
+        reader.read_u16()?
+    };
+
+    let roi_style = reader.read_byte()?;
+    let roi_shift = reader.read_byte()?;
+
+    // Only implicit ROIs (maximum shift) are defined (see Table A.25), so
+    // ignore any other style.
+    Some((component_index, if roi_style == 0 { roi_shift } else { 0 }))
 }
 
 pub(crate) fn skip_marker_segment(reader: &mut BitReader<'_>) -> Option<()> {
@@ -823,6 +885,39 @@ pub(crate) fn coc_marker(
     };
 
     Some((component_index, coc))
+}
+
+/// POC marker (A.6.6).
+pub(crate) fn poc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<Vec<ProgressionChange>> {
+    let length = reader.read_u16()?.checked_sub(2)?;
+    let mut reader = BitReader::new(reader.read_bytes(length as usize)?);
+
+    let read_component_index = |reader: &mut BitReader<'_>| {
+        if csiz < 257 {
+            reader.read_byte().map(u16::from)
+        } else {
+            reader.read_u16()
+        }
+    };
+
+    let entry_size = if csiz < 257 { 7 } else { 9 };
+
+    (0..length as usize / entry_size)
+        .map(|_| {
+            Some(ProgressionChange {
+                resolution_start: reader.read_byte()?,
+                component_start: read_component_index(&mut reader)?,
+                layer_end: reader.read_u16()?,
+                resolution_end: reader.read_byte()?,
+                component_end: match read_component_index(&mut reader)? {
+                    // See Table A.32.
+                    0 => 256,
+                    index => index,
+                },
+                progression_order: ProgressionOrder::from_u8(reader.read_byte()?).ok()?,
+            })
+        })
+        .collect()
 }
 
 /// QCD marker (A.6.4).

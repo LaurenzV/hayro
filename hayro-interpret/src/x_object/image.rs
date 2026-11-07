@@ -13,8 +13,8 @@ use kurbo::Affine;
 
 #[derive(Clone)]
 pub(crate) struct ImageXObject<'a> {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+    width: u32,
+    height: u32,
     pub(crate) color_space: Option<ColorSpace>,
     pub(crate) cache: Cache,
     pub(crate) interpolate: bool,
@@ -153,12 +153,12 @@ impl<'a> ImageXObject<'a> {
             0.0,
             1.0,
         ]));
-        let transform = context.get().ctm;
+        let transform = context.ctm();
 
         let has_alpha = self.has_mask();
 
-        let mut soft_mask = std::mem::take(&mut context.get_mut().graphics_state.soft_mask);
-        let blend_mode = std::mem::take(&mut context.get_mut().graphics_state.blend_mode);
+        let mut soft_mask = std::mem::take(&mut context.compositing_mut().soft_mask);
+        let blend_mode = std::mem::take(&mut context.compositing_mut().blend_mode);
 
         // If image has a soft mask, the soft mask from the graphics state
         // should be discarded.
@@ -167,10 +167,13 @@ impl<'a> ImageXObject<'a> {
         }
 
         device.push_transparency_group(
-            context.get().graphics_state.non_stroke_alpha,
+            context.fill_paint().alpha,
             std::mem::take(&mut soft_mask),
             blend_mode,
         );
+
+        // The transparency group already applies the fill alpha.
+        context.fill_paint_mut().alpha = 1.0;
 
         let image = if self.kind.is_mask() {
             Image::Stencil(StencilImage {

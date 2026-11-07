@@ -56,35 +56,65 @@ pub(crate) enum SegmentType {
     ColourPalette,
     /// Extension - see 7.4.14. (type 62)
     Extension,
+    /// "All other segment types are reserved and must not be used." (7.3)
+    Reserved,
 }
 
 impl SegmentType {
-    /// "All other segment types are reserved and must not be used." (7.3)
-    fn from_type_value(value: u8) -> Result<Self> {
+    /// Whether segments of this type must be associated with a page (7.3.2).
+    pub(crate) fn requires_page(self) -> bool {
+        self.is_immediate_region()
+            || matches!(
+                self,
+                Self::IntermediateTextRegion
+                    | Self::IntermediateHalftoneRegion
+                    | Self::IntermediateGenericRegion
+                    | Self::IntermediateGenericRefinementRegion
+                    | Self::PageInformation
+                    | Self::EndOfPage
+                    | Self::EndOfStripe
+            )
+    }
+
+    pub(crate) fn is_immediate_region(self) -> bool {
+        matches!(
+            self,
+            Self::ImmediateTextRegion
+                | Self::ImmediateLosslessTextRegion
+                | Self::ImmediateHalftoneRegion
+                | Self::ImmediateLosslessHalftoneRegion
+                | Self::ImmediateGenericRegion
+                | Self::ImmediateLosslessGenericRegion
+                | Self::ImmediateGenericRefinementRegion
+                | Self::ImmediateLosslessGenericRefinementRegion
+        )
+    }
+
+    fn from_type_value(value: u8) -> Self {
         match value {
-            0 => Ok(Self::SymbolDictionary),
-            4 => Ok(Self::IntermediateTextRegion),
-            6 => Ok(Self::ImmediateTextRegion),
-            7 => Ok(Self::ImmediateLosslessTextRegion),
-            16 => Ok(Self::PatternDictionary),
-            20 => Ok(Self::IntermediateHalftoneRegion),
-            22 => Ok(Self::ImmediateHalftoneRegion),
-            23 => Ok(Self::ImmediateLosslessHalftoneRegion),
-            36 => Ok(Self::IntermediateGenericRegion),
-            38 => Ok(Self::ImmediateGenericRegion),
-            39 => Ok(Self::ImmediateLosslessGenericRegion),
-            40 => Ok(Self::IntermediateGenericRefinementRegion),
-            42 => Ok(Self::ImmediateGenericRefinementRegion),
-            43 => Ok(Self::ImmediateLosslessGenericRefinementRegion),
-            48 => Ok(Self::PageInformation),
-            49 => Ok(Self::EndOfPage),
-            50 => Ok(Self::EndOfStripe),
-            51 => Ok(Self::EndOfFile),
-            52 => Ok(Self::Profiles),
-            53 => Ok(Self::Tables),
-            54 => Ok(Self::ColourPalette),
-            62 => Ok(Self::Extension),
-            _ => err!(SegmentError::UnknownType),
+            0 => Self::SymbolDictionary,
+            4 => Self::IntermediateTextRegion,
+            6 => Self::ImmediateTextRegion,
+            7 => Self::ImmediateLosslessTextRegion,
+            16 => Self::PatternDictionary,
+            20 => Self::IntermediateHalftoneRegion,
+            22 => Self::ImmediateHalftoneRegion,
+            23 => Self::ImmediateLosslessHalftoneRegion,
+            36 => Self::IntermediateGenericRegion,
+            38 => Self::ImmediateGenericRegion,
+            39 => Self::ImmediateLosslessGenericRegion,
+            40 => Self::IntermediateGenericRefinementRegion,
+            42 => Self::ImmediateGenericRefinementRegion,
+            43 => Self::ImmediateLosslessGenericRefinementRegion,
+            48 => Self::PageInformation,
+            49 => Self::EndOfPage,
+            50 => Self::EndOfStripe,
+            51 => Self::EndOfFile,
+            52 => Self::Profiles,
+            53 => Self::Tables,
+            54 => Self::ColourPalette,
+            62 => Self::Extension,
+            _ => Self::Reserved,
         }
     }
 }
@@ -105,7 +135,7 @@ pub(crate) struct SegmentHeader {
     /// The first page must be numbered '1'. This field may contain a value of
     /// zero; this value indicates that this segment is not associated with any
     /// page." (7.2.6)
-    pub(crate) _page_association: u32,
+    pub(crate) page_association: u32,
     /// "This field contains the segment numbers of the segments that this segment
     /// refers to, if any." (7.2.5)
     pub(crate) referred_to_segments: Vec<u32>,
@@ -127,7 +157,7 @@ pub(crate) struct Segment<'a> {
 }
 
 /// Parse a segment header (7.2).
-pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader> {
+pub(crate) fn parse_segment_header(reader: &mut Reader<'_>, strict: bool) -> Result<SegmentHeader> {
     // 7.2.2: Segment number
     // "This four-byte field contains the segment's segment number. The valid
     // range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive.
@@ -140,7 +170,11 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-5: Segment type. See 7.3."
-    let segment_type = SegmentType::from_type_value(flags & 0x3F)?;
+    let segment_type = SegmentType::from_type_value(flags & 0x3F);
+
+    if strict && segment_type == SegmentType::Reserved {
+        bail!(SegmentError::UnknownType);
+    }
 
     // "Bit 6: Page association field size. See 7.2.6."
     let page_association_long = flags & 0x40 != 0;
@@ -169,6 +203,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     let referred_to_count = if short_count < 7 {
         // Short form: "Bits 5-7: Count of referred-to segments. This field may
         // take on values between zero and four."
+
         short_count as u32
     } else {
         // Long form: "In the case where the field is in the long format (at least
@@ -200,15 +235,23 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // segment number is one byte long. Otherwise, when the current segment's
     // number is 65536 or less, each referred-to segment number is two bytes long.
     // Otherwise, each referred-to segment number is four bytes long."
+    let number_size = if segment_number <= 256 {
+        1
+    } else if segment_number <= 65536 {
+        2
+    } else {
+        4
+    };
+    let numbers = (referred_to_count as usize)
+        .checked_mul(number_size)
+        .and_then(|len| reader.read_bytes(len))
+        .ok_or(ParseError::UnexpectedEof)?;
+
     let mut referred_to_segments = Vec::with_capacity(referred_to_count as usize);
-    for _ in 0..referred_to_count {
-        let referred = if segment_number <= 256 {
-            reader.read_byte().ok_or(ParseError::UnexpectedEof)? as u32
-        } else if segment_number <= 65536 {
-            reader.read_u16().ok_or(ParseError::UnexpectedEof)? as u32
-        } else {
-            reader.read_u32().ok_or(ParseError::UnexpectedEof)?
-        };
+    for bytes in numbers.chunks_exact(number_size) {
+        let referred = bytes
+            .iter()
+            .fold(0, |acc, &byte| (acc << 8) | u32::from(byte));
 
         // If a segment refers to other segments, it must refer to only segments
         // with lower segment numbers.
@@ -239,6 +282,10 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // header is written."
     let data_length_raw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let data_length = if data_length_raw == 0xFFFFFFFF {
+        if strict && segment_type != SegmentType::ImmediateGenericRegion {
+            bail!(SegmentError::InvalidUnknownLength);
+        }
+
         None
     } else {
         Some(data_length_raw)
@@ -248,15 +295,15 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         segment_number,
         segment_type,
         _retain_flag: retain_flag,
-        _page_association: page_association,
+        page_association,
         referred_to_segments,
         data_length,
     })
 }
 
 /// Parse a complete segment (header + data).
-pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>> {
-    let header = parse_segment_header(reader)?;
+pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<Segment<'a>> {
+    let header = parse_segment_header(reader, strict)?;
     parse_segment_data(reader, header)
 }
 
@@ -301,6 +348,16 @@ fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize> 
     let flags = scan.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let uses_mmr = (flags & 1) != 0;
 
+    // The AT flags (7.4.6.3) belong to the data part and can contain the end
+    // marker, so the search starts after them.
+    let at_bytes = match (uses_mmr, (flags >> 1) & 0x03, flags & 0x10 != 0) {
+        (true, _, _) => 0,
+        (false, 0, false) => 8,
+        (false, 0, true) => 24,
+        (false, _, _) => 2,
+    };
+    scan.skip_bytes(at_bytes).ok_or(ParseError::UnexpectedEof)?;
+
     // "if MMR is 1, they are preceded by the two-byte sequence 0x00 0x00;
     // if MMR is 0, they are preceded by the two-byte sequence 0xFF 0xAC."
     let end_marker: [u8; 2] = if uses_mmr { [0x00, 0x00] } else { [0xFF, 0xAC] };
@@ -340,7 +397,7 @@ mod tests {
         ];
 
         let mut reader = Reader::new(&data);
-        let header = parse_segment_header(&mut reader).unwrap();
+        let header = parse_segment_header(&mut reader, true).unwrap();
 
         // "0x00 0x00 0x00 0x20: This segment's number is 0x00000020, or 32 decimal."
         assert_eq!(header.segment_number, 32);
@@ -357,7 +414,7 @@ mod tests {
         assert_eq!(header.referred_to_segments, vec![2, 30, 5]);
 
         // "0x04: This segment is associated with page number 4."
-        assert_eq!(header._page_association, 4);
+        assert_eq!(header.page_association, 4);
 
         assert_eq!(header.data_length, Some(16));
     }
@@ -391,7 +448,7 @@ mod tests {
         ];
 
         let mut reader = Reader::new(&data);
-        let header = parse_segment_header(&mut reader).unwrap();
+        let header = parse_segment_header(&mut reader, true).unwrap();
 
         // "00 00 02 34: This segment's number is 0x00000234, or 564 decimal."
         assert_eq!(header.segment_number, 564);
@@ -412,7 +469,7 @@ mod tests {
         );
 
         // "00 00 04 01: This segment is associated with page number 1025."
-        assert_eq!(header._page_association, 1025);
+        assert_eq!(header.page_association, 1025);
 
         assert_eq!(header.data_length, Some(32));
     }

@@ -66,7 +66,7 @@ pub(crate) fn tag_to_string(tag: u32) -> String {
     String::from_utf8_lossy(&bytes).to_string()
 }
 
-pub(crate) fn read<'a>(reader: &mut BitReader<'a>) -> Option<Jp2Box<'a>> {
+pub(crate) fn read<'a>(reader: &mut BitReader<'a>, strict: bool) -> Option<Jp2Box<'a>> {
     let l_box = reader.read_u32()?;
     let t_box = reader.read_u32()?;
 
@@ -85,13 +85,13 @@ pub(crate) fn read<'a>(reader: &mut BitReader<'a>) -> Option<Jp2Box<'a>> {
         // fields.
         1 => {
             let xl_box = reader.read_u64()?.checked_sub(16)?;
-            reader.read_bytes(xl_box as usize)?
+            read_data(reader, xl_box as usize, strict)?
         }
         // This field specifies the length of the box, stored as a 4-byte big-endian unsigned integer.
         // This value includes all of the fields of the box, including the length and type.
         _ => {
             let length = l_box.checked_sub(8)?;
-            reader.read_bytes(length as usize)?
+            read_data(reader, length as usize, strict)?
         }
     };
 
@@ -99,4 +99,21 @@ pub(crate) fn read<'a>(reader: &mut BitReader<'a>) -> Option<Jp2Box<'a>> {
         data,
         box_type: t_box,
     })
+}
+
+fn read_data<'a>(reader: &mut BitReader<'a>, length: usize, strict: bool) -> Option<&'a [u8]> {
+    if let Some(data) = reader.read_bytes(length) {
+        return Some(data);
+    }
+
+    // Some files declare a box length that exceeds the file, in which case
+    // we use the remaining data instead.
+    if strict {
+        return None;
+    }
+
+    let data = reader.tail()?;
+    reader.jump_to_end();
+
+    Some(data)
 }

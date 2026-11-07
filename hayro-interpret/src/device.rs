@@ -2,6 +2,7 @@ use crate::font::GlyphRun;
 use crate::x_object::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{DrawMode, DrawProps, ImageDrawProps};
+use hayro_syntax::object::Dict;
 use kurbo::{BezPath, Rect, Shape};
 
 /// A trait for a device that can be used to process PDF drawing instructions.
@@ -43,9 +44,9 @@ pub trait Device<'a> {
     }
     /// Called at the beginning of a marked content sequence (BMC/BDC).
     ///
-    /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
-    /// the marked content identifier from the properties dict, if present.
-    fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
+    /// The tag is the marked content tag (e.g. b"P", b"Span"). The properties are the property list
+    /// dictionary.
+    fn begin_marked_content(&mut self, _tag: &[u8], _properties: Option<&Dict<'_>>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }

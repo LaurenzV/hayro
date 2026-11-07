@@ -1,6 +1,9 @@
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
+use std::f64::consts::SQRT_2;
+
+const MIN_DASH_PERIOD: f32 = 0.1;
 
 impl Renderer<'_> {
     pub(super) fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
@@ -19,13 +22,32 @@ impl Renderer<'_> {
             line_width *= threshold;
         }
 
+        // At a device width of at most one pixel, round caps and joins are indistinguishable
+        // from square caps and bevel joins, which are much cheaper to construct.
+        let is_thin = transformed_width <= 1.0;
+        let cap = match stroke_props.line_cap {
+            kurbo::Cap::Round if is_thin => kurbo::Cap::Square,
+            cap => cap,
+        };
+        let join = match stroke_props.line_join {
+            kurbo::Join::Round if is_thin => kurbo::Join::Bevel,
+            join => join,
+        };
+
+        let dash_period: f32 = stroke_props.dash_array.iter().map(|n| n.abs()).sum();
+        let dash_pattern = if dash_period * min_factor >= MIN_DASH_PERIOD {
+            stroke_props.dash_array.iter().map(|n| *n as f64).collect()
+        } else {
+            kurbo::Dashes::new()
+        };
+
         let stroke = kurbo::Stroke {
             width: line_width as f64,
-            join: stroke_props.line_join,
+            join,
             miter_limit: stroke_props.miter_limit as f64,
-            start_cap: stroke_props.line_cap,
-            end_cap: stroke_props.line_cap,
-            dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
+            start_cap: cap,
+            end_cap: cap,
+            dash_pattern,
             dash_offset: stroke_props.dash_offset as f64,
         };
 
@@ -42,11 +64,23 @@ impl Renderer<'_> {
         self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
 
+        let stroke = self.ctx.stroke();
+        let extent = stroke.width / 2.0 * stroke.miter_limit.max(SQRT_2);
+        let bbox = path.control_box().inflate(extent, extent);
+        if self.misses_target(props.transform.transform_rect_bbox(bbox)) {
+            return;
+        }
+
         let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
-        self.ctx.stroke_path(path);
+        if let Some(outline) = single_segment_outline(path, self.ctx.stroke()) {
+            self.ctx.set_fill_rule(convert_fill_rule(FillRule::NonZero));
+            self.ctx.fill_path(&outline);
+        } else {
+            self.ctx.stroke_path(path);
+        }
         if clip_path.is_some() {
             self.ctx.pop_clip();
         }
@@ -138,4 +172,40 @@ pub(crate) fn max_factor(transform: &Affine) -> f32 {
         .to_vec2()
         .length()
         .max(y_advance.to_vec2().length()) as f32
+}
+
+fn single_segment_outline(path: &BezPath, stroke: &kurbo::Stroke) -> Option<BezPath> {
+    use kurbo::{Cap, PathEl};
+
+    if !stroke.dash_pattern.is_empty() || stroke.start_cap != stroke.end_cap {
+        return None;
+    }
+
+    let (p0, p1) = match path.elements() {
+        [PathEl::MoveTo(p0), PathEl::LineTo(p1)] => (*p0, *p1),
+        _ => return None,
+    };
+
+    let d = p1 - p0;
+    let len = d.hypot();
+    if len <= 0.0 || !len.is_finite() {
+        return None;
+    }
+
+    let half = 0.5 * stroke.width;
+    let dir = d / len;
+    let n = kurbo::Vec2::new(-dir.y, dir.x) * half;
+    let (a, b) = match stroke.start_cap {
+        Cap::Butt => (p0, p1),
+        Cap::Square => (p0 - dir * half, p1 + dir * half),
+        Cap::Round => return None,
+    };
+
+    Some(BezPath::from_vec(vec![
+        PathEl::MoveTo(a + n),
+        PathEl::LineTo(b + n),
+        PathEl::LineTo(b - n),
+        PathEl::LineTo(a - n),
+        PathEl::ClosePath,
+    ]))
 }

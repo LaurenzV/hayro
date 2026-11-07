@@ -45,6 +45,10 @@ pub enum FormatError {
     UnknownPageHeight,
     /// Page has zero width or height.
     EmptyPage,
+    /// The file header's page count doesn't match the pages in the file.
+    PageCountMismatch,
+    /// A page doesn't have exactly one end of page segment.
+    InvalidEndOfPage,
 }
 
 /// Errors related to segment processing.
@@ -54,12 +58,16 @@ pub enum SegmentError {
     UnknownType,
     /// Invalid referred-to segment count.
     InvalidReferredCount,
-    /// Segment refers to a larger segment number.
+    /// Segment refers to a segment it must not refer to.
     InvalidReference,
+    /// A segment other than an immediate generic region has an unknown length.
+    InvalidUnknownLength,
     /// Missing end marker for unknown-length region.
     MissingEndMarker,
     /// Missing required pattern dictionary.
     MissingPatternDictionary,
+    /// A page segment has no page association.
+    MissingPageAssociation,
 }
 
 /// Errors related to Huffman decoding.
@@ -75,8 +83,6 @@ pub enum HuffmanError {
     UnexpectedOob,
     /// Huffman tree has conflicting codes (one code is a prefix of another).
     ConflictingCodes,
-    /// Prefix length exceeds maximum supported value.
-    PrefixLengthTooLarge,
 }
 
 /// Errors related to region parameters.
@@ -133,7 +139,7 @@ pub enum OverflowError {
     ReferenceOffset,
     /// Index computation overflowed.
     Index,
-    /// A symbol dictionary has too many symbols.
+    /// A symbol dictionary or region has too many symbols.
     SymbolCount,
 }
 
@@ -161,7 +167,7 @@ impl fmt::Display for OverflowError {
             Self::ReferenceOffset => write!(f, "overflow in reference offset computation"),
             Self::Index => write!(f, "overflow in index computation"),
             Self::GridDimension => write!(f, "overflow in grid dimension computation"),
-            Self::SymbolCount => write!(f, "a symbol dictionary has too many symbols"),
+            Self::SymbolCount => write!(f, "too many symbols"),
         }
     }
 }
@@ -182,6 +188,8 @@ impl fmt::Display for FormatError {
             Self::MissingPageInfo => write!(f, "missing page information segment"),
             Self::UnknownPageHeight => write!(f, "page height unknown with no stripe segments"),
             Self::EmptyPage => write!(f, "page has zero width or height"),
+            Self::PageCountMismatch => write!(f, "page count in file header doesn't match"),
+            Self::InvalidEndOfPage => write!(f, "page without exactly one end of page segment"),
         }
     }
 }
@@ -191,9 +199,11 @@ impl fmt::Display for SegmentError {
         match self {
             Self::UnknownType => write!(f, "unknown or reserved segment type"),
             Self::InvalidReferredCount => write!(f, "invalid referred-to segment count"),
-            Self::InvalidReference => write!(f, "segment refers to larger segment number"),
+            Self::InvalidReference => write!(f, "segment refers to an invalid segment"),
+            Self::InvalidUnknownLength => write!(f, "unknown segment length for this type"),
             Self::MissingEndMarker => write!(f, "missing end marker for unknown-length region"),
             Self::MissingPatternDictionary => write!(f, "missing required pattern dictionary"),
+            Self::MissingPageAssociation => write!(f, "segment not associated with a page"),
         }
     }
 }
@@ -206,7 +216,6 @@ impl fmt::Display for HuffmanError {
             Self::MissingTables => write!(f, "not enough referred Huffman tables"),
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
             Self::ConflictingCodes => write!(f, "conflicting Huffman codes"),
-            Self::PrefixLengthTooLarge => write!(f, "Huffman prefix length too large"),
         }
     }
 }

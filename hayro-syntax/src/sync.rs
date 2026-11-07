@@ -5,10 +5,13 @@ pub(crate) use std::collections::HashMap;
 pub(crate) use alloc::collections::BTreeMap as HashMap;
 
 #[cfg(feature = "std")]
-pub(crate) use rustc_hash::FxHashMap;
+pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 
 #[cfg(not(feature = "std"))]
 pub(crate) use alloc::collections::BTreeMap as FxHashMap;
+
+#[cfg(not(feature = "std"))]
+pub(crate) use alloc::collections::BTreeSet as FxHashSet;
 
 // Keep in sync with the implementation in `page`.
 #[cfg(feature = "std")]
@@ -73,8 +76,7 @@ impl<T> MutexExt<T> for Mutex<T> {
 
 pub(crate) trait RwLockExt<T> {
     fn get(&self) -> RwLockReadGuard<'_, T>;
-    fn try_get(&self) -> Option<RwLockReadGuard<'_, T>>;
-    fn try_put(&self) -> Option<RwLockWriteGuard<'_, T>>;
+    fn put(&self) -> RwLockWriteGuard<'_, T>;
 }
 
 #[cfg(feature = "std")]
@@ -83,12 +85,8 @@ impl<T> RwLockExt<T> for RwLock<T> {
         self.read().unwrap()
     }
 
-    fn try_get(&self) -> Option<RwLockReadGuard<'_, T>> {
-        self.try_read().ok()
-    }
-
-    fn try_put(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        self.try_write().ok()
+    fn put(&self) -> RwLockWriteGuard<'_, T> {
+        self.write().unwrap()
     }
 }
 
@@ -98,11 +96,7 @@ impl<T> RwLockExt<T> for RwLock<T> {
         self.borrow()
     }
 
-    fn try_get(&self) -> Option<RwLockReadGuard<'_, T>> {
-        Some(self.borrow())
-    }
-
-    fn try_put(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        Some(self.borrow_mut())
+    fn put(&self) -> RwLockWriteGuard<'_, T> {
+        self.borrow_mut()
     }
 }

@@ -7,7 +7,6 @@ use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::{CacheKey, InterpreterSettings};
 use hayro_syntax::object::Name;
-use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Dict, Object};
@@ -30,7 +29,8 @@ pub enum MaskType {
 }
 
 struct Repr<'a> {
-    obj_id: ObjectIdentifier,
+    dict_key: u128,
+    parent_resources_key: Option<u128>,
     group: FormXObject<'a>,
     mask_type: MaskType,
     parent_resources: Resources<'a>,
@@ -46,8 +46,10 @@ struct Repr<'a> {
 
 impl Hash for Repr<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.obj_id.hash(state);
+        self.dict_key.hash(state);
+        self.parent_resources_key.hash(state);
         self.root_transform.cache_key().hash(state);
+        self.bbox.cache_key().hash(state);
     }
 }
 
@@ -57,13 +59,13 @@ pub struct SoftMask<'a>(Rc<Repr<'a>>);
 
 impl Debug for SoftMask<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SoftMask({:?})", self.0.obj_id)
+        write!(f, "SoftMask({:032x})", self.0.dict_key)
     }
 }
 
 impl PartialEq for SoftMask<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.obj_id == other.0.obj_id
+        self.cache_key() == other.cache_key()
     }
 }
 
@@ -81,21 +83,18 @@ impl<'a> SoftMask<'a> {
         context: &Context<'a>,
         parent_resources: Resources<'a>,
     ) -> Option<Self> {
-        // TODO: With this setup, if there is a luminosity mask and alpha mask pointing to the
-        // same xobject, the ID will be the same.
-        let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream<'_>>(G)?;
         let group = FormXObject::new(&group_stream)?;
-        let cs = ColorSpace::new(
-            group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
-            &context.interpreter_cache.object_cache,
-        )?;
         let transfer_function = dict
             .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
             .map(TransferFunction::new);
         let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
+                let cs = ColorSpace::new(
+                    group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
+                    &context.interpreter_cache.object_cache,
+                )?;
                 let color = dict
                     .get::<ColorComponents>(BC)
                     .map(|c| Color::new(cs, c, 1.0))
@@ -111,12 +110,17 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
         let nesting_depth = context.nesting_depth() + 1;
+        let parent_resources_key = group
+            .resources
+            .is_none()
+            .then(|| parent_resources.cache_key());
 
         Some(Self(Rc::new(Repr {
-            obj_id,
+            dict_key: dict.cache_key(),
+            parent_resources_key,
             group,
             mask_type,
-            root_transform: context.get().ctm,
+            root_transform: context.ctm(),
             transfer_function,
             bbox: context.bbox(),
             interpreter_cache: context.interpreter_cache.clone(),
@@ -143,13 +147,6 @@ impl<'a> SoftMask<'a> {
         self.0
             .group
             .draw(&self.0.parent_resources, &mut ctx, device);
-    }
-
-    /// Return the object identifier of the mask.
-    ///
-    /// This can be used as a unique identifier for caching purposes.
-    pub fn id(&self) -> ObjectIdentifier {
-        self.0.obj_id
     }
 
     /// Return the underlying mask type.

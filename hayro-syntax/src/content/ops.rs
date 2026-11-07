@@ -1,6 +1,6 @@
 //! Content stream operators.
 
-use crate::content::{Instruction, OPERANDS_THRESHOLD, OperatorTrait, Stack};
+use crate::content::{INLINE_COLOR_COMPONENTS, Instruction, OperatorTrait, Stack};
 use crate::object;
 use crate::object::Array;
 use crate::object::Name;
@@ -18,7 +18,10 @@ include!("ops_generated.rs");
 
 fn parse_named_color<'b, 'a>(
     objects: &'b [Object<'a>],
-) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<&'b Name<'a>>)> {
+) -> Option<(
+    SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
+    Option<&'b Name<'a>>,
+)> {
     let mut nums = smallvec![];
     let mut name = None;
 
@@ -27,8 +30,6 @@ fn parse_named_color<'b, 'a>(
             Object::Number(n) => nums.push(*n),
             Object::Name(n) => name = Some(n),
             _ => {
-                warn!("encountered unknown object {o:?} when parsing scn/SCN");
-
                 return None;
             }
         }
@@ -65,7 +66,7 @@ fn fmt_named_color(
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrokeColorNamed<'b, 'a>(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
     pub Option<&'b Name<'a>>,
 );
 
@@ -87,7 +88,7 @@ op_impl!(
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct NonStrokeColorNamed<'b, 'a>(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub SmallVec<[Number; INLINE_COLOR_COMPONENTS]>,
     pub Option<&'b Name<'a>>,
 );
 
@@ -256,6 +257,24 @@ f
             other => panic!("unexpected instruction: {other:?}"),
         }
 
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn scn_device_n_pattern() {
+        let input = [b"0.5 ".repeat(32), b"/P0 scn 0 0 m".to_vec()].concat();
+
+        let mut iter = TypedIter::new(&input);
+
+        match iter.next() {
+            Some(TypedInstruction::NonStrokeColorNamed(NonStrokeColorNamed(nums, Some(name)))) => {
+                assert_eq!(nums.as_slice(), &[Number::from_f32(0.5); 32]);
+                assert_eq!(name.as_ref(), b"P0");
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
+
+        assert!(matches!(iter.next(), Some(TypedInstruction::MoveTo(_))));
         assert!(iter.next().is_none());
     }
 

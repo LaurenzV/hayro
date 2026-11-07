@@ -30,7 +30,7 @@ use std::path::PathBuf;
 
 // First load the data that constitutes the PDF file.
 let data = std::fs::read(
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/text_with_rise.pdf"),
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/pdfs/custom/text_with_rise.pdf"),
 )
 .unwrap();
 
@@ -59,7 +59,7 @@ it.
 
 For better performance, it is strongly recommended to enable the `unsafe` feature,
 which does result in slightly more unsafe code being, but does give better performance:
-- We will use the `flate2` crate for decoding flate streams.
+- We will use `zlib-rs` instead of `miniz_oxide` for decoding flate streams.
 - SIMD will be enabled to accelerate decoding of images.
 - `memchr` will be used to accelerate some of the fallback parsing code.
 

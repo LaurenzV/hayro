@@ -28,7 +28,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
         });
     }
 
-    definitions.sort_by(|a, b| a.channel_index.cmp(&b.channel_index));
+    definitions.sort_by_key(|a| a.channel_index);
 
     // Ensure channel indices increases in steps of 1, starting from 0.
     for (idx, def) in definitions.iter().enumerate() {

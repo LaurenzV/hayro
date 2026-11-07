@@ -51,7 +51,7 @@ mod path;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple conversion invocations on the same document.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
 }
@@ -142,7 +142,7 @@ impl<'a> SvgRenderer<'a> {
                     format!("translate({} {})", c[4] as f32, c[5] as f32)
                 }
                 _ => {
-                    format!("matrix({})", &convert_transform(&transform))
+                    format!("matrix({})", convert_transform(&transform))
                 }
             };
 

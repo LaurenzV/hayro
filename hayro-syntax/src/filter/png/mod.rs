@@ -1,5 +1,10 @@
 //! Taken from the png crate, see <https://github.com/image-rs/image-png/blob/master/src/filter/mod.rs>
 
+#![allow(
+    clippy::chunks_exact_to_as_chunks,
+    reason = "Kept identical to the code from the png crate"
+)]
+
 use core::convert::TryInto;
 
 mod paeth;
