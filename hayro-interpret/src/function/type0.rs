@@ -21,6 +21,27 @@ struct SampledInput {
     stride: usize,
 }
 
+impl SampledInput {
+    /// Return the index of the sample at or below the encoded position of `x`,
+    /// and the fraction towards the next sample if there is one.
+    ///
+    /// The index is clamped as an integer, because `size - 1` may not be
+    /// representable as an `f32`: for `size = 16_777_220`, it rounds up to
+    /// `size`.
+    fn sample_position(&self, x: f32) -> (usize, Option<f32>) {
+        let last = self.size - 1;
+        let position = self.domain.map(x, self.encode).max(0.0);
+        let floor = position.floor();
+        let index = (floor as u32).min(last);
+        let fraction = position - floor;
+
+        (
+            index as usize,
+            (index < last && fraction > 0.0).then_some(fraction),
+        )
+    }
+}
+
 impl Type0 {
     /// Create a new type 0 function.
     pub(crate) fn new(
@@ -101,16 +122,11 @@ impl Type0 {
         let mut num_fractions = 0;
 
         for (x, input) in input.iter().zip(&self.inputs) {
-            let position = input
-                .domain
-                .map(*x, input.encode)
-                .max(0.0)
-                .min(input.size as f32 - 1.0);
-            let index = position.floor();
-            offset += index as usize * input.stride;
+            let (index, fraction) = input.sample_position(*x);
+            offset += index * input.stride;
 
-            if position != index {
-                fractions[num_fractions] = (input.stride, position - index);
+            if let Some(fraction) = fraction {
+                fractions[num_fractions] = (input.stride, fraction);
                 num_fractions += 1;
             }
         }
@@ -141,5 +157,43 @@ impl Type0 {
         for (output, decode) in output.iter_mut().zip(&self.decode) {
             *output = self.sample_range.map(*output, *decode);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SampledInput;
+    use crate::function::Interval;
+
+    fn input(size: u32) -> SampledInput {
+        SampledInput {
+            domain: Interval { min: 0.0, max: 1.0 },
+            encode: Interval {
+                min: 0.0,
+                max: (size - 1) as f32,
+            },
+            size,
+            stride: 1,
+        }
+    }
+
+    #[test]
+    fn sample_index_stays_below_size_when_size_rounds() {
+        // `16_777_219_f32` rounds to `16_777_220.0`.
+        let input = input(16_777_220);
+
+        assert_eq!(input.sample_position(1.0), (16_777_219, None));
+        assert_eq!(input.sample_position(2.0), (16_777_219, None));
+    }
+
+    #[test]
+    fn sample_position_interpolates_between_samples() {
+        let input = input(5);
+
+        assert_eq!(input.sample_position(0.0), (0, None));
+        assert_eq!(input.sample_position(0.625), (2, Some(0.5)));
+        assert_eq!(input.sample_position(1.0), (4, None));
+        assert_eq!(input.sample_position(-1.0), (0, None));
+        assert_eq!(input.sample_position(f32::NAN), (0, None));
     }
 }
