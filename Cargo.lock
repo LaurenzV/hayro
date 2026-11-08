@@ -650,6 +650,7 @@ dependencies = [
  "bitflags",
  "hayro-cmap",
  "hayro-font",
+ "hayro-postscript",
  "hayro-syntax",
  "image",
  "kurbo",
