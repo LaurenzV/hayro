@@ -4,9 +4,9 @@ use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, WHITE_POINT};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CalGray {
-    white_point: [f32; 3],
-    black_point: [f32; 3],
-    gamma: f32,
+    pub(super) white_point: [f32; 3],
+    pub(super) black_point: [f32; 3],
+    pub(super) gamma: f32,
     lookup: U8Lookup<u8>,
 }
 

@@ -7,6 +7,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, OnceLock};
 
 struct ICCColorRepr {
+    data: Option<Box<[u8]>>,
     number_components: usize,
     is_srgb: bool,
     is_lab: bool,
@@ -36,11 +37,25 @@ impl ICCProfile {
             .get(52..56)
             .map(|device_model| device_model == SRGB_MARKER)
             .unwrap_or(false);
-        Self::new_from_src_profile(src_profile, is_srgb, number_components)
+        Self::new_inner(
+            src_profile,
+            Some(Box::from(profile)),
+            is_srgb,
+            number_components,
+        )
     }
 
     pub(super) fn new_from_src_profile(
         src_profile: ColorProfile,
+        is_srgb: bool,
+        number_components: usize,
+    ) -> Option<Self> {
+        Self::new_inner(src_profile, None, is_srgb, number_components)
+    }
+
+    fn new_inner(
+        src_profile: ColorProfile,
+        data: Option<Box<[u8]>>,
         is_srgb: bool,
         number_components: usize,
     ) -> Option<Self> {
@@ -94,6 +109,7 @@ impl ICCProfile {
         };
 
         Some(Self(Arc::new(ICCColorRepr {
+            data,
             number_components,
             is_srgb,
             is_lab,
@@ -103,6 +119,11 @@ impl ICCProfile {
             transform_in_place_u8,
             transform_in_place_luma_u8,
         })))
+    }
+
+    /// The bytes of the profile, where it was read from them.
+    pub(super) fn data(&self) -> Option<&[u8]> {
+        self.0.data.as_deref()
     }
 
     pub(super) fn number_components(&self) -> usize {

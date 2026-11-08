@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `ColorSpace::kind` describes a color space's family and parameters, such as a `Separation`'s
+  colorant name, alternate and tint transform, a `DeviceN`'s colorants and process attributes, and
+  an `ICCBased` color space's profile. `ColorSpace::from_object` creates a color space from a PDF
+  object, such as an image's `ColorSpace` entry.
+
 ## [0.9.0] - 2026-11-02
 
 This release has an [MSRV] of 1.92.
