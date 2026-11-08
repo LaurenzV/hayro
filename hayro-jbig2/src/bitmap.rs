@@ -12,7 +12,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 // Keeps pixel coordinates plus offsets within `i32`.
-pub(crate) const MAX_DIMENSION: u32 = 1 << 28;
+pub(crate) const MAX_DIMENSION: u32 = 1 << 22;
 const MAX_AREA: u64 = (u16::MAX as u64).pow(2);
 
 /// The underlying word type for packed pixel storage.
