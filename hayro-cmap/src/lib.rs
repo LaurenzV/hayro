@@ -18,6 +18,7 @@ extern crate alloc;
 #[cfg(feature = "embed-cmaps")]
 mod bcmap;
 mod parse;
+mod ps;
 
 #[cfg(feature = "embed-cmaps")]
 pub use bcmap::load_embedded;
