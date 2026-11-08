@@ -8,7 +8,7 @@ use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::DecodeState;
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
-use crate::cancel::Cancel;
+use crate::cancel::{Cancel, WORD_WORK, WorkCounter};
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image};
 use crate::memory::MemoryBudget;
@@ -243,11 +243,11 @@ fn compute_skip_bitmap(
     budget.charge(len * size_of::<u32>())?;
     let mut hskip = vec![0_u32; len];
     let mut coords = GridCoords::new(grid, &header.grid_vector);
+    let mut work = WorkCounter::new();
 
     for m_g in 0..grid.height {
-        cancel.check()?;
-
         for n_g in 0..grid.width {
+            work.add(1, cancel)?;
             let (x, y) = coords.get();
 
             if lies_outside(x, y, pattern_dict, htreg) {
@@ -322,16 +322,14 @@ fn render_patterns(
     let mut coords = GridCoords::new(grid, &header.grid_vector);
     budget.charge(grid.width as usize * size_of::<u32>())?;
     let mut gray_values = vec![0; grid.width as usize];
+    let mut work = WorkCounter::new();
+    let cell_work = 1 + u64::from(WORD_WORK) * u64::from(ph) * u64::from(pw.div_ceil(WORD_BITS));
 
     for m_g in 0..grid.height {
-        cancel.check()?;
         gi.row_values(m_g, &mut gray_values);
 
-        for (n_g, &gray_value) in gray_values.iter().enumerate() {
-            if n_g % 1024 == 1023 {
-                cancel.check()?;
-            }
-
+        for &gray_value in &gray_values {
+            work.add(cell_work, cancel)?;
             let (x, y) = coords.get();
             let gray_value = gray_value as usize;
 

@@ -69,7 +69,7 @@ pub use error::{
 
 use crate::file::parse_segments_sequential;
 use bitmap::Bitmap;
-use cancel::Cancel;
+use cancel::{Cancel, FILL_CHUNK};
 pub use cancel::{CancelCheck, CancelHandle};
 use decode::CombinationOperator;
 use decode::generic;
@@ -428,7 +428,7 @@ impl PageBitmap {
         buf: &mut [u8],
         cancel: Cancel<'_>,
     ) -> core::result::Result<(), Cancelled> {
-        let mask = cancel::row_mask(self.width()) as usize;
+        let mask = cancel::row_mask(cancel::copy_work(self.width())) as usize;
 
         for (y, (row, out)) in self
             .rows()
@@ -455,8 +455,6 @@ impl PageBitmap {
         Ok(())
     }
 }
-
-const FILL_CHUNK: usize = 1 << 22;
 
 static U8_PIXELS: [[u8; 8]; 256] = {
     let mut table = [[0xFF; 8]; 256];

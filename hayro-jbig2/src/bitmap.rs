@@ -5,7 +5,7 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
-use crate::cancel::{Cancel, row_mask};
+use crate::cancel::{Cancel, copy_work, row_mask};
 use crate::decode::CombinationOperator;
 use crate::error::{OverflowError, Result, bail};
 use crate::memory::MemoryBudget;
@@ -230,7 +230,7 @@ impl Bitmap {
         operator: CombinationOperator,
         cancel: Cancel<'_>,
     ) -> Result<()> {
-        let rows = row_mask(other.width) + 1;
+        let rows = row_mask(copy_work(other.width)) + 1;
         let mut start = 0;
 
         while start < other.height {

@@ -11,7 +11,7 @@ use super::{RegionBitmap, generic_refinement};
 use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
-use crate::cancel::{Cancel, WorkCounter};
+use crate::cancel::{Cancel, WORD_WORK, WorkCounter};
 use crate::error::{HuffmanError, OverflowError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
@@ -257,8 +257,10 @@ pub(crate) fn decode_with(
             };
 
             region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
-            // Placing a word costs about as much as decoding four pixels.
-            work.add(4 * symbol_bitmap_ref.data.len() as u64, cancel)?;
+            work.add(
+                u64::from(WORD_WORK) * symbol_bitmap_ref.data.len() as u64,
+                cancel,
+            )?;
 
             if let SymbolBitmap::Owned(bitmap) = &symbol_bitmap {
                 budget.release(bitmap.memory_size());

@@ -1,3 +1,4 @@
+use crate::bitmap::WORD_BITS;
 use crate::error::Cancelled;
 
 /// A check for cancelling decoding.
@@ -60,6 +61,12 @@ impl<'a> Cancel<'a> {
 // The amount of work between two checks, in units of about one decoded pixel.
 const CHECK_INTERVAL: u32 = 1 << 16;
 
+// Copying or combining a word of pixels costs about as much as decoding four pixels.
+pub(crate) const WORD_WORK: u32 = 4;
+
+// Filling a byte costs about 1/64 of decoding a pixel.
+pub(crate) const FILL_CHUNK: usize = 64 * CHECK_INTERVAL as usize;
+
 pub(crate) struct WorkCounter(u64);
 
 impl WorkCounter {
@@ -80,8 +87,12 @@ impl WorkCounter {
     }
 }
 
+pub(crate) fn copy_work(width: u32) -> u32 {
+    width.div_ceil(WORD_BITS) * WORD_WORK
+}
+
 #[inline]
-pub(crate) fn row_mask(width: u32) -> u32 {
-    let rows = (CHECK_INTERVAL / width.max(1)).clamp(1, 1024);
+pub(crate) fn row_mask(row_work: u32) -> u32 {
+    let rows = (CHECK_INTERVAL / row_work.max(1)).clamp(1, 1024);
     (1 << rows.ilog2()) - 1
 }

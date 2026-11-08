@@ -4,6 +4,7 @@ use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, Word};
+use crate::cancel::{WORD_WORK, WorkCounter};
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec::Vec;
@@ -85,10 +86,13 @@ pub(crate) fn decode(
 
     let src_stride = collective_bitmap.stride;
 
+    let mut work = WorkCounter::new();
+    let pattern_work = 1 + u64::from(WORD_WORK)
+        * u64::from(pattern_height)
+        * u64::from(pattern_width.div_ceil(WORD_BITS));
+
     for gray in 0..num_patterns {
-        if gray % 1024 == 1023 {
-            scratch.cancel.check()?;
-        }
+        work.add(pattern_work, scratch.cancel)?;
 
         // "a) Let the subimage of B_HDC consisting of HPH rows and columns
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
