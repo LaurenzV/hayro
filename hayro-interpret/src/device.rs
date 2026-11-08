@@ -19,8 +19,6 @@ pub trait Device<'a> {
         });
     }
     /// Push a new transparency group to the blend stack.
-    ///
-    /// `isolated` and `knockout` correspond to the `I` and `K` entries of the group.
     fn push_transparency_group(
         &mut self,
         opacity: f32,
