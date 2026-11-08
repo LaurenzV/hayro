@@ -73,7 +73,7 @@ pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<I
 
     let cs = if header.component_infos.len() < 3 {
         ColorSpace::Enumerated(EnumeratedColorspace::Greyscale)
-    } else if has_subsampled_chroma {
+    } else if has_subsampled_chroma && settings.guess_subsampled_ycbcr {
         ColorSpace::Enumerated(EnumeratedColorspace::Sycc)
     } else {
         ColorSpace::Enumerated(EnumeratedColorspace::Srgb)

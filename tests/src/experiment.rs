@@ -120,7 +120,7 @@ fn check_jpx_images(folder: &str) {
                                 resolve_palette_indices: false,
                                 strict: false,
                                 target_resolution: Some((2000, 2000)),
-                                cancel: None,
+                                ..Default::default()
                             };
 
                             hayro_jpeg2000::Image::new(&raw_data, &settings).and_then(|image| {

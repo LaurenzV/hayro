@@ -132,6 +132,14 @@ pub struct DecodeSettings {
     pub target_resolution: Option<(u32, u32)>,
     /// A check for cancelling decoding.
     pub cancel: Option<CancelHandle>,
+    /// Whether a raw codestream (one without a JP2 colour specification) of
+    /// three components whose last two are subsampled is taken as YCbCr and
+    /// converted to RGB.
+    ///
+    /// Disable this when the colour space of the components is known from
+    /// elsewhere, as in a PDF image with a `/ColorSpace` entry: the components
+    /// are then returned as they are.
+    pub guess_subsampled_ycbcr: bool,
 }
 
 impl Default for DecodeSettings {
@@ -141,6 +149,7 @@ impl Default for DecodeSettings {
             strict: false,
             target_resolution: None,
             cancel: None,
+            guess_subsampled_ycbcr: true,
         }
     }
 }
