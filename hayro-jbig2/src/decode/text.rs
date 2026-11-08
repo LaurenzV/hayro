@@ -256,7 +256,13 @@ pub(crate) fn decode_with(
                 }
             };
 
-            region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
+            region.combine(
+                symbol_bitmap_ref,
+                x,
+                y,
+                header.flags.combination_operator,
+                cancel,
+            )?;
             work.add(
                 u64::from(WORD_WORK) * symbol_bitmap_ref.data.len() as u64,
                 cancel,

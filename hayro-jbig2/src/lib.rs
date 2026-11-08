@@ -602,7 +602,7 @@ fn decode_segment(
                 generic::decode_into(&header, page_bitmap, state)?;
             } else {
                 let region = generic::decode(&header, state)?;
-                page_bitmap.combine_cancellable(
+                page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
@@ -654,7 +654,7 @@ fn decode_segment(
             } else {
                 let region =
                     text::decode(&header, &symbols, &referred_tables, standard_tables, state)?;
-                page_bitmap.combine_cancellable(
+                page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
@@ -693,7 +693,7 @@ fn decode_segment(
                 halftone::decode_into(&header, pattern_dict, page_bitmap, state)?;
             } else {
                 let region = halftone::decode(&header, pattern_dict, state)?;
-                page_bitmap.combine_cancellable(
+                page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
@@ -777,7 +777,7 @@ fn decode_segment(
                     }
                 };
                 let region = generic_refinement::decode(&header, reference, state)?;
-                page_bitmap.combine_cancellable(
+                page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
                     region.bitmap.y_location as i32,
@@ -1048,7 +1048,7 @@ fn page_bitmap_area(
         false,
         budget,
     )?;
-    area.combine_cancellable(
+    area.combine(
         page,
         -i32::try_from(region_info.x_location).unwrap_or(i32::MAX),
         -i32::try_from(region_info.y_location).unwrap_or(i32::MAX),

@@ -444,7 +444,7 @@ fn render_patterns(
                     }
                 }
             } else {
-                region.combine(pattern, x as i32, y as i32, op);
+                region.combine(pattern, x as i32, y as i32, op, cancel)?;
             }
 
             coords.advance_col();
