@@ -57,22 +57,22 @@ impl<'a> Cancel<'a> {
     }
 }
 
-pub(crate) struct WorkCounter {
-    work: u64,
-    limit: u64,
-}
+// The amount of work between two checks, in units of about one decoded pixel.
+const CHECK_INTERVAL: u32 = 1 << 16;
+
+pub(crate) struct WorkCounter(u64);
 
 impl WorkCounter {
-    pub(crate) fn new(limit: u64) -> Self {
-        Self { work: 0, limit }
+    pub(crate) fn new() -> Self {
+        Self(0)
     }
 
     #[inline(always)]
     pub(crate) fn add(&mut self, work: u64, cancel: Cancel<'_>) -> Result<(), Cancelled> {
-        self.work += work;
+        self.0 += work;
 
-        if self.work >= self.limit {
-            self.work = 0;
+        if self.0 >= u64::from(CHECK_INTERVAL) {
+            self.0 = 0;
             cancel.check()?;
         }
 
@@ -82,6 +82,6 @@ impl WorkCounter {
 
 #[inline]
 pub(crate) fn row_mask(width: u32) -> u32 {
-    let rows = ((1 << 16) / width.max(1)).clamp(1, 1024);
+    let rows = (CHECK_INTERVAL / width.max(1)).clamp(1, 1024);
     (1 << rows.ilog2()) - 1
 }

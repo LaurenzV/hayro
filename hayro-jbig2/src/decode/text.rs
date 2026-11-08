@@ -142,7 +142,7 @@ pub(crate) fn decode_with(
         .ok_or(OverflowError::PlacementCoordinate)?;
     let mut first_s: i32 = 0;
     let mut instance_count = 0;
-    let mut work = WorkCounter::new(1 << 14);
+    let mut work = WorkCounter::new();
 
     while instance_count < header.num_instances {
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
@@ -158,7 +158,7 @@ pub(crate) fn decode_with(
                 bail!(ParseError::UnexpectedEof);
             }
 
-            work.add(32, cancel)?;
+            work.add(128, cancel)?;
 
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
@@ -257,7 +257,8 @@ pub(crate) fn decode_with(
             };
 
             region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
-            work.add(symbol_bitmap_ref.data.len() as u64, cancel)?;
+            // Placing a word costs about as much as decoding four pixels.
+            work.add(4 * symbol_bitmap_ref.data.len() as u64, cancel)?;
 
             if let SymbolBitmap::Owned(bitmap) = &symbol_bitmap {
                 budget.release(bitmap.memory_size());

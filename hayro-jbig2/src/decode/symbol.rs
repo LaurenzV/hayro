@@ -83,7 +83,7 @@ pub(crate) fn decode(
 
     let mut remaining_empty_height_classes = num_new_symbols;
 
-    let mut work = WorkCounter::new(1 << 16);
+    let mut work = WorkCounter::new();
 
     while ctx.symbols_decoded_count < num_new_symbols {
         work.add(64, cancel)?;
