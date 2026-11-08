@@ -1,6 +1,7 @@
 //! Each test decodes a raw CCITT stream from `streams` and compares the result
 //! against an image in `references`.
 
+mod cancel;
 mod codes;
 mod dimensions;
 mod edges;
