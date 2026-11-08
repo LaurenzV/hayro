@@ -86,8 +86,8 @@ pub mod error;
 pub(crate) mod math;
 mod sync;
 
-pub use cancel::CancelCheck;
 use cancel::{CHUNK, Cancel};
+pub use cancel::{CancelCheck, CancelHandle};
 
 use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 pub use error::{
@@ -109,7 +109,7 @@ pub(crate) const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
 pub(crate) const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
 
 /// Settings to apply during decoding.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DecodeSettings {
     /// Whether palette indices should be resolved.
     ///
@@ -131,17 +131,7 @@ pub struct DecodeSettings {
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
     /// A check for cancelling decoding.
-    pub cancel: Option<sync::Arc<dyn CancelCheck>>,
-}
-
-impl core::fmt::Debug for DecodeSettings {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("DecodeSettings")
-            .field("resolve_palette_indices", &self.resolve_palette_indices)
-            .field("strict", &self.strict)
-            .field("target_resolution", &self.target_resolution)
-            .finish_non_exhaustive()
-    }
+    pub cancel: Option<CancelHandle>,
 }
 
 impl Default for DecodeSettings {
@@ -217,7 +207,7 @@ impl<'a> Image<'a> {
         decoder_context: &'b mut DecoderContext<'a>,
     ) -> Result<DecodedImage<'b>> {
         let settings = &self.settings;
-        let cancel = Cancel(settings.cancel.as_deref());
+        let cancel = Cancel(settings.cancel.as_ref());
         j2c::decode(self.codestream, &self.header, decoder_context, cancel)?;
         let mut decoded_image = DecodedImage {
             decoded_components: &mut decoder_context.channel_data,

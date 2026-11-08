@@ -33,7 +33,6 @@ extern crate alloc;
 
 use crate::bit_reader::BitReader;
 use crate::context::DecoderContext;
-use crate::sync::Arc;
 
 mod bit_reader;
 mod cancel;
@@ -45,7 +44,7 @@ mod group4;
 mod sync;
 mod tables;
 
-pub use cancel::CancelCheck;
+pub use cancel::{CancelCheck, CancelHandle};
 pub use error::{DecodeError, Result};
 
 /// Decode the given image using the provided settings and decoder.
@@ -88,7 +87,7 @@ pub trait Decoder {
 }
 
 /// Settings to apply during decoding.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DecodeSettings {
     /// How many columns the image has (i.e. its width).
     pub columns: u32,
@@ -116,21 +115,7 @@ pub struct DecodeSettings {
     /// decoding it as well as possible.
     pub strict: bool,
     /// A check for cancelling decoding.
-    pub cancel: Option<Arc<dyn CancelCheck>>,
-}
-
-impl core::fmt::Debug for DecodeSettings {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("DecodeSettings")
-            .field("columns", &self.columns)
-            .field("rows", &self.rows)
-            .field("end_of_block", &self.end_of_block)
-            .field("end_of_line", &self.end_of_line)
-            .field("rows_are_byte_aligned", &self.rows_are_byte_aligned)
-            .field("encoding", &self.encoding)
-            .field("strict", &self.strict)
-            .finish_non_exhaustive()
-    }
+    pub cancel: Option<CancelHandle>,
 }
 
 /// The encoding mode for CCITT fax decoding.

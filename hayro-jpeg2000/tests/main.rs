@@ -1,6 +1,7 @@
 //! Each test decodes a JPEG 2000 file from `streams` and compares the decoded
 //! samples against an image in `references`.
 
+mod cancel;
 mod code_blocks;
 mod codestream;
 mod errors;
