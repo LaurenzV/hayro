@@ -248,10 +248,6 @@ fn compute_skip_bitmap(
         cancel.check()?;
 
         for n_g in 0..grid.width {
-            if n_g % 1024 == 1023 {
-                cancel.check()?;
-            }
-
             let (x, y) = coords.get();
 
             if lies_outside(x, y, pattern_dict, htreg) {
