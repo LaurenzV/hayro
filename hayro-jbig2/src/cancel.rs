@@ -37,13 +37,9 @@ impl core::fmt::Debug for CancelHandle {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct Cancel<'a>(Option<&'a CancelHandle>);
+pub(crate) struct Cancel<'a>(pub(crate) Option<&'a CancelHandle>);
 
-impl<'a> Cancel<'a> {
-    pub(crate) fn new(handle: Option<&'a CancelHandle>) -> Self {
-        Self(handle)
-    }
-
+impl Cancel<'_> {
     #[inline(always)]
     pub(crate) fn check(self) -> Result<(), Cancelled> {
         if self.0.is_some_and(|c| c.is_cancelled()) {
@@ -93,6 +89,8 @@ pub(crate) fn copy_work(width: u32) -> u32 {
 
 #[inline]
 pub(crate) fn row_mask(row_work: u32) -> u32 {
+    // Rows also cost something apart from their pixels, which matters for
+    // very narrow bitmaps.
     let rows = (CHECK_INTERVAL / row_work.max(1)).clamp(1, 1024);
     (1 << rows.ilog2()) - 1
 }

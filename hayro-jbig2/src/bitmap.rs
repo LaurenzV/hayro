@@ -255,7 +255,7 @@ mod tests {
         let budget = &mut MemoryBudget::new(None);
         let mut page = Bitmap::new(8, 8, budget).unwrap();
         let region = Bitmap::new_with(8, 8, 0, 0, true, budget).unwrap();
-        let cancel = Cancel::new(None);
+        let cancel = Cancel(None);
         page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or, cancel)
             .unwrap();
         page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or, cancel)

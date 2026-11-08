@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS};
-use crate::cancel::{Cancel, WorkCounter, row_mask};
+use crate::cancel::{Cancel, WorkCounter, copy_work, row_mask};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
     DecodeContext, ReferenceCorner, SymbolBitmaps, TextRegionContexts, TextRegionFlags,
@@ -689,8 +689,14 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     // Finally, we simply chop up the collective bitmap into its constituent
     // symbols.
     let mut x_offset: u32 = 0;
+    let mut work = WorkCounter::new();
+
     for symbol_idx in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
         let symbol_width = ctx.symbol_widths[symbol_idx as usize];
+        work.add(
+            u64::from(copy_work(symbol_width).max(1)) * u64::from(ctx.height_class_height),
+            ctx.cancel,
+        )?;
         let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height, ctx.budget)?;
 
         for y in 0..ctx.height_class_height {

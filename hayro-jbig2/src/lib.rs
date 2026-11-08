@@ -69,7 +69,7 @@ pub use error::{
 
 use crate::file::parse_segments_sequential;
 use bitmap::Bitmap;
-use cancel::{Cancel, FILL_CHUNK};
+use cancel::{Cancel, FILL_CHUNK, copy_work, row_mask};
 pub use cancel::{CancelCheck, CancelHandle};
 use decode::CombinationOperator;
 use decode::generic;
@@ -263,7 +263,7 @@ impl Globals {
         let strict = settings.strict;
         let mut dictionaries = Dictionaries::default();
         let standard_tables = StandardHuffmanTables::default();
-        let cancel = Cancel::new(settings.cancel.as_ref());
+        let cancel = Cancel(settings.cancel.as_ref());
         let mut state = DecodeState::new(None, cancel);
 
         for seg in segments {
@@ -356,8 +356,7 @@ impl<'a> Page<'a> {
             None => None,
         };
 
-        let cancel = Cancel::new(self.settings.cancel.as_ref());
-        let bitmap = decode_segments(segments, globals, self.size, &self.settings, cancel)?;
+        let bitmap = decode_segments(segments, globals, self.size, &self.settings)?;
 
         Ok(PageBitmap {
             bitmap,
@@ -391,7 +390,7 @@ impl PageBitmap {
 
     /// Return the pixels as 8-bit samples, with black as 0 and white as 255.
     pub fn data_u8(&self) -> core::result::Result<Vec<u8>, Cancelled> {
-        let cancel = Cancel::new(self.cancel.as_ref());
+        let cancel = Cancel(self.cancel.as_ref());
         let len = self.width() as usize * self.height() as usize;
         let mut buf = Vec::with_capacity(len);
 
@@ -413,7 +412,7 @@ impl PageBitmap {
             "buffer has the wrong size"
         );
 
-        let cancel = Cancel::new(self.cancel.as_ref());
+        let cancel = Cancel(self.cancel.as_ref());
 
         for chunk in buf.chunks_mut(FILL_CHUNK) {
             cancel.check()?;
@@ -428,7 +427,7 @@ impl PageBitmap {
         buf: &mut [u8],
         cancel: Cancel<'_>,
     ) -> core::result::Result<(), Cancelled> {
-        let mask = cancel::row_mask(cancel::copy_work(self.width())) as usize;
+        let mask = row_mask(copy_work(self.width())) as usize;
 
         for (y, (row, out)) in self
             .rows()
@@ -528,9 +527,9 @@ fn decode_segments(
     globals: Option<&Globals>,
     size: PageSize,
     settings: &DecodeSettings,
-    cancel: Cancel<'_>,
 ) -> Result<Bitmap> {
     let strict = settings.strict;
+    let cancel = Cancel(settings.cancel.as_ref());
     let mut state = DecodeState::new(settings.memory_limit, cancel);
     // "Bit 2: Page default pixel value. This bit contains the initial value
     // for every pixel in the page, before any region segments are decoded
