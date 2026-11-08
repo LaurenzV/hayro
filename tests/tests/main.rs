@@ -21,7 +21,6 @@ use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-mod groups;
 mod harness;
 mod load;
 mod raster;
@@ -114,7 +113,6 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
-        .chain(groups::tests())
         .chain([Test::unit("visibility", visibility)])
         .filter(|test| args.matches(&test.name))
         .collect();

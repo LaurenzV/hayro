@@ -19,16 +19,16 @@ pub trait Device<'a> {
         });
     }
     /// Push a new transparency group to the blend stack.
+    ///
+    /// `isolated` and `knockout` correspond to the `I` and `K` entries of the group.
     fn push_transparency_group(
         &mut self,
         opacity: f32,
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
+        isolated: bool,
+        knockout: bool,
     );
-    /// The isolated (`I`) and knockout (`K`) entries of a form `XObject`'s transparency group, called right
-    /// after the `push_transparency_group` that opens it. Groups pushed for any other reason are neither.
-    /// Devices that do not composite groups themselves can ignore this.
-    fn set_group_flags(&mut self, _isolated: bool, _knockout: bool) {}
     /// Draw a run of positioned glyphs.
     fn draw_glyph_run(
         &mut self,
@@ -61,7 +61,15 @@ pub struct DummyDevice;
 impl Device<'_> for DummyDevice {
     fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_>, _: &DrawMode) {}
     fn push_clip_path(&mut self, _: &ClipPath) {}
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
+    fn push_transparency_group(
+        &mut self,
+        _: f32,
+        _: Option<SoftMask<'_>>,
+        _: BlendMode,
+        _: bool,
+        _: bool,
+    ) {
+    }
     fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
     fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
     fn pop_clip(&mut self) {}
