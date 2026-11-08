@@ -3,7 +3,7 @@ use crate::SvgRenderer;
 use crate::mask::{ImageLuminanceMask, MaskKind};
 use base64::Engine;
 use hayro_interpret::{
-    BlendMode, Device, DrawMode, DrawProps, FillRule, ImageData, LumaData, Paint,
+    BlendMode, Device, DrawMode, DrawProps, FillRule, ImageData, LumaData, Overprint, Paint,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::{Affine, Rect, Shape};
@@ -139,6 +139,7 @@ impl<'a> SvgRenderer<'a> {
                         paint: paint.clone(),
                         soft_mask: None,
                         blend_mode: BlendMode::Normal,
+                        overprint: Overprint::default(),
                     },
                     &DrawMode::Fill(FillRule::NonZero),
                 );

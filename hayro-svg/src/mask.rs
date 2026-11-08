@@ -1,7 +1,8 @@
 use crate::{Id, SvgRenderer, hash128};
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::{
-    BlendMode, CacheKey, DrawMode, DrawProps, FillRule, MaskType, Paint, SoftMask, TransferFunction,
+    BlendMode, CacheKey, DrawMode, DrawProps, FillRule, MaskType, Overprint, Paint, SoftMask,
+    TransferFunction,
 };
 use image::DynamicImage;
 use kurbo::{Affine, Rect, Shape};
@@ -103,6 +104,7 @@ impl<'a> SvgRenderer<'a> {
                                 paint,
                                 soft_mask: None,
                                 blend_mode: BlendMode::Normal,
+                                overprint: Overprint::default(),
                             },
                             &DrawMode::Fill(FillRule::NonZero),
                         );

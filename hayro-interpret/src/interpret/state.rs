@@ -6,10 +6,10 @@ use crate::font::{Font, UNITS_PER_EM};
 use crate::function::{Function, TransferFunction};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
-use crate::types::BlendMode;
+use crate::types::{BlendMode, Overprint};
 use crate::x_object::soft_mask::SoftMask;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
-use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
+use hayro_syntax::object::dict::keys::{FONT, OP_NS, SMASK, TR, TR2};
 use hayro_syntax::object::{Array, Dict, Name, Number, Object};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
@@ -263,6 +263,7 @@ pub(crate) struct CompositingState<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     pub(crate) transfer_function: Option<ActiveTransferFunction>,
     pub(crate) blend_mode: BlendMode,
+    pub(crate) overprint: Overprint,
 }
 
 pub(crate) struct PaintData<'a> {
@@ -301,6 +302,20 @@ pub(crate) fn handle_gs_single<'a>(
                 convert_line_join(LineJoin(dict.get::<Number>(key)?));
         }
         "ML" => context.stroke_props_mut().miter_limit = dict.get::<f32>(key)?,
+        "OP" => {
+            let overprint = dict.get::<bool>(key)?;
+            context.compositing_mut().overprint.stroke = overprint;
+
+            // "If this entry is absent, the value of the OP entry shall also
+            // be used for other painting operations."
+            if !dict.contains_key(OP_NS) {
+                context.compositing_mut().overprint.fill = overprint;
+            }
+        }
+        "op" => context.compositing_mut().overprint.fill = dict.get::<bool>(key)?,
+        "OPM" => {
+            context.compositing_mut().overprint.mode = u8::from(dict.get::<i32>(key)? == 1);
+        }
         "CA" => context.stroke_paint_mut().alpha = dict.get::<f32>(key)?,
         "ca" => context.fill_paint_mut().alpha = dict.get::<f32>(key)?,
         "TR" | "TR2" => {
@@ -410,4 +425,152 @@ fn convert_blend_mode(name: &str) -> Option<BlendMode> {
     };
 
     Some(bm)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::font::GlyphRun;
+    use crate::{
+        BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+        InterpreterCache, InterpreterSettings, Overprint, SoftMask, interpret_page,
+    };
+    use hayro_syntax::Pdf;
+    use kurbo::{Affine, BezPath, Rect};
+
+    /// Records the overprint parameters of each drawing operation.
+    #[derive(Default)]
+    struct OverprintDevice(Vec<(&'static str, Overprint)>);
+
+    impl Device<'_> for OverprintDevice {
+        fn draw_path(&mut self, _: &BezPath, props: DrawProps<'_>, draw_mode: &DrawMode) {
+            let kind = match draw_mode {
+                DrawMode::Stroke(_) => "stroke",
+                _ => "fill",
+            };
+            self.0.push((kind, props.overprint));
+        }
+
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+
+        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
+
+        fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
+
+        fn draw_image(&mut self, _: Image<'_, '_>, props: ImageDrawProps<'_>) {
+            self.0.push(("image", props.overprint));
+        }
+
+        fn pop_clip(&mut self) {}
+
+        fn pop_transparency_group(&mut self) {}
+    }
+
+    /// The overprint parameters of each drawing operation of a page whose
+    /// content is `content`, with the graphics states `/A` to `/E`.
+    fn overprints(content: &str) -> Vec<(&'static str, Overprint)> {
+        let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R \
+/Resources << /ExtGState << /A << /OP true >> /B << /OP true /op false >> \
+/C << /op true >> /D << /OPM 1 >> /E << /OP false >> >> \
+/XObject << /Im 5 0 R >> >> >>\nendobj\n"
+            .to_vec();
+        data.extend(
+            format!(
+                "4 0 obj\n<< /Length {} >>\nstream\n{content}\nendstream\nendobj\n",
+                content.len()
+            )
+            .as_bytes(),
+        );
+        data.extend(
+            b"5 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 \
+/ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x80\nendstream\nendobj\n",
+        );
+        data.extend(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        let pdf = Pdf::new(data).unwrap();
+        let cache = InterpreterCache::new();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            &cache,
+            pdf.xref(),
+            InterpreterSettings::default(),
+        );
+        let mut device = OverprintDevice::default();
+        interpret_page(&pdf.pages()[0], &mut context, &mut device);
+
+        device.0
+    }
+
+    const fn overprint(stroke: bool, fill: bool, mode: u8) -> Overprint {
+        Overprint { stroke, fill, mode }
+    }
+
+    #[test]
+    fn overprint_is_off_by_default() {
+        assert_eq!(
+            overprints("0 0 5 5 re f 0 0 5 5 re S /Im Do"),
+            [
+                ("fill", Overprint::default()),
+                ("stroke", Overprint::default()),
+                ("image", Overprint::default()),
+            ]
+        );
+        assert_eq!(Overprint::default(), overprint(false, false, 0));
+    }
+
+    #[test]
+    fn op_sets_both_where_the_lowercase_entry_is_absent() {
+        assert_eq!(
+            overprints("/A gs 0 0 5 5 re f 0 0 5 5 re S /Im Do"),
+            [
+                ("fill", overprint(true, true, 0)),
+                ("stroke", overprint(true, true, 0)),
+                ("image", overprint(true, true, 0)),
+            ]
+        );
+    }
+
+    #[test]
+    fn op_and_lowercase_op_are_apart() {
+        assert_eq!(
+            overprints("/B gs 0 0 5 5 re f /Im Do"),
+            [
+                ("fill", overprint(true, false, 0)),
+                ("image", overprint(true, false, 0)),
+            ]
+        );
+        assert_eq!(
+            overprints("/C gs 0 0 5 5 re S /Im Do"),
+            [
+                ("stroke", overprint(false, true, 0)),
+                ("image", overprint(false, true, 0)),
+            ]
+        );
+    }
+
+    #[test]
+    fn overprint_mode_is_kept() {
+        assert_eq!(
+            overprints("/D gs 0 0 5 5 re f"),
+            [("fill", overprint(false, false, 1))]
+        );
+        assert_eq!(
+            overprints("/A gs /D gs 0 0 5 5 re f"),
+            [("fill", overprint(true, true, 1))]
+        );
+    }
+
+    #[test]
+    fn overprint_is_part_of_the_saved_state() {
+        assert_eq!(
+            overprints("q /A gs 0 0 5 5 re f Q 0 0 5 5 re f /A gs /E gs 0 0 5 5 re S"),
+            [
+                ("fill", overprint(true, true, 0)),
+                ("fill", Overprint::default()),
+                ("stroke", Overprint::default()),
+            ]
+        );
+    }
 }

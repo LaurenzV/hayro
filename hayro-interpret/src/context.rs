@@ -213,6 +213,7 @@ impl<'a> Context<'a> {
             paint: self.get_paint(is_stroke),
             soft_mask: self.compositing().soft_mask.clone(),
             blend_mode: self.compositing().blend_mode,
+            overprint: self.compositing().overprint,
         }
     }
 

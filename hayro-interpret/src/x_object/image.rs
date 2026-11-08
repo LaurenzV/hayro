@@ -190,6 +190,7 @@ impl<'a> ImageXObject<'a> {
                 transform,
                 soft_mask: None,
                 blend_mode: BlendMode::default(),
+                overprint: context.compositing().overprint,
             },
         );
         device.pop_transparency_group();

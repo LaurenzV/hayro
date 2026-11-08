@@ -287,6 +287,8 @@ pub struct DrawProps<'a> {
     pub soft_mask: Option<SoftMask<'a>>,
     /// The blend mode.
     pub blend_mode: BlendMode,
+    /// The overprint parameters.
+    pub overprint: Overprint,
 }
 
 /// Properties for an image drawing operation.
@@ -298,6 +300,22 @@ pub struct ImageDrawProps<'a> {
     pub soft_mask: Option<SoftMask<'a>>,
     /// The blend mode.
     pub blend_mode: BlendMode,
+    /// The overprint parameters.
+    ///
+    /// An image is painted with [`Overprint::fill`].
+    pub overprint: Overprint,
+}
+
+/// The overprint parameters of the graphics state, as set by the `OP`, `op`
+/// and `OPM` entries of an `ExtGState` dictionary.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Overprint {
+    /// Whether stroking overprints (`OP`).
+    pub stroke: bool,
+    /// Whether other painting overprints (`op`, or `OP` where `op` is absent).
+    pub fill: bool,
+    /// The overprint mode (`OPM`), which is either 0 or 1.
+    pub mode: u8,
 }
 
 /// The draw mode.
