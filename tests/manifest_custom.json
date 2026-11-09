@@ -1449,5 +1449,20 @@
     "id": "pattern_shading_radial_extend_interior",
     "file": "pdfs/custom/pattern_shading_radial_extend_interior.pdf",
     "svg": true
+  },
+  {
+    "id": "pattern_tiling_shading_scaled",
+    "file": "pdfs/custom/pattern_tiling_shading_scaled.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_tiling_shading_translated",
+    "file": "pdfs/custom/pattern_tiling_shading_translated.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_tiling_clip_scaled",
+    "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
+    "svg": true
   }
 ]
