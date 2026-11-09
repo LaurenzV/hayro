@@ -219,13 +219,9 @@ impl<'a> TilingPattern<'a> {
     ) -> Option<()> {
         let state = State::new(initial_transform);
 
-        let cell = initial_transform * self.bbox.to_path(0.1);
-
         let mut context = Context::new_with(
             state.ctm,
-            // The cell is drawn into its own target, so its bbox bounds what the
-            // content can paint.
-            cell.bounding_box(),
+            initial_transform.transform_rect_bbox(self.bbox),
             &self.cache,
             self.xref,
             self.settings.clone(),
@@ -237,7 +233,7 @@ impl<'a> TilingPattern<'a> {
         let iter = TypedIter::new(decoded.as_ref());
 
         let clip_path = ClipPath {
-            path: cell,
+            path: initial_transform * self.bbox.to_path(0.1),
             fill: FillRule::NonZero,
         };
         device.push_clip_path(&clip_path);
