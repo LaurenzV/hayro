@@ -422,6 +422,7 @@ raster/custom/pattern_shading_type6_2.png b7c16519b5605a45f38529d49579ccfb
 raster/custom/pattern_shading_type7.png dac128b12bb9a561bcae81a34460bb79
 raster/custom/pattern_shading_type7_background.png dac128b12bb9a561bcae81a34460bb79
 raster/custom/pattern_tiling_cache_key.png e9b2f059cfc6531f50865f45fb144c5d
+raster/custom/pattern_tiling_clip_scaled.png e0e362306854d5e9b0d0143ac777ffca
 raster/custom/pattern_tiling_huge_x_step.png 58339c031f78e8ebbb757a7b9c5aa0ef
 raster/custom/pattern_tiling_inner_transform.png a9b680599c5cf541acbb73aa5b2bddab
 raster/custom/pattern_tiling_large_x_step.png 824859821759c375b6206c9c5bfb6fef
@@ -433,6 +434,8 @@ raster/custom/pattern_tiling_overlap_rotated.png af5a2dcdcd86dbe5b1f93ca4198b1f3
 raster/custom/pattern_tiling_overlap_transparent.png 0c0aec971356cbd33e5a54c33f4028ff
 raster/custom/pattern_tiling_rotated.png 2a7d65dcb8ada45b523a84c3eb913bfc
 raster/custom/pattern_tiling_rotated_shape.png 307bc6ff1e5916bff6d697a6576855ff
+raster/custom/pattern_tiling_shading_scaled.png 571f12be931ebb937fbd88964ed78bba
+raster/custom/pattern_tiling_shading_translated.png 571f12be931ebb937fbd88964ed78bba
 raster/custom/pattern_tiling_simple.png 20c4f1a8108c591461ac7c726e1530ac
 raster/custom/pattern_tiling_small.png 049b362775696c55f061bafb91a476ff
 raster/custom/pattern_tiling_small_cell.png 85f68d9a11676cb602311a01a50bb499
@@ -448,7 +451,7 @@ raster/custom/pdf_render_issue14_p1.png 22e6a52462bea6aebb5059e940bbeca7
 raster/custom/pdf_render_issue14_p2.png c5538fc974e7f5373c4705a845fa196f
 raster/custom/pdf_render_issue14_p3.png 443ff2c33024eeef0241ad5fa71a3a2c
 raster/custom/pdftc_100k_1894.png 2fc92df622e38bf0954cafa6b5f2d00a
-raster/custom/pdftc_100l_0138.png f3af880d6dd421f7105b853b7a93811b
+raster/custom/pdftc_100l_0138.png 618063570b71d982aba1d5c6d474cdab
 raster/custom/pdftc_100l_1071.png 302966f4d529d89752f091f90924e381
 raster/custom/pdftc_100l_1731_p0.png 74f6fafc722240ca6d7f065cc8ac955d
 raster/custom/pdftc_100l_1731_p1.png ed993830dd7bfde16b5445b351038aef
@@ -910,7 +913,7 @@ raster/pdfbox/4268.png ea83404a92ef5bda3f45c75844408c35
 raster/pdfbox/4277_p0.png 83dc26f98c4766b90769648318cf5e0b
 raster/pdfbox/4277_p1.png a7746b5d14e7b2b958920c99acb7b40d
 raster/pdfbox/4277_p2.png a580305b2e37c276052b16515e898cbc
-raster/pdfbox/4278.png 6c4e3abfe94fed097d7bd722897947dd
+raster/pdfbox/4278.png e2019e041d297d5454774d4e42d6d5ea
 raster/pdfbox/4279.png 0724033c229bb5a1f71660075519d50c
 raster/pdfbox/4320_p0.png 470c87ad50d2f14a252c199669a91a72
 raster/pdfbox/4320_p1.png ad95fa098ad623eae4621df88464b826
@@ -1383,7 +1386,7 @@ raster/pdfjs/bug1753983.png 3c8af7f3d21f0c5df5373001d4645757
 raster/pdfjs/bug1755507.png 495d18e88c116df9d19980f37f6ffefb
 raster/pdfjs/bug1782186.png cf149e2e379b7b92ecbc634581214777
 raster/pdfjs/bug1791583.png 92ab2aa6094b2a32ed2c2c940b2f8a2b
-raster/pdfjs/bug1795263.png 904d37281d6b00ef89ba4717cb236259
+raster/pdfjs/bug1795263.png b637a5c2f5f4b167e255108d90351ce3
 raster/pdfjs/bug1799927.png 75b119733ac0da1dec6b8d152bad555d
 raster/pdfjs/bug1820909_p0.png f94248889f207bbc69066a1acacfaaa7
 raster/pdfjs/bug1820909_p1.png 03469f8cf990154b8e7bda96be04aea2
@@ -2074,7 +2077,7 @@ raster/pdfjs/issue6652.png 9511cdf94a09c9f7dbfb5a7152fc604b
 raster/pdfjs/issue6692.png fa16c72183391961a45babae8b9d979b
 raster/pdfjs/issue6707.png 47c2514f39b104c380cb169bbe8470bb
 raster/pdfjs/issue6721_reduced.png 9b5e14c897a299f5e18155bea7fc3efe
-raster/pdfjs/issue6737.png 2e9c76023962fa19a96ebb9d4a8c3acf
+raster/pdfjs/issue6737.png 29a1d55aa644760ee465fdc5216d532e
 raster/pdfjs/issue6741.png 2f0cd1b6cde941a0e068fa81f58fa541
 raster/pdfjs/issue6769.png 444f3c97bb630f993fc27c309cd5b126
 raster/pdfjs/issue6769_no_matrix.png fa1f7b505df730e0cc26bb3009768346
@@ -2255,8 +2258,11 @@ svg/custom/pattern_alpha_image_mask.png cdb6200d886d8514a4245bc382486cc9
 svg/custom/pattern_alpha_type3.png bd5591a1ba7ca111ef7fd04cf42a1828
 svg/custom/pattern_shading_radial_extend_interior.png b5645a9f902288c4a14e52693c45e20a
 svg/custom/pattern_tiling_cache_key.png 60860a762a1d01c84668e96830a72c53
+svg/custom/pattern_tiling_clip_scaled.png 4bb2fa72990bac8f2d054fd5380fb91f
 svg/custom/pattern_tiling_nested.png eca58d1e6dae5ebd188ad1ffcdc7a198
 svg/custom/pattern_tiling_rotated.png 042e24450a234d341167093dcd141cf9
+svg/custom/pattern_tiling_shading_scaled.png 186fa3e5ec9cf3b1e7ddf992e3ea945a
+svg/custom/pattern_tiling_shading_translated.png bf09ce5def81b6b6e296bf569c9b6bd5
 svg/custom/pattern_tiling_simple.png 7a5dafa17eedb41c94d78bc8af894664
 svg/custom/resvg_masking_mask_mask_type_alpha.png cd64139fd53cc2f914f70dc9899b6c17
 svg/custom/resvg_masking_mask_mask_type_luminance.png 936d97d7124ec2e5bd8b562bec57f133
@@ -2271,7 +2277,7 @@ svg/pdfbox/3640.png d28360fbc8aba469e3ee0f782f9489f5
 svg/pdfbox/3647.png f0ece738372a8a7130166d09dd2497e6
 svg/pdfbox/5795.png 2cac2eee81872d9a6bf187b831fcb1ed
 svg/pdfbox/6024.png 297c4f20c8728fe5d75ed3e42e1ab29e
-svg/pdfium/41480161.png 4cf5f1307dc7df61f0002c076de094c3
+svg/pdfium/41480161.png 6791b346b8bd63f1d4d1d938b87f788d
 svg/pdfjs/issue11279.png 25a79dd9ec94d82db84ffcc3c6684952
 svg/pdfjs/issue13372.png 156e8488e48de8d3af9abd823292cf72
 svg/pdfjs/issue2177.png d0b94ff9f98552b24a668334154c5698
