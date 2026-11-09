@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS};
+use crate::cancel::{Cancel, WorkCounter, copy_work, row_mask};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
     DecodeContext, ReferenceCorner, SymbolBitmaps, TextRegionContexts, TextRegionFlags,
@@ -34,6 +35,7 @@ pub(crate) fn decode(
     standard_tables: &StandardHuffmanTables,
     input_contexts: Option<&RetainedContexts>,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<SymbolDictionary> {
     let num_new_symbols = header.num_new_symbols;
     let capacity = (num_new_symbols as usize).min(header.data.len());
@@ -50,6 +52,7 @@ pub(crate) fn decode(
         header,
         standard_tables,
         budget,
+        cancel,
     };
 
     let read_height_class_delta = |ctx: &mut SymbolDecodeContext<'_>| {
@@ -80,7 +83,11 @@ pub(crate) fn decode(
 
     let mut remaining_empty_height_classes = num_new_symbols;
 
+    let mut work = WorkCounter::new();
+
     while ctx.symbols_decoded_count < num_new_symbols {
+        work.add(64, cancel)?;
+
         let height_class_delta =
             read_height_class_delta(&mut ctx)?.ok_or(SymbolError::UnexpectedOob)?;
 
@@ -101,6 +108,8 @@ pub(crate) fn decode(
                 bail!(SymbolError::TooManySymbols);
             }
 
+            work.add(64, cancel)?;
+
             symbol_width = symbol_width
                 .checked_add_signed(width_delta)
                 .ok_or(OverflowError::BitmapDimension)?;
@@ -108,6 +117,13 @@ pub(crate) fn decode(
                 .total_width
                 .checked_add(symbol_width)
                 .ok_or(OverflowError::BitmapDimension)?;
+
+            if !ctx.header.flags.use_huffman || ctx.header.flags.use_refagg {
+                work.add(
+                    u64::from(symbol_width) * u64::from(ctx.height_class_height),
+                    cancel,
+                )?;
+            }
 
             match (ctx.header.flags.use_huffman, ctx.header.flags.use_refagg) {
                 (false, false) => {
@@ -122,6 +138,7 @@ pub(crate) fn decode(
                         ctx.header.flags.template,
                         false,
                         &ctx.header.adaptive_template_pixels,
+                        cancel,
                     )?;
 
                     ctx.symbols.new.push(Arc::new(region));
@@ -300,6 +317,7 @@ fn decode_refinement_bitmap(
             ctx.header.flags.refinement_template,
             &ctx.header.refinement_at_pixels,
             false,
+            ctx.cancel,
         )?;
     } else {
         generic_refinement::decode_bitmap(
@@ -312,6 +330,7 @@ fn decode_refinement_bitmap(
             ctx.header.flags.refinement_template,
             &ctx.header.refinement_at_pixels,
             false,
+            ctx.cancel,
         )?;
     }
 
@@ -420,6 +439,7 @@ fn decode_aggregation_bitmap(
         &header,
         &mut bitmap,
         ctx.budget,
+        ctx.cancel,
     )?;
     Ok(bitmap)
 }
@@ -457,6 +477,7 @@ struct SymbolDecodeContext<'a> {
     symbols: Symbols<'a>,
     standard_tables: &'a StandardHuffmanTables,
     budget: &'a mut MemoryBudget,
+    cancel: Cancel<'a>,
     symbol_widths: Vec<u32>,
     height_class_first_symbol: u32,
     symbols_decoded_count: u32,
@@ -633,7 +654,13 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height, ctx.budget)?;
+        let check_mask = row_mask(ctx.total_width);
+
         for y in 0..ctx.height_class_height {
+            if y & check_mask == check_mask {
+                ctx.cancel.check()?;
+            }
+
             let row = &data[y as usize * row_bytes..][..row_bytes];
             for (byte_x, byte) in row.iter().enumerate() {
                 for bit in 0..8 {
@@ -655,15 +682,21 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height, ctx.budget)?;
-        decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict)?;
+        decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict, ctx.cancel)?;
         bitmap
     };
 
     // Finally, we simply chop up the collective bitmap into its constituent
     // symbols.
     let mut x_offset: u32 = 0;
+    let mut work = WorkCounter::new();
+
     for symbol_idx in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
         let symbol_width = ctx.symbol_widths[symbol_idx as usize];
+        work.add(
+            u64::from(copy_work(symbol_width).max(1)) * u64::from(ctx.height_class_height),
+            ctx.cancel,
+        )?;
         let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height, ctx.budget)?;
 
         for y in 0..ctx.height_class_height {

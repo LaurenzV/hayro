@@ -4,6 +4,7 @@ use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, Word};
+use crate::cancel::{WORD_WORK, WorkCounter};
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec::Vec;
@@ -11,7 +12,7 @@ use alloc::vec::Vec;
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 pub(crate) fn decode(
     header: &PatternDictionaryHeader<'_>,
-    scratch: &mut DecodeState,
+    scratch: &mut DecodeState<'_>,
 ) -> Result<PatternDictionary> {
     let pattern_width = header.pattern_width as u32;
     let pattern_height = header.pattern_height as u32;
@@ -32,7 +33,12 @@ pub(crate) fn decode(
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
     if header.mmr {
-        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data, header.strict)?;
+        let _ = generic::decode_bitmap_mmr(
+            &mut collective_bitmap,
+            header.data,
+            header.strict,
+            scratch.cancel,
+        )?;
     } else {
         let at_pixels = match header.template {
             Template::Template0 => [
@@ -70,6 +76,7 @@ pub(crate) fn decode(
             header.template,
             false,
             &at_pixels,
+            scratch.cancel,
         )?;
     }
 
@@ -79,7 +86,14 @@ pub(crate) fn decode(
 
     let src_stride = collective_bitmap.stride;
 
+    let mut work = WorkCounter::new();
+    let pattern_work = 1 + u64::from(WORD_WORK)
+        * u64::from(pattern_height)
+        * u64::from(pattern_width.div_ceil(WORD_BITS));
+
     for gray in 0..num_patterns {
+        work.add(pattern_work, scratch.cancel)?;
+
         // "a) Let the subimage of B_HDC consisting of HPH rows and columns
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
         // HDPATS[GRAY] = B_P" (6.7.5)"

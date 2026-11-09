@@ -5,6 +5,7 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
+use crate::cancel::{Cancel, copy_work, row_mask};
 use crate::decode::CombinationOperator;
 use crate::error::{OverflowError, Result, bail};
 use crate::memory::MemoryBudget;
@@ -151,14 +152,21 @@ impl Bitmap {
     /// the page bitmap." (7.4.1.5)
     ///
     /// Pixels outside the destination bitmap are ignored.
-    pub(crate) fn combine(&mut self, other: &Self, x: i32, y: i32, operator: CombinationOperator) {
+    pub(crate) fn combine(
+        &mut self,
+        other: &Self,
+        x: i32,
+        y: i32,
+        operator: CombinationOperator,
+        cancel: Cancel<'_>,
+    ) -> Result<()> {
         // TODO: Figure out how we can optimize this, especially since this is a
         // bottleneck for symbols/patterns.
         let dest_x_start = x.max(0);
         let dest_x_end = x.saturating_add(other.width as i32).min(self.width as i32);
 
         if dest_x_start >= dest_x_end {
-            return;
+            return Ok(());
         }
 
         let src_x_start = (dest_x_start - x) as u32;
@@ -168,8 +176,13 @@ impl Bitmap {
         let src_height = i64::from(other.height);
         let src_y_start = (-i64::from(y)).clamp(0, src_height) as u32;
         let src_y_end = (i64::from(self.height) - i64::from(y)).clamp(0, src_height) as u32;
+        let check_mask = row_mask(copy_work(other.width));
 
         for src_y in src_y_start..src_y_end {
+            if src_y & check_mask == check_mask {
+                cancel.check()?;
+            }
+
             let dest_y = (i64::from(y) + i64::from(src_y)) as u32;
 
             let first_word = dest_x_start / WORD_BITS;
@@ -219,6 +232,8 @@ impl Bitmap {
                 self.data[dest_idx] = (dest_word & !mask) | (result & mask);
             }
         }
+
+        Ok(())
     }
 
     #[inline]
@@ -240,8 +255,11 @@ mod tests {
         let budget = &mut MemoryBudget::new(None);
         let mut page = Bitmap::new(8, 8, budget).unwrap();
         let region = Bitmap::new_with(8, 8, 0, 0, true, budget).unwrap();
-        page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or);
-        page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or);
+        let cancel = Cancel(None);
+        page.combine(&region, i32::MAX - 1, 0, CombinationOperator::Or, cancel)
+            .unwrap();
+        page.combine(&region, 0, i32::MAX - 1, CombinationOperator::Or, cancel)
+            .unwrap();
         assert!(page.data.iter().all(|&w| w == 0));
     }
 }

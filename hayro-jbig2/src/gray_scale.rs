@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION};
+use crate::cancel::{Cancel, row_mask};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, ParseError, Result, bail};
@@ -36,11 +37,11 @@ pub(crate) struct GrayScaleParams<'a> {
 pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut DecodeState,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<GrayScaleImage> {
     // Table C.1: "GSMMR specifies whether MMR is used."
     if params.use_mmr {
-        decode_mmr(data, params, &mut ctx.budget)
+        decode_mmr(data, params, &mut ctx.budget, ctx.cancel)
     } else {
         decode_arithmetic(data, params, ctx)
     }
@@ -53,6 +54,7 @@ fn decode_mmr(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<GrayScaleImage> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
@@ -62,12 +64,19 @@ fn decode_mmr(
     let bits_per_pixel = params.bits_per_pixel;
 
     let mut offset = 0;
-    decode_bitplanes(width, height, bits_per_pixel, budget, |_, bitplane| {
-        // Table C.4: "GBW = GSW, GBH = GSH"
-        offset += decode_bitmap_mmr(bitplane, &data[offset..], params.strict)?;
+    decode_bitplanes(
+        width,
+        height,
+        bits_per_pixel,
+        budget,
+        cancel,
+        |_, bitplane| {
+            // Table C.4: "GBW = GSW, GBH = GSH"
+            offset += decode_bitmap_mmr(bitplane, &data[offset..], params.strict, cancel)?;
 
-        Ok(())
-    })
+            Ok(())
+        },
+    )
 }
 
 /// The gray-scale image decoding procedure using arithmetic coding (Annex C, C.5).
@@ -76,7 +85,7 @@ fn decode_mmr(
 fn decode_arithmetic(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut DecodeState,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<GrayScaleImage> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
@@ -120,6 +129,8 @@ fn decode_arithmetic(
     };
 
     let mut decoder = ArithmeticDecoder::new(data);
+    let cancel = ctx.cancel;
+    let check_mask = row_mask(width);
     ctx.contexts.clear();
     ctx.contexts.resize(
         1 << template.context_bits(),
@@ -133,6 +144,7 @@ fn decode_arithmetic(
                 height,
                 bits_per_pixel,
                 &mut ctx.budget,
+                cancel,
                 |_, bitplane| {
                     // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
                     let mut gatherer = ContextGatherer::new(template, &at_pixels);
@@ -140,6 +152,10 @@ fn decode_arithmetic(
                     for y in 0..height {
                         if decoder.is_exhausted() {
                             bail!(ParseError::UnexpectedEof);
+                        }
+
+                        if y & check_mask == check_mask {
+                            cancel.check()?;
                         }
 
                         gatherer.start_row(bitplane, y);
@@ -212,6 +228,7 @@ fn decode_bitplanes<F>(
     height: u32,
     bits_per_pixel: u32,
     budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
     mut decode_next: F,
 ) -> Result<GrayScaleImage>
 where
@@ -221,6 +238,7 @@ where
 
     simd::dispatch!(Level::new(), simd => {
         for j in (0..bits_per_pixel).rev() {
+            cancel.check()?;
             let mut bitplane = Bitmap::new(width, height, budget)?;
             decode_next(j, &mut bitplane)?;
 

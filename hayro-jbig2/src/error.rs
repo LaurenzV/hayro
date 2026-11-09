@@ -25,7 +25,13 @@ pub enum DecodeError {
     MemoryLimitExceeded,
     /// Feature not yet implemented.
     Unsupported,
+    /// Decoding was cancelled.
+    Cancelled,
 }
+
+/// The error returned when decoding was cancelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cancelled;
 
 /// Errors related to reading/parsing data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,7 +164,14 @@ impl fmt::Display for DecodeError {
             Self::Overflow(e) => write!(f, "{e}"),
             Self::MemoryLimitExceeded => write!(f, "memory limit exceeded"),
             Self::Unsupported => write!(f, "unsupported feature"),
+            Self::Cancelled => write!(f, "{Cancelled}"),
         }
+    }
+}
+
+impl fmt::Display for Cancelled {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "decoding was cancelled")
     }
 }
 
@@ -258,6 +271,7 @@ impl fmt::Display for SymbolError {
 }
 
 impl core::error::Error for DecodeError {}
+impl core::error::Error for Cancelled {}
 impl core::error::Error for ParseError {}
 impl core::error::Error for FormatError {}
 impl core::error::Error for SegmentError {}
@@ -266,6 +280,12 @@ impl core::error::Error for RegionError {}
 impl core::error::Error for TemplateError {}
 impl core::error::Error for SymbolError {}
 impl core::error::Error for OverflowError {}
+
+impl From<Cancelled> for DecodeError {
+    fn from(_: Cancelled) -> Self {
+        Self::Cancelled
+    }
+}
 
 impl From<ParseError> for DecodeError {
     fn from(e: ParseError) -> Self {
