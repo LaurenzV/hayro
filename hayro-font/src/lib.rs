@@ -702,6 +702,15 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
     }
 }
 
+/// Return the part of a glyph name before its first period, like `h` for `h.smcp`.
+///
+/// The Adobe Glyph List Specification (<https://github.com/adobe-type-tools/agl-specification>)
+/// treats the part after the period as a suffix that names a variant of the same character.
+pub(crate) fn glyph_name_base(name: &str) -> Option<&str> {
+    let (base, _) = name.split_once('.')?;
+    (!base.is_empty()).then_some(base)
+}
+
 /// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
 /// Specification (<https://github.com/adobe-type-tools/agl-specification>), with the AGL
 /// extended by glyph names used in the Computer Modern and AMS fonts.

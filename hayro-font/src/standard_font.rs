@@ -4,8 +4,8 @@ use crate::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
 use crate::program::FontProgram;
 use crate::true_type::{Width, read_encoding, read_widths};
 use crate::{
-    Encoding, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_factor,
-    strip_subset_prefix,
+    Encoding, FontQuery, glyph_name_base, glyph_name_to_unicode, normalized_glyph_name,
+    stretch_factor, strip_subset_prefix,
 };
 use hayro_cmap::BfString;
 use hayro_syntax::object::Dict;
@@ -111,7 +111,12 @@ impl StandardFont {
         }
     }
 
-    pub(crate) fn get_width(&self, mut name: &str) -> Option<f32> {
+    pub(crate) fn get_width(&self, name: &str) -> Option<f32> {
+        self.metrics_width(name)
+            .or_else(|| self.metrics_width(glyph_name_base(name)?))
+    }
+
+    fn metrics_width(&self, mut name: &str) -> Option<f32> {
         // <https://github.com/apache/pdfbox/blob/129aafe26548c1ff935af9c55cb40a996186c35f/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/PDSimpleFont.java#L340>
         if name == ".notdef" {
             return Some(250.0);
@@ -246,18 +251,21 @@ impl StandardKind {
 
     fn lookup_glyph(&self, code: u8) -> GlyphId {
         self.code_to_ps_name(code)
-            .and_then(|c| {
-                self.program
-                    .glyph_by_name(c)
-                    .or_else(|| {
-                        // If the font doesn't have a POST table, try to map via unicode instead.
-                        glyph_names::get(c)
-                            .and_then(|c| c.chars().next())
-                            .and_then(|c| self.program.cmap_glyph(c))
-                    })
-                    .or_else(|| self.program.glyph_by_name(normalized_glyph_name(c)))
+            .and_then(|name| {
+                self.glyph_by_name(name)
+                    .or_else(|| self.program.glyph_by_name(normalized_glyph_name(name)))
+                    .or_else(|| self.glyph_by_name(glyph_name_base(name)?))
             })
             .unwrap_or(GlyphId::NOTDEF)
+    }
+
+    fn glyph_by_name(&self, name: &str) -> Option<GlyphId> {
+        self.program.glyph_by_name(name).or_else(|| {
+            // If the font doesn't have a POST table, try to map via unicode instead.
+            glyph_names::get(name)
+                .and_then(|c| c.chars().next())
+                .and_then(|c| self.program.cmap_glyph(c))
+        })
     }
 
     // The substitute font might have different metrics than the standard font it
@@ -404,4 +412,19 @@ enum StandardFontFamily {
     Helvetica,
     Courier,
     Times,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StandardFont;
+
+    #[test]
+    fn suffixed_glyph_name_width() {
+        let font = StandardFont::Helvetica;
+
+        assert_eq!(font.get_width("h.smcp"), Some(556.0));
+        assert_eq!(font.get_width("h.smcp"), font.get_width("h"));
+        assert_eq!(font.get_width(".notdef"), Some(250.0));
+        assert_eq!(font.get_width("unknown.alt"), None);
+    }
 }
