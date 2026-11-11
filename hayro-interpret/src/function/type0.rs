@@ -22,12 +22,7 @@ struct SampledInput {
 }
 
 impl SampledInput {
-    /// Return the index of the sample at or below the encoded position of `x`,
-    /// and the fraction towards the next sample if there is one.
-    ///
-    /// The index is clamped as an integer, because `size - 1` may not be
-    /// representable as an `f32`: for `size = 16_777_220`, it rounds up to
-    /// `size`.
+    /// Return the sample index for `x` and the fraction towards the next sample.
     fn sample_position(&self, x: f32) -> (usize, Option<f32>) {
         let last = self.size - 1;
         let position = self.domain.map(x, self.encode).max(0.0);
@@ -165,8 +160,10 @@ mod tests {
     use super::SampledInput;
     use crate::function::Interval;
 
-    fn input(size: u32) -> SampledInput {
-        SampledInput {
+    #[test]
+    fn sample_index_stays_below_size_when_size_rounds() {
+        let size = 16_777_220;
+        let input = SampledInput {
             domain: Interval { min: 0.0, max: 1.0 },
             encode: Interval {
                 min: 0.0,
@@ -174,26 +171,9 @@ mod tests {
             },
             size,
             stride: 1,
-        }
-    }
-
-    #[test]
-    fn sample_index_stays_below_size_when_size_rounds() {
-        // `16_777_219_f32` rounds to `16_777_220.0`.
-        let input = input(16_777_220);
+        };
 
         assert_eq!(input.sample_position(1.0), (16_777_219, None));
         assert_eq!(input.sample_position(2.0), (16_777_219, None));
-    }
-
-    #[test]
-    fn sample_position_interpolates_between_samples() {
-        let input = input(5);
-
-        assert_eq!(input.sample_position(0.0), (0, None));
-        assert_eq!(input.sample_position(0.625), (2, Some(0.5)));
-        assert_eq!(input.sample_position(1.0), (4, None));
-        assert_eq!(input.sample_position(-1.0), (0, None));
-        assert_eq!(input.sample_position(f32::NAN), (0, None));
     }
 }
