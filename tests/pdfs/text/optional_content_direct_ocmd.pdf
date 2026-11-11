@@ -1,0 +1,43 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R 6 0 R] /D << /OFF [6 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 30] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> /Properties << /A << /Type /OCMD /OCGs 6 0 R >> /B << /Type /OCMD /OCGs [5 0 R 6 0 R] >> /C << /Type /OCMD /OCGs [5 0 R 6 0 R] /P /AllOn >> /D << /Type /OCMD /VE [/Not 6 0 R] >> >> >> >>
+endobj
+4 0 obj
+<< /Length 188 >>
+stream
+/OC /A BDC BT /F1 12 Tf 10 10 Td (A) Tj ET EMC
+/OC /B BDC BT /F1 12 Tf 22 10 Td (B) Tj ET EMC
+/OC /C BDC BT /F1 12 Tf 34 10 Td (C) Tj ET EMC
+/OC /D BDC BT /F1 12 Tf 46 10 Td (D) Tj ET EMC
+endstream
+endobj
+5 0 obj
+<< /Type /OCG /Name (L1) >>
+endobj
+6 0 obj
+<< /Type /OCG /Name (L2) >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000120 00000 n 
+0000000177 00000 n 
+0000000483 00000 n 
+0000000721 00000 n 
+0000000764 00000 n 
+0000000807 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+877
+%%EOF

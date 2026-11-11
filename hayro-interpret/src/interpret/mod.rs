@@ -15,7 +15,7 @@ use crate::x_object::{FormXObject, ImageXObject, XObject};
 use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, OCMD, RECT, TYPE};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -171,6 +171,11 @@ fn interpret_annotation<'a>(
     let flags = annot.get::<u32>(F).unwrap_or(0);
 
     if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
+        return;
+    }
+
+    // 12.5.2: The `OC` entry of an annotation specifies its optional content properties.
+    if !context.ocg_state.is_oc_active(annot, context.xref) {
         return;
     }
 
@@ -527,7 +532,16 @@ pub fn interpret<'a>(
                     });
 
                 if let Some((dict, oc_ref)) = oc {
-                    context.ocg_state.begin_ocg(&dict, oc_ref.into());
+                    context
+                        .ocg_state
+                        .begin_ocg(&dict, oc_ref.into(), context.xref);
+                } else if let Some(name) = bdc.1.clone().into_name()
+                    && let Some(ocmd) = resources.properties.get::<Dict<'_>>(name)
+                    && ocmd.get::<Name<'_>>(TYPE).as_deref() == Some(OCMD)
+                {
+                    // An optional content group is always referenced indirectly, but a
+                    // membership dictionary can also be a direct object.
+                    context.ocg_state.begin_ocmd(&ocmd, context.xref);
                 } else {
                     context.ocg_state.begin_marked_content();
                 }
