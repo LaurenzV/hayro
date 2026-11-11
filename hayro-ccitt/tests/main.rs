@@ -127,34 +127,6 @@ fn check_consumed(
     );
 }
 
-/// Decode `stream`, which fails part-way through, and check that the rows
-/// emitted before the error match `reference`.
-fn check_partial(stream: &str, reference: &str, configure: impl FnOnce(&mut DecodeSettings)) {
-    let path = tests_dir().join("streams").join(format!("{stream}.bin"));
-    let data =
-        std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
-    let reference = load_reference(reference);
-
-    let mut settings = DecodeSettings {
-        columns: reference[0].len() as u32,
-        rows: reference.len() as u32,
-        end_of_block: false,
-        end_of_line: false,
-        rows_are_byte_aligned: false,
-        encoding: G4,
-        strict: false,
-        cancel: None,
-    };
-    configure(&mut settings);
-
-    let mut collector = Collector::new(settings.columns);
-    assert!(
-        decode(&data, &mut collector, &settings).is_err(),
-        "{stream}: expected decoding error"
-    );
-    assert_eq!(collector.rows, reference, "{stream}: wrong partial rows");
-}
-
 /// Decode `stream`, which is malformed, and check that it doesn't panic.
 fn check_malformed(
     stream: &str,

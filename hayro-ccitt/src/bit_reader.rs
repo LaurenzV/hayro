@@ -70,12 +70,6 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline(always)]
-    pub(crate) fn next_byte_padding_is_zero(&self) -> bool {
-        let bit_pos = self.bit_pos();
-        bit_pos.is_multiple_of(8) || (self.peek_u32() >> (32 - (8 - bit_pos))) == 0
-    }
-
-    #[inline(always)]
     pub(crate) fn at_end(&self) -> bool {
         self.byte_pos() >= self.data.len()
     }

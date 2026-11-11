@@ -36,20 +36,28 @@ pub(crate) fn decode(
         }
 
         if let Err(e) = decode_2d_line(ctx, reader) {
-            if !ctx.settings.strict
-                && !matches!(e, DecodeError::Cancelled)
-                && ctx.pixels_decoded > 0
-            {
-                ctx.color = Color::White;
-                if ctx.push_pixels(ctx.line_width - ctx.pixels_decoded).is_ok() {
-                    ctx.next_line(decoder);
-                }
+            if ctx.settings.strict {
+                return Err(e);
             }
+
+            if ctx.pixels_decoded > 0 {
+                ctx.color = Color::White;
+                ctx.push_pixels(ctx.line_width - ctx.pixels_decoded)?;
+                ctx.next_line(decoder);
+            }
+
+            if e == DecodeError::UnexpectedEof {
+                break;
+            }
+
             return Err(e);
         }
+
         ctx.next_line(decoder);
 
-        ctx.align_row(reader);
+        if ctx.settings.rows_are_byte_aligned {
+            reader.align();
+        }
     }
 
     Ok(())

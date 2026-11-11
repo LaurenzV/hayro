@@ -27,8 +27,6 @@ pub(crate) struct DecoderContext<'a> {
     pub(crate) decoded_rows: u32,
     /// The settings to apply during decoding.
     pub(crate) settings: &'a DecodeSettings,
-    /// Whether rows should be aligned to byte boundaries.
-    pub(crate) byte_align: bool,
     /// Whether the data contains EOLs.
     pub(crate) has_eols: bool,
 }
@@ -46,19 +44,7 @@ impl<'a> DecoderContext<'a> {
             color: Color::White,
             decoded_rows: 0,
             settings,
-            byte_align: settings.rows_are_byte_aligned,
             has_eols: false,
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn align_row(&mut self, reader: &mut BitReader<'_>) {
-        if self.byte_align {
-            if !self.settings.strict && !reader.next_byte_padding_is_zero() {
-                self.byte_align = false;
-            } else {
-                reader.align();
-            }
         }
     }
 
