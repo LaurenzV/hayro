@@ -27,7 +27,11 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         cancel: None,
     };
 
-    let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
+    let image = params
+        .num_components
+        .filter(|_| !params.is_indexed)
+        .and_then(|channels| hayro_jpeg2000::Image::from_codestream(data, channels, &settings).ok())
+        .or_else(|| hayro_jpeg2000::Image::new(data, &settings).ok())?;
 
     let width = image.width();
     let height = image.height();

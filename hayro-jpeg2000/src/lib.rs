@@ -168,7 +168,20 @@ impl<'a> Image<'a> {
         if data.starts_with(JP2_MAGIC) {
             jp2::parse(data, settings.clone())
         } else if data.starts_with(CODESTREAM_MAGIC) {
-            j2c::parse(data, settings)
+            j2c::parse(data, settings, None)
+        } else {
+            err!(FormatError::InvalidSignature)
+        }
+    }
+
+    /// Try to create a new image from a raw codestream with the given number of colour channels.
+    pub fn from_codestream(
+        data: &'a [u8],
+        color_channels: u8,
+        settings: &DecodeSettings,
+    ) -> Result<Self> {
+        if data.starts_with(CODESTREAM_MAGIC) {
+            j2c::parse(data, settings, Some(color_channels))
         } else {
             err!(FormatError::InvalidSignature)
         }

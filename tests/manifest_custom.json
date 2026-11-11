@@ -761,6 +761,14 @@
     "file": "pdfs/custom/stream_jpx_6.pdf"
   },
   {
+    "id": "stream_jpx_raw_device_n",
+    "file": "pdfs/custom/stream_jpx_raw_device_n.pdf"
+  },
+  {
+    "id": "stream_jpx_raw_subsampled_rgb",
+    "file": "pdfs/custom/stream_jpx_raw_subsampled_rgb.pdf"
+  },
+  {
     "id": "stroke_hairline_large_ctm",
     "file": "pdfs/custom/stroke_hairline_large_ctm.pdf",
     "comment": "lines in the tiling patterns are not rendered correctly yet"
