@@ -341,8 +341,7 @@ impl OutlineGlyph {
         self.program.hinted_outline(self.id, ppem, cache)
     }
 
-    /// Return the identifier of the glyph. You can use this to calculate the cache key
-    /// for the outline of the glyph.
+    /// Return the identifier of the glyph.
     pub fn identifier(&self) -> GlyphIdentifier {
         GlyphIdentifier {
             program: self.program.clone(),
@@ -360,12 +359,6 @@ impl OutlineGlyph {
     /// Returns `None` for Type1 fonts.
     pub fn font_data(&self) -> Option<OutlineFontData> {
         self.font.font_data()
-    }
-
-    /// A key that identifies the font program the glyph comes from, for every font type (Type 1
-    /// included, which has no [`Self::font_data`]). Glyph ids are unique only within one program.
-    pub fn font_key(&self) -> u128 {
-        self.program.content_hash()
     }
 
     /// Get the glyph ID within the font.
@@ -397,7 +390,7 @@ impl OutlineGlyph {
     }
 }
 
-/// An identifier that uniquely identifies the outline of a glyph, for caching purposes.
+/// An identifier for the outline of a glyph and the font program it belongs to.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphIdentifier {
     program: FontProgram,
@@ -405,9 +398,16 @@ pub struct GlyphIdentifier {
 }
 
 impl GlyphIdentifier {
-    /// Return the cache key of the glyph.
-    pub fn cache_key(&self) -> u128 {
+    /// Return a key that uniquely identifies the outline of the glyph, across all font
+    /// programs.
+    pub fn glyph_key(&self) -> u128 {
         hash128(self)
+    }
+
+    /// Return a key that identifies the font program the glyph belongs to, for every font
+    /// type. Glyph IDs are only unique within a single font program.
+    pub fn font_key(&self) -> u128 {
+        self.program.content_hash()
     }
 }
 
