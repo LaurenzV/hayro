@@ -22,7 +22,6 @@ struct SampledInput {
 }
 
 impl SampledInput {
-    /// Return the sample index for `x` and the fraction towards the next sample.
     fn sample_position(&self, x: f32) -> (usize, Option<f32>) {
         let last = self.size - 1;
         let position = self.domain.map(x, self.encode).max(0.0);
