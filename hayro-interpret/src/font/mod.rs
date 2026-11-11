@@ -164,7 +164,7 @@ impl CacheKey for Type3Glyph<'_> {
 
 impl CacheKey for GlyphIdentifier {
     fn cache_key(&self) -> u128 {
-        Self::cache_key(self)
+        self.glyph_key()
     }
 }
 
