@@ -100,8 +100,7 @@ impl Type0Font {
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
         let mut to_unicode_is_cid_indexed = false;
 
-        // If there is no ToUnicode map, try to get the UCS2 CMap, embedded or
-        // not (see section 9.10.2 in the PDF specification).
+        // If there is no ToUnicode map, try to get the UCS2 CMap.
         if to_unicode.is_none()
             && let Some(cc) = character_collection.as_ref()
             && let Some(ucs2_name) = cc.family.ucs2_cmap()
