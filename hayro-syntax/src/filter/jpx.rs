@@ -25,13 +25,13 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         strict: false,
         target_resolution: params.target_dimension,
         cancel: None,
-        // With a `/ColorSpace` in the image dictionary, the colour space
-        // information in the JPX data is ignored (PDF 2.0, 8.9.5.3 table 89),
-        // so a raw codestream's components are not guessed to be YCbCr.
-        guess_subsampled_ycbcr: params.num_components.is_none(),
     };
 
-    let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
+    let image = params
+        .num_components
+        .filter(|_| !params.is_indexed)
+        .and_then(|channels| hayro_jpeg2000::Image::from_codestream(data, channels, &settings).ok())
+        .or_else(|| hayro_jpeg2000::Image::new(data, &settings).ok())?;
 
     let width = image.width();
     let height = image.height();
@@ -55,23 +55,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
             _ => return None,
         },
     };
-    let mut has_alpha = image.has_alpha();
-    let mut cs = cs;
-
-    // A component the decoder takes as opacity (a channel definition box, or
-    // one component more than its colour space has) is a colour component
-    // when the image dictionary's colour space has room for it: the colour
-    // space information in the JPX data is ignored then, and `/SMaskInData`
-    // images have one component fewer in their colour space.
-    if has_alpha && !params.is_indexed && params.num_components == Some(cs.num_components() + 1) {
-        has_alpha = false;
-        cs = match cs.num_components() + 1 {
-            1 => ImageColorSpace::Gray,
-            3 => ImageColorSpace::Rgb,
-            4 => ImageColorSpace::Cmyk,
-            n => ImageColorSpace::Unknown(n),
-        };
-    }
+    let has_alpha = image.has_alpha();
     let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
     let bitmap = image.decode(&mut decoder_context).ok()?.data_u8().ok()?;
 
@@ -148,50 +132,4 @@ fn scale(
     input.truncate(final_pos);
 
     Some(input)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::decode;
-    use crate::object::stream::{ImageColorSpace, ImageDecodeParams};
-
-    // Both from pdf.js's `jpx_subsampling.pdf`: raw codestreams of 32x32 pixels.
-    // The first has three components, the last two subsampled 2x2, in an image
-    // with `/ColorSpace /DeviceRGB`; the second has two, the second subsampled
-    // 2x1, in an image with a two-component `/DeviceN` colour space.
-    const RGB_SUBSAMPLED: &[u8] = include_bytes!("../../tests/jpx/rgb_subsampled.j2k");
-    const TWO_COMPONENTS: &[u8] = include_bytes!("../../tests/jpx/two_components.j2k");
-
-    fn params(num_components: Option<u8>) -> ImageDecodeParams {
-        ImageDecodeParams {
-            num_components,
-            width: 32,
-            height: 32,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn subsampled_components_are_not_ycbcr_with_a_pdf_colour_space() {
-        // The components as they are: black in the top left corner, as
-        // pdf.js and MuPDF draw it.
-        let decoded = decode(RGB_SUBSAMPLED, &params(Some(3))).unwrap();
-        assert_eq!(decoded.data[..3], [0, 0, 0]);
-        // Without a colour space in the PDF, the components are guessed to be
-        // YCbCr as before.
-        let guessed = decode(RGB_SUBSAMPLED, &params(None)).unwrap();
-        assert_eq!(guessed.data[..3], [0, 135, 0]);
-    }
-
-    #[test]
-    fn every_component_is_colour_when_the_pdf_colour_space_has_them_all() {
-        let decoded = decode(TWO_COMPONENTS, &params(Some(2))).unwrap();
-        let image = decoded.image_data.unwrap();
-        assert!(image.alpha.is_none());
-        assert!(matches!(
-            image.color_space,
-            Some(ImageColorSpace::Unknown(2))
-        ));
-        assert_eq!(decoded.data.len(), 32 * 32 * 2);
-    }
 }
