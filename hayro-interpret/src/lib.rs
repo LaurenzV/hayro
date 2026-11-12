@@ -29,10 +29,12 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 mod cache;
+mod canvas;
 mod context;
 mod convert;
 mod device;
 mod function;
+mod function_shading;
 mod interpret;
 mod mesh;
 mod ocg;

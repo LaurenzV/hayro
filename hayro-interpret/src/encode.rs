@@ -1,8 +1,10 @@
 //! Encoding shading patterns for easy sampling.
 
+use crate::canvas::Canvas;
 use crate::color::{AlphaColor, ColorSpace};
+use crate::function_shading::draw_function;
 use crate::interpret::state::ActiveTransferFunction;
-use crate::mesh::{Canvas, draw_function, draw_mesh};
+use crate::mesh::draw_mesh;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType};
 use crate::util::x_y_advances;
