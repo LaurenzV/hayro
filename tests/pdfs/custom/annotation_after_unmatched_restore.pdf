@@ -1,0 +1,39 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Annots [5 0 R] >>
+endobj
+4 0 obj
+<< /Length 10 >>
+stream
+Q 1 0 0 rg
+endstream
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Square /Rect [10 10 90 90] /F 4 /AP << /N 6 0 R >> >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 80 80] /Length 14 >>
+stream
+0 0 80 80 re f
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000218 00000 n 
+0000000278 00000 n 
+0000000373 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+485
+%%EOF

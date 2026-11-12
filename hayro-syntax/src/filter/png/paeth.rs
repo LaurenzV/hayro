@@ -7,9 +7,6 @@
 
 use super::BytesPerPixel;
 
-// This code path is used on non-x86_64 architectures but we allow dead code
-// for the test module to be able to access it.
-#[allow(dead_code)]
 pub(super) fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
     // On ARM this algorithm performs much better than the one above adapted from stb,
     // and this is the better-studied algorithm we've always used here,

@@ -11,6 +11,10 @@ readme = "README.md"
 exclude = ["/tests/"]
 autotests = false
 
+[features]
+default = ["std"]
+std = []
+
 [lints]
 workspace = true
 

@@ -36,29 +36,7 @@ impl ImageDecoder for Page<'_> {
 }
 
 fn decode_into_buf(page: &Page<'_>, buf: &mut [u8]) -> ImageResult<()> {
-    struct LumaDecoder<'a> {
-        buf: &'a mut [u8],
-        pos: usize,
-    }
-
-    impl crate::Decoder for LumaDecoder<'_> {
-        fn push_pixel(&mut self, black: bool) {
-            self.buf[self.pos] = if black { 0 } else { 255 };
-            self.pos += 1;
-        }
-
-        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-            let luma = if black { 0 } else { 255 };
-            let count = chunk_count as usize * 8;
-            self.buf[self.pos..self.pos + count].fill(luma);
-            self.pos += count;
-        }
-
-        fn next_line(&mut self) {}
-    }
-
-    let mut decoder = LumaDecoder { buf, pos: 0 };
-    page.decode(&mut decoder)?;
+    page.decode()?.store_u8_into(buf)?;
 
     Ok(())
 }
@@ -130,6 +108,12 @@ impl From<crate::DecodeError> for DecodingError {
 impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
         Self::Decoding(value.into())
+    }
+}
+
+impl From<crate::Cancelled> for ImageError {
+    fn from(value: crate::Cancelled) -> Self {
+        crate::DecodeError::from(value).into()
     }
 }
 

@@ -2,6 +2,7 @@
 
 use crate::color::{AlphaColor, ColorComponents, ColorSpace};
 use crate::function::MAX_COMPONENTS;
+use crate::gradient::finish_color;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
@@ -96,16 +97,7 @@ impl EncodedShadingPattern {
     pub fn sample(&self, pos: Point) -> [f32; 4] {
         self.shading_type
             .eval(pos, self.background_color, &self.color_space)
-            .map(|v| {
-                let mut components = v.components();
-                components[3] *= self.opacity;
-
-                if let Some(tf) = &self.transfer_function {
-                    return tf.apply(&AlphaColor::new(components)).components();
-                }
-
-                components
-            })
+            .map(|v| finish_color(self, v.components()))
             .unwrap_or([0.0, 0.0, 0.0, 0.0])
     }
 
@@ -124,6 +116,19 @@ impl EncodedShadingPattern {
         scale: f32,
         mut f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
+        if let EncodedShadingType::RadialAxial(shading) = &self.shading_type {
+            let lut = shading.lut(self);
+            let background = finish_color(self, self.background_color.components());
+
+            self.walk_grid(bbox, scale, |point| {
+                f(shading.position(point).map_or(background, |t| lut.get(t)));
+            })
+        } else {
+            self.walk_grid(bbox, scale, |point| f(self.sample(point)))
+        }
+    }
+
+    fn walk_grid(&self, bbox: Rect, scale: f32, mut f: impl FnMut(Point)) -> (u32, u32, Affine) {
         let (width, height) = texture_dimensions(bbox, scale);
         let inv_scale = 1.0 / scale as f64;
 
@@ -138,7 +143,7 @@ impl EncodedShadingPattern {
             let mut point = start_point;
 
             for _ in 0..width {
-                f(self.sample(point));
+                f(point);
 
                 point += x_advance;
             }
@@ -405,44 +410,15 @@ impl EncodedShadingType {
                     Some(color_space.to_rgba(out, 1.0))
                 }
             }
-            Self::RadialAxial(EncodedRadialAxialShading {
-                function,
-                params,
-                domain,
-                extend,
-            }) => {
-                let (t0, t1) = (domain[0], domain[1]);
-
-                let mut t = match params {
-                    RadialAxialParams::Axial => pos.x as f32,
-                    RadialAxialParams::Radial { p1, r } => {
-                        radial_pos(&pos, p1, *r, extend[0], extend[1]).unwrap_or(f32::MIN)
-                    }
+            Self::RadialAxial(shading) => {
+                let Some(t) = shading.position(pos) else {
+                    return Some(bg_color);
                 };
 
-                if t == f32::MIN {
-                    return Some(bg_color);
-                }
-
-                if t < 0.0 {
-                    if extend[0] {
-                        t = 0.0;
-                    } else {
-                        return Some(bg_color);
-                    }
-                } else if t > 1.0 {
-                    if extend[1] {
-                        t = 1.0;
-                    } else {
-                        return Some(bg_color);
-                    }
-                }
-
-                let t = t0 + (t1 - t0) * t;
-
+                let [t0, t1] = shading.domain;
                 let mut val = [0.0; MAX_COMPONENTS];
-                let val = &mut val[..function.num_outputs()];
-                function.eval(&[t], val)?;
+                let val = &mut val[..shading.function.num_outputs()];
+                shading.function.eval(&[t0 + (t1 - t0) * t], val)?;
 
                 Some(color_space.to_rgba(val, 1.0))
             }
@@ -463,6 +439,25 @@ impl EncodedShadingType {
                 }
             }
             Self::Dummy(_) => Some(AlphaColor::TRANSPARENT),
+        }
+    }
+}
+
+impl EncodedRadialAxialShading {
+    fn position(&self, pos: Point) -> Option<f32> {
+        let t = match self.params {
+            RadialAxialParams::Axial => pos.x as f32,
+            RadialAxialParams::Radial { p1, r } => {
+                radial_pos(&pos, &p1, r, self.extend[0], self.extend[1])?
+            }
+        };
+
+        if t < 0.0 {
+            self.extend[0].then_some(0.0)
+        } else if t > 1.0 {
+            self.extend[1].then_some(1.0)
+        } else {
+            Some(t)
         }
     }
 }

@@ -18,7 +18,13 @@ pub(crate) struct ArithmeticDecoder<'a> {
     base_pointer: u32,
     /// The bit shift counter.
     shift_count: u32,
+    /// How often `BYTEIN` ran into the marker that ends the data.
+    markers_seen: u32,
 }
+
+// Encoders may trim trailing 0xFF 0x7F pairs (E.2.10), so valid data can also
+// run into its end many times.
+const MAX_MARKERS: u32 = 65_536;
 
 impl<'a> ArithmeticDecoder<'a> {
     pub(crate) fn new(data: &'a [u8]) -> Self {
@@ -28,11 +34,17 @@ impl<'a> ArithmeticDecoder<'a> {
             a: 0,
             base_pointer: 0,
             shift_count: 0,
+            markers_seen: 0,
         };
 
         decoder.initialize();
 
         decoder
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_exhausted(&self) -> bool {
+        self.markers_seen > MAX_MARKERS
     }
 
     /// Read the next bit using the given context label.
@@ -63,6 +75,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
             if b1 > 0x8f {
                 self.shift_count = 8;
+                self.markers_seen = self.markers_seen.saturating_add(1);
             } else {
                 self.base_pointer += 1;
                 self.c = self

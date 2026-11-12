@@ -24,6 +24,10 @@
     "file": "pdfs/custom/annotation_bbox_offset.pdf"
   },
   {
+    "id": "annotation_after_unmatched_restore",
+    "file": "pdfs/custom/annotation_after_unmatched_restore.pdf"
+  },
+  {
     "id": "object_stream_wrong_index",
     "file": "pdfs/custom/object_stream_wrong_index.pdf"
   },
@@ -757,6 +761,14 @@
     "file": "pdfs/custom/stream_jpx_6.pdf"
   },
   {
+    "id": "stream_jpx_raw_device_n",
+    "file": "pdfs/custom/stream_jpx_raw_device_n.pdf"
+  },
+  {
+    "id": "stream_jpx_raw_subsampled_rgb",
+    "file": "pdfs/custom/stream_jpx_raw_subsampled_rgb.pdf"
+  },
+  {
     "id": "stroke_hairline_large_ctm",
     "file": "pdfs/custom/stroke_hairline_large_ctm.pdf",
     "comment": "lines in the tiling patterns are not rendered correctly yet"
@@ -817,6 +829,10 @@
   {
     "id": "xobject_with_fill_opacity",
     "file": "pdfs/custom/xobject_with_fill_opacity.pdf"
+  },
+  {
+    "id": "xobject_unmatched_restore",
+    "file": "pdfs/custom/xobject_unmatched_restore.pdf"
   },
   {
     "id": "image_jbig2_4",
@@ -1248,6 +1264,18 @@
     "file": "pdfs/custom/flate_predictor_invalid.pdf"
   },
   {
+    "id": "predictor_last_row_cut_short",
+    "file": "pdfs/custom/predictor_last_row_cut_short.pdf"
+  },
+  {
+    "id": "predictor_png_row_ends_inside_pixel",
+    "file": "pdfs/custom/predictor_png_row_ends_inside_pixel.pdf"
+  },
+  {
+    "id": "predictor_tiff_row_ends_inside_byte",
+    "file": "pdfs/custom/predictor_tiff_row_ends_inside_byte.pdf"
+  },
+  {
     "id": "issue141",
     "link": true
   },
@@ -1424,5 +1452,25 @@
   {
     "id": "font_type1_opentype_builtin_encoding",
     "file": "pdfs/custom/font_type1_opentype_builtin_encoding.pdf"
+  },
+  {
+    "id": "pattern_shading_radial_extend_interior",
+    "file": "pdfs/custom/pattern_shading_radial_extend_interior.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_tiling_shading_scaled",
+    "file": "pdfs/custom/pattern_tiling_shading_scaled.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_tiling_shading_translated",
+    "file": "pdfs/custom/pattern_tiling_shading_translated.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_tiling_clip_scaled",
+    "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
+    "svg": true
   }
 ]

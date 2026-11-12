@@ -36,7 +36,7 @@ pub(crate) fn parse_inner<'a>(
         buf: Vec::new(),
         get_cmap,
     };
-    let mut _codespace_ranges = Vec::new();
+    let mut codespace_ranges = Vec::new();
     let mut ranges = PartitionedRanges::new();
     let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
@@ -80,7 +80,7 @@ pub(crate) fn parse_inner<'a>(
         } else {
             match name.as_str() {
                 Some("begincodespacerange") => {
-                    parse_codespace_range(&mut scanner, &mut _codespace_ranges, &mut ctx)?;
+                    parse_codespace_range(&mut scanner, &mut codespace_ranges, &mut ctx)?;
                 }
                 Some("begincidrange") => {
                     parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
@@ -148,7 +148,7 @@ pub(crate) fn parse_inner<'a>(
 
     Some(CMap {
         metadata,
-        _codespace_ranges,
+        codespace_ranges,
         cid_ranges: ranges,
         notdef_ranges,
         bf_entries,
@@ -281,12 +281,15 @@ fn parse_bf_char<F>(
         let dst = scanner.parse_string().ok()?;
         dst.decode_into(&mut ctx.buf).ok()?;
 
+        let Some(dst_base) = decode_be(&ctx.buf) else {
+            continue;
+        };
         entries.push(BfRange {
             range: Range {
                 start: code,
                 end: code,
             },
-            dst_base: decode_be(&ctx.buf)?,
+            dst_base,
         });
     }
 }
@@ -312,9 +315,12 @@ fn parse_bf_range<F>(
             Token::String(s) => {
                 s.decode_into(&mut ctx.buf).ok()?;
 
+                let Some(dst_base) = decode_be(&ctx.buf) else {
+                    continue;
+                };
                 entries.push(BfRange {
                     range: Range { start, end },
-                    dst_base: decode_be(&ctx.buf)?,
+                    dst_base,
                 });
             }
             _ if name_matches(&next, "[") => {
@@ -322,12 +328,15 @@ fn parse_bf_range<F>(
                     let s = scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
+                    let Some(dst_base) = decode_be(&ctx.buf) else {
+                        continue;
+                    };
                     entries.push(BfRange {
                         range: Range {
                             start: code,
                             end: code,
                         },
-                        dst_base: decode_be(&ctx.buf)?,
+                        dst_base,
                     });
                 }
 

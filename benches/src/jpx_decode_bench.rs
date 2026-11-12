@@ -171,7 +171,7 @@ fn decode_one(
     extracted
         .image
         .decode(context)
-        .map(|decoded| decoded.store_u8_into(output))
+        .and_then(|decoded| decoded.store_u8_into(output).map_err(Into::into))
         .map_err(|err| format!("failed to decode {}: {err:?}", extracted.name))
 }
 

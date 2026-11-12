@@ -8,22 +8,25 @@ use super::{
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use super::{RegionBitmap, generic_refinement};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
+use crate::cancel::{Cancel, WORD_WORK, WorkCounter};
 use crate::error::{HuffmanError, OverflowError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
+use crate::memory::MemoryBudget;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
+use crate::sync::Arc;
 
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState<'_>,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -31,6 +34,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         header.flags.default_pixel,
+        &mut scratch.budget,
     )?;
 
     decode_into(
@@ -50,11 +54,11 @@ pub(crate) fn decode(
 
 pub(crate) fn decode_into(
     header: &TextRegionHeader<'_>,
-    symbols: &[&Bitmap],
+    symbols: &[&Arc<Bitmap>],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState<'_>,
 ) -> Result<()> {
     let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
     scratch.contexts.clear();
@@ -71,7 +75,14 @@ pub(crate) fn decode_into(
             standard_tables,
             &mut scratch.contexts,
         )?;
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(
+            ctx,
+            SymbolBitmaps::new(symbols, &[]),
+            header,
+            bitmap,
+            &mut scratch.budget,
+            scratch.cancel,
+        )?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -80,27 +91,50 @@ pub(crate) fn decode_into(
         let mut contexts = TextRegionContexts::new(symbol_code_length);
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(
+            ctx,
+            SymbolBitmaps::new(symbols, &[]),
+            header,
+            bitmap,
+            &mut scratch.budget,
+            scratch.cancel,
+        )?;
     }
 
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct SymbolBitmaps<'a> {
+    first: &'a [&'a Arc<Bitmap>],
+    second: &'a [Arc<Bitmap>],
+}
+
+impl<'a> SymbolBitmaps<'a> {
+    pub(crate) fn new(first: &'a [&'a Arc<Bitmap>], second: &'a [Arc<Bitmap>]) -> Self {
+        Self { first, second }
+    }
+
+    fn get(self, index: usize) -> Option<&'a Bitmap> {
+        let bitmap = match self.first.get(index) {
+            Some(bitmap) => bitmap,
+            None => self.second.get(index - self.first.len())?,
+        };
+
+        Some(bitmap)
+    }
+}
+
 /// Decode a text region segment with a decode context (6.4).
 pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     region: &mut Bitmap,
+    budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let strip_size = header.strip_size();
-
-    // Inspired by Chromium's limit:
-    // https://pdfium.googlesource.com/pdfium/%2B/refs/heads/main/core/fxcodec/jbig2/jbig2_context.cpp#666
-    let max_instances = header.segment_data_len.saturating_mul(32);
-    if header.num_instances as usize > max_instances {
-        bail!(SymbolError::TooManyInstances);
-    }
 
     let mut strip_t = ctx
         .read_strip_delta_t(strip_size)?
@@ -108,6 +142,7 @@ pub(crate) fn decode_with(
         .ok_or(OverflowError::PlacementCoordinate)?;
     let mut first_s: i32 = 0;
     let mut instance_count = 0;
+    let mut work = WorkCounter::new();
 
     while instance_count < header.num_instances {
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
@@ -119,6 +154,12 @@ pub(crate) fn decode_with(
         let mut current_s = 0;
 
         loop {
+            if ctx.is_exhausted() {
+                bail!(ParseError::UnexpectedEof);
+            }
+
+            work.add(128, cancel)?;
+
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -153,8 +194,9 @@ pub(crate) fn decode_with(
 
             let symbol_id = ctx.read_symbol_id()?;
 
-            let symbol_bitmap =
-                decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
+            let symbol_bitmap = decode_symbol_instance_bitmap(
+                &mut ctx, symbols, header, symbol_id, budget, cancel,
+            )?;
 
             let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => match symbols.get(*idx) {
@@ -214,7 +256,21 @@ pub(crate) fn decode_with(
                 }
             };
 
-            region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
+            region.combine(
+                symbol_bitmap_ref,
+                x,
+                y,
+                header.flags.combination_operator,
+                cancel,
+            )?;
+            work.add(
+                u64::from(WORD_WORK) * symbol_bitmap_ref.data.len() as u64,
+                cancel,
+            )?;
+
+            if let SymbolBitmap::Owned(bitmap) = &symbol_bitmap {
+                budget.release(bitmap.memory_size());
+            }
 
             if !header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
@@ -330,6 +386,13 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             decoder,
             contexts,
             gr_contexts,
+        }
+    }
+
+    fn is_exhausted(&self) -> bool {
+        match self {
+            DecodeContext::Huffman { .. } => false,
+            DecodeContext::Arithmetic { decoder, .. } => decoder.is_exhausted(),
         }
     }
 
@@ -495,6 +558,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         reference_y_offset: i32,
         refinement_template: RefinementTemplate,
         refinement_at_pixels: &[AdaptiveTemplatePixel],
+        cancel: Cancel<'_>,
     ) -> Result<()> {
         match self {
             DecodeContext::Huffman {
@@ -522,6 +586,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                     refinement_template,
                     refinement_at_pixels,
                     false,
+                    cancel,
                 )
             }
             DecodeContext::Arithmetic {
@@ -538,6 +603,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                 refinement_template,
                 refinement_at_pixels,
                 false,
+                cancel,
             ),
         }
     }
@@ -554,9 +620,11 @@ enum SymbolBitmap {
 /// Decode the symbol instance bitmap (6.4.11).
 fn decode_symbol_instance_bitmap(
     ctx: &mut DecodeContext<'_, '_>,
-    symbols: &[&Bitmap],
+    symbols: SymbolBitmaps<'_>,
     header: &TextRegionHeader<'_>,
     symbol_id: usize,
+    budget: &mut MemoryBudget,
+    cancel: Cancel<'_>,
 ) -> Result<SymbolBitmap> {
     if !header.flags.use_refinement || ctx.read_refinement_flag()? == 0 {
         return Ok(SymbolBitmap::Reference(symbol_id));
@@ -588,7 +656,7 @@ fn decode_symbol_instance_bitmap(
         .checked_add(rdy)
         .ok_or(OverflowError::ReferenceOffset)?;
 
-    let mut refined_bitmap = Bitmap::new(refined_width, refined_height)?;
+    let mut refined_bitmap = Bitmap::new(refined_width, refined_height, budget)?;
 
     ctx.decode_refinement_bitmap(
         &mut refined_bitmap,
@@ -597,6 +665,7 @@ fn decode_symbol_instance_bitmap(
         reference_y_offset,
         header.flags.refinement_template,
         &header.refinement_at_pixels,
+        cancel,
     )?;
 
     Ok(SymbolBitmap::Owned(refined_bitmap))
@@ -823,7 +892,6 @@ pub(crate) struct TextRegionHeader<'a> {
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
     pub(crate) symbol_id_table: Option<HuffmanTable>,
-    pub(crate) segment_data_len: usize,
     pub(crate) data: &'a [u8],
     pub(crate) strict: bool,
 }
@@ -898,7 +966,6 @@ pub(crate) fn parse<'a>(
     num_symbols: u32,
     strict: bool,
 ) -> Result<TextRegionHeader<'a>> {
-    let segment_data_len = reader.tail().ok_or(ParseError::UnexpectedEof)?.len();
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
     let huffman_flags = if flags.use_huffman {
@@ -931,7 +998,6 @@ pub(crate) fn parse<'a>(
         refinement_at_pixels,
         num_instances,
         symbol_id_table,
-        segment_data_len,
         data,
         strict,
     })

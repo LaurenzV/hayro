@@ -73,6 +73,11 @@ fn refine_large_offsets() {
 }
 
 #[test]
+fn many_instances() {
+    check("text_many_instances", "honeycomb");
+}
+
+#[test]
 fn instance_far_left() {
     check("text_instance_far_left", "honeycomb");
 }

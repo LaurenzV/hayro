@@ -2,7 +2,6 @@ use crate::WORKSPACE_PATH;
 use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::{RenderSettings, render_pdf};
-use hayro_jbig2::DecoderContext;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
@@ -24,17 +23,9 @@ fn load_pdf(file: &[u8]) {
 }
 
 fn load_jbig2(file: &[u8]) {
-    struct NullDecoder;
-    impl hayro_jbig2::Decoder for NullDecoder {
-        fn push_pixel(&mut self, _black: bool) {}
-        fn push_pixel_chunk(&mut self, _black: bool, _chunk_count: u32) {}
-        fn next_line(&mut self) {}
-    }
-
     if let Ok(file) = hayro_jbig2::File::new(file, &hayro_jbig2::DecodeSettings::default()) {
-        let mut ctx = DecoderContext::default();
         for page in file.pages() {
-            let _ = page.decode_with(&mut NullDecoder, &mut ctx);
+            let _ = page.decode();
         }
     }
 }
