@@ -1,13 +1,16 @@
 use super::{ColorSpace, ToRgb, U8Lookup};
 use crate::cache::Cache;
 use crate::function::{Function, MAX_COMPONENTS};
-use hayro_syntax::object::{Array, Name, Object};
+use hayro_syntax::object::dict::keys::{COLORSPACE, COMPONENTS, PROCESS};
+use hayro_syntax::object::{Array, Dict, Name, Object};
 use rustc_hash::FxHashMap;
 
 const MAX_CACHED_COLORS: usize = 1 << 18;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceN {
+    names: Vec<Box<[u8]>>,
+    process: Option<DeviceNProcess>,
     alternate_space: ColorSpace,
     pub(super) num_components: u8,
     tint_transform: Function,
@@ -20,7 +23,6 @@ impl DeviceN {
         let mut iter = array.flex_iter();
         // Skip `/DeviceN`
         let _ = iter.next::<Name<'_>>()?;
-        // Skip `Name`.
         let names = iter
             .next::<Array<'_>>()?
             .iter::<Name<'_>>()
@@ -29,18 +31,40 @@ impl DeviceN {
         let all_none = names.iter().all(|n| n.as_str() == "None");
         let alternate_space = ColorSpace::new_nested(iter.next::<Object<'_>>()?, cache, depth)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
+        let process = iter
+            .next::<Dict<'_>>()
+            .and_then(|attributes| attributes.get::<Dict<'_>>(PROCESS))
+            .and_then(|process| DeviceNProcess::new(&process, cache, depth));
 
         if num_components == 0 || num_components as usize > MAX_COMPONENTS {
             return None;
         }
 
         Some(Self {
+            names: names.iter().map(|n| Box::from(n.as_ref())).collect(),
+            process,
             alternate_space,
             num_components,
             tint_transform,
             is_none: all_none,
             lookup: U8Lookup::default(),
         })
+    }
+
+    pub(super) fn names(&self) -> &[Box<[u8]>] {
+        &self.names
+    }
+
+    pub(super) fn process(&self) -> Option<&DeviceNProcess> {
+        self.process.as_ref()
+    }
+
+    pub(super) fn alternate_space(&self) -> &ColorSpace {
+        &self.alternate_space
+    }
+
+    pub(super) fn tint_transform(&self) -> &Function {
+        &self.tint_transform
     }
 
     fn evaluate(&self, input: &[u8]) -> Vec<u8> {
@@ -144,5 +168,42 @@ impl ToRgb for DeviceN {
 
     fn is_none(&self) -> bool {
         self.is_none
+    }
+}
+
+/// The process colorants of a `DeviceN` color space, given in the `Process`
+/// entry of its attributes dictionary.
+#[derive(Debug, Clone)]
+pub struct DeviceNProcess {
+    color_space: ColorSpace,
+    components: Vec<Box<[u8]>>,
+}
+
+impl DeviceNProcess {
+    fn new(dict: &Dict<'_>, cache: &Cache, depth: u8) -> Option<Self> {
+        let color_space =
+            ColorSpace::new_nested(dict.get::<Object<'_>>(COLORSPACE)?, cache, depth)?;
+        let components = dict
+            .get::<Array<'_>>(COMPONENTS)?
+            .iter::<Name<'_>>()
+            .map(|n| Box::from(n.as_ref()))
+            .collect();
+
+        Some(Self {
+            color_space,
+            components,
+        })
+    }
+
+    /// Return the process color space.
+    pub fn color_space(&self) -> &ColorSpace {
+        &self.color_space
+    }
+
+    /// Return the names of the colorants of the color space that are its
+    /// process components, in the order of the process color space's
+    /// components.
+    pub fn components(&self) -> &[Box<[u8]>] {
+        &self.components
     }
 }

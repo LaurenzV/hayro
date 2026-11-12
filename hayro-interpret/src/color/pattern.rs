@@ -1,11 +1,17 @@
 use super::{ColorComponents, ColorSpace, ToLuma, ToRgb};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Pattern(ColorSpace);
+pub(crate) struct Pattern(ColorSpace, bool);
 
 impl Pattern {
-    pub(super) fn new(color_space: ColorSpace) -> Self {
-        Self(color_space)
+    /// A pattern color space whose underlying color space is `color_space`,
+    /// given in the PDF where `given` is `true`.
+    pub(super) fn new(color_space: ColorSpace, given: bool) -> Self {
+        Self(color_space, given)
+    }
+
+    pub(super) fn underlying(&self) -> Option<&ColorSpace> {
+        self.1.then_some(&self.0)
     }
 
     pub(super) fn color_space(&self) -> ColorSpace {

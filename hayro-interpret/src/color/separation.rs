@@ -5,6 +5,7 @@ use hayro_syntax::object::{Array, Name, Object};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Separation {
+    name: Box<[u8]>,
     alternate_space: ColorSpace,
     tint_transform: Function,
     is_none_separation: bool,
@@ -24,11 +25,24 @@ impl Separation {
         let is_none_separation = name.as_str() == "None";
 
         Some(Self {
+            name: Box::from(name.as_ref()),
             alternate_space,
             tint_transform,
             is_none_separation,
             lookup: U8Lookup::default(),
         })
+    }
+
+    pub(super) fn name(&self) -> &[u8] {
+        &self.name
+    }
+
+    pub(super) fn alternate_space(&self) -> &ColorSpace {
+        &self.alternate_space
+    }
+
+    pub(super) fn tint_transform(&self) -> &Function {
+        &self.tint_transform
     }
 
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {

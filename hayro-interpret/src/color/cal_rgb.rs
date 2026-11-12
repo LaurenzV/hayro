@@ -4,10 +4,10 @@ use hayro_syntax::object::dict::keys::{BLACK_POINT, GAMMA, MATRIX, WHITE_POINT};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CalRgb {
-    white_point: [f32; 3],
-    black_point: [f32; 3],
-    matrix: [f32; 9],
-    gamma: [f32; 3],
+    pub(super) white_point: [f32; 3],
+    pub(super) black_point: [f32; 3],
+    pub(super) matrix: [f32; 9],
+    pub(super) gamma: [f32; 3],
 }
 
 // See <https://github.com/mozilla/pdf.js/blob/06f44916c8936b92f464d337fe3a0a6b2b78d5b4/src/core/colorspace.js#L846>

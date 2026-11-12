@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Indexed {
-    values: Vec<Vec<u8>>,
+    values: Vec<u8>,
     hival: u8,
     base: Box<ColorSpace>,
     lookup: U8Lookup<[u8; 3]>,
@@ -31,20 +31,9 @@ impl Indexed {
 
             let num_components = base_color_space.num_components();
 
-            let mut byte_iter = data.iter().copied();
+            let len = (hival as usize + 1) * num_components as usize;
 
-            let mut vals = vec![];
-            for _ in 0..=hival {
-                let mut temp = vec![];
-
-                for _ in 0..num_components {
-                    temp.push(byte_iter.next()?);
-                }
-
-                vals.push(temp);
-            }
-
-            vals
+            data.get(..len)?.to_vec()
         };
 
         Some(Self {
@@ -60,15 +49,22 @@ impl Indexed {
         self.hival
     }
 
+    pub(super) fn base(&self) -> &ColorSpace {
+        &self.base
+    }
+
+    pub(super) fn lookup(&self) -> &[u8] {
+        &self.values
+    }
+
     fn convert_inner(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         let mut indexed = vec![0; input.len() * self.base.num_components() as usize];
 
-        for (input, output) in input
-            .iter()
-            .zip(indexed.chunks_exact_mut(self.base.num_components() as usize))
-        {
+        let n = self.base.num_components() as usize;
+
+        for (input, output) in input.iter().zip(indexed.chunks_exact_mut(n)) {
             let idx = (*input).min(self.hival) as usize;
-            output.copy_from_slice(&self.values[idx]);
+            output.copy_from_slice(&self.values[idx * n..(idx + 1) * n]);
         }
 
         self.base.convert(&indexed, output)

@@ -23,7 +23,10 @@ use self::indexed::Indexed;
 use self::lab::Lab;
 use self::pattern::Pattern;
 use self::separation::Separation;
+
+pub use self::device_n::DeviceNProcess;
 use crate::cache::{Cache, CacheKey};
+use crate::function::Function;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
@@ -239,11 +242,14 @@ impl ColorSpaceType {
                     return Some(Self::DeviceN(DeviceN::new(&color_array, cache, depth + 1)?));
                 }
                 PATTERN => {
-                    let cs = iter
+                    let pattern = match iter
                         .next::<Object<'_>>()
                         .and_then(|o| ColorSpace::new_nested(o, cache, depth + 1))
-                        .unwrap_or(ColorSpace::device_rgb());
-                    return Some(Self::Pattern(Pattern::new(cs)));
+                    {
+                        Some(cs) => Pattern::new(cs, true),
+                        None => Pattern::new(ColorSpace::device_rgb(), false),
+                    };
+                    return Some(Self::Pattern(pattern));
                 }
                 _ => {
                     return None;
@@ -260,10 +266,116 @@ impl ColorSpaceType {
             DEVICE_GRAY | G => Some(Self::DeviceGray(DeviceGray)),
             DEVICE_CMYK | CMYK => Some(Self::DeviceCmyk(DeviceCmyk)),
             CALCMYK => Some(Self::DeviceCmyk(DeviceCmyk)),
-            PATTERN => Some(Self::Pattern(Pattern::new(ColorSpace::device_rgb()))),
+            PATTERN => Some(Self::Pattern(Pattern::new(ColorSpace::device_rgb(), false))),
             _ => None,
         }
     }
+}
+
+/// The family of a color space, with its parameters.
+///
+/// This describes a color space as the PDF defines it, independently of how it
+/// is converted to RGB.
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub enum ColorSpaceKind<'a> {
+    /// A `DeviceGray` color space.
+    DeviceGray,
+    /// A `DeviceRGB` color space.
+    ///
+    /// This is also used for an `ICCBased` color space whose profile is sRGB.
+    DeviceRgb,
+    /// A `DeviceCMYK` color space.
+    ///
+    /// This is also used for a `CalCMYK` color space.
+    DeviceCmyk,
+    /// A `CalGray` color space.
+    #[non_exhaustive]
+    CalGray {
+        /// The white point, in CIE 1931 XYZ.
+        white_point: [f32; 3],
+        /// The black point, in CIE 1931 XYZ.
+        black_point: [f32; 3],
+        /// The gamma.
+        gamma: f32,
+    },
+    /// A `CalRGB` color space.
+    #[non_exhaustive]
+    CalRgb {
+        /// The white point, in CIE 1931 XYZ.
+        white_point: [f32; 3],
+        /// The black point, in CIE 1931 XYZ.
+        black_point: [f32; 3],
+        /// The gamma of each component.
+        gamma: [f32; 3],
+        /// The matrix from the decoded components to XYZ, in column-major
+        /// order, as in the PDF.
+        matrix: [f32; 9],
+    },
+    /// A `Lab` color space.
+    #[non_exhaustive]
+    Lab {
+        /// The white point, in CIE 1931 XYZ.
+        white_point: [f32; 3],
+        /// The black point, in CIE 1931 XYZ.
+        black_point: [f32; 3],
+        /// The ranges of a* and b*: `[a_min, a_max, b_min, b_max]`.
+        range: [f32; 4],
+    },
+    /// An `ICCBased` color space.
+    ///
+    /// Where the profile can't be used, the color space is its alternate
+    /// instead, or the device color space with the same number of
+    /// components.
+    #[non_exhaustive]
+    IccBased {
+        /// The ICC profile.
+        profile: &'a [u8],
+        /// The number of components.
+        num_components: u8,
+    },
+    /// An `Indexed` color space.
+    #[non_exhaustive]
+    Indexed {
+        /// The base color space.
+        base: &'a ColorSpace,
+        /// The maximum index.
+        hival: u8,
+        /// The color table: `hival + 1` entries of one byte for each component
+        /// of the base color space.
+        lookup: &'a [u8],
+    },
+    /// A `Separation` color space.
+    #[non_exhaustive]
+    Separation {
+        /// The name of the colorant.
+        name: &'a [u8],
+        /// The alternate color space.
+        alternate: &'a ColorSpace,
+        /// The function from the tint to the components of the alternate color
+        /// space.
+        tint_transform: &'a Function,
+    },
+    /// A `DeviceN` color space.
+    #[non_exhaustive]
+    DeviceN {
+        /// The names of the colorants.
+        names: &'a [Box<[u8]>],
+        /// The process colorants, from the attributes dictionary.
+        process: Option<&'a DeviceNProcess>,
+        /// The alternate color space.
+        alternate: &'a ColorSpace,
+        /// The function from the tints to the components of the alternate color
+        /// space.
+        tint_transform: &'a Function,
+    },
+    /// A `Pattern` color space.
+    #[non_exhaustive]
+    Pattern {
+        /// The underlying color space of an uncolored pattern, where it is
+        /// given.
+        underlying: Option<&'a ColorSpace>,
+    },
 }
 
 /// A PDF color space.
@@ -274,6 +386,63 @@ impl ColorSpace {
     /// Create a new color space from the given object.
     pub(crate) fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
         Self::new_nested(object, cache, 0)
+    }
+
+    /// Create a color space from a PDF object, such as the `ColorSpace` entry
+    /// of an image dictionary.
+    ///
+    /// The object is a color space name or array. A name of a color space in a
+    /// resource dictionary is not resolved.
+    pub fn from_object(object: Object<'_>) -> Option<Self> {
+        Self::new(object, &Cache::new())
+    }
+
+    /// Return the family of the color space, with its parameters.
+    pub fn kind(&self) -> ColorSpaceKind<'_> {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceGray(_) => ColorSpaceKind::DeviceGray,
+            ColorSpaceType::DeviceRgb(_) => ColorSpaceKind::DeviceRgb,
+            ColorSpaceType::DeviceCmyk(_) => ColorSpaceKind::DeviceCmyk,
+            ColorSpaceType::CalGray(c) => ColorSpaceKind::CalGray {
+                white_point: c.white_point,
+                black_point: c.black_point,
+                gamma: c.gamma,
+            },
+            ColorSpaceType::CalRgb(c) => ColorSpaceKind::CalRgb {
+                white_point: c.white_point,
+                black_point: c.black_point,
+                gamma: c.gamma,
+                matrix: c.matrix,
+            },
+            ColorSpaceType::Lab(l) => ColorSpaceKind::Lab {
+                white_point: l.white_point,
+                black_point: l.black_point,
+                range: l.range,
+            },
+            ColorSpaceType::ICCBased(icc) => ColorSpaceKind::IccBased {
+                profile: icc.data().unwrap_or_default(),
+                num_components: icc.number_components() as u8,
+            },
+            ColorSpaceType::Indexed(i) => ColorSpaceKind::Indexed {
+                base: i.base(),
+                hival: i.hival(),
+                lookup: i.lookup(),
+            },
+            ColorSpaceType::Separation(s) => ColorSpaceKind::Separation {
+                name: s.name(),
+                alternate: s.alternate_space(),
+                tint_transform: s.tint_transform(),
+            },
+            ColorSpaceType::DeviceN(d) => ColorSpaceKind::DeviceN {
+                names: d.names(),
+                process: d.process(),
+                alternate: d.alternate_space(),
+                tint_transform: d.tint_transform(),
+            },
+            ColorSpaceType::Pattern(p) => ColorSpaceKind::Pattern {
+                underlying: p.underlying(),
+            },
+        }
     }
 
     pub(super) fn new_nested(object: Object<'_>, cache: &Cache, depth: u8) -> Option<Self> {
@@ -304,6 +473,7 @@ impl ColorSpace {
     pub(crate) fn pattern() -> Self {
         Self(Arc::new(ColorSpaceType::Pattern(Pattern::new(
             Self::device_gray(),
+            false,
         ))))
     }
 
@@ -651,7 +821,7 @@ fn encode_components(input: &[f32], ranges: &[(f32, f32)]) -> SmallVec<[u8; 4]> 
 
 #[cfg(test)]
 mod tests {
-    use super::{ColorSpace, MAX_COLOR_SPACE_DEPTH};
+    use super::{ColorSpace, ColorSpaceKind, MAX_COLOR_SPACE_DEPTH};
     use crate::cache::Cache;
     use hayro_syntax::Pdf;
     use hayro_syntax::object::{Object, ObjectIdentifier};
@@ -695,5 +865,271 @@ mod tests {
     #[test]
     fn deep_color_space_chain_fails() {
         assert!(color_space_of_chain(20_000).is_none());
+    }
+
+    /// A PDF whose object 10 is `objects[0]`, 11 is `objects[1]` and so on.
+    fn pdf_with(objects: &[&[u8]]) -> Pdf {
+        let mut data = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+            .to_vec();
+
+        for (i, object) in objects.iter().enumerate() {
+            data.extend(format!("{} 0 obj\n", 10 + i).as_bytes());
+            data.extend(*object);
+            data.extend(b"\nendobj\n");
+        }
+
+        data.extend(b"trailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        Pdf::new(data).unwrap()
+    }
+
+    fn color_space(objects: &[&[u8]]) -> ColorSpace {
+        let pdf = pdf_with(objects);
+        let object = pdf
+            .xref()
+            .get::<Object<'_>>(ObjectIdentifier::new(10, 0))
+            .unwrap();
+
+        ColorSpace::from_object(object).unwrap()
+    }
+
+    #[test]
+    fn kind_of_device_color_spaces() {
+        assert!(matches!(
+            color_space(&[b"/DeviceGray"]).kind(),
+            ColorSpaceKind::DeviceGray
+        ));
+        assert!(matches!(
+            color_space(&[b"/DeviceRGB"]).kind(),
+            ColorSpaceKind::DeviceRgb
+        ));
+        assert!(matches!(
+            color_space(&[b"/DeviceCMYK"]).kind(),
+            ColorSpaceKind::DeviceCmyk
+        ));
+        assert!(matches!(
+            color_space(&[b"[/CalCMYK << >>]"]).kind(),
+            ColorSpaceKind::DeviceCmyk
+        ));
+    }
+
+    #[test]
+    fn kind_of_cal_gray() {
+        let cs = color_space(&[
+            b"[/CalGray << /WhitePoint [0.9505 1 1.089] /BlackPoint [0.1 0.2 0.3] /Gamma 2.2 >>]",
+        ]);
+        let ColorSpaceKind::CalGray {
+            white_point,
+            black_point,
+            gamma,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(white_point, [0.9505, 1.0, 1.089]);
+        assert_eq!(black_point, [0.1, 0.2, 0.3]);
+        assert_eq!(gamma, 2.2);
+    }
+
+    #[test]
+    fn kind_of_cal_rgb() {
+        let cs = color_space(&[b"[/CalRGB << /WhitePoint [0.9505 1 1.089] \
+/Gamma [1.8 1.9 2.0] /Matrix [0.4 0.2 0.0 0.3 0.7 0.1 0.2 0.1 0.9] >>]"]);
+        let ColorSpaceKind::CalRgb {
+            white_point,
+            black_point,
+            gamma,
+            matrix,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(white_point, [0.9505, 1.0, 1.089]);
+        assert_eq!(black_point, [0.0, 0.0, 0.0]);
+        assert_eq!(gamma, [1.8, 1.9, 2.0]);
+        assert_eq!(matrix, [0.4, 0.2, 0.0, 0.3, 0.7, 0.1, 0.2, 0.1, 0.9]);
+    }
+
+    #[test]
+    fn kind_of_lab() {
+        let cs = color_space(&[
+            b"[/Lab << /WhitePoint [0.9642 1 0.8249] /BlackPoint [0.01 0.01 0.01] /Range [-50 60 -70 80] >>]",
+        ]);
+        let ColorSpaceKind::Lab {
+            white_point,
+            black_point,
+            range,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(white_point, [0.9642, 1.0, 0.8249]);
+        assert_eq!(black_point, [0.01, 0.01, 0.01]);
+        assert_eq!(range, [-50.0, 60.0, -70.0, 80.0]);
+    }
+
+    #[test]
+    fn kind_of_icc_based() {
+        let profile = include_bytes!("../../assets/LAB.icc");
+        let mut stream = format!("<< /N 3 /Length {} >>\nstream\n", profile.len()).into_bytes();
+        stream.extend(profile);
+        stream.extend(b"\nendstream");
+
+        let cs = color_space(&[b"[/ICCBased 11 0 R]", &stream]);
+        let ColorSpaceKind::IccBased {
+            profile: data,
+            num_components,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(data, profile);
+        assert_eq!(num_components, 3);
+    }
+
+    #[test]
+    fn kind_of_unusable_icc_based_is_its_alternate() {
+        let cs = color_space(&[
+            b"[/ICCBased 11 0 R]",
+            b"<< /N 4 /Alternate /DeviceCMYK /Length 4 >>\nstream\nnope\nendstream",
+        ]);
+
+        assert!(matches!(cs.kind(), ColorSpaceKind::DeviceCmyk));
+    }
+
+    #[test]
+    fn kind_of_indexed() {
+        let cs = color_space(&[b"[/Indexed /DeviceRGB 1 <ff000000ff00>]"]);
+        let ColorSpaceKind::Indexed {
+            base,
+            hival,
+            lookup,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert!(matches!(base.kind(), ColorSpaceKind::DeviceRgb));
+        assert_eq!(hival, 1);
+        assert_eq!(lookup, &[0xff, 0, 0, 0, 0xff, 0]);
+    }
+
+    #[test]
+    fn indexed_converts_as_before() {
+        let cs = color_space(&[b"[/Indexed /DeviceRGB 1 <ff000000ff00>]"]);
+
+        assert_eq!(cs.to_rgba(&[0.0], 1.0).to_rgba8(), [255, 0, 0, 255]);
+        assert_eq!(cs.to_rgba(&[1.0], 1.0).to_rgba8(), [0, 255, 0, 255]);
+        // An index past `hival` is clamped to it.
+        assert_eq!(cs.to_rgba(&[5.0], 1.0).to_rgba8(), [0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn kind_of_separation() {
+        let cs = color_space(&[
+            b"[/Separation /PANTONE#20185#20C /DeviceCMYK 11 0 R]",
+            b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.91 0.76 0] /N 1 >>",
+        ]);
+        let ColorSpaceKind::Separation {
+            name,
+            alternate,
+            tint_transform,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(name, b"PANTONE 185 C");
+        assert!(matches!(alternate.kind(), ColorSpaceKind::DeviceCmyk));
+
+        let mut out = [0.0; 4];
+        tint_transform.eval(&[1.0], &mut out).unwrap();
+        assert_eq!(out, [0.0, 0.91, 0.76, 0.0]);
+    }
+
+    #[test]
+    fn kind_of_device_n() {
+        let cs = color_space(&[
+            b"[/DeviceN [/Cyan /Spot#20Gold] /DeviceCMYK 11 0 R \
+<< /Subtype /NChannel /Process << /ColorSpace /DeviceCMYK /Components [/Cyan /Magenta /Yellow /Black] >> >>]",
+            b"<< /FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1] /Length 19 >>\n\
+stream\n{ 0 exch 0 exch 0 }\nendstream",
+        ]);
+        let ColorSpaceKind::DeviceN {
+            names,
+            process,
+            alternate,
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(
+            names,
+            &[Box::from(&b"Cyan"[..]), Box::from(&b"Spot Gold"[..])]
+        );
+        assert!(matches!(alternate.kind(), ColorSpaceKind::DeviceCmyk));
+
+        let process = process.unwrap();
+        assert!(matches!(
+            process.color_space().kind(),
+            ColorSpaceKind::DeviceCmyk
+        ));
+        assert_eq!(
+            process.components(),
+            &[
+                Box::from(&b"Cyan"[..]),
+                Box::from(&b"Magenta"[..]),
+                Box::from(&b"Yellow"[..]),
+                Box::from(&b"Black"[..]),
+            ]
+        );
+    }
+
+    #[test]
+    fn kind_of_device_n_without_attributes() {
+        let cs = color_space(&[
+            b"[/DeviceN [/Spot] /DeviceGray 11 0 R]",
+            b"<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>",
+        ]);
+        let ColorSpaceKind::DeviceN { names, process, .. } = cs.kind() else {
+            panic!("{:?}", cs.kind());
+        };
+
+        assert_eq!(names, &[Box::from(&b"Spot"[..])]);
+        assert!(process.is_none());
+    }
+
+    #[test]
+    fn kind_of_pattern() {
+        assert!(matches!(
+            color_space(&[b"/Pattern"]).kind(),
+            ColorSpaceKind::Pattern {
+                underlying: None,
+                ..
+            }
+        ));
+
+        let cs = color_space(&[b"[/Pattern /DeviceCMYK]"]);
+        let ColorSpaceKind::Pattern {
+            underlying: Some(underlying),
+            ..
+        } = cs.kind()
+        else {
+            panic!("{:?}", cs.kind());
+        };
+        assert!(matches!(underlying.kind(), ColorSpaceKind::DeviceCmyk));
     }
 }

@@ -6,6 +6,8 @@ use moxcms::{ColorProfile, Xyzd};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Lab {
+    pub(super) white_point: [f32; 3],
+    pub(super) black_point: [f32; 3],
     pub(super) range: [f32; 4],
     profile: ICCProfile,
 }
@@ -14,7 +16,7 @@ impl Lab {
     pub(super) fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
         // Not sure how this should be used.
-        let _black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
+        let black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let range = dict
             .get::<[f32; 4]>(RANGE)
             .unwrap_or([-100.0, 100.0, -100.0, 100.0]);
@@ -29,7 +31,12 @@ impl Lab {
 
         let profile = ICCProfile::new_from_src_profile(profile, false, 3)?;
 
-        Some(Self { range, profile })
+        Some(Self {
+            white_point,
+            black_point,
+            range,
+            profile,
+        })
     }
 }
 
