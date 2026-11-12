@@ -59,7 +59,7 @@ pdf-writer = { version = "0.15" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.4", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.12", default-features = false }
 fearless_simd = "1.0.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
