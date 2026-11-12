@@ -129,9 +129,9 @@ impl<'a> SvgRenderer<'a> {
                         let shading_paint = if let EncodedShadingType::RadialAxial(gradient) =
                             &encoded.shading_type
                             && let Some(native) =
-                                gradient.as_svg_gradient(&encoded, bbox, NATIVE_GRADIENT_TOLERANCE)
+                                gradient.as_svg_gradient(&encoded, NATIVE_GRADIENT_TOLERANCE)
                         {
-                            let gradient_key = gradient_key(shading_key, &native);
+                            let gradient_key = gradient_key(&native);
                             let gradient_id =
                                 self.gradients
                                     .insert_with(gradient_key, || CachedNativeGradient {
@@ -356,7 +356,7 @@ fn rgba_to_hex(color: [f32; 4]) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
-fn gradient_key(shading_key: u128, gradient: &SvgGradient) -> u128 {
+fn gradient_key(gradient: &SvgGradient) -> u128 {
     let kind = match &gradient.kind {
         SvgGradientKind::Linear { start, end } => (
             0_u8,
@@ -397,7 +397,7 @@ fn gradient_key(shading_key: u128, gradient: &SvgGradient) -> u128 {
         })
         .collect::<Vec<_>>();
 
-    hash128(&(shading_key, kind, transform, stops))
+    hash128(&(kind, transform, stops))
 }
 
 fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradient) {
@@ -408,10 +408,7 @@ fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradie
             xml.write_attribute("gradientUnits", "userSpaceOnUse");
             xml.write_attribute(
                 "gradientTransform",
-                &format!(
-                    "matrix({})",
-                    convert_transform(&(Affine::translate((-0.5, -0.5)) * gradient.transform))
-                ),
+                &format!("matrix({})", convert_transform(&gradient.transform)),
             );
             xml.write_attribute("x1", &start.x);
             xml.write_attribute("y1", &start.y);
@@ -429,10 +426,7 @@ fn write_gradient(xml: &mut xmlwriter::XmlWriter, id: &str, gradient: &SvgGradie
             xml.write_attribute("gradientUnits", "userSpaceOnUse");
             xml.write_attribute(
                 "gradientTransform",
-                &format!(
-                    "matrix({})",
-                    convert_transform(&(Affine::translate((-0.5, -0.5)) * gradient.transform))
-                ),
+                &format!("matrix({})", convert_transform(&gradient.transform)),
             );
             xml.write_attribute("fx", &start_center.x);
             xml.write_attribute("fy", &start_center.y);

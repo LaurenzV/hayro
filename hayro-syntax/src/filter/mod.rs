@@ -12,6 +12,7 @@ mod jbig2;
 mod jpx;
 mod lzw_flate;
 mod png;
+mod predictor;
 mod run_length;
 
 use crate::object::Dict;

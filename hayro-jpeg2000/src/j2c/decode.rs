@@ -15,6 +15,7 @@ use super::progression::{ProgressionData, progression_iterator};
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
+use crate::cancel::Cancel;
 use crate::error::{DecodingError, Result, TileError, ValidationError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::math::SimdBuffer;
@@ -25,6 +26,7 @@ pub(crate) fn decode<'a>(
     data: &'a [u8],
     header: &'a Header,
     ctx: &mut DecoderContext<'a>,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
@@ -33,9 +35,11 @@ pub(crate) fn decode<'a>(
         bail!(TileError::Invalid);
     }
 
-    ctx.reset(header, &tiles[0])?;
+    ctx.reset(header, &tiles[0], cancel)?;
 
     for tile in &tiles {
+        cancel.check()?;
+
         let progression_iterator = progression_iterator(tile, header)?;
 
         decode_tile(
@@ -45,6 +49,7 @@ pub(crate) fn decode<'a>(
             &mut ctx.tile_decode_context,
             &mut ctx.channel_data,
             &mut ctx.storage,
+            cancel,
         )?;
     }
 
@@ -52,10 +57,15 @@ pub(crate) fn decode<'a>(
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
     if tiles[0].mct {
-        mct::apply_inverse(&mut ctx.channel_data, &tiles[0].component_infos, header)?;
+        mct::apply_inverse(
+            &mut ctx.channel_data,
+            &tiles[0].component_infos,
+            header,
+            cancel,
+        )?;
     }
 
-    apply_sign_shift(&mut ctx.channel_data, &header.component_infos);
+    apply_sign_shift(&mut ctx.channel_data, &header.component_infos, cancel)?;
 
     Ok(())
 }
@@ -70,7 +80,12 @@ pub struct DecoderContext<'a> {
 }
 
 impl DecoderContext<'_> {
-    fn reset(&mut self, header: &Header, initial_tile: &Tile<'_>) -> Result<()> {
+    fn reset(
+        &mut self,
+        header: &Header,
+        initial_tile: &Tile<'_>,
+        cancel: Cancel<'_>,
+    ) -> Result<()> {
         self.tile_decode_context.reset();
         self.storage.reset();
 
@@ -80,6 +95,8 @@ impl DecoderContext<'_> {
             .ok_or(ValidationError::ImageTooLarge)?;
         // TODO: SIMD Buffers should be reused across runs!
         for info in &initial_tile.component_infos {
+            cancel.check()?;
+
             self.channel_data.push(ComponentData {
                 container: SimdBuffer::zeros(sample_count),
                 bit_depth: info.size_info.precision,
@@ -97,6 +114,7 @@ fn decode_tile<'a, 'b>(
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut [ComponentData],
     storage: &mut DecompositionStorage<'a>,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     storage.reset();
 
@@ -104,20 +122,22 @@ fn decode_tile<'a, 'b>(
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build::build(tile, storage, header.skipped_resolution_levels)?;
+    build::build(tile, storage, header.skipped_resolution_levels, cancel)?;
     // Next, we parse the layers/segments for each code block.
-    segment::parse(tile, progression_iterator, header, storage)?;
+    segment::parse(tile, progression_iterator, header, storage, cancel)?;
 
     // Interleave bitplane decoding, IDWT, and storage for each component tile
     // so we can reuse the coefficient and IDWT buffers.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
+        cancel.check()?;
+
         if idx > 0 {
             let count = storage.tile_decompositions[idx].coefficient_count;
             storage.coefficients[..count].fill(0.0);
         }
         // We then decode the bitplanes of each code block, yielding the
         // (possibly dequantized) coefficients of each code block.
-        decode_component_tile_bit_planes(idx, tile, tile_ctx, storage, header)?;
+        decode_component_tile_bit_planes(idx, tile, tile_ctx, storage, header, cancel)?;
         // Next, we apply the inverse discrete wavelet transform.
         idwt::apply(
             storage,
@@ -125,7 +145,8 @@ fn decode_tile<'a, 'b>(
             idx,
             header,
             component_info.wavelet_transform(),
-        );
+            cancel,
+        )?;
         // Finally, we store the raw samples for the tile area in the correct
         // location. Note that in case we have MCT, we are not applying it yet.
         // It will be applied in the very end once all tiles have been processed.
@@ -142,7 +163,8 @@ fn decode_tile<'a, 'b>(
             tile_ctx,
             &mut channel_data[idx],
             component_info,
-        );
+            cancel,
+        )?;
     }
 
     Ok(())
@@ -272,6 +294,7 @@ fn decode_component_tile_bit_planes<'a>(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'a>,
     header: &Header,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let component_info = &tile.component_infos[component_idx];
 
@@ -288,6 +311,7 @@ fn decode_component_tile_bit_planes<'a>(
                 tile_ctx,
                 storage,
                 header,
+                cancel,
             )?;
         }
     }
@@ -302,6 +326,7 @@ fn decode_sub_band_bitplanes(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'_>,
     header: &Header,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
 
@@ -356,6 +381,8 @@ fn decode_sub_band_bitplanes(
             .clone()
             .map(|idx| &storage.code_blocks[idx])
         {
+            cancel.check()?;
+
             bitplane::decode(
                 code_block,
                 sub_band.sub_band_type,
@@ -399,10 +426,16 @@ fn decode_sub_band_bitplanes(
     Ok(())
 }
 
-fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[ComponentInfo]) {
+fn apply_sign_shift(
+    channel_data: &mut [ComponentData],
+    component_infos: &[ComponentInfo],
+    cancel: Cancel<'_>,
+) -> Result<()> {
     use crate::math::{Level, dispatch, f32x8};
 
     for (channel, component_info) in channel_data.iter_mut().zip(component_infos.iter()) {
+        cancel.check()?;
+
         let offset = (1_u32 << (component_info.size_info.precision - 1)) as f32;
         dispatch!(Level::new(), simd => {
             let offset_v = f32x8::splat(simd, offset);
@@ -412,6 +445,8 @@ fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[Compo
             }
         });
     }
+
+    Ok(())
 }
 
 fn store<'a>(
@@ -420,7 +455,8 @@ fn store<'a>(
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut ComponentData,
     component_info: &ComponentInfo,
-) {
+    cancel: Cancel<'_>,
+) -> Result<()> {
     let idwt_output = &mut tile_ctx.idwt_output;
 
     let component_tile = ComponentTile::new(tile, component_info);
@@ -432,7 +468,7 @@ fn store<'a>(
     // Resolution levels can be empty (B-14), in which case there is nothing
     // to store.
     if idwt_output.rect.width() == 0 || idwt_output.rect.height() == 0 {
-        return;
+        return Ok(());
     }
 
     let (scale_x, scale_y) = (
@@ -469,6 +505,8 @@ fn store<'a>(
             .skip(resolution_tile.rect.y0.saturating_sub(image_y_offset) as usize);
 
         for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
+            cancel.check()?;
+
             let input_row = &input_row[skip_x as usize..];
             let output_row = &mut output_row
                 [resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize..]
@@ -490,6 +528,8 @@ fn store<'a>(
             .then_some(resolution_tile.rect.y0);
 
         for y in resolution_tile.rect.y0..resolution_tile.rect.y1 {
+            cancel.check()?;
+
             let relative_y = (y - idwt_output.rect.y0) as usize;
             let reference_grid_y = if first_y == Some(y) {
                 image_y_offset
@@ -525,4 +565,6 @@ fn store<'a>(
             }
         }
     }
+
+    Ok(())
 }

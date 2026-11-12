@@ -1,10 +1,8 @@
-use crate::bit_reader::BitWriter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
-use alloc::vec;
 use alloc::vec::Vec;
 
 /// Decode JBIG2 data from a PDF stream.
@@ -20,12 +18,13 @@ pub(crate) fn decode(
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .and_then(|g| g.decoded_data().ok());
 
-    let settings = hayro_jbig2::DecodeSettings { strict: false };
+    let settings = hayro_jbig2::DecodeSettings::default();
     let globals = globals
         .map(|globals| hayro_jbig2::Globals::new(&globals, &settings))
         .transpose()
         .ok()?;
     let page = hayro_jbig2::Page::new_embedded(data, globals.as_ref(), &settings).ok()?;
+    let bitmap = page.decode().ok()?;
 
     // Whenever possible (if we don't have an indexed color space), we convert
     // the data as 8-bit instead of 1-bit, so that it can be easier converted
@@ -34,69 +33,22 @@ pub(crate) fn decode(
     // We need to invert the color because JBIG2 uses black = 1 and
     // white = 0, but PDF uses the opposite.
     let (decoded, bpc) = if image_params.is_indexed {
-        let row_bytes = (page.width() as usize).div_ceil(8);
-        let mut packed = vec![0_u8; row_bytes * page.height() as usize];
+        let width = bitmap.width() as usize;
+        let row_bytes = width.div_ceil(8);
+        let mut packed = Vec::with_capacity(row_bytes * bitmap.height() as usize);
+        let padding_mask = !0_u8 << ((8 - width % 8) % 8);
 
-        struct BitWriterDecoder<'a> {
-            writer: BitWriter<'a>,
-        }
+        for row in bitmap.rows() {
+            packed.extend(bytes(row, row_bytes).map(|byte| !byte));
 
-        impl hayro_jbig2::Decoder for BitWriterDecoder<'_> {
-            fn push_pixel(&mut self, black: bool) {
-                let _ = self.writer.write(u32::from(!black));
-            }
-
-            fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-                let byte_value = if black { 0x00 } else { 0xFF };
-                let _ = self.writer.fill_bytes(byte_value, chunk_count as usize);
-            }
-
-            fn next_line(&mut self) {
-                // Images need to be padded to the byte boundary after each row.
-                self.writer.align();
+            if let Some(last) = packed.last_mut() {
+                *last &= padding_mask;
             }
         }
-
-        let writer = BitWriter::new(&mut packed, 1)?;
-        let mut decoder = BitWriterDecoder { writer };
-        page.decode(&mut decoder).ok()?;
 
         (packed, 1)
     } else {
-        struct Luma8Decoder {
-            output: Vec<u8>,
-            pos: usize,
-        }
-
-        impl hayro_jbig2::Decoder for Luma8Decoder {
-            fn push_pixel(&mut self, black: bool) {
-                if black {
-                    self.output[self.pos] = 0x00;
-                }
-
-                self.pos += 1;
-            }
-
-            fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-                let count = chunk_count as usize * 8;
-
-                if black {
-                    self.output[self.pos..self.pos + count].fill(0x00);
-                }
-
-                self.pos += count;
-            }
-
-            fn next_line(&mut self) {}
-        }
-
-        let mut decoder = Luma8Decoder {
-            output: vec![0xFF; page.width() as usize * page.height() as usize],
-            pos: 0,
-        };
-        page.decode(&mut decoder).ok()?;
-
-        (decoder.output, 8)
+        (bitmap.data_u8().ok()?, 8)
     };
 
     Some(FilterResult {
@@ -105,8 +57,12 @@ pub(crate) fn decode(
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
-            width: page.width(),
-            height: page.height(),
+            width: bitmap.width(),
+            height: bitmap.height(),
         }),
     })
+}
+
+fn bytes(row: &[u32], len: usize) -> impl Iterator<Item = u8> + '_ {
+    row.iter().flat_map(|word| word.to_be_bytes()).take(len)
 }

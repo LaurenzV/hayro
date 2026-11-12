@@ -398,11 +398,7 @@
   {
     "id": "42271956"
   },
-  {
-    "id": "467170761",
-    "ignore": true,
-    "comment": "doesnt stop, lots of time in dash generation and strip generation spent, degenerate dashes?"
-  },
+  "467170761",
   {
     "id": "471224081",
     "ignore": true

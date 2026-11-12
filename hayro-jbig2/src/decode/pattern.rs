@@ -1,9 +1,10 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
 use super::{AdaptiveTemplatePixel, Template, generic};
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, Word};
+use crate::cancel::{WORD_WORK, WorkCounter};
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec::Vec;
@@ -11,7 +12,7 @@ use alloc::vec::Vec;
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 pub(crate) fn decode(
     header: &PatternDictionaryHeader<'_>,
-    scratch: &mut ScratchBuffers,
+    scratch: &mut DecodeState<'_>,
 ) -> Result<PatternDictionary> {
     let pattern_width = header.pattern_width as u32;
     let pattern_height = header.pattern_height as u32;
@@ -27,12 +28,17 @@ pub(crate) fn decode(
         .checked_mul(pattern_width)
         .ok_or(OverflowError::BitmapDimension)?;
 
-    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height)?;
+    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height, &mut scratch.budget)?;
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
     if header.mmr {
-        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data, header.strict)?;
+        let _ = generic::decode_bitmap_mmr(
+            &mut collective_bitmap,
+            header.data,
+            header.strict,
+            scratch.cancel,
+        )?;
     } else {
         let at_pixels = match header.template {
             Template::Template0 => [
@@ -70,6 +76,7 @@ pub(crate) fn decode(
             header.template,
             false,
             &at_pixels,
+            scratch.cancel,
         )?;
     }
 
@@ -79,12 +86,19 @@ pub(crate) fn decode(
 
     let src_stride = collective_bitmap.stride;
 
+    let mut work = WorkCounter::new();
+    let pattern_work = 1 + u64::from(WORD_WORK)
+        * u64::from(pattern_height)
+        * u64::from(pattern_width.div_ceil(WORD_BITS));
+
     for gray in 0..num_patterns {
+        work.add(pattern_work, scratch.cancel)?;
+
         // "a) Let the subimage of B_HDC consisting of HPH rows and columns
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
         // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
-        let mut pattern = Bitmap::new(pattern_width, pattern_height)?;
+        let mut pattern = Bitmap::new(pattern_width, pattern_height, &mut scratch.budget)?;
 
         let src_word_idx = start_x / WORD_BITS;
         let src_bit_offset = start_x % WORD_BITS;
@@ -122,44 +136,10 @@ pub(crate) fn decode(
         patterns.push(pattern);
     }
 
-    // It turns out that when rendering patterns, the `Bitmap::combine` operation
-    // can often be a huge bottleneck. This is because we need to do a lot of
-    // fiddling to compose the patterns in the right position. And since
-    // if a page uses such patterns, there's going to be a lot of them,
-    // this takes up a lot of time.
-    //
-    // The key insight for our optimization is that patterns are usually
-    // very small. Therefore, we precompute a new version of each pattern
-    // for all possible 32-bit alignments, which later on allows us to
-    // very easily blit it into the backdrop, significantly speeding up
-    // the whole process.
-    let shifted_patterns = if pattern_width <= WORD_BITS && pattern_height <= WORD_BITS {
-        let h = pattern_height as usize;
-        let mut data = Vec::with_capacity(patterns.len() * 32 * h * 2);
-        for pattern in &patterns {
-            for k in 0..32_u32 {
-                for y in 0..h {
-                    let word = pattern.data[y];
-                    if k == 0 {
-                        data.push(word);
-                        data.push(0);
-                    } else {
-                        data.push(word >> k);
-                        data.push(word << (WORD_BITS - k));
-                    }
-                }
-            }
-        }
-        data
-    } else {
-        Vec::new()
-    };
-
     Ok(PatternDictionary {
         patterns,
         pattern_width,
         pattern_height,
-        shifted_patterns,
     })
 }
 
@@ -169,17 +149,6 @@ pub(crate) struct PatternDictionary {
     pub(crate) patterns: Vec<Bitmap>,
     pub(crate) pattern_width: u32,
     pub(crate) pattern_height: u32,
-    shifted_patterns: Vec<Word>,
-}
-
-impl PatternDictionary {
-    #[inline(always)]
-    pub(crate) fn shifted_pattern(&self, pattern_idx: usize, bit_offset: u32) -> Option<&[Word]> {
-        let h = self.pattern_height as usize;
-        let len = h * 2;
-        let start = (pattern_idx * 32 + bit_offset as usize) * len;
-        self.shifted_patterns.get(start..start + len)
-    }
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).

@@ -55,11 +55,9 @@ impl Renderer<'_> {
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
                             && let Some(native) =
-                                gradient.as_svg_gradient(&encoded, bbox, NATIVE_GRADIENT_TOLERANCE)
+                                gradient.as_svg_gradient(&encoded, NATIVE_GRADIENT_TOLERANCE)
                         {
-                            paint_transform = path_transform.inverse()
-                                * Affine::translate((-0.5, -0.5))
-                                * native.transform;
+                            paint_transform = path_transform.inverse() * native.transform;
 
                             let stops = native
                                 .stops

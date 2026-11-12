@@ -42,9 +42,9 @@ fuzz_target!(|data: &[u8]| {
             _ => hayro_ccitt::EncodingMode::Group3_2D,
         },
         strict: false,
+        cancel: None,
     };
 
     let mut decoder = Decoder;
-    let mut context = hayro_ccitt::DecoderContext::new(settings);
-    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &mut context);
+    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &settings);
 });

@@ -46,6 +46,8 @@ image = { version = "0.25", default-features = false }
 kurbo = { version = "0.13.0" }
 resvg = { version = "0.47.0" }
 flate2 = { version = "1" }
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
+zlib-rs = { version = "0.6.8", default-features = false, features = ["rust-allocator"] }
 phf = { version = "0.13.1", default-features = false }
 moxcms = { version = "0.8.1" }
 rustc-hash = { version = "2" }
@@ -57,7 +59,7 @@ pdf-writer = { version = "0.15" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.4", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.12", default-features = false }
 fearless_simd = "1.0.0"
 brotli = { version = "8", default-features = false, features = ["std"] }

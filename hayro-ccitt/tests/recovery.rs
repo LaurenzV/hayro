@@ -38,3 +38,8 @@ fn run_past_line_end_g3_1d() {
         s.encoding = G3_1D;
     });
 }
+
+#[test]
+fn truncated_line_g4() {
+    check("g4_truncated_line", "g4_truncated_line", |_| {});
+}
