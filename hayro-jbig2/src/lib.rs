@@ -264,7 +264,7 @@ impl Globals {
         let mut dictionaries = Dictionaries::default();
         let standard_tables = StandardHuffmanTables::default();
         let cancel = Cancel(settings.cancel.as_ref());
-        let mut state = DecodeState::new(None, cancel);
+        let mut state = DecodeState::new(settings.memory_limit, cancel);
 
         for seg in segments {
             cancel.check()?;
