@@ -398,7 +398,11 @@ impl CMap {
                 name: Some(Vec::from(name)),
                 writing_mode: Some(writing_mode),
             },
-            codespace_ranges: Vec::new(),
+            codespace_ranges: alloc::vec![CodespaceRange {
+                number_bytes: 2,
+                low: 0x0000,
+                high: 0xFFFF,
+            }],
             cid_ranges: {
                 let mut r = PartitionedRanges::new();
                 r.push(
@@ -1129,6 +1133,19 @@ endnotdefrange
             ),
             (0x20, 0x7E, 1)
         );
+
+        for identity in [CMap::identity_h(), CMap::identity_v()] {
+            let codespace = identity.codespace_ranges();
+            assert_eq!(codespace.len(), 1);
+            assert_eq!(
+                (
+                    codespace[0].byte_len(),
+                    codespace[0].low(),
+                    codespace[0].high()
+                ),
+                (2, 0x0000, 0xFFFF)
+            );
+        }
     }
 
     #[test]
