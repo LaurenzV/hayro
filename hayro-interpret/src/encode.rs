@@ -2,7 +2,9 @@
 
 use crate::canvas::Canvas;
 use crate::color::{AlphaColor, ColorSpace};
+use crate::function::MAX_COMPONENTS;
 use crate::function_shading::draw_function;
+use crate::gradient::function_lut;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::mesh::draw_mesh;
 use crate::pattern::ShadingPattern;
@@ -106,6 +108,17 @@ impl EncodedShadingPattern {
         self.finish(self.color_space.to_rgba(components, 1.0).components())
     }
 
+    /// Evaluate `function` and convert the result, or return transparent if it fails.
+    pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
+        let mut out = [0.0; MAX_COMPONENTS];
+        let out = &mut out[..function.num_outputs()];
+
+        match function.eval(input, out) {
+            Some(()) => self.convert(out),
+            None => [0.0; 4],
+        }
+    }
+
     /// Sample the shading on a pixel grid covering `bbox`, with `scale`
     /// pixels per unit of `bbox`.
     ///
@@ -119,67 +132,35 @@ impl EncodedShadingPattern {
         &self,
         bbox: Rect,
         scale: f32,
-        mut f: impl FnMut([f32; 4]),
+        f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
         let (width, height) = texture_dimensions(bbox, scale);
         let grid_transform =
             Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(1.0 / scale as f64);
         let background = self.finish(self.background_color.components());
+        let mut canvas = Canvas::new(width, height, background);
+        let transform = grid_transform.inverse() * self.base_transform.inverse();
 
-        if let EncodedShadingType::RadialAxial(shading) = &self.shading_type {
-            let lut = shading.lut(self);
-
-            self.walk_grid(bbox, scale, |point| {
-                f(shading.position(point).map_or(background, |t| lut.get(t)));
-            });
-        } else {
-            let mut canvas = Canvas::new(width, height, background);
-            let transform = grid_transform.inverse() * self.base_transform.inverse();
-
-            match &self.shading_type {
-                EncodedShadingType::FunctionBased(shading) => {
-                    draw_function(
-                        &mut canvas,
-                        shading.domain,
-                        &shading.function,
-                        transform,
-                        self,
-                    );
-                }
-                EncodedShadingType::Mesh(shading) => {
-                    draw_mesh(&mut canvas, &shading.shading_type, transform, self);
-                }
-                EncodedShadingType::RadialAxial(_) | EncodedShadingType::Dummy(_) => {}
+        match &self.shading_type {
+            EncodedShadingType::FunctionBased(shading) => {
+                draw_function(
+                    &mut canvas,
+                    shading.domain,
+                    &shading.function,
+                    transform,
+                    self,
+                );
             }
-
-            canvas.pixels.into_iter().for_each(f);
+            EncodedShadingType::RadialAxial(shading) => shading.draw(&mut canvas, transform, self),
+            EncodedShadingType::Mesh(shading) => {
+                draw_mesh(&mut canvas, &shading.shading_type, transform, self);
+            }
+            EncodedShadingType::Dummy(_) => {}
         }
+
+        canvas.pixels.into_iter().for_each(f);
 
         (width, height, grid_transform)
-    }
-
-    fn walk_grid(&self, bbox: Rect, scale: f32, mut f: impl FnMut(Point)) {
-        let (width, height) = texture_dimensions(bbox, scale);
-        let inv_scale = 1.0 / scale as f64;
-
-        let (x_advance, y_advance) =
-            x_y_advances(&(Affine::scale(inv_scale) * self.base_transform));
-
-        let mut start_point = self.base_transform
-            * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
-            * Point::new(bbox.x0, bbox.y0);
-
-        for _ in 0..height {
-            let mut point = start_point;
-
-            for _ in 0..width {
-                f(point);
-
-                point += x_advance;
-            }
-
-            start_point += y_advance;
-        }
     }
 
     /// Rasterize the shading into a straight (non-premultiplied) RGBA8
@@ -338,6 +319,28 @@ pub(crate) enum RadialAxialParams {
 }
 
 impl EncodedRadialAxialShading {
+    /// Draw the shading, with `transform` mapping shading space to the canvas.
+    fn draw(&self, canvas: &mut Canvas, transform: Affine, pattern: &EncodedShadingPattern) {
+        let lut = function_lut(&self.function, self.domain, pattern);
+        let to_shading = transform.inverse();
+        let (x_advance, y_advance) = x_y_advances(&to_shading);
+        let mut row_start = to_shading * Point::new(0.5, 0.5);
+
+        for row in canvas.pixels.chunks_exact_mut(canvas.width) {
+            let mut point = row_start;
+
+            for pixel in row {
+                if let Some(t) = self.position(point) {
+                    *pixel = lut.get(t);
+                }
+
+                point += x_advance;
+            }
+
+            row_start += y_advance;
+        }
+    }
+
     fn position(&self, pos: Point) -> Option<f32> {
         let t = match self.params {
             RadialAxialParams::Axial => pos.x as f32,

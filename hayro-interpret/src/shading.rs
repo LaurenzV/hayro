@@ -664,9 +664,10 @@ fn read_patch_mesh(
         }
 
         let patch = patch_from_stream(&control_points, colors, kind);
-        for column in &patch.control_points {
-            extend_bounds(&mut bounds, points_bbox(column));
-        }
+        extend_bounds(
+            &mut bounds,
+            points_bbox(patch.control_points.as_flattened()),
+        );
         patches.push(patch);
     }
 

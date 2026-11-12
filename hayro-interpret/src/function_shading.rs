@@ -1,9 +1,8 @@
 //! Rasterization of function-based shadings.
 
 use crate::canvas::{Canvas, bounds};
+use crate::color::{color_error, lerp_color};
 use crate::encode::EncodedShadingPattern;
-use crate::function::MAX_COMPONENTS;
-use crate::gradient::{color_error, lerp_color};
 use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point, Rect};
 
@@ -88,13 +87,8 @@ impl FunctionSampler<'_> {
 
     fn sample_at(&self, point: Point) -> [f32; 4] {
         let point = self.inverse * point;
-        let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..self.function.num_outputs()];
-
-        match self.function.eval(&[point.x as f32, point.y as f32], out) {
-            Some(()) => self.pattern.convert(out),
-            None => [0.0; 4],
-        }
+        self.pattern
+            .eval(self.function, &[point.x as f32, point.y as f32])
     }
 
     fn contains(&self, point: Point) -> bool {
@@ -110,23 +104,24 @@ fn draw_function_cell(
     size: usize,
     corners: [[f32; 4]; 4],
 ) {
-    let corner_points = [[0, 0], [size, 0], [0, size], [size, size]]
+    let corners_in_domain = [[0, 0], [size, 0], [0, size], [size, size]]
         .map(|[dx, dy]| sampler.inverse * Point::new((x + dx) as f64, (y + dy) as f64));
 
-    if x >= canvas.width || y >= canvas.height || !bounds(&corner_points).overlaps(sampler.domain) {
+    if x >= canvas.width
+        || y >= canvas.height
+        || !bounds(&corners_in_domain).overlaps(sampler.domain)
+    {
         return;
     }
 
-    if size <= FUNCTION_PIXEL_CELL {
-        for row in y..(y + size).min(canvas.height) {
-            for column in x..(x + size).min(canvas.width) {
-                let center = Point::new(column as f64 + 0.5, row as f64 + 0.5);
+    let inside = corners_in_domain
+        .into_iter()
+        .all(|p| sampler.domain.contains(p));
 
-                if sampler.contains(center) {
-                    canvas.pixels[row * canvas.width + column] = sampler.sample_at(center);
-                }
-            }
-        }
+    if size <= FUNCTION_PIXEL_CELL {
+        fill_cell(canvas, sampler, [x, y], size, inside, |center, _| {
+            sampler.sample_at(center)
+        });
 
         return;
     }
@@ -163,34 +158,31 @@ fn draw_function_cell(
         if error > FUNCTION_TOLERANCE {
             draw_function_cell(canvas, sampler, origin, half, corners);
         } else {
-            fill_function_cell(canvas, sampler, origin, half, corners);
+            let [c00, c10, c01, c11] = corners;
+            fill_cell(canvas, sampler, origin, half, inside, |_, [u, v]| {
+                lerp_color(lerp_color(c00, c10, u), lerp_color(c01, c11, u), v)
+            });
         }
     }
 }
 
-/// Fill the pixels of a cell that lie in the domain by interpolating its corner colors.
-fn fill_function_cell(
+/// Fill the pixels of a cell that lie in the domain, given each pixel's center and its relative
+/// position in the cell.
+fn fill_cell(
     canvas: &mut Canvas,
     sampler: &FunctionSampler<'_>,
     [x, y]: [usize; 2],
     size: usize,
-    [c00, c10, c01, c11]: [[f32; 4]; 4],
+    inside: bool,
+    color: impl Fn(Point, [f32; 2]) -> [f32; 4],
 ) {
-    let inside = [[0, 0], [size, 0], [0, size], [size, size]]
-        .into_iter()
-        .all(|[dx, dy]| sampler.contains(Point::new((x + dx) as f64, (y + dy) as f64)));
-    let position = |offset: usize| (offset as f32 + 0.5) / size as f32;
-
     for row in y..(y + size).min(canvas.height) {
-        let v = position(row - y);
-        let (left, right) = (lerp_color(c00, c01, v), lerp_color(c10, c11, v));
-
         for column in x..(x + size).min(canvas.width) {
             let center = Point::new(column as f64 + 0.5, row as f64 + 0.5);
 
             if inside || sampler.contains(center) {
-                canvas.pixels[row * canvas.width + column] =
-                    lerp_color(left, right, position(column - x));
+                let position = [column - x, row - y].map(|o| (o as f32 + 0.5) / size as f32);
+                canvas.pixels[row * canvas.width + column] = color(center, position);
             }
         }
     }

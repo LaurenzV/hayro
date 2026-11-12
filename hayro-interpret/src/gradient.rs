@@ -4,8 +4,8 @@
 //! radial-axial shadings it's useful if we can instead approximate them by
 //! SVG-like sRGB gradients.
 
+use crate::color::{color_error, lerp_color};
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
-use crate::function::MAX_COMPONENTS;
 use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point};
 
@@ -82,10 +82,6 @@ impl EncodedRadialAxialShading {
         })
     }
 
-    pub(crate) fn lut(&self, pattern: &EncodedShadingPattern) -> ColorLut {
-        function_lut(&self.function, self.domain, pattern)
-    }
-
     // SVG gradients pad with their end stops, so a non-extended end gets a short stretch of background.
     fn padded_range(&self, has_background: bool) -> Option<[f64; 2]> {
         let mut padding = self.extend.map(|extend| if extend { 0.0 } else { PADDING });
@@ -142,14 +138,7 @@ fn sample_function(
     pattern: &EncodedShadingPattern,
     t: f32,
 ) -> [f32; 4] {
-    let t = t0 + (t1 - t0) * t;
-    let mut out = [0.0; MAX_COMPONENTS];
-    let out = &mut out[..function.num_outputs()];
-    if function.eval(&[t], out).is_none() {
-        return [0.0, 0.0, 0.0, 0.0];
-    }
-
-    pattern.convert(out)
+    pattern.eval(function, &[t0 + (t1 - t0) * t])
 }
 
 fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
@@ -334,20 +323,4 @@ fn approximate_gradient_interval(
 
     approximate_gradient_interval(sample, stops, start, mid, tolerance, depth + 1);
     approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1);
-}
-
-pub(crate) fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
-    [
-        c0[0] + (c1[0] - c0[0]) * t,
-        c0[1] + (c1[1] - c0[1]) * t,
-        c0[2] + (c1[2] - c0[2]) * t,
-        c0[3] + (c1[3] - c0[3]) * t,
-    ]
-}
-
-pub(crate) fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
-    c0.iter()
-        .zip(c1)
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0, f32::max)
 }

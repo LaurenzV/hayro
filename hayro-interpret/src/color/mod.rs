@@ -580,6 +580,18 @@ fn f32_to_u8(val: f32) -> u8 {
     (val * 255.0 + 0.5) as u8
 }
 
+pub(crate) fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
+    [0, 1, 2, 3].map(|i| c0[i] + (c1[i] - c0[i]) * t)
+}
+
+/// The largest difference between two colors in any component.
+pub(crate) fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
+    c0.iter()
+        .zip(c1)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max)
+}
+
 #[derive(Debug, Clone)]
 /// A color.
 pub struct Color {
