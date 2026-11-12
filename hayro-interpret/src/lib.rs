@@ -34,6 +34,7 @@ mod convert;
 mod device;
 mod function;
 mod interpret;
+mod mesh;
 mod ocg;
 mod types;
 mod x_object;

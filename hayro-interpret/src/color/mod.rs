@@ -324,6 +324,14 @@ impl ColorSpace {
         matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
     }
 
+    /// Return `true` if the current color space is `DeviceGray` or `DeviceRGB`.
+    pub(crate) fn is_device_gray_or_rgb(&self) -> bool {
+        matches!(
+            self.0.as_ref(),
+            ColorSpaceType::DeviceGray(_) | ColorSpaceType::DeviceRgb(_)
+        )
+    }
+
     pub(crate) fn indexed_hival(&self) -> Option<u8> {
         match self.0.as_ref() {
             ColorSpaceType::Indexed(indexed) => Some(indexed.hival()),

@@ -7,6 +7,7 @@
 use crate::color::AlphaColor;
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
 use crate::function::MAX_COMPONENTS;
+use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point};
 
 const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
@@ -72,8 +73,8 @@ impl EncodedRadialAxialShading {
             transform: pattern.base_transform.inverse(),
             stops: pad_stops(
                 approximate_gradient_stops(
-                    |t| self.sample_t(pattern, t),
-                    &self.normalized_stitching_bounds(),
+                    |t| sample_function(&self.function, self.domain, pattern, t),
+                    &normalized_stitching_bounds(&self.function, self.domain),
                     tolerance,
                 ),
                 range,
@@ -83,11 +84,7 @@ impl EncodedRadialAxialShading {
     }
 
     pub(crate) fn lut(&self, pattern: &EncodedShadingPattern) -> GradientLut {
-        GradientLut::new(&approximate_gradient_stops(
-            |t| self.sample_t(pattern, t),
-            &self.normalized_stitching_bounds(),
-            LUT_TOLERANCE,
-        ))
+        function_lut(&self.function, self.domain, pattern)
     }
 
     // SVG gradients pad with their end stops, so a non-extended end gets a short stretch of background.
@@ -125,40 +122,57 @@ impl EncodedRadialAxialShading {
             },
         }
     }
+}
 
-    fn sample_t(&self, pattern: &EncodedShadingPattern, t: f32) -> [f32; 4] {
-        let (t0, t1) = (self.domain[0], self.domain[1]);
-        let t = t0 + (t1 - t0) * t;
-        let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..self.function.num_outputs()];
-        if self.function.eval(&[t], out).is_none() {
-            return [0.0, 0.0, 0.0, 0.0];
-        }
+/// Build a lookup table of the colors of `function` over the input range `[t0, t1]`.
+///
+/// The table is indexed by the position within that range, normalized to `[0, 1]`.
+pub(crate) fn function_lut(
+    function: &ShadingFunction,
+    range: [f32; 2],
+    pattern: &EncodedShadingPattern,
+) -> GradientLut {
+    GradientLut::new(&approximate_gradient_stops(
+        |t| sample_function(function, range, pattern, t),
+        &normalized_stitching_bounds(function, range),
+        LUT_TOLERANCE,
+    ))
+}
 
-        finish_color(pattern, pattern.color_space.to_rgba(out, 1.0).components())
+fn sample_function(
+    function: &ShadingFunction,
+    [t0, t1]: [f32; 2],
+    pattern: &EncodedShadingPattern,
+    t: f32,
+) -> [f32; 4] {
+    let t = t0 + (t1 - t0) * t;
+    let mut out = [0.0; MAX_COMPONENTS];
+    let out = &mut out[..function.num_outputs()];
+    if function.eval(&[t], out).is_none() {
+        return [0.0, 0.0, 0.0, 0.0];
     }
 
-    fn normalized_stitching_bounds(&self) -> Vec<f32> {
-        let [t0, t1] = self.domain;
-        let dt = t1 - t0;
-        if dt.abs() <= f32::EPSILON {
-            return vec![];
-        }
+    finish_color(pattern, pattern.color_space.to_rgba(out, 1.0).components())
+}
 
-        let mut bounds = self
-            .function
-            .stitching_bounds()
-            .into_iter()
-            .map(|bound| (bound - t0) / dt)
-            .filter(|bound| *bound > 0.0 && *bound < 1.0)
-            .collect::<Vec<_>>();
-
-        if dt < 0.0 {
-            bounds.reverse();
-        }
-
-        bounds
+fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
+    let dt = t1 - t0;
+    if dt.abs() <= f32::EPSILON {
+        return vec![];
     }
+
+    let mut bounds = function
+        .stitching_bounds()
+        .into_iter()
+        .map(|bound| (bound - t0) / dt)
+        .filter(|bound| *bound > 0.0 && *bound < 1.0)
+        .collect::<Vec<_>>();
+
+    if dt < 0.0 {
+        bounds.reverse();
+    }
+
+    bounds
 }
 
 pub(crate) struct GradientLut {
@@ -335,7 +349,7 @@ fn approximate_gradient_interval(
     approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1);
 }
 
-fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
+pub(crate) fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
     [
         c0[0] + (c1[0] - c0[0]) * t,
         c0[1] + (c1[1] - c0[1]) * t,
@@ -344,7 +358,7 @@ fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
     ]
 }
 
-fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
+pub(crate) fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
     c0.iter()
         .zip(c1)
         .map(|(a, b)| (a - b).abs())
