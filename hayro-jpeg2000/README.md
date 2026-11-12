@@ -36,7 +36,7 @@ println!(
 
 let mut ctx = DecoderContext::default();
 let decoded = image.decode(&mut ctx).unwrap();
-let bitmap = decoded.data_u8();
+let bitmap = decoded.data_u8().unwrap();
 ```
 
 If you want to see a more comprehensive example, please take a look

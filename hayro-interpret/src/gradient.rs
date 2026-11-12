@@ -7,10 +7,11 @@
 use crate::color::AlphaColor;
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
 use crate::function::MAX_COMPONENTS;
-use kurbo::{Affine, Circle, Point, Rect, Shape};
+use kurbo::{Affine, Point};
 
 const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
 const RADIAL_EPSILON: f64 = 1.0e-6;
+const PADDING: f64 = 0.01;
 
 /// An SVG-like gradient.
 pub struct SvgGradient {
@@ -57,47 +58,59 @@ impl EncodedRadialAxialShading {
     pub fn as_svg_gradient(
         &self,
         pattern: &EncodedShadingPattern,
-        path_bbox: Rect,
         tolerance: f32,
     ) -> Option<SvgGradient> {
-        // A couple of cases cannot be losslessly represented by an SVG gradient.
-        match self.params {
-            RadialAxialParams::Axial => {
-                if !self.axial_extend_covers_bbox(pattern, path_bbox) {
-                    return None;
-                }
-            }
-            RadialAxialParams::Radial { .. } => {
-                if !self.radial_extend_covers_bbox(pattern, path_bbox)
-                    || pattern.background_color.components()[3] > 0.0
-                {
-                    return None;
-                }
-            }
-        }
+        let background = pattern.background_color.components();
+        let background = (background[3] > 0.0).then(|| finish_color(pattern, background));
+        let range = self.padded_range(background.is_some())?;
 
         Some(SvgGradient {
-            kind: self.native_gradient_kind(),
+            kind: self.gradient_kind(range),
             transform: pattern.base_transform.inverse(),
-            stops: approximate_gradient_stops(
-                |t| self.sample_t(pattern, t),
-                &self.normalized_stitching_bounds(),
-                tolerance,
+            stops: pad_stops(
+                approximate_gradient_stops(
+                    |t| self.sample_t(pattern, t),
+                    &self.normalized_stitching_bounds(),
+                    tolerance,
+                ),
+                range,
+                background,
             ),
         })
     }
 
-    fn native_gradient_kind(&self) -> SvgGradientKind {
+    // SVG gradients pad with their end stops, so a non-extended end gets a short stretch of background.
+    fn padded_range(&self, has_background: bool) -> Option<[f64; 2]> {
+        let mut padding = self.extend.map(|extend| if extend { 0.0 } else { PADDING });
+
+        if let RadialAxialParams::Radial { p1, r } = self.params {
+            let growth = r.y - r.x;
+            let nested = growth.abs() - p1.to_vec2().hypot() > RADIAL_EPSILON;
+
+            // Unless nested, circles past the end outrank earlier ones and some points need the background.
+            if r.x < 0.0 || r.y < 0.0 || !nested && (has_background || !self.extend[1]) {
+                return None;
+            }
+
+            // The padded circles must not have a negative radius.
+            padding[0] = padding[0].min(r.x / growth.max(0.0));
+            padding[1] = padding[1].min(r.y / (-growth).max(0.0));
+        }
+
+        Some([-padding[0], 1.0 + padding[1]])
+    }
+
+    fn gradient_kind(&self, [t0, t1]: [f64; 2]) -> SvgGradientKind {
         match &self.params {
             RadialAxialParams::Axial => SvgGradientKind::Linear {
-                start: Point::ZERO,
-                end: Point::new(1.0, 0.0),
+                start: Point::new(t0, 0.0),
+                end: Point::new(t1, 0.0),
             },
             RadialAxialParams::Radial { p1, r } => SvgGradientKind::Radial {
-                start_center: Point::ZERO,
-                start_radius: r.x as f32,
-                end_center: *p1,
-                end_radius: r.y as f32,
+                start_center: (p1.to_vec2() * t0).to_point(),
+                start_radius: (r.x + (r.y - r.x) * t0) as f32,
+                end_center: (p1.to_vec2() * t1).to_point(),
+                end_radius: (r.x + (r.y - r.x) * t1) as f32,
             },
         }
     }
@@ -110,59 +123,8 @@ impl EncodedRadialAxialShading {
         if self.function.eval(&[t], out).is_none() {
             return [0.0, 0.0, 0.0, 0.0];
         }
-        let mut components = pattern.color_space.to_rgba(out, 1.0).components();
-        components[3] *= pattern.opacity;
 
-        if let Some(tf) = &pattern.transfer_function {
-            return tf.apply(&AlphaColor::new(components)).components();
-        }
-
-        components
-    }
-
-    fn axial_extend_covers_bbox(&self, pattern: &EncodedShadingPattern, path_bbox: Rect) -> bool {
-        let path_bbox = pattern.base_transform.transform_rect_bbox(path_bbox);
-
-        let min_x = path_bbox.min_x();
-        let max_x = path_bbox.max_x();
-
-        (self.extend[0] || min_x >= 0.0) && (self.extend[1] || max_x <= 1.0)
-    }
-
-    fn radial_extend_covers_bbox(&self, pattern: &EncodedShadingPattern, path_bbox: Rect) -> bool {
-        let RadialAxialParams::Radial { p1, r } = self.params else {
-            return false;
-        };
-
-        let path_bbox = pattern.base_transform.transform_rect_bbox(path_bbox);
-
-        if p1.x.abs() <= RADIAL_EPSILON && p1.y.abs() <= RADIAL_EPSILON {
-            return self.same_center_radial_extend_covers_bbox(path_bbox, r.x, r.y);
-        }
-
-        let start_extend_ok = self.extend[0] || r.x.abs() <= RADIAL_EPSILON;
-        let end_extend_ok = self.extend[1] || circle_covers_bbox(Circle::new(p1, r.y), path_bbox);
-
-        start_extend_ok && end_extend_ok
-    }
-
-    fn same_center_radial_extend_covers_bbox(&self, path_bbox: Rect, r0: f64, r1: f64) -> bool {
-        let mut inner_circle = Circle::new(Point::ZERO, r0);
-        let mut outer_circle = Circle::new(Point::ZERO, r1);
-        let mut inner_extend = self.extend[0];
-        let mut outer_extend = self.extend[1];
-
-        if inner_circle.radius > outer_circle.radius {
-            std::mem::swap(&mut inner_circle, &mut outer_circle);
-            std::mem::swap(&mut inner_extend, &mut outer_extend);
-        }
-
-        let inner_extend_ok = inner_extend
-            || inner_circle.radius <= RADIAL_EPSILON
-            || circle_outside_bbox(inner_circle, path_bbox);
-        let outer_extend_ok = outer_extend || circle_covers_bbox(outer_circle, path_bbox);
-
-        inner_extend_ok && outer_extend_ok
+        finish_color(pattern, pattern.color_space.to_rgba(out, 1.0).components())
     }
 
     fn normalized_stitching_bounds(&self) -> Vec<f32> {
@@ -188,36 +150,42 @@ impl EncodedRadialAxialShading {
     }
 }
 
-fn circle_covers_bbox(circle: Circle, bbox: Rect) -> bool {
-    if circle.radius < 0.0 {
-        return false;
+fn finish_color(pattern: &EncodedShadingPattern, mut components: [f32; 4]) -> [f32; 4] {
+    components[3] *= pattern.opacity;
+
+    if let Some(tf) = &pattern.transfer_function {
+        return tf.apply(&AlphaColor::new(components)).components();
     }
 
-    let radius_squared = circle.radius * circle.radius;
-    [
-        Point::new(bbox.x0, bbox.y0),
-        Point::new(bbox.x1, bbox.y0),
-        Point::new(bbox.x0, bbox.y1),
-        Point::new(bbox.x1, bbox.y1),
-    ]
-    .into_iter()
-    .all(|point| {
-        let delta = point - circle.center;
-        delta.hypot2() <= radius_squared
-    })
+    components
 }
 
-fn circle_outside_bbox(circle: Circle, bbox: Rect) -> bool {
-    if circle.radius <= 0.0 {
-        return true;
+fn pad_stops(
+    mut stops: Vec<SvgGradientStop>,
+    [t0, t1]: [f64; 2],
+    background: Option<[f32; 4]>,
+) -> Vec<SvgGradientStop> {
+    let (t0, t1) = (t0 as f32, t1 as f32);
+    let padding = |offset| SvgGradientStop {
+        offset,
+        color: background.unwrap_or([0.0; 4]),
+    };
+
+    for stop in &mut stops {
+        stop.offset = (stop.offset - t0) / (t1 - t0);
     }
 
-    let closest = Point::new(
-        circle.center.x.clamp(bbox.x0, bbox.x1),
-        circle.center.y.clamp(bbox.y0, bbox.y1),
-    );
+    if t0 < 0.0 {
+        let edge = stops[0].offset;
+        stops.splice(0..0, [padding(0.0), padding(edge)]);
+    }
 
-    !circle.contains(closest)
+    if t1 > 1.0 {
+        let edge = stops[stops.len() - 1].offset;
+        stops.extend([padding(edge), padding(1.0)]);
+    }
+
+    stops
 }
 
 fn approximate_gradient_stops(

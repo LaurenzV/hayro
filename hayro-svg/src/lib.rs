@@ -51,7 +51,7 @@ mod path;
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
 /// multiple conversion invocations on the same document.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
 }
@@ -250,7 +250,7 @@ impl<'a> SvgRenderer<'a> {
             mask.is_some() || blend_mode != BlendMode::Normal || !self.active_clips.is_empty();
 
         if push_group {
-            self.push_transparency_group(1.0, mask, blend_mode);
+            self.push_transparency_group_inner(1.0, mask.map(MaskKind::SoftMask), blend_mode);
         }
 
         func(self);
@@ -308,6 +308,8 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         opacity: f32,
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
+        _: bool,
+        _: bool,
     ) {
         self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask), blend_mode);
     }

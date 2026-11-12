@@ -14,7 +14,8 @@ members = [
     "hayro-ccitt",
     "hayro-fuzz",
     "hayro-postscript",
-    "hayro-cmap"
+    "hayro-cmap",
+    "hayro-font"
 ]
 
 [workspace.package]
@@ -26,35 +27,38 @@ readme = "README.md"
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-hayro = { path = "hayro", version = "0.8.0", default-features = false }
-hayro-ccitt = { path = "hayro-ccitt", version = "0.4.0", default-features = false }
-hayro-interpret = { path = "hayro-interpret", version = "0.8.0", default-features = false }
-hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.4.1", default-features = false }
-hayro-jbig2 = { path = "hayro-jbig2", version = "0.3.1", default-features = false }
-hayro-syntax = { path = "hayro-syntax", version = "0.8.0", default-features = false }
-hayro-svg = { path = "hayro-svg", version = "0.8.0", default-features = false }
-hayro-write = { path = "hayro-write", version = "0.8.0", default-features = false }
-hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
-hayro-cmap = { path = "hayro-cmap", version = "0.1.0", default-features = false }
+hayro = { path = "hayro", version = "0.9.0", default-features = false }
+hayro-ccitt = { path = "hayro-ccitt", version = "0.5.0", default-features = false }
+hayro-interpret = { path = "hayro-interpret", version = "0.9.0", default-features = false }
+hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.5.0", default-features = false }
+hayro-jbig2 = { path = "hayro-jbig2", version = "0.4.0", default-features = false }
+hayro-syntax = { path = "hayro-syntax", version = "0.9.0", default-features = false }
+hayro-svg = { path = "hayro-svg", version = "0.9.0", default-features = false }
+hayro-write = { path = "hayro-write", version = "0.9.0", default-features = false }
+hayro-postscript = { path = "hayro-postscript", version = "0.2.0", default-features = false }
+hayro-cmap = { path = "hayro-cmap", version = "0.1.1", default-features = false }
+hayro-font = { path = "hayro-font", version = "0.5.0", default-features = false }
 
+ab_glyph_rasterizer = { version = "0.1.10", default-features = false, features = ["std"] }
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 kurbo = { version = "0.13.0" }
 resvg = { version = "0.47.0" }
 flate2 = { version = "1" }
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
+zlib-rs = { version = "0.6.8", default-features = false, features = ["rust-allocator"] }
 phf = { version = "0.13.1", default-features = false }
 moxcms = { version = "0.8.1" }
 rustc-hash = { version = "2" }
 siphasher = "1"
-skrifa = { version = "0.46.0" }
+skrifa = { version = "0.49.0" }
 smallvec = { version = "1" }
-yoke = { version = "0.8" }
 pdf-writer = { version = "0.15" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.4", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.12", default-features = false }
 fearless_simd = "1.0.0"
 brotli = { version = "8", default-features = false, features = ["std"] }

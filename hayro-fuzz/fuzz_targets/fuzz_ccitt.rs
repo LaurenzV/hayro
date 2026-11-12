@@ -30,17 +30,21 @@ fuzz_target!(|data: &[u8]| {
     let columns = u16::from_le_bytes([data[0], data[1]]).max(1) as u32;
     let rows = u16::from_le_bytes([data[2], data[3]]).max(1) as u32;
 
-    let mut settings = hayro_ccitt::DecodeSettings::new(columns, rows);
-    settings.end_of_block = data[4] != 0;
-    settings.end_of_line = data[5] != 0;
-    settings.rows_are_byte_aligned = data[6] != 0;
-    settings.encoding = match data[7] % 3 {
-        0 => hayro_ccitt::EncodingMode::Group4,
-        1 => hayro_ccitt::EncodingMode::Group3_1D,
-        _ => hayro_ccitt::EncodingMode::Group3_2D,
+    let settings = hayro_ccitt::DecodeSettings {
+        columns,
+        rows,
+        end_of_block: data[4] != 0,
+        end_of_line: data[5] != 0,
+        rows_are_byte_aligned: data[6] != 0,
+        encoding: match data[7] % 3 {
+            0 => hayro_ccitt::EncodingMode::Group4,
+            1 => hayro_ccitt::EncodingMode::Group3_1D,
+            _ => hayro_ccitt::EncodingMode::Group3_2D,
+        },
+        strict: false,
+        cancel: None,
     };
 
     let mut decoder = Decoder;
-    let mut context = hayro_ccitt::DecoderContext::new(settings);
-    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &mut context);
+    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &settings);
 });

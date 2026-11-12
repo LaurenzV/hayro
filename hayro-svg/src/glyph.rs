@@ -44,7 +44,7 @@ impl<'a> SvgRenderer<'a> {
         match glyph {
             Glyph::Outline(glyph) => {
                 let outline = glyph.outline();
-                let glyph_id = glyph.identifier().cache_key();
+                let glyph_id = glyph.identifier().glyph_key();
                 let (cache_key, glyph_path, use_transform, paint_transform) = match mode {
                     DrawMode::Fill(_) => {
                         let transform = props.transform * glyph_transform;

@@ -203,9 +203,9 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
     let mut decoder_context = crate::DecoderContext::default();
 
     match output(image) {
-        Output::Unchanged { .. } => image.decode(&mut decoder_context)?.store_u8_into(buf),
+        Output::Unchanged { .. } => image.decode(&mut decoder_context)?.store_u8_into(buf)?,
         Output::Converted { from } => {
-            let decoded = image.decode(&mut decoder_context)?.data_u8();
+            let decoded = image.decode(&mut decoder_context)?.data_u8()?;
             if to_srgb(image, from, &decoded, buf).is_err() {
                 match image.color_space().num_channels() {
                     3 => buf.copy_from_slice(&decoded),
@@ -278,6 +278,12 @@ impl From<crate::DecodeError> for DecodingError {
 impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
         Self::Decoding(value.into())
+    }
+}
+
+impl From<crate::Cancelled> for ImageError {
+    fn from(value: crate::Cancelled) -> Self {
+        crate::DecodeError::from(value).into()
     }
 }
 

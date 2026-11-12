@@ -1,6 +1,6 @@
 [package]
 name = "hayro-jbig2"
-version = "0.3.1"
+version = "0.4.0"
 description = "A memory-safe, pure-Rust JBIG2 decoder."
 authors = { workspace = true }
 edition = { workspace = true }
@@ -13,7 +13,7 @@ autotests = false
 
 [features]
 default = ["std", "image", "simd"]
-std = []
+std = ["hayro-ccitt/std"]
 simd = ["fearless_simd", "std"]
 image = ["dep:image", "std"]
 

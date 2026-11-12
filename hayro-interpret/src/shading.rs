@@ -205,7 +205,7 @@ impl Shading {
             }
             4 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
@@ -232,7 +232,7 @@ impl Shading {
             }
             5 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let function = read_function(dict, &color_space);
@@ -259,7 +259,7 @@ impl Shading {
             }
             6 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
@@ -283,7 +283,7 @@ impl Shading {
             }
             7 => {
                 let stream = stream?;
-                let stream_data = stream.decoded().ok()?;
+                let stream_data = stream.decoded_data().ok()?;
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
@@ -845,6 +845,10 @@ fn read_lattice_triangles(
     vertices_per_row: u32,
     decode: &[f32],
 ) -> Option<(Vec<Triangle>, Option<kurbo::Rect>)> {
+    if vertices_per_row < 2 {
+        return None;
+    }
+
     let mut lattices = vec![];
     let mut bounds = None;
 
@@ -1113,4 +1117,17 @@ fn points_bbox(points: &[Point]) -> kurbo::Rect {
         .fold(kurbo::Rect::from_points(points[0], points[0]), |bbox, p| {
             bbox.union_pt(*p)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_lattice_triangles;
+
+    const DECODE: [f32; 6] = [0.0, 100.0, 0.0, 100.0, 0.0, 1.0];
+
+    #[test]
+    fn lattice_rejects_rows_of_fewer_than_two_vertices() {
+        assert!(read_lattice_triangles(&[], 8, 8, false, 0, &DECODE).is_none());
+        assert!(read_lattice_triangles(&[0; 3], 8, 8, false, 1, &DECODE).is_none());
+    }
 }

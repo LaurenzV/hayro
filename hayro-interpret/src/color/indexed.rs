@@ -13,17 +13,17 @@ pub(crate) struct Indexed {
 }
 
 impl Indexed {
-    pub(super) fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
+    pub(super) fn new(array: &Array<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip name
         let _ = iter.next::<Name<'_>>()?;
-        let base_color_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
+        let base_color_space = ColorSpace::new_nested(iter.next::<Object<'_>>()?, cache, depth)?;
         let hival = iter.next::<u32>()?.min(u8::MAX as u32) as u8;
 
         let values = {
             let data = iter
                 .next::<Stream<'_>>()
-                .and_then(|s| s.decoded().ok())
+                .and_then(|s| s.decoded_data().ok())
                 .or_else(|| {
                     iter.next::<object::String<'_>>()
                         .map(|s| Cow::Owned(s.to_vec()))

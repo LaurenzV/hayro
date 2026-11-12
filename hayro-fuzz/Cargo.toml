@@ -36,3 +36,5 @@ path = "fuzz_targets/fuzz_ccitt.rs"
 test = false
 doc = false
 bench = false
+
+[lints]

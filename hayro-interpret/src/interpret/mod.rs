@@ -3,11 +3,10 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
-use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
-use crate::interpret::state::{TextStateFont, handle_gs};
+use crate::interpret::state::handle_gs;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
@@ -34,14 +33,7 @@ const ANNOTATION_NO_VIEW: u32 = 1 << 5;
 
 pub use state::ActiveTransferFunction;
 
-/// A callback function for resolving font queries.
-///
-/// The first argument is the raw data, the second argument is the index in case the font
-/// is a TTC, otherwise it should be 0.
-pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
-/// A callback function for resolving cmap names to their files.
-pub type CMapResolverFn =
-    Arc<dyn Fn(hayro_cmap::CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
+pub use hayro_font::{CMapResolverFn, FontResolverFn};
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
@@ -111,8 +103,8 @@ impl Default for InterpreterSettings {
             font_resolver: Arc::new(|_| None),
             #[cfg(feature = "embed-fonts")]
             font_resolver: Arc::new(|query| match query {
-                FontQuery::Standard(s) => Some(s.get_font_data()),
-                FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
+                crate::font::FontQuery::Standard(s) => Some(s.get_font_data()),
+                crate::font::FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
             }),
             #[cfg(feature = "embed-cmaps")]
             cmap_resolver: Arc::new(hayro_cmap::load_embedded),
@@ -305,9 +297,8 @@ pub fn interpret<'a>(
                     r.1.as_f64(),
                     r.0.as_f64() + r.2.as_f64(),
                     r.1.as_f64() + r.3.as_f64(),
-                )
-                .to_path(0.1);
-                context.path_mut().extend(rect);
+                );
+                context.path_mut().extend(rect.path_elements(0.1));
 
                 let p = Point::new(r.0.as_f64(), r.1.as_f64());
                 *(context.last_point_mut()) = p;
@@ -436,7 +427,14 @@ pub fn interpret<'a>(
             TypedInstruction::ClipEvenOdd(_) => {
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
-            TypedInstruction::RestoreState(_) => context.restore_state(device),
+            TypedInstruction::RestoreState(_) => {
+                // Ignore a `Q` without a matching `q` in this stream: it would otherwise
+                // restore the state saved on entry and let later operators change the
+                // caller's state.
+                if context.num_states() > num_states + 1 {
+                    context.restore_state(device);
+                }
+            }
             TypedInstruction::FlatnessTolerance(_) => {
                 // Ignore for now.
             }
@@ -588,8 +586,7 @@ pub fn interpret<'a>(
                     font_dict_cache.insert(name.clone(), font_dict.clone());
                     context.resolve_font(&font_dict)
                 } else {
-                    Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
-                        .map(TextStateFont::Fallback)
+                    context.fallback_font()
                 };
 
                 context.text_state_mut().font_size = t.1.as_f32();
@@ -599,11 +596,7 @@ pub fn interpret<'a>(
                 if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.text_state_mut().font = Font::new_standard(
-                        StandardFont::Helvetica,
-                        &context.settings.font_resolver,
-                    )
-                    .map(TextStateFont::Fallback);
+                    context.text_state_mut().font = context.fallback_font();
                 }
 
                 text::show_text_string(context, device, resources, s.0);
@@ -612,11 +605,7 @@ pub fn interpret<'a>(
                 if context.text_state().font.is_none() {
                     // Even if no explicit font was set, we try to assume Helvetica. Acrobat
                     // seems to do the same.
-                    context.text_state_mut().font = Font::new_standard(
-                        StandardFont::Helvetica,
-                        &context.settings.font_resolver,
-                    )
-                    .map(TextStateFont::Fallback);
+                    context.text_state_mut().font = context.fallback_font();
                 }
 
                 text::begin_glyph_run(context);
