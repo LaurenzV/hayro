@@ -1,4 +1,5 @@
 use super::xobject_oc;
+use crate::cache::{Cache, CacheKey};
 use crate::context::Context;
 use crate::device::Device;
 use crate::{ClipPath, FillRule, interpret};
@@ -9,9 +10,31 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use std::borrow::Cow;
+use std::sync::Arc;
+
+/// Distinguishes a form's decoded content in the object cache from anything else cached for the same stream.
+const FORM_CONTENT: u128 = 0x666f_726d_5f63_6f6e_7465_6e74;
+
+/// A form's decoded content stream.
+pub(crate) enum FormContent<'a> {
+    Decoded(Cow<'a, [u8]>),
+    /// Kept in the object cache, so that a form drawn many times, like a logo
+    /// repeated on every page or a mark stamped hundreds of times on one, is
+    /// only decompressed once.
+    Cached(Arc<[u8]>),
+}
+
+impl AsRef<[u8]> for FormContent<'_> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Decoded(data) => data.as_ref(),
+            Self::Cached(data) => data,
+        }
+    }
+}
 
 pub(crate) struct FormXObject<'a> {
-    pub(crate) decoded: Cow<'a, [u8]>,
+    pub(crate) decoded: FormContent<'a>,
     pub(crate) matrix: Affine,
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
@@ -23,9 +46,26 @@ pub(crate) struct FormXObject<'a> {
 
 impl<'a> FormXObject<'a> {
     pub(crate) fn new(stream: &Stream<'a>) -> Option<Self> {
+        Self::with_content(stream, FormContent::Decoded(stream.decoded_data().ok()?))
+    }
+
+    /// Like `new`, but takes the decoded content from `cache` when the same
+    /// form has been drawn before.
+    pub(crate) fn new_cached(stream: &Stream<'a>, cache: &Cache) -> Option<Self> {
+        let decoded =
+            cache.get_or_insert_with((stream.cache_key(), FORM_CONTENT).cache_key(), || {
+                stream
+                    .decoded_data()
+                    .ok()
+                    .map(|data| Arc::<[u8]>::from(data.as_ref()))
+            })?;
+
+        Self::with_content(stream, FormContent::Cached(decoded))
+    }
+
+    fn with_content(stream: &Stream<'a>, decoded: FormContent<'a>) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded_data().ok()?;
         let resources = dict.get(RESOURCES).map(Resources::new);
 
         let matrix = Affine::new(
