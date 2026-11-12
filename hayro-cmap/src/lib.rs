@@ -1066,89 +1066,6 @@ endcidrange
     }
 
     #[test]
-    fn raw_ranges() {
-        let base_data = br#"
-1 begincodespacerange
-<00> <80>
-endcodespacerange
-1 begincidrange
-<20> <7E> 1
-endcidrange
-"#;
-
-        let child_data = br#"
-/Base usecmap
-1 begincodespacerange
-<8140> <9FFC>
-endcodespacerange
-1 begincidrange
-<8140> <817E> 633
-endcidrange
-1 beginnotdefrange
-<8180> <81FC> 7
-endnotdefrange
-"#;
-
-        let cmap = CMap::parse(child_data, |name| {
-            (name.to_bytes() == b"Base").then_some(base_data.as_slice())
-        })
-        .unwrap();
-
-        let codespace = cmap.codespace_ranges();
-        assert_eq!(codespace.len(), 1);
-        assert_eq!(
-            (
-                codespace[0].byte_len(),
-                codespace[0].low(),
-                codespace[0].high()
-            ),
-            (2, 0x8140, 0x9FFC)
-        );
-
-        let cid = cmap.cid_ranges(2);
-        assert_eq!(cid.len(), 1);
-        assert_eq!(
-            (cid[0].start(), cid[0].end(), cid[0].cid_start()),
-            (0x8140, 0x817E, 633)
-        );
-        assert!(cmap.cid_ranges(1).is_empty());
-        assert!(cmap.cid_ranges(5).is_empty());
-
-        let notdef = cmap.notdef_ranges(2);
-        assert_eq!(notdef.len(), 1);
-        assert_eq!(
-            (notdef[0].start(), notdef[0].end(), notdef[0].cid_start()),
-            (0x8180, 0x81FC, 7)
-        );
-
-        let base = cmap.base().unwrap();
-        assert!(base.base().is_none());
-        assert_eq!(base.codespace_ranges()[0].byte_len(), 1);
-        let base_cid = base.cid_ranges(1);
-        assert_eq!(
-            (
-                base_cid[0].start(),
-                base_cid[0].end(),
-                base_cid[0].cid_start()
-            ),
-            (0x20, 0x7E, 1)
-        );
-
-        for identity in [CMap::identity_h(), CMap::identity_v()] {
-            let codespace = identity.codespace_ranges();
-            assert_eq!(codespace.len(), 1);
-            assert_eq!(
-                (
-                    codespace[0].byte_len(),
-                    codespace[0].low(),
-                    codespace[0].high()
-                ),
-                (2, 0x0000, 0xFFFF)
-            );
-        }
-    }
-
-    #[test]
     fn usecmap_partial_override() {
         let base_data = br#"
 /CIDSystemInfo 3 dict dup begin
@@ -1443,6 +1360,89 @@ endbfrange
             cmap.lookup_bf_string(0x7f),
             Some(BfString::Char('\u{007F}'))
         );
+    }
+
+    #[test]
+    fn raw_ranges() {
+        let base_data = br#"
+1 begincodespacerange
+<00> <80>
+endcodespacerange
+1 begincidrange
+<20> <7E> 1
+endcidrange
+"#;
+
+        let child_data = br#"
+/Base usecmap
+1 begincodespacerange
+<8140> <9FFC>
+endcodespacerange
+1 begincidrange
+<8140> <817E> 633
+endcidrange
+1 beginnotdefrange
+<8180> <81FC> 7
+endnotdefrange
+"#;
+
+        let cmap = CMap::parse(child_data, |name| {
+            (name.to_bytes() == b"Base").then_some(base_data.as_slice())
+        })
+        .unwrap();
+
+        let codespace = cmap.codespace_ranges();
+        assert_eq!(codespace.len(), 1);
+        assert_eq!(
+            (
+                codespace[0].byte_len(),
+                codespace[0].low(),
+                codespace[0].high()
+            ),
+            (2, 0x8140, 0x9FFC)
+        );
+
+        let cid = cmap.cid_ranges(2);
+        assert_eq!(cid.len(), 1);
+        assert_eq!(
+            (cid[0].start(), cid[0].end(), cid[0].cid_start()),
+            (0x8140, 0x817E, 633)
+        );
+        assert!(cmap.cid_ranges(1).is_empty());
+        assert!(cmap.cid_ranges(5).is_empty());
+
+        let notdef = cmap.notdef_ranges(2);
+        assert_eq!(notdef.len(), 1);
+        assert_eq!(
+            (notdef[0].start(), notdef[0].end(), notdef[0].cid_start()),
+            (0x8180, 0x81FC, 7)
+        );
+
+        let base = cmap.base().unwrap();
+        assert!(base.base().is_none());
+        assert_eq!(base.codespace_ranges()[0].byte_len(), 1);
+        let base_cid = base.cid_ranges(1);
+        assert_eq!(
+            (
+                base_cid[0].start(),
+                base_cid[0].end(),
+                base_cid[0].cid_start()
+            ),
+            (0x20, 0x7E, 1)
+        );
+
+        for identity in [CMap::identity_h(), CMap::identity_v()] {
+            let codespace = identity.codespace_ranges();
+            assert_eq!(codespace.len(), 1);
+            assert_eq!(
+                (
+                    codespace[0].byte_len(),
+                    codespace[0].low(),
+                    codespace[0].high()
+                ),
+                (2, 0x0000, 0xFFFF)
+            );
+        }
     }
 }
 
