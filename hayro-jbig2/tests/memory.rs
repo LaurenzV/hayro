@@ -31,3 +31,8 @@ fn symbol_dictionary_large_symbol() {
 fn symbol_dictionary_many_symbols() {
     check_memory_limit_exceeded("memory_symbol_dictionary_many_symbols", 8192);
 }
+
+#[test]
+fn symbol_dictionary_global() {
+    check_memory_limit_exceeded("memory_symbol_dictionary_global", 49152);
+}
