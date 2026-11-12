@@ -112,9 +112,10 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
 
     /// Return the properties of the font the run was shown with.
     ///
-    /// Returns `None` if the content stream selected no font or one that could
-    /// not be loaded, in which case the run is shown with a fallback font that
-    /// has no font dictionary.
+    /// Returns `None` if the content stream selected no font with `Tf`, or a
+    /// font its resources don't have, in which case the run is shown with
+    /// Helvetica. A font that has a dictionary always has its properties here,
+    /// even when it is drawn with a substitute font.
     pub fn font(&self) -> Option<&'run FontProperties<'a>> {
         self.font
     }
