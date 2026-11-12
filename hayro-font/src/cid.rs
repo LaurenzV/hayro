@@ -66,11 +66,16 @@ impl Type0Font {
             match load_program(&font_descriptor, loader) {
                 Some(program) => (program, false, false),
                 None => {
-                    // A font for a CJK character collection is never one of the
-                    // standard 14 fonts: a name such as "NotoSansKR-Regular"
-                    // would keyword-match Helvetica, which has no CJK glyphs, and
-                    // the query would not carry the collection a resolver needs to
-                    // pick a CJK fallback (#1693).
+                    // A font for a CJK character collection should almost never
+                    // resolve to one of the standard 14 fonts: a name such as
+                    // "NotoSansKR-Regular" would keyword-match Helvetica, which has
+                    // no CJK glyphs, and the query would not carry the collection
+                    // a resolver needs to pick a CJK fallback (#1693). The
+                    // exception is an *exact* standard-font match such as
+                    // TimesNewRomanPSMT with GBK-EUC-H, whose narrow proportional
+                    // glyphs must not become fullwidth fallback ones
+                    // (raster::pdfjs_issue11088): keep exact matches, drop
+                    // keyword matches.
                     let is_cjk = matches!(
                         character_collection.as_ref().map(|cc| &cc.family),
                         Some(
@@ -80,11 +85,8 @@ impl Type0Font {
                                 | CidFamily::AdobeKorea1
                         )
                     );
-                    let standard = if is_cjk {
-                        None
-                    } else {
-                        select_standard_font(dict, &font_descriptor)
-                    };
+                    let standard = select_standard_font(dict, &font_descriptor)
+                        .filter(|&(_, exact)| !is_cjk || exact);
 
                     let (query, is_standard) = if let Some((standard, _)) = standard {
                         (FontQuery::Standard(standard), true)
