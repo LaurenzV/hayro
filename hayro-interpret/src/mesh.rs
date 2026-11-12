@@ -10,9 +10,11 @@ use kurbo::{Affine, Point, Rect};
 /// Target edge length in pixels of the pieces a mesh is split into.
 const MESH_SEGMENT: f64 = 8.0;
 /// Initial cell size in pixels for function-based shadings.
-const FUNCTION_CELL: f64 = 16.0;
+const FUNCTION_CELL: usize = 16;
 /// Largest color error a function-based cell may have before it is split further.
 const FUNCTION_TOLERANCE: f32 = 0.01;
+/// Size in pixels up to which function-based cells are sampled at every pixel.
+const FUNCTION_PIXEL_CELL: usize = 4;
 const MAX_DEPTH: u32 = 10;
 /// Approximate maximum number of pieces a mesh is split into.
 const MAX_PIECES: f64 = (1 << 20) as f64;
@@ -187,30 +189,28 @@ pub(crate) fn draw_function(
     transform: Affine,
     pattern: &EncodedShadingPattern,
 ) {
-    let visible = transform
-        .inverse()
-        .transform_rect_bbox(canvas.bounds())
-        .intersect(domain);
+    let area = transform
+        .transform_rect_bbox(domain)
+        .intersect(canvas.bounds());
 
-    if visible.width() <= 0.0 || visible.height() <= 0.0 {
+    if area.width() <= 0.0 || area.height() <= 0.0 {
         return;
     }
 
     let sampler = FunctionSampler {
         function,
-        transform,
+        inverse: transform.inverse(),
+        domain,
         pattern,
     };
-    let length = |a: Point, b: Point| (transform * a - transform * b).hypot();
-    let origin = visible.origin();
-    let columns = (length(origin, Point::new(visible.x1, visible.y0)) / FUNCTION_CELL).ceil();
-    let rows = (length(origin, Point::new(visible.x0, visible.y1)) / FUNCTION_CELL).ceil();
-    let (columns, rows) = (columns.max(1.0) as usize, rows.max(1.0) as usize);
-    let x = |column: usize| visible.x0 + visible.width() * column as f64 / columns as f64;
-    let y = |row: usize| visible.y0 + visible.height() * row as f64 / rows as f64;
+    let (x0, y0) = (area.x0.floor() as usize, area.y0.floor() as usize);
+    let columns = (area.x1.ceil() as usize - x0).div_ceil(FUNCTION_CELL);
+    let rows = (area.y1.ceil() as usize - y0).div_ceil(FUNCTION_CELL);
+    let corner =
+        |column: usize, row: usize| [x0 + column * FUNCTION_CELL, y0 + row * FUNCTION_CELL];
     let sample_row = |row: usize| {
         (0..=columns)
-            .map(|column| sampler.sample(Point::new(x(column), y(row))))
+            .map(|column| sampler.sample(corner(column, row)))
             .collect::<Vec<_>>()
     };
 
@@ -220,7 +220,6 @@ pub(crate) fn draw_function(
         let current = sample_row(row);
 
         for column in 0..columns {
-            let cell = Rect::new(x(column), y(row - 1), x(column + 1), y(row));
             let corners = [
                 previous[column],
                 previous[column + 1],
@@ -228,7 +227,13 @@ pub(crate) fn draw_function(
                 current[column + 1],
             ];
 
-            draw_function_cell(canvas, &sampler, cell, corners);
+            draw_function_cell(
+                canvas,
+                &sampler,
+                corner(column, row - 1),
+                FUNCTION_CELL,
+                corners,
+            );
         }
 
         previous = current;
@@ -237,12 +242,19 @@ pub(crate) fn draw_function(
 
 struct FunctionSampler<'a> {
     function: &'a ShadingFunction,
-    transform: Affine,
+    inverse: Affine,
+    domain: Rect,
     pattern: &'a EncodedShadingPattern,
 }
 
 impl FunctionSampler<'_> {
-    fn sample(&self, point: Point) -> [f32; 4] {
+    /// The color at the given pixel corner of the canvas.
+    fn sample(&self, [x, y]: [usize; 2]) -> [f32; 4] {
+        self.sample_at(Point::new(x as f64, y as f64))
+    }
+
+    fn sample_at(&self, point: Point) -> [f32; 4] {
+        let point = self.inverse * point;
         let mut out = [0.0; MAX_COMPONENTS];
         let out = &mut out[..self.function.num_outputs()];
 
@@ -251,35 +263,48 @@ impl FunctionSampler<'_> {
             None => [0.0; 4],
         }
     }
+
+    fn contains(&self, point: Point) -> bool {
+        self.domain.contains(self.inverse * point)
+    }
 }
 
-/// Draw a cell with the given corner colors (ordered by `y`, then `x`), refining it as needed.
+/// Draw a cell from its corner colors (ordered by `y`, then `x`), refining it as needed.
 fn draw_function_cell(
     canvas: &mut Canvas,
     sampler: &FunctionSampler<'_>,
-    cell: Rect,
+    [x, y]: [usize; 2],
+    size: usize,
     corners: [[f32; 4]; 4],
 ) {
-    let transform = sampler.transform;
-    let points = [
-        Point::new(cell.x0, cell.y0),
-        Point::new(cell.x1, cell.y0),
-        Point::new(cell.x0, cell.y1),
-        Point::new(cell.x1, cell.y1),
-    ]
-    .map(|p| transform * p);
+    let corner_points = [[0, 0], [size, 0], [0, size], [size, size]]
+        .map(|[dx, dy]| sampler.inverse * Point::new((x + dx) as f64, (y + dy) as f64));
 
-    if !canvas.is_visible(&points) {
+    if x >= canvas.width || y >= canvas.height || !bounds(&corner_points).overlaps(sampler.domain) {
         return;
     }
 
+    if size <= FUNCTION_PIXEL_CELL {
+        for row in y..(y + size).min(canvas.height) {
+            for column in x..(x + size).min(canvas.width) {
+                let center = Point::new(column as f64 + 0.5, row as f64 + 0.5);
+
+                if sampler.contains(center) {
+                    canvas.pixels[row * canvas.width + column] = sampler.sample_at(center);
+                }
+            }
+        }
+
+        return;
+    }
+
+    let half = size / 2;
     let [c00, c10, c01, c11] = corners;
-    let center = cell.center();
-    let top = sampler.sample(Point::new(center.x, cell.y0));
-    let left = sampler.sample(Point::new(cell.x0, center.y));
-    let middle = sampler.sample(center);
-    let right = sampler.sample(Point::new(cell.x1, center.y));
-    let bottom = sampler.sample(Point::new(center.x, cell.y1));
+    let top = sampler.sample([x + half, y]);
+    let left = sampler.sample([x, y + half]);
+    let middle = sampler.sample([x + half, y + half]);
+    let right = sampler.sample([x + size, y + half]);
+    let bottom = sampler.sample([x + half, y + size]);
 
     let error = [
         color_error(top, lerp_color(c00, c10, 0.5)),
@@ -294,43 +319,46 @@ fn draw_function_cell(
     .into_iter()
     .fold(0.0, f32::max);
 
-    let [p00, p10, p01, _] = points;
-    let size = (p10 - p00).hypot().max((p01 - p00).hypot());
     let quarters = [
-        (
-            Rect::new(cell.x0, cell.y0, center.x, center.y),
-            [c00, top, left, middle],
-        ),
-        (
-            Rect::new(center.x, cell.y0, cell.x1, center.y),
-            [top, c10, middle, right],
-        ),
-        (
-            Rect::new(cell.x0, center.y, center.x, cell.y1),
-            [left, middle, c01, bottom],
-        ),
-        (
-            Rect::new(center.x, center.y, cell.x1, cell.y1),
-            [middle, right, bottom, c11],
-        ),
+        ([x, y], [c00, top, left, middle]),
+        ([x + half, y], [top, c10, middle, right]),
+        ([x, y + half], [left, middle, c01, bottom]),
+        ([x + half, y + half], [middle, right, bottom, c11]),
     ];
 
-    if error > FUNCTION_TOLERANCE && size > 1.0 {
-        for (quarter, corners) in quarters {
-            draw_function_cell(canvas, sampler, quarter, corners);
+    for (origin, corners) in quarters {
+        if error > FUNCTION_TOLERANCE {
+            draw_function_cell(canvas, sampler, origin, half, corners);
+        } else {
+            fill_function_cell(canvas, sampler, origin, half, corners);
         }
-    } else {
-        for (quarter, [c00, c10, c01, c11]) in quarters {
-            let [p00, p10, p01, p11] = [
-                Point::new(quarter.x0, quarter.y0),
-                Point::new(quarter.x1, quarter.y0),
-                Point::new(quarter.x0, quarter.y1),
-                Point::new(quarter.x1, quarter.y1),
-            ]
-            .map(|p| transform * p);
+    }
+}
 
-            canvas.fill_triangle([p00, p10, p01], [c00, c10, c01], &|c| *c);
-            canvas.fill_triangle([p10, p11, p01], [c10, c11, c01], &|c| *c);
+/// Fill the pixels of a cell that lie in the domain by interpolating its corner colors.
+fn fill_function_cell(
+    canvas: &mut Canvas,
+    sampler: &FunctionSampler<'_>,
+    [x, y]: [usize; 2],
+    size: usize,
+    [c00, c10, c01, c11]: [[f32; 4]; 4],
+) {
+    let inside = [[0, 0], [size, 0], [0, size], [size, size]]
+        .into_iter()
+        .all(|[dx, dy]| sampler.contains(Point::new((x + dx) as f64, (y + dy) as f64)));
+    let position = |offset: usize| (offset as f32 + 0.5) / size as f32;
+
+    for row in y..(y + size).min(canvas.height) {
+        let v = position(row - y);
+        let (left, right) = (lerp_color(c00, c01, v), lerp_color(c10, c11, v));
+
+        for column in x..(x + size).min(canvas.width) {
+            let center = Point::new(column as f64 + 0.5, row as f64 + 0.5);
+
+            if inside || sampler.contains(center) {
+                canvas.pixels[row * canvas.width + column] =
+                    lerp_color(left, right, position(column - x));
+            }
         }
     }
 }
