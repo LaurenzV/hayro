@@ -82,7 +82,7 @@ impl EncodedRadialAxialShading {
         })
     }
 
-    pub(crate) fn lut(&self, pattern: &EncodedShadingPattern) -> GradientLut {
+    pub(crate) fn lut(&self, pattern: &EncodedShadingPattern) -> ColorLut {
         function_lut(&self.function, self.domain, pattern)
     }
 
@@ -128,8 +128,8 @@ pub(crate) fn function_lut(
     function: &ShadingFunction,
     range: [f32; 2],
     pattern: &EncodedShadingPattern,
-) -> GradientLut {
-    GradientLut::new(&approximate_gradient_stops(
+) -> ColorLut {
+    ColorLut::new(&approximate_gradient_stops(
         |t| sample_function(function, range, pattern, t),
         &normalized_stitching_bounds(function, range),
         LUT_TOLERANCE,
@@ -172,11 +172,11 @@ fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -
     bounds
 }
 
-pub(crate) struct GradientLut {
+pub(crate) struct ColorLut {
     colors: Vec<[f32; 4]>,
 }
 
-impl GradientLut {
+impl ColorLut {
     fn new(stops: &[SvgGradientStop]) -> Self {
         let min_gap = stops
             .windows(2)

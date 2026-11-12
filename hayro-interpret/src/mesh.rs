@@ -3,7 +3,7 @@
 use crate::color::ColorComponents;
 use crate::encode::EncodedShadingPattern;
 use crate::function::MAX_COMPONENTS;
-use crate::gradient::{GradientLut, color_error, function_lut, lerp_color};
+use crate::gradient::{ColorLut, color_error, function_lut, lerp_color};
 use crate::shading::{Patch, ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point, Rect};
 
@@ -410,7 +410,7 @@ trait MeshColors<const N: usize> {
 
 /// Colors given by the input of a 1-in function, looked up in a table.
 struct Parameter {
-    lut: GradientLut,
+    lut: ColorLut,
     t0: f32,
     scale: f32,
 }
