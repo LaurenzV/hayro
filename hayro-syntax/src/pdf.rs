@@ -160,6 +160,7 @@ impl PdfVersion {
 
 #[cfg(test)]
 mod tests {
+    use crate::object::{ObjectIdentifier, Stream};
     use crate::pdf::{Pdf, PdfVersion};
 
     #[test]
@@ -181,5 +182,17 @@ mod tests {
         let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf17);
+    }
+
+    #[test]
+    fn xref_stream_in_encrypted_pdf() {
+        let data = std::fs::read("../tests/pdfs/custom/catalog-in-objstm-aes.pdf").unwrap();
+        let pdf = Pdf::new(data).unwrap();
+        let stream = pdf
+            .xref()
+            .get::<Stream<'_>>(ObjectIdentifier::new(13, 0))
+            .unwrap();
+
+        assert_eq!(stream.decoded().unwrap().len(), 98);
     }
 }

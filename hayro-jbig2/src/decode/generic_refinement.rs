@@ -6,9 +6,10 @@ use super::{
     AdaptiveTemplatePixel, RefinementTemplate, RegionBitmap, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
-use crate::ScratchBuffers;
+use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT, Word};
+use crate::cancel::{Cancel, row_mask};
 use crate::decode::generic::ContextGatherer;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
@@ -17,7 +18,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<RegionBitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -25,6 +26,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         false,
+        &mut ctx.budget,
     )?;
 
     decode_into(header, reference, &mut region, ctx)?;
@@ -40,7 +42,7 @@ pub(crate) fn decode_into(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
     region: &mut Bitmap,
-    ctx: &mut ScratchBuffers,
+    ctx: &mut DecodeState<'_>,
 ) -> Result<()> {
     let data = header.data;
 
@@ -81,6 +83,7 @@ pub(crate) fn decode_into(
         header.template,
         &header.adaptive_template_pixels,
         header.tpgron,
+        ctx.cancel,
     )?;
 
     Ok(())
@@ -396,6 +399,7 @@ pub(crate) fn decode_bitmap(
     gr_template: RefinementTemplate,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
     tpgron: bool,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     macro_rules! refinement_decode_loop {
         ($gatherer:expr, $tpgron:expr, $sltp_context:expr, $gather:expr) => {{
@@ -405,9 +409,18 @@ pub(crate) fn decode_bitmap(
 
             // "1) Set LTP = 0." (6.3.5.6)
             let mut ltp = false;
+            let check_mask = row_mask(width);
 
             // "3) Decode each row as follows:" (6.3.5.6)
             for y in 0..height {
+                if decoder.is_exhausted() {
+                    bail!(ParseError::UnexpectedEof);
+                }
+
+                if y & check_mask == check_mask {
+                    cancel.check()?;
+                }
+
                 // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
                 // coder" (6.3.5.6)
                 if $tpgron {

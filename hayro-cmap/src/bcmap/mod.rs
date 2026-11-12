@@ -73,7 +73,7 @@ pub(crate) fn parse<'a>(
     let mut character_collection = None;
     let mut writing_mode = None;
     let mut base: Option<Box<CMap>> = None;
-    let mut _codespace_ranges = Vec::new();
+    let mut codespace_ranges = Vec::new();
     let mut cid_ranges = PartitionedRanges::new();
     let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
@@ -123,7 +123,7 @@ pub(crate) fn parse<'a>(
                 };
             }
             SEGMENT_CODESPACE => {
-                parse_codespace(payload, &mut _codespace_ranges)?;
+                parse_codespace(payload, &mut codespace_ranges)?;
             }
             SEGMENT_NOTDEF => {
                 parse_notdef(payload, &mut notdef_ranges)?;
@@ -194,7 +194,7 @@ pub(crate) fn parse<'a>(
             name: cmap_name,
             writing_mode,
         },
-        _codespace_ranges,
+        codespace_ranges,
         cid_ranges,
         notdef_ranges,
         bf_entries,

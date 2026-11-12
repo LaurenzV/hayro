@@ -4,8 +4,8 @@
 //! as defined in ITU-T Recommendations T.4 and T.6. These encodings are commonly
 //! used for bi-level (black and white) images in PDF documents and fax transmissions.
 //!
-//! The main entry point is the [`decode`] function, which takes encoded data, a
-//! [`DecoderContext`], and outputs each decoded row as a list of color changes
+//! The main entry point is the [`decode`] function, which takes encoded data and
+//! [`DecodeSettings`], and outputs each decoded row as a list of color changes
 //! through a [`Decoder`] trait that can be implemented according to your needs.
 //!
 //! The crate is `no_std` compatible but requires an allocator to be available.
@@ -23,28 +23,31 @@
 //!
 //! [`decode`]: crate::decode
 //! [`Decoder`]: crate::Decoder
+//! [`DecodeSettings`]: crate::DecodeSettings
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
 extern crate alloc;
 
 use crate::bit_reader::BitReader;
+use crate::context::DecoderContext;
 
 mod bit_reader;
+mod cancel;
 mod codes;
 mod context;
 mod error;
 mod group3;
 mod group4;
+mod sync;
 mod tables;
-mod util;
 
-pub use context::DecoderContext;
+pub use cancel::{CancelCheck, CancelHandle};
 pub use error::{DecodeError, Result};
 
-/// Decode the given image using the provided decoder context and decoder.
+/// Decode the given image using the provided settings and decoder.
 ///
 /// If decoding was successful, the number of bytes that have been read in total
 /// is returned.
@@ -53,18 +56,18 @@ pub use error::{DecodeError, Result};
 /// However, even if that's the case, it is possible that a number
 /// of rows were decoded successfully and written into the decoder, so those
 /// can still be used, but the image might be truncated.
-pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext) -> Result<usize> {
-    ctx.reset();
-    let mut reader = BitReader::new(data);
-
-    if ctx.settings.columns == 0 {
+pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Result<usize> {
+    if settings.columns == 0 {
         return Ok(0);
     }
 
-    match ctx.settings.encoding {
-        EncodingMode::Group4 => group4::decode(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_1D => group3::decode_1d(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_2D => group3::decode_2d(ctx, &mut reader, decoder)?,
+    let mut reader = BitReader::new(data);
+    let mut ctx = DecoderContext::new(settings);
+
+    match settings.encoding {
+        EncodingMode::Group4 => group4::decode(&mut ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_1D => group3::decode_1d(&mut ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_2D => group3::decode_2d(&mut ctx, &mut reader, decoder)?,
     }
 
     reader.align();
@@ -84,7 +87,7 @@ pub trait Decoder {
 }
 
 /// Settings to apply during decoding.
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DecodeSettings {
     /// How many columns the image has (i.e. its width).
     pub columns: u32,
@@ -111,6 +114,8 @@ pub struct DecodeSettings {
     /// Whether to reject data that violates the specification, instead of
     /// decoding it as well as possible.
     pub strict: bool,
+    /// A check for cancelling decoding.
+    pub cancel: Option<CancelHandle>,
 }
 
 /// The encoding mode for CCITT fax decoding.

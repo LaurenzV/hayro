@@ -22,11 +22,7 @@ pub(crate) enum BytesPerPixel {
 
 // Note: This impl is not from the png crate.
 impl BytesPerPixel {
-    pub(crate) fn from_row_len(row_len: usize, bpp: usize) -> Option<Self> {
-        if !row_len.is_multiple_of(bpp) {
-            return None;
-        }
-
+    fn new(bpp: usize) -> Option<Self> {
         match bpp {
             1 => Some(Self::One),
             2 => Some(Self::Two),
@@ -62,12 +58,38 @@ impl RowFilter {
     }
 }
 
-pub(crate) fn unfilter(
-    mut filter: RowFilter,
-    tbpp: BytesPerPixel,
-    previous: &[u8],
-    current: &mut [u8],
-) {
+// Note: This function is not from the png crate.
+pub(crate) fn unfilter_row(filter: RowFilter, bpp: usize, previous: &[u8], current: &mut [u8]) {
+    let mut start = 0;
+
+    if let Some(tbpp) = BytesPerPixel::new(bpp) {
+        start = current.len() - current.len() % bpp;
+        let previous = previous.get(..start).unwrap_or(previous);
+        unfilter(filter, tbpp, previous, &mut current[..start]);
+    }
+
+    for i in start..current.len() {
+        let left = i.checked_sub(bpp).map_or(0, |j| current[j]);
+        let above = previous.get(i).copied().unwrap_or(0);
+        let above_left = i
+            .checked_sub(bpp)
+            .and_then(|j| previous.get(j))
+            .copied()
+            .unwrap_or(0);
+
+        let prediction = match filter {
+            RowFilter::NoFilter => 0,
+            RowFilter::Sub => left,
+            RowFilter::Up => above,
+            RowFilter::Avg => ((u16::from(left) + u16::from(above)) / 2) as u8,
+            RowFilter::Paeth => paeth::filter_paeth(left, above, above_left),
+        };
+
+        current[i] = current[i].wrapping_add(prediction);
+    }
+}
+
+fn unfilter(mut filter: RowFilter, tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8]) {
     use self::RowFilter::*;
 
     // If the previous row is empty, then treat it as if it were filled with zeros.

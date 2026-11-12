@@ -170,6 +170,8 @@ impl<'a> ImageXObject<'a> {
             context.fill_paint().alpha,
             std::mem::take(&mut soft_mask),
             blend_mode,
+            false,
+            false,
         );
 
         // The transparency group already applies the fill alpha.

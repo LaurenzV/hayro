@@ -4,7 +4,7 @@ use crate::{DecodeError, Decoder, EncodingMode, Result};
 
 /// Group 3 1D decoding (T.4 Section 4.1).
 pub(crate) fn decode_1d(
-    ctx: &mut DecoderContext,
+    ctx: &mut DecoderContext<'_>,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
 ) -> Result<()> {
@@ -13,6 +13,15 @@ pub(crate) fn decode_1d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
+        if ctx
+            .settings
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.is_cancelled())
+        {
+            return Err(DecodeError::Cancelled);
+        }
+
         let line_start = reader.clone();
 
         if let Err(e) = decode_1d_line(ctx, reader) {
@@ -31,7 +40,7 @@ pub(crate) fn decode_1d(
 
 /// Group 3 2D decoding (T.4 Section 4.2).
 pub(crate) fn decode_2d(
-    ctx: &mut DecoderContext,
+    ctx: &mut DecoderContext<'_>,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
 ) -> Result<()> {
@@ -40,6 +49,15 @@ pub(crate) fn decode_2d(
     ctx.has_eols = reader.read_eol_if_available() > 0 || ctx.settings.end_of_line;
 
     loop {
+        if ctx
+            .settings
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.is_cancelled())
+        {
+            return Err(DecodeError::Cancelled);
+        }
+
         let line_start = reader.clone();
 
         let result = reader.read_bit().and_then(|tag_bit| {
@@ -67,7 +85,7 @@ pub(crate) fn decode_2d(
 /// Recover from a damaged line by continuing at the next EOL.
 #[cold]
 fn recover<'a>(
-    ctx: &mut DecoderContext,
+    ctx: &mut DecoderContext<'_>,
     reader: &mut BitReader<'a>,
     line_start: BitReader<'a>,
     error: DecodeError,
@@ -86,7 +104,7 @@ fn recover<'a>(
 }
 
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
-fn check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<bool> {
+fn check_eob(ctx: &mut DecoderContext<'_>, reader: &mut BitReader<'_>) -> Result<bool> {
     // If the data contains EOLs, we treat the zeros used for byte alignment as
     // fill, so it doesn't matter whether the encoder aligned the start or the
     // end of the EOL. Without EOLs, we need to align first, as the padding
@@ -130,7 +148,7 @@ fn check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> Result<boo
 /// In 2D data, an RTC consists of six times EOL + 1 (T.4 Section 4.2.4), so
 /// tag bits between EOLs are skipped as well, including the one after the last
 /// EOL of an RTC.
-fn read_eols(ctx: &DecoderContext, reader: &mut BitReader<'_>) -> usize {
+fn read_eols(ctx: &DecoderContext<'_>, reader: &mut BitReader<'_>) -> usize {
     let mut eol_count = reader.read_eol_if_available();
 
     if !matches!(ctx.settings.encoding, EncodingMode::Group3_2D) {

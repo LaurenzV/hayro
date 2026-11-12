@@ -12,7 +12,7 @@ use hayro_syntax::object::{Dict, Object};
 use std::fmt::Write;
 
 pub(crate) fn tests() -> Vec<Test> {
-    let units: [(&str, fn()); 7] = [
+    let units: [(&str, fn()); 8] = [
         ("text::glyph_names", glyph_names),
         ("text::type3_glyph_names", type3_glyph_names),
         ("text::zapf_dingbats", zapf_dingbats),
@@ -20,6 +20,7 @@ pub(crate) fn tests() -> Vec<Test> {
         ("text::marked_content", marked_content),
         ("text::clip_mode", clip_mode),
         ("text::to_unicode_cid_ranges", to_unicode_cid_ranges),
+        ("text::embedded_cid_font_ucs2", embedded_cid_font_ucs2),
     ];
 
     units.map(|(name, run)| Test::unit(name, run)).into()
@@ -35,7 +36,15 @@ struct TextCollector(String);
 impl<'a> Device<'a> for TextCollector {
     fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
     fn push_clip_path(&mut self, _: &ClipPath) {}
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
+    fn push_transparency_group(
+        &mut self,
+        _: f32,
+        _: Option<SoftMask<'a>>,
+        _: BlendMode,
+        _: bool,
+        _: bool,
+    ) {
+    }
     fn draw_glyph_run(&mut self, glyph_run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
         for glyph in glyph_run.glyphs() {
             match glyph.as_unicode() {
@@ -122,4 +131,10 @@ fn to_unicode_cid_ranges() {
     let file = &read("pdfs/text/to_unicode_cid_ranges.pdf");
 
     assert_eq!(page_text(file), "HI");
+}
+
+fn embedded_cid_font_ucs2() {
+    let file = &read("pdfs/text/embedded_cid_font_ucs2.pdf");
+
+    assert_eq!(page_text(file), "가나다あいう");
 }

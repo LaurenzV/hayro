@@ -2,10 +2,9 @@
 
 use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
-use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
-use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE};
+use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, IDENTITY, LENGTH, NAME, TYPE, XREF};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
@@ -116,11 +115,7 @@ impl<'a> Stream<'a> {
         let ctx = self.dict.ctx();
 
         if ctx.xref().needs_decryption(ctx)
-            && self
-                .dict
-                .get::<object::String<'_>>(TYPE)
-                .map(|t| t.as_ref() != b"XRef")
-                .unwrap_or(true)
+            && self.dict.get::<Name<'_>>(TYPE).as_deref() != Some(XREF)
         {
             let crypt_filter = self.crypt_filter();
             let target = match &crypt_filter {
@@ -267,7 +262,11 @@ impl Skippable for Stream<'_> {
 }
 
 impl<'a> Readable<'a> for Stream<'a> {
-    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn read(_: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
+        None
+    }
+
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
         let offset = r.offset();
         parse_proper(r, &dict).or_else(|| {
@@ -417,7 +416,7 @@ mod tests {
     fn display() {
         let mut reader = Reader::new(b"<< /Length 3 >> stream\nabc\nendstream");
         let stream = reader
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(format!("{stream}"), "Stream (len: 3)");
@@ -428,7 +427,7 @@ mod tests {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
@@ -439,7 +438,7 @@ mod tests {
         let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
@@ -450,7 +449,7 @@ mod tests {
         let data = b"<< /Length 3 /F (data.bin) >> stream\nabc\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abc");

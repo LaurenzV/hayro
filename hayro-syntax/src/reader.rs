@@ -13,6 +13,7 @@ pub trait ReaderExt<'a> {
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_with_context<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T>;
+    fn read_indirect<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T>;
     fn skip<T: Skippable>(&mut self, is_content_stream: bool) -> Option<&'a [u8]>;
     fn skip_with_depth<T: Skippable>(
         &mut self,
@@ -53,6 +54,17 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
     #[inline]
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T> {
         self.read::<T>(ReaderContext::dummy_ref())
+    }
+
+    #[inline]
+    fn read_indirect<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
+        let old_offset = self.offset;
+
+        T::read_indirect(self, ctx).or_else(|| {
+            self.offset = old_offset;
+
+            None
+        })
     }
 
     #[inline]
@@ -247,9 +259,12 @@ impl<'a> ReaderContext<'a> {
 
 pub trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        Self::read(r, ctx)
+    }
     fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
         let mut r = Reader::new(b);
-        Self::read(&mut r, &ReaderContext::dummy())
+        Self::read_indirect(&mut r, &ReaderContext::dummy())
     }
 }
 

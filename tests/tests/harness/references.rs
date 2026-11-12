@@ -79,20 +79,20 @@ pub(crate) fn load(hash: &str) -> Result<(RgbaImage, PathBuf), String> {
 
     if !path.exists() {
         if args().offline {
-            return Err(format!("reference image {hash} isn't downloaded (offline)"));
+            return Err("isn't downloaded (offline)".to_string());
         }
 
         let _guard = DOWNLOAD.lock().unwrap_or_else(PoisonError::into_inner);
         if !path.exists() {
             let relative = path.strip_prefix(&*WORKSPACE_PATH).unwrap();
             assets::download_reference(hash, relative)
-                .map_err(|err| format!("couldn't download reference image {hash}: {err}"))?;
+                .map_err(|err| format!("couldn't be downloaded: {err}"))?;
         }
     }
 
-    let data = std::fs::read(&path).map_err(|err| err.to_string())?;
+    let data = std::fs::read(&path).map_err(|err| format!("couldn't be read: {err}"))?;
     let image = load_from_memory(&data)
-        .map_err(|err| format!("invalid reference image {hash}: {err}"))?
+        .map_err(|err| format!("is invalid: {err}"))?
         .into_rgba8();
 
     Ok((image, path))

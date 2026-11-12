@@ -21,3 +21,18 @@ fn huffman_value_out_of_range() {
 fn text_placement_out_of_range() {
     check_malformed("malformed_text_placement_out_of_range");
 }
+
+#[test]
+fn symbol_dictionary_empty_export_runs() {
+    check_malformed("malformed_symbol_dictionary_empty_export_runs");
+}
+
+#[test]
+fn symbol_dictionary_empty_height_classes() {
+    check_malformed("malformed_symbol_dictionary_empty_height_classes");
+}
+
+#[test]
+fn symbol_dictionary_garbage_data() {
+    check_malformed("malformed_symbol_dictionary_garbage_data");
+}

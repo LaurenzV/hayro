@@ -7,11 +7,9 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
-use crate::sync::FxHashMap;
 use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::Deref;
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.
@@ -54,18 +52,17 @@ impl<'a> Dict<'a> {
 
     /// Returns the number of entries in the dictionary.
     pub fn len(&self) -> usize {
-        self.offsets().map_or(0, FxHashMap::len)
+        self.offsets().len()
     }
 
     /// Return whether the dictionary is empty.
     pub fn is_empty(&self) -> bool {
-        self.offsets().is_none_or(FxHashMap::is_empty)
+        self.offsets().is_empty()
     }
 
     /// Checks whether the dictionary contains an entry with a specific key.
     pub fn contains_key(&self, key: impl AsRef<[u8]>) -> bool {
-        self.offsets()
-            .is_some_and(|offsets| offsets.contains_key(key.as_ref()))
+        self.offset(key.as_ref()).is_some()
     }
 
     /// Returns the entry of a key as a specific object, or try to resolve it in case it's
@@ -83,25 +80,24 @@ impl<'a> Dict<'a> {
 
     /// Get the object reference linked to a key.
     pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
-        let offset = *self.offsets()?.get(key.as_ref())?;
+        let offset = self.offset(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
     }
 
-    /// Returns an iterator over all keys in the dictionary.
+    /// Returns an iterator over all keys in the dictionary, in no particular order.
     pub fn keys(&self) -> impl Iterator<Item = Name<'a>> + '_ {
-        self.offsets()
-            .into_iter()
-            .flat_map(|offsets| offsets.keys().cloned())
+        self.offsets().iter().map(|(key, _)| key.clone())
     }
 
     /// An iterator over all entries in the dictionary, sorted by key.
     pub fn entries(&self) -> impl Iterator<Item = (Name<'a>, MaybeRef<Object<'a>>)> + '_ {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
+        sorted_keys.dedup_by(|n1, n2| n1.as_ref() == n2.as_ref());
         sorted_keys
             .into_iter()
-            .filter_map(|k| self.get_raw(k.deref()).map(|obj| (k, obj)))
+            .filter_map(|k| self.get_raw(k.as_ref()).map(|obj| (k, obj)))
     }
 
     /// Return the object identifier of the dict, if it's an indirect object.
@@ -115,7 +111,7 @@ impl<'a> Dict<'a> {
     where
         T: Readable<'a>,
     {
-        let offset = *self.offsets()?.get(key.as_ref())?;
+        let offset = self.offset(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
     }
@@ -127,10 +123,27 @@ impl<'a> Dict<'a> {
         }
     }
 
-    fn offsets(&self) -> Option<&FxHashMap<Name<'a>, usize>> {
+    fn offsets(&self) -> &[(Name<'a>, usize)] {
         match &self.0 {
-            Inner::Empty => None,
-            Inner::Some(repr) => Some(&repr.offsets),
+            Inner::Empty => &[],
+            Inner::Some(repr) => &repr.offsets,
+        }
+    }
+
+    fn offset(&self, key: &[u8]) -> Option<usize> {
+        let offsets = self.offsets();
+
+        if offsets.len() <= MAX_UNSORTED_LEN {
+            offsets
+                .iter()
+                .find(|(name, _)| name.as_ref() == key)
+                .map(|(_, offset)| *offset)
+        } else {
+            let idx = offsets
+                .binary_search_by(|(name, _)| name.as_ref().cmp(key))
+                .ok()?;
+
+            Some(offsets[idx].1)
         }
     }
 }
@@ -205,20 +218,15 @@ impl<'a> Readable<'a> for Dict<'a> {
     }
 }
 
+const MAX_UNSORTED_LEN: usize = 16;
+
 fn read_inner<'a>(
     r: &mut Reader<'a>,
     ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
-    // TODO: Figure out how to
-    // 1) Make dictionaries easily cloneable without wrapping in Arc.
-    // 2) Maybe have an efficient per-document allocator pool for hashmaps
-    // that can be reused.
-    #[cfg(feature = "std")]
-    let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher);
-    #[cfg(not(feature = "std"))]
-    let mut offsets = FxHashMap::new();
+    let mut offsets = Vec::with_capacity(8);
 
     let data = parse_dict_with(
         r,
@@ -227,10 +235,15 @@ fn read_inner<'a>(
         end_tag,
         #[inline]
         |name, offset, _| {
-            offsets.insert(name, offset);
+            offsets.push((name, offset));
             Some(())
         },
     )?;
+
+    if offsets.len() > MAX_UNSORTED_LEN {
+        offsets.sort_by(|(a, _), (b, _)| a.as_ref().cmp(b.as_ref()));
+        offsets.dedup_by(|(a, _), (b, _)| a.as_ref() == b.as_ref());
+    }
 
     Some(Dict(Inner::Some(Arc::new(Repr {
         data,
@@ -346,7 +359,7 @@ object!(Dict<'a>, Dict);
 
 struct Repr<'a> {
     data: &'a [u8],
-    offsets: FxHashMap<Name<'a>, usize>,
+    offsets: Vec<(Name<'a>, usize)>,
     ctx: ReaderContext<'a>,
 }
 
