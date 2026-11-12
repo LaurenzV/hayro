@@ -58,6 +58,14 @@ them eventually).
 Overall, you should expect this crate to have worse performance than `OpenJPEG`,
 but the difference gap should not be too large.
 
+The optional `threads` feature decodes independent tiles in parallel using the
+current Rayon thread pool. Callers can select a pool with
+`rayon::ThreadPool::install`. Single-tile images and single-thread pools use the
+serial path. Parallel decoding requires scratch memory for each active job,
+bounded by the pool's thread count; use a smaller pool to limit memory use.
+The final sample copies are synchronized per component, so this feature does
+not require unsafe code.
+
 ## Safety
 By default, the crate has the `simd` feature enabled, which uses the
 [`fearless_simd`](https://github.com/linebender/fearless_simd) crate to accelerate
