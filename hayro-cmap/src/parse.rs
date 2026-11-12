@@ -8,7 +8,6 @@ use crate::bcmap;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange,
     MAX_NESTING_DEPTH, Metadata, PartitionedRanges, Range, WritingMode,
-    inherit_base_codespace_ranges,
 };
 
 struct Context<F> {
@@ -147,8 +146,6 @@ pub(crate) fn parse_inner<'a>(
         writing_mode,
     };
 
-    inherit_base_codespace_ranges(&mut codespace_ranges, base.as_deref());
-
     Some(CMap {
         metadata,
         codespace_ranges,
@@ -202,7 +199,11 @@ fn parse_codespace_range<F>(
             return None;
         }
 
-        ranges.push(CodespaceRange::from_raw(n_bytes, low, high));
+        ranges.push(CodespaceRange {
+            number_bytes: n_bytes,
+            low,
+            high,
+        });
     }
 }
 

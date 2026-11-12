@@ -15,7 +15,7 @@ pub use embedded::load_embedded;
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata,
-    PartitionedRanges, Range, WritingMode, inherit_base_codespace_ranges, parse,
+    PartitionedRanges, Range, WritingMode, parse,
 };
 use huffman::HuffmanTable;
 use reader::Reader;
@@ -188,8 +188,6 @@ pub(crate) fn parse<'a>(
     notdef_ranges.sort();
     bf_entries.sort_by_key(|a| a.range.start);
 
-    inherit_base_codespace_ranges(&mut codespace_ranges, base.as_deref());
-
     Some(CMap {
         metadata: Metadata {
             character_collection,
@@ -213,7 +211,11 @@ fn parse_codespace(payload: &[u8], ranges: &mut Vec<CodespaceRange>) -> Option<(
         let low = r.read_n_bytes(bw)?;
         let high = r.read_n_bytes(bw)?;
 
-        ranges.push(CodespaceRange::from_raw(bw as u8, low, high));
+        ranges.push(CodespaceRange {
+            number_bytes: bw as u8,
+            low,
+            high,
+        });
     }
 
     Some(())
