@@ -342,9 +342,7 @@ pub struct TriangleVertex {
     pub colors: ColorComponents,
 }
 
-/// A patch of a patch-mesh shading, in tensor-product form.
-///
-/// Coons patches are converted into the equivalent tensor-product patch.
+/// A patch of a patch-mesh shading in tensor-product form (Coons patches are converted).
 #[derive(Clone, Debug)]
 pub struct Patch {
     /// The control points, indexed by column (`u`) and then by row (`v`).
@@ -609,12 +607,12 @@ fn read_patch_mesh(
         helpers.read_colors(reader, has_function, decode)
     };
 
-    let mut prev_patch_points: Option<Vec<Point>> = None;
+    let mut prev_patch_points: Option<[Point; 16]> = None;
     let mut prev_patch_colors: Option<[ColorComponents; 4]> = None;
     let mut patches = vec![];
 
     while let Some(flag) = reader.read(bpf) {
-        let mut control_points = vec![Point::ZERO; 16]; // Always allocate 16, use subset as needed.
+        let mut control_points = [Point::ZERO; 16];
         let mut colors = [smallvec![], smallvec![], smallvec![], smallvec![]];
 
         match flag {
@@ -627,14 +625,14 @@ fn read_patch_mesh(
                     colors[i] = read_colors(&mut reader)?;
                 }
 
-                prev_patch_points = Some(control_points.clone());
+                prev_patch_points = Some(control_points);
                 prev_patch_colors = Some(colors.clone());
             }
             1..=3 => {
-                let prev_points = prev_patch_points.as_ref()?;
+                let prev_points = prev_patch_points?;
                 let prev_colors = prev_patch_colors.as_ref()?;
 
-                copy_patch_control_points(flag, prev_points, &mut control_points);
+                copy_patch_control_points(flag, &prev_points, &mut control_points);
 
                 match flag {
                     1 => {
@@ -659,7 +657,7 @@ fn read_patch_mesh(
                 colors[2] = read_colors(&mut reader)?;
                 colors[3] = read_colors(&mut reader)?;
 
-                prev_patch_points = Some(control_points.clone());
+                prev_patch_points = Some(control_points);
                 prev_patch_colors = Some(colors.clone());
             }
             _ => break,
@@ -675,11 +673,11 @@ fn read_patch_mesh(
     Some((patches, bounds))
 }
 
-/// The position of each tensor-product control point in the stream, indexed by `u` and then by `v`.
+/// The stream index of each tensor-product control point, by `u` and then `v`.
 const STREAM_ORDER: [[usize; 4]; 4] =
     [[0, 1, 2, 3], [11, 12, 13, 4], [10, 15, 14, 5], [9, 8, 7, 6]];
 
-fn patch_from_stream(points: &[Point], colors: [ColorComponents; 4], kind: PatchKind) -> Patch {
+fn patch_from_stream(points: &[Point; 16], colors: [ColorComponents; 4], kind: PatchKind) -> Patch {
     let mut p = STREAM_ORDER.map(|column| column.map(|i| points[i]));
 
     if kind == PatchKind::Coons {
@@ -712,8 +710,8 @@ fn patch_from_stream(points: &[Point], colors: [ColorComponents; 4], kind: Patch
 
 fn copy_patch_control_points(
     flag: u32,
-    prev_control_points: &[Point],
-    control_points: &mut [Point],
+    prev_control_points: &[Point; 16],
+    control_points: &mut [Point; 16],
 ) {
     match flag {
         1 => {

@@ -1,7 +1,6 @@
 //! Encoding shading patterns for easy sampling.
 
 use crate::color::{AlphaColor, ColorSpace};
-use crate::gradient::finish_color;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::mesh::{Canvas, draw_function, draw_mesh};
 use crate::pattern::ShadingPattern;
@@ -90,6 +89,21 @@ pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
 }
 
 impl EncodedShadingPattern {
+    /// Apply the opacity and transfer function to a color.
+    pub(crate) fn finish(&self, mut color: [f32; 4]) -> [f32; 4] {
+        color[3] *= self.opacity;
+
+        match &self.transfer_function {
+            Some(tf) => tf.apply(&AlphaColor::new(color)).components(),
+            None => color,
+        }
+    }
+
+    /// Convert components in the color space of the shading into a finished color.
+    pub(crate) fn convert(&self, components: &[f32]) -> [f32; 4] {
+        self.finish(self.color_space.to_rgba(components, 1.0).components())
+    }
+
     /// Sample the shading on a pixel grid covering `bbox`, with `scale`
     /// pixels per unit of `bbox`.
     ///
@@ -108,7 +122,7 @@ impl EncodedShadingPattern {
         let (width, height) = texture_dimensions(bbox, scale);
         let grid_transform =
             Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(1.0 / scale as f64);
-        let background = finish_color(self, self.background_color.components());
+        let background = self.finish(self.background_color.components());
 
         if let EncodedShadingType::RadialAxial(shading) = &self.shading_type {
             let lut = shading.lut(self);
@@ -117,10 +131,6 @@ impl EncodedShadingPattern {
                 f(shading.position(point).map_or(background, |t| lut.get(t)));
             });
         } else {
-            let background = match self.shading_type {
-                EncodedShadingType::Dummy(_) => finish_color(self, [0.0; 4]),
-                _ => background,
-            };
             let mut canvas = Canvas::new(width, height, background);
             let transform = grid_transform.inverse() * self.base_transform.inverse();
 
@@ -245,12 +255,10 @@ impl ShadingPattern {
 
         let color_space = self.shading.color_space.clone();
 
-        let background_color = self
-            .shading
-            .background
-            .as_ref()
-            .map(|b| color_space.to_rgba(b, 1.0))
-            .unwrap_or(AlphaColor::TRANSPARENT);
+        let background_color = match (&shading_type, &self.shading.background) {
+            (EncodedShadingType::Dummy(_), _) | (_, None) => AlphaColor::TRANSPARENT,
+            (_, Some(background)) => color_space.to_rgba(background, 1.0),
+        };
 
         EncodedShadingPattern {
             color_space,

@@ -4,7 +4,6 @@
 //! radial-axial shadings it's useful if we can instead approximate them by
 //! SVG-like sRGB gradients.
 
-use crate::color::AlphaColor;
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
 use crate::function::MAX_COMPONENTS;
 use crate::shading::ShadingFunction;
@@ -65,7 +64,7 @@ impl EncodedRadialAxialShading {
         tolerance: f32,
     ) -> Option<SvgGradient> {
         let background = pattern.background_color.components();
-        let background = (background[3] > 0.0).then(|| finish_color(pattern, background));
+        let background = (background[3] > 0.0).then(|| pattern.finish(background));
         let range = self.padded_range(background.is_some())?;
 
         Some(SvgGradient {
@@ -124,9 +123,7 @@ impl EncodedRadialAxialShading {
     }
 }
 
-/// Build a lookup table of the colors of `function` over the input range `[t0, t1]`.
-///
-/// The table is indexed by the position within that range, normalized to `[0, 1]`.
+/// A lookup table of `function`'s colors over `range`, indexed by the normalized position in it.
 pub(crate) fn function_lut(
     function: &ShadingFunction,
     range: [f32; 2],
@@ -152,7 +149,7 @@ fn sample_function(
         return [0.0, 0.0, 0.0, 0.0];
     }
 
-    finish_color(pattern, pattern.color_space.to_rgba(out, 1.0).components())
+    pattern.convert(out)
 }
 
 fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
@@ -219,16 +216,6 @@ impl GradientLut {
         let last = self.colors.len() - 1;
         self.colors[((t * last as f32 + 0.5) as usize).min(last)]
     }
-}
-
-pub(crate) fn finish_color(pattern: &EncodedShadingPattern, mut components: [f32; 4]) -> [f32; 4] {
-    components[3] *= pattern.opacity;
-
-    if let Some(tf) = &pattern.transfer_function {
-        return tf.apply(&AlphaColor::new(components)).components();
-    }
-
-    components
 }
 
 fn pad_stops(

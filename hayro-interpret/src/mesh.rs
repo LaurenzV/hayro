@@ -1,30 +1,20 @@
 //! Rasterization of function-based and mesh shadings.
-//!
-//! All of these shadings are reduced to triangles whose corners carry either a final color or a
-//! normalized function input, which are then filled into a [`Canvas`] with linear interpolation
-//! across each triangle.
-//!
-//! Triangles and patches are refined by repeated halving, using the same depth for the whole
-//! mesh. Since midpoints are computed symmetrically, two neighbors split their shared edge into
-//! exactly the same points, which keeps the mesh free of cracks.
 
 use crate::color::ColorComponents;
 use crate::encode::EncodedShadingPattern;
 use crate::function::MAX_COMPONENTS;
-use crate::gradient::{GradientLut, color_error, finish_color, function_lut, lerp_color};
+use crate::gradient::{GradientLut, color_error, function_lut, lerp_color};
 use crate::shading::{Patch, ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point, Rect};
 
-/// The target edge length in pixels of the pieces meshes are split into.
+/// Target edge length in pixels of the pieces a mesh is split into.
 const MESH_SEGMENT: f64 = 8.0;
-/// The size in pixels of the cells function-based shadings are sampled in before refinement.
+/// Initial cell size in pixels for function-based shadings.
 const FUNCTION_CELL: f64 = 16.0;
-/// The largest error in a color component that the interpolation of a function-based shading
-/// may introduce before cells are refined further.
+/// Largest color error a function-based cell may have before it is split further.
 const FUNCTION_TOLERANCE: f32 = 0.01;
-/// The maximum number of times the pieces of a mesh are halved.
 const MAX_DEPTH: u32 = 10;
-/// The maximum number of pieces a mesh is split into, approximately.
+/// Approximate maximum number of pieces a mesh is split into.
 const MAX_PIECES: f64 = (1 << 20) as f64;
 
 /// A grid of straight (non-premultiplied) RGBA pixels.
@@ -49,11 +39,11 @@ impl Canvas {
         Rect::new(0.0, 0.0, self.width as f64, self.height as f64)
     }
 
-    /// Fill the pixels whose centers lie inside the triangle, interpolating `values` linearly
-    /// between the corners and turning them into colors with `shade`.
-    ///
-    /// A pixel center on an edge belongs to the triangle only if the triangle lies below or to the
-    /// right of it, so triangles sharing an edge never both fill a pixel or both miss it.
+    fn is_visible(&self, points: &[Point]) -> bool {
+        bounds(points).overlaps(self.bounds())
+    }
+
+    /// Fill the pixel centers in the triangle; centers on an edge go to the triangle below or right.
     fn fill_triangle<const N: usize>(
         &mut self,
         points: [Point; 3],
@@ -120,15 +110,12 @@ impl Canvas {
     }
 }
 
-/// The index of the first pixel whose center is not before `coordinate`, clamped to `[0, len]`.
+/// The first pixel whose center is at or past `coordinate`, clamped to `[0, len]`.
 fn pixel_index(coordinate: f64, len: usize) -> usize {
     (coordinate - 0.5).ceil().clamp(0.0, len as f64) as usize
 }
 
-/// The x coordinate at which the edge between `a` and `b` crosses the line at `y`.
-///
-/// The endpoints are put into a fixed order first, so that both triangles sharing an edge get
-/// exactly the same result.
+/// The x at which the edge `ab` crosses `y`, independent of the order of `a` and `b`.
 fn edge_x(a: Point, b: Point, y: f64) -> f64 {
     let (a, b) = if (a.y, a.x) <= (b.y, b.x) {
         (a, b)
@@ -139,8 +126,7 @@ fn edge_x(a: Point, b: Point, y: f64) -> f64 {
     a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y)
 }
 
-/// Draw a triangle-mesh or patch-mesh shading, given the transform from shading space to the
-/// canvas.
+/// Draw a mesh shading, with `transform` mapping shading space to the canvas.
 pub(crate) fn draw_mesh(
     canvas: &mut Canvas,
     shading_type: &ShadingType,
@@ -178,9 +164,7 @@ pub(crate) fn draw_mesh(
                 .iter()
                 .map(|patch| CanvasPatch::new(patch, transform))
                 .collect::<Vec<_>>();
-            let pieces = patches
-                .iter()
-                .map(|p| (p.extent(), bounds(p.points.as_flattened())));
+            let pieces = patches.iter().map(|p| (p.extent(), p.bounds()));
             let depth = mesh_depth(canvas.bounds(), pieces);
 
             if let Some(function) = function {
@@ -195,8 +179,7 @@ pub(crate) fn draw_mesh(
     }
 }
 
-/// Draw a function-based shading over `domain`, given the transform from the domain to the
-/// canvas.
+/// Draw a function-based shading, with `transform` mapping its domain to the canvas.
 pub(crate) fn draw_function(
     canvas: &mut Canvas,
     domain: Rect,
@@ -261,26 +244,16 @@ struct FunctionSampler<'a> {
 impl FunctionSampler<'_> {
     fn sample(&self, point: Point) -> [f32; 4] {
         let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..self.function.num_outputs().min(MAX_COMPONENTS)];
+        let out = &mut out[..self.function.num_outputs()];
 
-        if self
-            .function
-            .eval(&[point.x as f32, point.y as f32], out)
-            .is_some()
-        {
-            let color = self.pattern.color_space.to_rgba(out, 1.0);
-            finish_color(self.pattern, color.components())
-        } else {
-            [0.0; 4]
+        match self.function.eval(&[point.x as f32, point.y as f32], out) {
+            Some(()) => self.pattern.convert(out),
+            None => [0.0; 4],
         }
     }
 }
 
-/// Draw a cell of a function-based shading, given the colors at its corners, ordered by `y`
-/// and then by `x`.
-///
-/// The cell is split as long as its colors deviate from the interpolation of its corners by
-/// more than [`FUNCTION_TOLERANCE`], until it covers about a pixel.
+/// Draw a cell with the given corner colors (ordered by `y`, then `x`), refining it as needed.
 fn draw_function_cell(
     canvas: &mut Canvas,
     sampler: &FunctionSampler<'_>,
@@ -296,7 +269,7 @@ fn draw_function_cell(
     ]
     .map(|p| transform * p);
 
-    if !overlaps(bounds(&points), canvas.bounds()) {
+    if !canvas.is_visible(&points) {
         return;
     }
 
@@ -362,17 +335,13 @@ fn draw_function_cell(
     }
 }
 
-/// The depth to which all pieces of a mesh are split, given the extent and bounds of each piece.
-///
-/// The depth is chosen such that the largest visible piece is split into segments of about
-/// [`MESH_SEGMENT`] pixels, as long as the estimated number of visible pieces stays within
-/// [`MAX_PIECES`].
+/// The depth to which all pieces are split; one shared depth keeps shared edges crack-free.
 fn mesh_depth(canvas: Rect, pieces: impl Iterator<Item = (f64, Rect)>) -> u32 {
     let mut max_extent: f64 = 0.0;
     let mut visible_area = 0.0;
 
     for (extent, bounds) in pieces {
-        if !overlaps(bounds, canvas) {
+        if !bounds.overlaps(canvas) {
             continue;
         }
 
@@ -397,10 +366,6 @@ fn mesh_depth(canvas: Rect, pieces: impl Iterator<Item = (f64, Rect)>) -> u32 {
     depth
 }
 
-fn overlaps(a: Rect, b: Rect) -> bool {
-    a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0
-}
-
 fn bounds(points: &[Point]) -> Rect {
     points
         .iter()
@@ -409,13 +374,9 @@ fn bounds(points: &[Point]) -> Rect {
         })
 }
 
-/// The way the colors of a mesh are interpolated.
-///
-/// Corners carry `N` values, which are interpolated linearly and turned into colors per pixel.
+/// How `N` per-corner values are interpolated across a mesh and turned into colors.
 trait MeshColors<const N: usize> {
-    /// The values for a corner with the given color components.
     fn values(&self, components: &[f32]) -> [f32; N];
-    /// The color for interpolated values.
     fn shade(&self, values: &[f32; N]) -> [f32; 4];
 }
 
@@ -457,16 +418,13 @@ impl MeshColors<1> for Parameter {
     }
 }
 
-/// Colors given directly as components in the color space of the shading.
-///
-/// The components are converted at the corners, and the resulting colors are interpolated.
+/// Colors converted from components at the corners and interpolated as RGBA.
 struct Direct<'a> {
     pattern: &'a EncodedShadingPattern,
 }
 
 impl Direct<'_> {
-    /// Whether interpolating converted colors gives the same result as converting interpolated
-    /// components.
+    /// Whether interpolating converted colors equals converting interpolated components.
     fn is_linear(&self) -> bool {
         self.pattern.color_space.is_device_gray_or_rgb() && self.pattern.transfer_function.is_none()
     }
@@ -474,8 +432,7 @@ impl Direct<'_> {
 
 impl MeshColors<4> for Direct<'_> {
     fn values(&self, components: &[f32]) -> [f32; 4] {
-        let color = self.pattern.color_space.to_rgba(components, 1.0);
-        finish_color(self.pattern, color.components())
+        self.pattern.convert(components)
     }
 
     fn shade(&self, values: &[f32; 4]) -> [f32; 4] {
@@ -544,8 +501,7 @@ fn draw_triangles<const N: usize>(
     }
 }
 
-/// Draw the piece of `triangle` with the given corners, whose barycentric coordinates within the
-/// triangle are `weights`, after splitting it `depth` more times.
+/// Draw the piece of `triangle` with the given corners and barycentric `weights`.
 fn draw_triangle_piece<const N: usize>(
     canvas: &mut Canvas,
     triangle: &CanvasTriangle<'_>,
@@ -554,7 +510,7 @@ fn draw_triangle_piece<const N: usize>(
     depth: u32,
     colors: &impl MeshColors<N>,
 ) {
-    if !overlaps(bounds(&points), canvas.bounds()) {
+    if !canvas.is_visible(&points) {
         return;
     }
 
@@ -607,6 +563,10 @@ impl<'a> CanvasPatch<'a> {
         columns.into_iter().chain(rows).fold(0.0, f64::max)
     }
 
+    fn bounds(&self) -> Rect {
+        bounds(self.points.as_flattened())
+    }
+
     /// The color components at the given position within the patch.
     fn components<'b>(&self, u: f32, v: f32, out: &'b mut [f32; MAX_COMPONENTS]) -> &'b [f32] {
         let [[c00, c01], [c10, c11]] = self.colors;
@@ -623,60 +583,56 @@ fn draw_patches<const N: usize>(
     colors: &impl MeshColors<N>,
 ) {
     for patch in patches {
-        draw_patch_rows(canvas, patch, patch.points, [0.0, 1.0], [depth; 2], colors);
+        let ranges = [[0.0, 1.0]; 2];
+        draw_patch_piece(canvas, patch, patch.points, ranges, [depth; 2], colors);
     }
 }
 
-/// Split the part `v_range` of a patch, whose control net is `points`, into rows, which are then
-/// split into pieces, and draw them in order of increasing `v`. `depth` holds the number of
-/// remaining splits along `v` and along `u`.
-///
-/// Drawing rows of larger `v`, and within a row pieces of larger `u`, later makes them win where
-/// a patch folds over itself.
-fn draw_patch_rows<const N: usize>(
+/// Draw a patch piece, splitting along `v` before `u` so that larger `v`, then `u`, paints last.
+fn draw_patch_piece<const N: usize>(
     canvas: &mut Canvas,
     patch: &CanvasPatch<'_>,
     points: [[Point; 4]; 4],
-    v_range: [f32; 2],
-    [v_depth, u_depth]: [u32; 2],
+    [u_range, v_range]: [[f32; 2]; 2],
+    [u_depth, v_depth]: [u32; 2],
     colors: &impl MeshColors<N>,
 ) {
-    if !overlaps(bounds(points.as_flattened()), canvas.bounds()) {
+    if !canvas.is_visible(points.as_flattened()) {
         return;
     }
 
-    if v_depth == 0 {
-        draw_patch_pieces(canvas, patch, points, [0.0, 1.0], v_range, u_depth, colors);
+    let halves = |[a, b]: [f32; 2]| [[a, 0.5 * (a + b)], [0.5 * (a + b), b]];
 
-        return;
-    }
+    if v_depth > 0 {
+        let (low, high) = split_rows(points);
 
-    let split = points.map(split_cubic);
-    let low = split.map(|(low, _)| low);
-    let high = split.map(|(_, high)| high);
-    let middle = 0.5 * (v_range[0] + v_range[1]);
-    let depth = [v_depth - 1, u_depth];
+        for (points, v_range) in [low, high].into_iter().zip(halves(v_range)) {
+            let ranges = [u_range, v_range];
+            draw_patch_piece(
+                canvas,
+                patch,
+                points,
+                ranges,
+                [u_depth, v_depth - 1],
+                colors,
+            );
+        }
+    } else if u_depth > 0 {
+        let (low, high) = split_columns(points);
 
-    draw_patch_rows(canvas, patch, low, [v_range[0], middle], depth, colors);
-    draw_patch_rows(canvas, patch, high, [middle, v_range[1]], depth, colors);
-}
-
-fn draw_patch_pieces<const N: usize>(
-    canvas: &mut Canvas,
-    patch: &CanvasPatch<'_>,
-    points: [[Point; 4]; 4],
-    u_range: [f32; 2],
-    v_range: [f32; 2],
-    depth: u32,
-    colors: &impl MeshColors<N>,
-) {
-    if !overlaps(bounds(points.as_flattened()), canvas.bounds()) {
-        return;
-    }
-
-    if depth == 0 {
-        let [u0, u1] = u_range;
-        let [v0, v1] = v_range;
+        for (points, u_range) in [low, high].into_iter().zip(halves(u_range)) {
+            let ranges = [u_range, v_range];
+            draw_patch_piece(
+                canvas,
+                patch,
+                points,
+                ranges,
+                [u_depth - 1, v_depth],
+                colors,
+            );
+        }
+    } else {
+        let ([u0, u1], [v0, v1]) = (u_range, v_range);
         let mut buffer = [0.0; MAX_COMPONENTS];
         let mut values = |u, v| colors.values(patch.components(u, v, &mut buffer));
         let (c00, c10, c01, c11) = (
@@ -690,31 +646,14 @@ fn draw_patch_pieces<const N: usize>(
 
         canvas.fill_triangle([p00, p10, p01], [c00, c10, c01], &shade);
         canvas.fill_triangle([p10, p11, p01], [c10, c11, c01], &shade);
-
-        return;
     }
+}
 
-    let (low, high) = split_columns(points);
-    let middle = 0.5 * (u_range[0] + u_range[1]);
+/// Split a control net at `v = 0.5`.
+fn split_rows(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
+    let split = points.map(split_cubic);
 
-    draw_patch_pieces(
-        canvas,
-        patch,
-        low,
-        [u_range[0], middle],
-        v_range,
-        depth - 1,
-        colors,
-    );
-    draw_patch_pieces(
-        canvas,
-        patch,
-        high,
-        [middle, u_range[1]],
-        v_range,
-        depth - 1,
-        colors,
-    );
+    (split.map(|(low, _)| low), split.map(|(_, high)| high))
 }
 
 /// Split a control net at `u = 0.5`.
