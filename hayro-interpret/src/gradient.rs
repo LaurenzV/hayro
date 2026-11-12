@@ -12,6 +12,9 @@ use kurbo::{Affine, Point};
 const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
 const RADIAL_EPSILON: f64 = 1.0e-6;
 const PADDING: f64 = 0.01;
+const LUT_TOLERANCE: f32 = 0.01;
+const MIN_LUT_SIZE: usize = 256;
+const MAX_LUT_SIZE: usize = 4096;
 
 /// An SVG-like gradient.
 pub struct SvgGradient {
@@ -77,6 +80,14 @@ impl EncodedRadialAxialShading {
                 background,
             ),
         })
+    }
+
+    pub(crate) fn lut(&self, pattern: &EncodedShadingPattern) -> GradientLut {
+        GradientLut::new(&approximate_gradient_stops(
+            |t| self.sample_t(pattern, t),
+            &self.normalized_stitching_bounds(),
+            LUT_TOLERANCE,
+        ))
     }
 
     // SVG gradients pad with their end stops, so a non-extended end gets a short stretch of background.
@@ -150,7 +161,53 @@ impl EncodedRadialAxialShading {
     }
 }
 
-fn finish_color(pattern: &EncodedShadingPattern, mut components: [f32; 4]) -> [f32; 4] {
+pub(crate) struct GradientLut {
+    colors: Vec<[f32; 4]>,
+}
+
+impl GradientLut {
+    fn new(stops: &[SvgGradientStop]) -> Self {
+        let min_gap = stops
+            .windows(2)
+            .map(|w| w[1].offset - w[0].offset)
+            .filter(|gap| *gap > 0.0)
+            .fold(1.0, f32::min);
+        let size = ((1.0 / min_gap).ceil() as usize)
+            .next_power_of_two()
+            .clamp(MIN_LUT_SIZE, MAX_LUT_SIZE);
+
+        let mut segment = 0;
+        let colors = (0..size)
+            .map(|i| {
+                let t = i as f32 / (size - 1) as f32;
+
+                while segment + 2 < stops.len() && stops[segment + 1].offset < t {
+                    segment += 1;
+                }
+
+                let (start, end) = (&stops[segment], &stops[(segment + 1).min(stops.len() - 1)]);
+                let width = end.offset - start.offset;
+                let local = if width > 0.0 {
+                    ((t - start.offset) / width).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+
+                lerp_color(start.color, end.color, local)
+            })
+            .collect();
+
+        Self { colors }
+    }
+
+    #[inline]
+    pub(crate) fn get(&self, t: f32) -> [f32; 4] {
+        let last = self.colors.len() - 1;
+        self.colors[((t * last as f32 + 0.5) as usize).min(last)]
+    }
+}
+
+pub(crate) fn finish_color(pattern: &EncodedShadingPattern, mut components: [f32; 4]) -> [f32; 4] {
     components[3] *= pattern.opacity;
 
     if let Some(tf) = &pattern.transfer_function {
