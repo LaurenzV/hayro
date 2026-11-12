@@ -1,0 +1,46 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /ShadingType 2 /ColorSpace /DeviceCMYK /Coords [0 0 300 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >> /Extend [true true] >>
+endobj
+2 0 obj
+<< /FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1] /Length 23 >>
+stream
+{ pop 0 0 0 4 -1 roll }
+endstream
+endobj
+3 0 obj
+<< /ShadingType 1 /ColorSpace /DeviceCMYK /Domain [0 1 0 1] /Matrix [300 0 0 20 0 0] /Function 2 0 R >>
+endobj
+4 0 obj
+<< /Type /Catalog /Pages 5 0 R >>
+endobj
+5 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 5 0 R /MediaBox [0 0 300 50] /Contents 7 0 R /Resources << /Shading << /Axial 1 0 R /FunctionBased 3 0 R >> >> >>
+endobj
+7 0 obj
+<<  /Length 73 >>
+stream
+q 0 30 300 20 re W n /Axial sh Q
+q 0 0 300 20 re W n /FunctionBased sh Q
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000194 00000 n 
+0000000326 00000 n 
+0000000445 00000 n 
+0000000494 00000 n 
+0000000551 00000 n 
+0000000703 00000 n 
+trailer
+<< /Size 8 /Root 4 0 R >>
+startxref
+827
+%%EOF

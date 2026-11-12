@@ -1,5 +1,5 @@
 use crate::CacheKey;
-use crate::color::Color;
+use crate::color::{CmykProfile, Color};
 use crate::pattern::Pattern;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
@@ -94,6 +94,22 @@ impl RasterImage<'_> {
         }
     }
 
+    /// Perform some operation with the CMYK and alpha channel of the image.
+    ///
+    /// The colors are converted to CMYK as by
+    /// [`ColorSpace::to_cmyk`](crate::color::ColorSpace::to_cmyk), and the target
+    /// dimension works as for [`with_rgba`](Self::with_rgba).
+    pub fn with_cmyk(
+        &self,
+        profile: Option<&CmykProfile>,
+        func: impl FnOnce(CmykData, Option<LumaData>),
+        target_dimension: Option<(u32, u32)>,
+    ) {
+        if let Some(decoded) = self.0.decoded_cmyk_image(target_dimension, profile) {
+            func(decoded.image, decoded.alpha);
+        }
+    }
+
     /// Return the underlying stream object.
     ///
     /// This allows you to get access to the raw encoded image data, without doing any decoding.
@@ -182,6 +198,23 @@ pub struct RgbData {
     ///
     /// The first number indicates the x scaling factor, the second number the
     /// y scaling factor.
+    pub scale_factors: (f32, f32),
+}
+
+/// A structure holding 4-channel CMYK data.
+#[derive(Clone)]
+pub struct CmykData {
+    /// The actual data, with the cyan, magenta, yellow and black of each pixel. It is
+    /// guaranteed to have the length width * height * 4.
+    pub data: Vec<u8>,
+    /// The width.
+    pub width: u32,
+    /// The height.
+    pub height: u32,
+    /// Whether the image should be interpolated.
+    pub interpolate: bool,
+    /// Additional scaling factors to apply to the image, as for
+    /// [`RgbData::scale_factors`].
     pub scale_factors: (f32, f32),
 }
 

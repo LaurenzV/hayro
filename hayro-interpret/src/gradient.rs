@@ -2,9 +2,9 @@
 //!
 //! PDF shadings are very expensive to evaluate. Because of this, at least for
 //! radial-axial shadings it's useful if we can instead approximate them by
-//! SVG-like sRGB gradients.
+//! SVG-like sRGB gradients, or CMYK gradients for CMYK output.
 
-use crate::color::AlphaColor;
+use crate::color::{AlphaColor, CmykProfile, srgb_to_cmyk};
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
 use crate::function::MAX_COMPONENTS;
 use kurbo::{Affine, Circle, Point, Rect, Shape};
@@ -13,13 +13,16 @@ const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
 const RADIAL_EPSILON: f64 = 1.0e-6;
 
 /// An SVG-like gradient.
-pub struct SvgGradient {
+///
+/// The colors of its stops are RGBA in sRGB, or cyan, magenta, yellow, black and alpha for
+/// [`EncodedRadialAxialShading::as_svg_gradient_cmyk`].
+pub struct SvgGradient<C = [f32; 4]> {
     /// The kind of the gradient.
     pub kind: SvgGradientKind,
     /// The transform from encoded shading coordinates into the renderer's coordinate space.
     pub transform: Affine,
-    /// The stops of the gradient in the sRGB color space.
-    pub stops: Vec<SvgGradientStop>,
+    /// The stops of the gradient.
+    pub stops: Vec<SvgGradientStop<C>>,
 }
 
 /// The kind of the SVG gradient.
@@ -45,11 +48,11 @@ pub enum SvgGradientKind {
 }
 
 /// A color stop for an SVG-like gradient.
-pub struct SvgGradientStop {
+pub struct SvgGradientStop<C = [f32; 4]> {
     /// Normalized offset.
     pub offset: f32,
-    /// RGBA color components in sRGB.
-    pub color: [f32; 4],
+    /// The color components, see [`SvgGradient`].
+    pub color: C,
 }
 
 impl EncodedRadialAxialShading {
@@ -60,6 +63,31 @@ impl EncodedRadialAxialShading {
         path_bbox: Rect,
         tolerance: f32,
     ) -> Option<SvgGradient> {
+        self.as_gradient(pattern, path_bbox, tolerance, |t| self.sample_t(pattern, t))
+    }
+
+    /// Like [`as_svg_gradient`](Self::as_svg_gradient), with the colors of the stops as
+    /// cyan, magenta, yellow, black and alpha, converted as by
+    /// [`EncodedShadingPattern::sample_cmyk`].
+    pub fn as_svg_gradient_cmyk(
+        &self,
+        pattern: &EncodedShadingPattern,
+        path_bbox: Rect,
+        tolerance: f32,
+        profile: Option<&CmykProfile>,
+    ) -> Option<SvgGradient<[f32; 5]>> {
+        self.as_gradient(pattern, path_bbox, tolerance, |t| {
+            self.sample_t_cmyk(pattern, t, profile)
+        })
+    }
+
+    fn as_gradient<const N: usize>(
+        &self,
+        pattern: &EncodedShadingPattern,
+        path_bbox: Rect,
+        tolerance: f32,
+        sample: impl FnMut(f32) -> [f32; N],
+    ) -> Option<SvgGradient<[f32; N]>> {
         // A couple of cases cannot be losslessly represented by an SVG gradient.
         match self.params {
             RadialAxialParams::Axial => {
@@ -80,7 +108,7 @@ impl EncodedRadialAxialShading {
             kind: self.native_gradient_kind(),
             transform: pattern.base_transform.inverse(),
             stops: approximate_gradient_stops(
-                |t| self.sample_t(pattern, t),
+                sample,
                 &self.normalized_stitching_bounds(),
                 tolerance,
             ),
@@ -103,14 +131,9 @@ impl EncodedRadialAxialShading {
     }
 
     fn sample_t(&self, pattern: &EncodedShadingPattern, t: f32) -> [f32; 4] {
-        let (t0, t1) = (self.domain[0], self.domain[1]);
-        let t = t0 + (t1 - t0) * t;
-        let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..self.function.num_outputs()];
-        if self.function.eval(&[t], out).is_none() {
-            return [0.0, 0.0, 0.0, 0.0];
-        }
-        let mut components = pattern.color_space.to_rgba(out, 1.0).components();
+        let mut components = self.eval_t(t, [0.0; 4], |out| {
+            pattern.color_space.to_rgba(out, 1.0).components()
+        });
         components[3] *= pattern.opacity;
 
         if let Some(tf) = &pattern.transfer_function {
@@ -118,6 +141,39 @@ impl EncodedRadialAxialShading {
         }
 
         components
+    }
+
+    fn sample_t_cmyk(
+        &self,
+        pattern: &EncodedShadingPattern,
+        t: f32,
+        profile: Option<&CmykProfile>,
+    ) -> [f32; 5] {
+        // As in `EncodedShadingPattern::sample_cmyk`, transfer functions apply to sRGB.
+        if pattern.transfer_function.is_some() {
+            let [r, g, b, a] = self.sample_t(pattern, t);
+            let [c, m, y, k] = srgb_to_cmyk([r, g, b], profile);
+            return [c, m, y, k, a];
+        }
+
+        let mut components = self.eval_t(t, [0.0; 5], |out| {
+            pattern.color_space.to_cmyk(out, 1.0, profile)
+        });
+        components[4] *= pattern.opacity;
+
+        components
+    }
+
+    fn eval_t<T>(&self, t: f32, invalid: T, color: impl FnOnce(&[f32]) -> T) -> T {
+        let (t0, t1) = (self.domain[0], self.domain[1]);
+        let t = t0 + (t1 - t0) * t;
+        let mut out = [0.0; MAX_COMPONENTS];
+        let out = &mut out[..self.function.num_outputs()];
+        if self.function.eval(&[t], out).is_none() {
+            return invalid;
+        }
+
+        color(out)
     }
 
     fn axial_extend_covers_bbox(&self, pattern: &EncodedShadingPattern, path_bbox: Rect) -> bool {
@@ -220,11 +276,11 @@ fn circle_outside_bbox(circle: Circle, bbox: Rect) -> bool {
     !circle.contains(closest)
 }
 
-fn approximate_gradient_stops(
-    mut sample: impl FnMut(f32) -> [f32; 4],
+fn approximate_gradient_stops<const N: usize>(
+    mut sample: impl FnMut(f32) -> [f32; N],
     breakpoints: &[f32],
     tolerance: f32,
-) -> Vec<SvgGradientStop> {
+) -> Vec<SvgGradientStop<[f32; N]>> {
     let mut interval_bounds = Vec::with_capacity(breakpoints.len() + 2);
     interval_bounds.push(0.0);
     interval_bounds.extend(breakpoints.iter().copied());
@@ -263,16 +319,16 @@ fn approximate_gradient_stops(
 }
 
 #[derive(Clone, Copy)]
-struct GradientSample {
+struct GradientSample<const N: usize> {
     offset: f32,
-    color: [f32; 4],
+    color: [f32; N],
 }
 
-fn approximate_gradient_interval(
-    sample: &mut impl FnMut(f32) -> [f32; 4],
-    stops: &mut Vec<SvgGradientStop>,
-    start: GradientSample,
-    end: GradientSample,
+fn approximate_gradient_interval<const N: usize>(
+    sample: &mut impl FnMut(f32) -> [f32; N],
+    stops: &mut Vec<SvgGradientStop<[f32; N]>>,
+    start: GradientSample<N>,
+    end: GradientSample<N>,
     tolerance: f32,
     depth: u8,
 ) {
@@ -310,16 +366,11 @@ fn approximate_gradient_interval(
     approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1);
 }
 
-fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
-    [
-        c0[0] + (c1[0] - c0[0]) * t,
-        c0[1] + (c1[1] - c0[1]) * t,
-        c0[2] + (c1[2] - c0[2]) * t,
-        c0[3] + (c1[3] - c0[3]) * t,
-    ]
+fn lerp_color<const N: usize>(c0: [f32; N], c1: [f32; N], t: f32) -> [f32; N] {
+    core::array::from_fn(|index| c0[index] + (c1[index] - c0[index]) * t)
 }
 
-fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
+fn color_error<const N: usize>(c0: [f32; N], c1: [f32; N]) -> f32 {
     c0.iter()
         .zip(c1)
         .map(|(a, b)| (a - b).abs())

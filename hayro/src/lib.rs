@@ -39,6 +39,7 @@ use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
+use hayro_interpret::color::{CmykProfile, Color};
 use hayro_interpret::font::{GlyphRun, HintingCache};
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
@@ -107,6 +108,36 @@ pub(crate) struct Renderer<'a> {
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
     pub(crate) in_type3_glyph: bool,
+    /// The pass of [`render_cmyk`] that the renderer paints, or `None` for RGB.
+    pub(crate) cmyk: Option<CmykPass>,
+}
+
+/// One of the two passes of [`render_cmyk`].
+///
+/// A pass paints the complements of some of the components of the CMYK colors into the
+/// red, green and blue lanes of an RGBA pixmap: the first pass those of cyan, magenta and
+/// yellow, the second one that of black in all three lanes. Compositing, coverage, opacity
+/// and soft masks act on each lane the same way as on the component it holds. The PDF
+/// specification defines the separable blend modes in CMYK on the complements, and the
+/// non-separable ones on the complements of cyan, magenta and yellow, with black taken
+/// from the backdrop for Hue, Saturation and Color and from the source for Luminosity,
+/// which is what the RGB formulas give for the gray colors of the second pass. So the two
+/// passes together give the CMYK rendering.
+#[derive(Clone)]
+pub(crate) struct CmykPass {
+    pub(crate) black: bool,
+    pub(crate) profile: Option<CmykProfile>,
+}
+
+impl CmykPass {
+    /// Return the RGBA color that the pass paints for a CMYK color with alpha.
+    pub(crate) fn lanes(&self, [c, m, y, k, alpha]: [f32; 5]) -> [f32; 4] {
+        if self.black {
+            [1.0 - k, 1.0 - k, 1.0 - k, alpha]
+        } else {
+            [1.0 - c, 1.0 - m, 1.0 - y, alpha]
+        }
+    }
 }
 
 impl<'r> Renderer<'r> {
@@ -117,7 +148,21 @@ impl<'r> Renderer<'r> {
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
             in_type3_glyph: false,
+            cmyk: None,
         }
+    }
+
+    /// Convert a color into the color that the renderer paints.
+    fn color(&self, color: &Color) -> AlphaColor<Srgb> {
+        let [r, g, b, a] = match &self.cmyk {
+            Some(pass) => {
+                let cmyk = color.to_cmyk(pass.profile.as_ref());
+                hayro_interpret::color::AlphaColor::new(pass.lanes(cmyk)).to_rgba8()
+            }
+            None => color.to_rgba().to_rgba8(),
+        };
+
+        AlphaColor::from_rgba8(r, g, b, a)
     }
 
     fn misses_target(&self, bbox: Rect) -> bool {
@@ -284,6 +329,120 @@ pub fn render<'a>(
     render_settings: &RenderSettings,
     pixmap_settings: &PixmapSettings,
 ) -> Pixmap {
+    render_pixmap(
+        page,
+        cache,
+        interpreter_settings,
+        render_settings,
+        pixmap_settings,
+        None,
+    )
+}
+
+/// Settings for the output pixmap of [`render_cmyk`].
+#[derive(Clone)]
+pub struct CmykPixmapSettings {
+    /// Horizontal scale factor.
+    pub x_scale: f32,
+    /// Vertical scale factor.
+    pub y_scale: f32,
+    /// The profile that colors are converted to CMYK with, as described in
+    /// [`ColorSpace::to_cmyk`](hayro_interpret::color::ColorSpace::to_cmyk).
+    pub profile: Option<CmykProfile>,
+}
+
+impl Default for CmykPixmapSettings {
+    fn default() -> Self {
+        Self {
+            x_scale: 1.0,
+            y_scale: 1.0,
+            profile: None,
+        }
+    }
+}
+
+/// A CMYK pixmap with an alpha channel.
+pub struct CmykPixmap {
+    /// The width.
+    pub width: u16,
+    /// The height.
+    pub height: u16,
+    /// The pixels in row-major order, with the cyan, magenta, yellow, black and alpha of
+    /// each, and the colors premultiplied with alpha.
+    ///
+    /// Since white paper carries no ink, the premultiplied colors are also the colors of
+    /// the page on white paper.
+    pub data: Vec<u8>,
+}
+
+/// Render a page to a CMYK pixmap with the given settings.
+///
+/// Colors are converted to CMYK as described in
+/// [`ColorSpace::to_cmyk`](hayro_interpret::color::ColorSpace::to_cmyk), and
+/// transparency blends in CMYK, with all blend modes as the PDF specification defines
+/// them for CMYK. The page is rendered twice: once with the complements of cyan, magenta
+/// and yellow in the red, green and blue lanes, and once with the complement of black.
+///
+/// Luminosity soft masks are computed from the RGB rendering of their group, as for
+/// [`render`]. Transfer functions apply to the sRGB colors, which are then converted to
+/// CMYK. Overprint is not supported.
+pub fn render_cmyk<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+    pixmap_settings: &CmykPixmapSettings,
+) -> CmykPixmap {
+    let [cmy, k] = [false, true].map(|black| {
+        render_pixmap(
+            page,
+            cache,
+            interpreter_settings,
+            render_settings,
+            &PixmapSettings {
+                x_scale: pixmap_settings.x_scale,
+                y_scale: pixmap_settings.y_scale,
+                bg_color: TRANSPARENT,
+            },
+            Some(CmykPass {
+                black,
+                profile: pixmap_settings.profile.clone(),
+            }),
+        )
+    });
+
+    // The lanes are premultiplied, so the premultiplied components are alpha minus the
+    // lanes.
+    let data = cmy
+        .data()
+        .iter()
+        .zip(k.data())
+        .flat_map(|(cmy, k)| {
+            [
+                cmy.a.saturating_sub(cmy.r),
+                cmy.a.saturating_sub(cmy.g),
+                cmy.a.saturating_sub(cmy.b),
+                k.a.saturating_sub(k.r),
+                cmy.a,
+            ]
+        })
+        .collect();
+
+    CmykPixmap {
+        width: cmy.width(),
+        height: cmy.height(),
+        data,
+    }
+}
+
+fn render_pixmap<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+    pixmap_settings: &PixmapSettings,
+    cmyk: Option<CmykPass>,
+) -> Pixmap {
     let (width, height) = page.render_dimensions();
     let mut ctx = RenderContext::new(
         (width * pixmap_settings.x_scale) as u16,
@@ -293,13 +452,14 @@ pub fn render<'a>(
         pixmap_settings.x_scale as f64,
         pixmap_settings.y_scale as f64,
     ) * page.initial_transform(true).to_kurbo();
-    render_into(
+    render_into_with(
         page,
         cache,
         interpreter_settings,
         render_settings,
         &mut ctx,
         transform,
+        cmyk,
     );
     ctx.flush();
 
@@ -328,6 +488,26 @@ pub fn render_into<'a>(
     ctx: &mut RenderContext,
     transform: Affine,
 ) {
+    render_into_with(
+        page,
+        cache,
+        interpreter_settings,
+        render_settings,
+        ctx,
+        transform,
+        None,
+    );
+}
+
+fn render_into_with<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+    ctx: &mut RenderContext,
+    transform: Affine,
+    cmyk: Option<CmykPass>,
+) {
     let target = Rect::new(0.0, 0.0, ctx.width() as f64, ctx.height() as f64);
     let mut state = Context::new(
         transform,
@@ -343,6 +523,7 @@ pub fn render_into<'a>(
 
     let global = GlobalState::new(cache, render_settings);
     let mut device = Renderer::new(ctx, &global);
+    device.cmyk = cmyk;
     let crop_box = page.intersected_crop_box().to_kurbo();
     let [a, b, c, d, _, _] = transform.as_coeffs();
     let axis_aligned = (b == 0.0 && c == 0.0) || (a == 0.0 && d == 0.0);

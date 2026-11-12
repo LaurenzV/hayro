@@ -1,6 +1,6 @@
 //! Encoding shading patterns for easy sampling.
 
-use crate::color::{AlphaColor, ColorComponents, ColorSpace};
+use crate::color::{AlphaColor, CmykProfile, ColorComponents, ColorSpace, srgb_to_cmyk};
 use crate::function::MAX_COMPONENTS;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
@@ -16,6 +16,7 @@ pub struct EncodedShadingPattern {
     /// The base transform of the shading pattern.
     pub base_transform: Affine,
     pub(crate) color_space: ColorSpace,
+    pub(crate) background: Option<ColorComponents>,
     pub(crate) background_color: AlphaColor,
     /// The encoded shading type.
     pub shading_type: EncodedShadingType,
@@ -95,7 +96,12 @@ impl EncodedShadingPattern {
     #[inline]
     pub fn sample(&self, pos: Point) -> [f32; 4] {
         self.shading_type
-            .eval(pos, self.background_color, &self.color_space)
+            .eval(
+                pos,
+                || self.background_color,
+                AlphaColor::TRANSPARENT,
+                |c| self.color_space.to_rgba(c, 1.0),
+            )
             .map(|v| {
                 let mut components = v.components();
                 components[3] *= self.opacity;
@@ -107,6 +113,38 @@ impl EncodedShadingPattern {
                 components
             })
             .unwrap_or([0.0, 0.0, 0.0, 0.0])
+    }
+
+    /// Sample the shading at the given position, as cyan, magenta, yellow, black and
+    /// alpha.
+    ///
+    /// The colors are converted as by [`ColorSpace::to_cmyk`]. If the shading has a
+    /// transfer function, it applies to the sRGB color of [`sample`](Self::sample), which
+    /// is then converted to CMYK.
+    #[inline]
+    pub fn sample_cmyk(&self, pos: Point, profile: Option<&CmykProfile>) -> [f32; 5] {
+        if self.transfer_function.is_some() {
+            let [r, g, b, a] = self.sample(pos);
+            let [c, m, y, k] = srgb_to_cmyk([r, g, b], profile);
+            return [c, m, y, k, a];
+        }
+
+        self.shading_type
+            .eval(
+                pos,
+                || {
+                    self.background.as_ref().map_or([0.0; 5], |background| {
+                        self.color_space.to_cmyk(background, 1.0, profile)
+                    })
+                },
+                [0.0; 5],
+                |c| self.color_space.to_cmyk(c, 1.0, profile),
+            )
+            .map(|mut components| {
+                components[4] *= self.opacity;
+                components
+            })
+            .unwrap_or([0.0; 5])
     }
 
     /// Sample the shading on a pixel grid covering `bbox`, with `scale`
@@ -124,6 +162,22 @@ impl EncodedShadingPattern {
         scale: f32,
         mut f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
+        self.walk_texture(bbox, scale, |point| f(self.sample(point)))
+    }
+
+    /// Like [`sample_texture`](Self::sample_texture), with the straight samples of
+    /// [`sample_cmyk`](Self::sample_cmyk).
+    pub fn sample_texture_cmyk(
+        &self,
+        bbox: Rect,
+        scale: f32,
+        profile: Option<&CmykProfile>,
+        mut f: impl FnMut([f32; 5]),
+    ) -> (u32, u32, Affine) {
+        self.walk_texture(bbox, scale, |point| f(self.sample_cmyk(point, profile)))
+    }
+
+    fn walk_texture(&self, bbox: Rect, scale: f32, mut f: impl FnMut(Point)) -> (u32, u32, Affine) {
         let (width, height) = texture_dimensions(bbox, scale);
         let inv_scale = 1.0 / scale as f64;
 
@@ -138,7 +192,7 @@ impl EncodedShadingPattern {
             let mut point = start_point;
 
             for _ in 0..width {
-                f(self.sample(point));
+                f(point);
 
                 point += x_advance;
             }
@@ -266,16 +320,16 @@ impl ShadingPattern {
         };
 
         let color_space = self.shading.color_space.clone();
+        let background = self.shading.background.clone();
 
-        let background_color = self
-            .shading
-            .background
+        let background_color = background
             .as_ref()
             .map(|b| color_space.to_rgba(b, 1.0))
             .unwrap_or(AlphaColor::TRANSPARENT);
 
         EncodedShadingPattern {
             color_space,
+            background,
             background_color,
             shading_type,
             base_transform,
@@ -387,22 +441,26 @@ pub(crate) enum RadialAxialParams {
 }
 
 impl EncodedShadingType {
-    pub(crate) fn eval(
+    /// Evaluate the shading at the given position, with `color` converting the components
+    /// of a color in the shading's color space, `background` giving the background color,
+    /// and `transparent` the color for no paint.
+    pub(crate) fn eval<T>(
         &self,
         pos: Point,
-        bg_color: AlphaColor,
-        color_space: &ColorSpace,
-    ) -> Option<AlphaColor> {
+        background: impl FnOnce() -> T,
+        transparent: T,
+        color: impl FnOnce(&[f32]) -> T,
+    ) -> Option<T> {
         match self {
             Self::FunctionBased(EncodedFunctionBasedShading { domain, function }) => {
                 if !domain.contains(pos) {
-                    Some(bg_color)
+                    Some(background())
                 } else {
                     let mut out = [0.0; MAX_COMPONENTS];
                     let out = &mut out[..function.num_outputs()];
                     function.eval(&[pos.x as f32, pos.y as f32], out)?;
                     // TODO: Clamp out-of-range values.
-                    Some(color_space.to_rgba(out, 1.0))
+                    Some(color(out))
                 }
             }
             Self::RadialAxial(EncodedRadialAxialShading {
@@ -421,20 +479,20 @@ impl EncodedShadingType {
                 };
 
                 if t == f32::MIN {
-                    return Some(bg_color);
+                    return Some(background());
                 }
 
                 if t < 0.0 {
                     if extend[0] {
                         t = 0.0;
                     } else {
-                        return Some(bg_color);
+                        return Some(background());
                     }
                 } else if t > 1.0 {
                     if extend[1] {
                         t = 1.0;
                     } else {
-                        return Some(bg_color);
+                        return Some(background());
                     }
                 }
 
@@ -444,25 +502,25 @@ impl EncodedShadingType {
                 let val = &mut val[..function.num_outputs()];
                 function.eval(&[t], val)?;
 
-                Some(color_space.to_rgba(val, 1.0))
+                Some(color(val))
             }
             Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
-                if let Some(color) = samples.get(&sample_point) {
+                if let Some(components) = samples.get(&sample_point) {
                     if let Some(function) = function {
                         let mut val = [0.0; MAX_COMPONENTS];
                         let val = &mut val[..function.num_outputs()];
-                        function.eval(color, val)?;
-                        Some(color_space.to_rgba(val, 1.0))
+                        function.eval(components, val)?;
+                        Some(color(val))
                     } else {
-                        Some(color_space.to_rgba(color, 1.0))
+                        Some(color(components))
                     }
                 } else {
-                    Some(bg_color)
+                    Some(background())
                 }
             }
-            Self::Dummy(_) => Some(AlphaColor::TRANSPARENT),
+            Self::Dummy(_) => Some(transparent),
         }
     }
 }

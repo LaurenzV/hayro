@@ -4,7 +4,6 @@ use hayro_interpret::hayro_cmap::WritingMode;
 use hayro_interpret::{DrawMode, DrawProps, FillRule, Paint, StrokeProps};
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::rc::Rc;
-use vello_cpu::color::AlphaColor;
 
 const MIN_HINTING_PPEM: f64 = 4.0;
 const MAX_HINTING_PPEM: f64 = 128.0;
@@ -209,8 +208,7 @@ impl Renderer<'_> {
     fn fill_outline_run(&mut self, glyph_run: &GlyphRun<'_, '_>, props: &DrawProps<'_>) {
         match &props.paint {
             Paint::Color(color) => {
-                let color = color.to_rgba().to_rgba8();
-                let color = AlphaColor::from_rgba8(color[0], color[1], color[2], color[3]);
+                let color = self.color(color);
                 let hint = self.hint(glyph_run);
                 let use_cache = self.global.glyph_caching
                     && self.global.aliasing_threshold.is_none()
