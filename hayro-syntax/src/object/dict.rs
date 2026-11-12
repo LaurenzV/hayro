@@ -120,7 +120,7 @@ impl<'a> Dict<'a> {
     /// An iterator over dictionary entries with the byte spans of each key and value.
     ///
     /// The iterator rescans the dictionary in source order, including duplicate keys,
-    /// and yields spans relative to [`Dict::data`]. [`Dict::get`] returns the last
+    /// and yields spans relative to [`Dict::data`]. [`Dict::get`] returns the first
     /// value for a duplicate key.
     pub fn entry_spans(&self) -> DictEntrySpans<'a> {
         DictEntrySpans::new(self.data(), self.ctx().in_content_stream())
@@ -1332,7 +1332,7 @@ mod tests {
     fn entry_spans_report_duplicate_keys() {
         let dict = Dict::from_bytes(b"<</A 1 /A 2>>").unwrap();
 
-        assert_eq!(dict.get::<i32>(b"A"), Some(2));
+        assert_eq!(dict.get::<i32>(b"A"), Some(1));
         assert_eq!(
             spans_of(&dict),
             vec![
