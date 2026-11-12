@@ -531,13 +531,12 @@ mod cjk_fallback_tests {
     use super::*;
     use crate::standard_font::StandardFont;
     use hayro_syntax::object::FromBytes;
-    use std::cell::RefCell;
-    use std::rc::Rc;
     use std::sync::Arc;
+    use std::sync::Mutex;
 
     fn queries_for(dict_bytes: &[u8]) -> Vec<String> {
         let dict = Dict::from_bytes(dict_bytes).unwrap();
-        let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let seen_resolver = seen.clone();
         let font_resolver: crate::FontResolverFn = Arc::new(move |query| {
             let label = match query {
@@ -548,14 +547,14 @@ mod cjk_fallback_tests {
                     f.character_collection.as_ref().map(|cc| &cc.family)
                 ),
             };
-            seen_resolver.borrow_mut().push(label);
+            seen_resolver.lock().unwrap().push(label);
             Some(StandardFont::Helvetica.get_font_data())
         });
-        let cmap_resolver: crate::CMapResolverFn = Arc::new(|_| None);
+        let cmap_resolver: CMapResolverFn = Arc::new(|_| None);
 
         let cache = crate::FontCache::new();
         let _ = cache.font(&dict, &font_resolver, &cmap_resolver);
-        std::mem::take(&mut *seen.borrow_mut())
+        std::mem::take(&mut *seen.lock().unwrap())
     }
 
     #[test]
