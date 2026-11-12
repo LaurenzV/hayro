@@ -682,6 +682,7 @@ dependencies = [
  "image",
  "moxcms",
  "png",
+ "rayon",
 ]
 
 [[package]]
