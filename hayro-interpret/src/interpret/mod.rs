@@ -427,7 +427,14 @@ pub fn interpret<'a>(
             TypedInstruction::ClipEvenOdd(_) => {
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
-            TypedInstruction::RestoreState(_) => context.restore_state(device),
+            TypedInstruction::RestoreState(_) => {
+                // Ignore a `Q` without a matching `q` in this stream: it would otherwise
+                // restore the state saved on entry and let later operators change the
+                // caller's state.
+                if context.num_states() > num_states + 1 {
+                    context.restore_state(device);
+                }
+            }
             TypedInstruction::FlatnessTolerance(_) => {
                 // Ignore for now.
             }

@@ -3,6 +3,8 @@ use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
 use std::f64::consts::SQRT_2;
 
+const MIN_DASH_PERIOD: f32 = 0.1;
+
 impl Renderer<'_> {
     pub(super) fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
         let threshold = if is_text { 0.25 } else { 1.0 };
@@ -32,13 +34,20 @@ impl Renderer<'_> {
             join => join,
         };
 
+        let dash_period: f32 = stroke_props.dash_array.iter().map(|n| n.abs()).sum();
+        let dash_pattern = if dash_period * min_factor >= MIN_DASH_PERIOD {
+            stroke_props.dash_array.iter().map(|n| *n as f64).collect()
+        } else {
+            kurbo::Dashes::new()
+        };
+
         let stroke = kurbo::Stroke {
             width: line_width as f64,
             join,
             miter_limit: stroke_props.miter_limit as f64,
             start_cap: cap,
             end_cap: cap,
-            dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
+            dash_pattern,
             dash_offset: stroke_props.dash_offset as f64,
         };
 

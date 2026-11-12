@@ -165,6 +165,8 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         opacity: f32,
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
+        _: bool,
+        _: bool,
     ) {
         Self::push_transparency_group(self, opacity, mask, blend_mode);
     }

@@ -17,7 +17,13 @@ pub enum DecodeError {
     Decoding(DecodingError),
     /// Errors related to color space and component handling.
     Color(ColorError),
+    /// Decoding was cancelled.
+    Cancelled,
 }
+
+/// The error returned when decoding was cancelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cancelled;
 
 /// Errors related to JP2 file format and box parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +136,14 @@ impl fmt::Display for DecodeError {
             Self::Validation(e) => write!(f, "{e}"),
             Self::Decoding(e) => write!(f, "{e}"),
             Self::Color(e) => write!(f, "{e}"),
+            Self::Cancelled => write!(f, "{Cancelled}"),
         }
+    }
+}
+
+impl fmt::Display for Cancelled {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "decoding was cancelled")
     }
 }
 
@@ -226,12 +239,19 @@ impl fmt::Display for ColorError {
 }
 
 impl core::error::Error for DecodeError {}
+impl core::error::Error for Cancelled {}
 impl core::error::Error for FormatError {}
 impl core::error::Error for MarkerError {}
 impl core::error::Error for TileError {}
 impl core::error::Error for ValidationError {}
 impl core::error::Error for DecodingError {}
 impl core::error::Error for ColorError {}
+
+impl From<Cancelled> for DecodeError {
+    fn from(_: Cancelled) -> Self {
+        Self::Cancelled
+    }
+}
 
 impl From<FormatError> for DecodeError {
     fn from(e: FormatError) -> Self {

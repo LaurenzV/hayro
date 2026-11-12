@@ -1,10 +1,9 @@
-use hayro_syntax::content;
-use hayro_syntax::object::Number;
+use hayro_postscript::{Procedure, Scanner, Token};
 use hayro_syntax::object::Stream;
-use hayro_syntax::reader::Reader;
-use hayro_syntax::reader::{ReaderContext, ReaderExt};
 use std::array;
 use std::ops::Rem;
+
+const MAX_PROCEDURE_DEPTH: usize = 256;
 
 /// A type 4 function (postscript function).
 #[derive(Debug)]
@@ -205,7 +204,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 
     for op in procedure {
         match op {
-            PostScriptOp::Number(n) => arg_stack.push(Argument::Float(n.as_f64() as f32))?,
+            PostScriptOp::Number(n) => arg_stack.push(Argument::Float(*n))?,
             PostScriptOp::Abs => {
                 one_f!(|n: f32| n.abs());
             }
@@ -410,29 +409,27 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 }
 
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
-    let mut r = Reader::new(data);
-    parse_procedure_inner(&mut r)
+    let procedure = Scanner::new(data).parse_procedure().ok()?;
+    parse_procedure_inner(procedure, 0)
 }
 
-fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
+fn parse_procedure_inner(procedure: Procedure<'_>, depth: usize) -> Option<Vec<PostScriptOp>> {
+    if depth >= MAX_PROCEDURE_DEPTH {
+        return None;
+    }
+
     let mut stack = ParseStack::new();
-
     let mut ops = vec![];
-    r.skip_white_spaces_and_comments();
-    r.forward_tag(b"{")?;
+    let mut tokens = procedure.tokens();
 
-    loop {
-        r.skip_white_spaces_and_comments();
-
-        if r.peek_byte()? == b'}' {
-            r.forward_tag(b"}")?;
-
-            break;
-        } else if r.peek_byte()? == b'{' {
-            stack.push(parse_procedure_inner(r)?);
-        } else {
-            let op = PostScriptOp::from_reader(r, &mut stack)?;
-            ops.push(op);
+    while !tokens.at_end() {
+        match tokens.parse_token().ok()? {
+            Token::Number(n) => ops.push(PostScriptOp::Number(n.as_f64() as f32)),
+            Token::Procedure(p) => stack.push(parse_procedure_inner(p, depth + 1)?)?,
+            Token::Name(n) if !n.is_literal() && !n.is_immediate() => {
+                ops.push(PostScriptOp::from_operator(n.as_bytes(), &mut stack)?);
+            }
+            _ => return None,
         }
     }
 
@@ -441,7 +438,7 @@ fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum PostScriptOp {
-    Number(Number),
+    Number(f32),
     Abs,
     Add,
     Atan,
@@ -487,63 +484,55 @@ pub(super) enum PostScriptOp {
 }
 
 impl PostScriptOp {
-    fn from_reader(r: &mut Reader<'_>, stack: &mut ParseStack) -> Option<Self> {
-        let op = if let Some(n) = r.read::<Number>(&ReaderContext::dummy()) {
-            // TODO: Support radix numbers
-            Self::Number(n)
-        } else {
-            let op = r.read::<content::Operator<'_>>(&ReaderContext::dummy())?;
-            match op.as_ref() {
-                b"abs" => Self::Abs,
-                b"add" => Self::Add,
-                b"atan" => Self::Atan,
-                b"ceiling" => Self::Ceiling,
-                b"cos" => Self::Cos,
-                b"cvi" => Self::Cvi,
-                b"cvr" => Self::Cvr,
-                b"div" => Self::Div,
-                b"exp" => Self::Exp,
-                b"floor" => Self::Floor,
-                b"idiv" => Self::Idiv,
-                b"ln" => Self::Ln,
-                b"log" => Self::Log,
-                b"mod" => Self::Mod,
-                b"mul" => Self::Mul,
-                b"neg" => Self::Neg,
-                b"round" => Self::Round,
-                b"sin" => Self::Sin,
-                b"sqrt" => Self::Sqrt,
-                b"sub" => Self::Sub,
-                b"truncate" => Self::Truncate,
-                b"and" => Self::And,
-                b"bitshift" => Self::Bitshift,
-                b"eq" => Self::Eq,
-                b"false" => Self::False,
-                b"ge" => Self::Ge,
-                b"gt" => Self::Gt,
-                b"le" => Self::Le,
-                b"lt" => Self::Lt,
-                b"ne" => Self::Ne,
-                b"not" => Self::Not,
-                b"or" => Self::Or,
-                b"true" => Self::True,
-                b"xor" => Self::Xor,
-                b"if" => Self::If(stack.pop()?),
-                b"ifelse" => {
-                    let s = stack.pop()?;
-                    let f = stack.pop()?;
-                    Self::IfElse(f, s)
-                }
-                b"copy" => Self::Copy,
-                b"dup" => Self::Dup,
-                b"exch" => Self::Exch,
-                b"index" => Self::Index,
-                b"pop" => Self::Pop,
-                b"roll" => Self::Roll,
-                _ => {
-                    return None;
-                }
+    fn from_operator(op: &[u8], stack: &mut ParseStack) -> Option<Self> {
+        let op = match op {
+            b"abs" => Self::Abs,
+            b"add" => Self::Add,
+            b"atan" => Self::Atan,
+            b"ceiling" => Self::Ceiling,
+            b"cos" => Self::Cos,
+            b"cvi" => Self::Cvi,
+            b"cvr" => Self::Cvr,
+            b"div" => Self::Div,
+            b"exp" => Self::Exp,
+            b"floor" => Self::Floor,
+            b"idiv" => Self::Idiv,
+            b"ln" => Self::Ln,
+            b"log" => Self::Log,
+            b"mod" => Self::Mod,
+            b"mul" => Self::Mul,
+            b"neg" => Self::Neg,
+            b"round" => Self::Round,
+            b"sin" => Self::Sin,
+            b"sqrt" => Self::Sqrt,
+            b"sub" => Self::Sub,
+            b"truncate" => Self::Truncate,
+            b"and" => Self::And,
+            b"bitshift" => Self::Bitshift,
+            b"eq" => Self::Eq,
+            b"false" => Self::False,
+            b"ge" => Self::Ge,
+            b"gt" => Self::Gt,
+            b"le" => Self::Le,
+            b"lt" => Self::Lt,
+            b"ne" => Self::Ne,
+            b"not" => Self::Not,
+            b"or" => Self::Or,
+            b"true" => Self::True,
+            b"xor" => Self::Xor,
+            b"if" => Self::If(stack.pop()?),
+            b"ifelse" => {
+                let s = stack.pop()?;
+                let f = stack.pop()?;
+                Self::IfElse(f, s)
             }
+            b"copy" => Self::Copy,
+            b"dup" => Self::Dup,
+            b"exch" => Self::Exch,
+            b"index" => Self::Index,
+            b"pop" => Self::Pop,
+            b"roll" => Self::Roll,
+            _ => return None,
         };
 
         Some(op)
@@ -552,12 +541,30 @@ impl PostScriptOp {
 
 #[cfg(test)]
 mod tests {
-    use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
+    use crate::function::type4::{MAX_PROCEDURE_DEPTH, PostScriptOp, Type4, parse_procedure};
     use crate::function::{Function, FunctionType, Interval, Repr};
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
-    use hayro_syntax::object::Number;
+    fn nested_program(depth: usize) -> Vec<u8> {
+        let mut program = "{ true ".repeat(depth - 1);
+        program.push_str("{ 1 }");
+        program.push_str(&" if }".repeat(depth - 1));
+
+        program.into_bytes()
+    }
+
+    #[test]
+    fn nested_procedures_up_to_bound() {
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH)).is_some());
+        assert!(parse_procedure(&nested_program(MAX_PROCEDURE_DEPTH + 1)).is_none());
+    }
+
+    #[test]
+    fn deep_procedure_nesting_fails() {
+        let program = format!("{}{}", "{".repeat(300_000), "}".repeat(300_000));
+        assert!(parse_procedure(program.as_bytes()).is_none());
+    }
 
     #[test]
     fn lex_1() {
@@ -569,7 +576,7 @@ mod tests {
             vec![
                 PostScriptOp::Copy,
                 PostScriptOp::Dup,
-                PostScriptOp::Number(Number::from_f32(2.0)),
+                PostScriptOp::Number(2.0),
                 PostScriptOp::Exch,
                 PostScriptOp::Roll,
             ]
@@ -586,8 +593,8 @@ mod tests {
             vec![
                 PostScriptOp::If(vec![PostScriptOp::Dup, PostScriptOp::Exch]),
                 PostScriptOp::IfElse(
-                    vec![PostScriptOp::Number(Number::from_i32(0))],
-                    vec![PostScriptOp::Number(Number::from_i32(1))]
+                    vec![PostScriptOp::Number(0.0)],
+                    vec![PostScriptOp::Number(1.0)]
                 )
             ]
         );
@@ -602,6 +609,11 @@ mod tests {
         let res = stack.items().iter().map(|i| i.as_f32()).collect::<Vec<_>>();
 
         assert_eq!(res.as_slice(), out);
+    }
+
+    #[test]
+    fn radix_numbers() {
+        op_impl("16#FF 2#101", &[255.0, 5.0]);
     }
 
     #[test]

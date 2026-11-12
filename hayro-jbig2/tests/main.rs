@@ -1,6 +1,7 @@
 //! Each test decodes a JBIG2 file from `streams` and compares the result
 //! against an image in `references`.
 
+mod cancel;
 mod composite;
 mod file;
 mod generic;
@@ -8,6 +9,7 @@ mod halftone;
 mod huffman;
 mod lenient;
 mod malformed;
+mod memory;
 mod page;
 mod refinement;
 mod symbol;
@@ -34,30 +36,52 @@ fn load_reference(name: &str) -> Bitmap {
         .collect()
 }
 
-#[derive(Default)]
-struct Collector {
-    rows: Bitmap,
-    current: Vec<bool>,
-}
+fn decode(page: &hayro_jbig2::Page<'_>) -> hayro_jbig2::Result<Bitmap> {
+    let bitmap = page.decode()?;
+    let width = bitmap.width() as usize;
 
-impl hayro_jbig2::Decoder for Collector {
-    fn push_pixel(&mut self, black: bool) {
-        self.current.push(black);
-    }
-
-    fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-        self.current
-            .extend(std::iter::repeat_n(black, chunk_count as usize * 8));
-    }
-
-    fn next_line(&mut self) {
-        self.rows.push(std::mem::take(&mut self.current));
-    }
+    Ok(bitmap
+        .rows()
+        .map(|row| {
+            (0..width)
+                .map(|x| row[x / 32] & (0x8000_0000 >> (x % 32)) != 0)
+                .collect()
+        })
+        .collect())
 }
 
 /// Decode `stream` in strict mode and check that it matches `reference`.
 fn check(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), true);
+}
+
+/// Decode `stream` in lenient mode with the given memory limit and check that
+/// it matches `reference`.
+fn check_with_memory_limit(stream: &str, reference: &str, memory_limit: usize) {
+    let settings = hayro_jbig2::DecodeSettings {
+        memory_limit: Some(memory_limit),
+        ..Default::default()
+    };
+    compare_with(stream, load_reference(reference), &settings);
+}
+
+/// Decode `stream` in lenient mode with the given memory limit and check that
+/// decoding fails because the limit is exceeded.
+fn check_memory_limit_exceeded(stream: &str, memory_limit: usize) {
+    let data = read_stream(stream);
+    let settings = hayro_jbig2::DecodeSettings {
+        memory_limit: Some(memory_limit),
+        ..Default::default()
+    };
+    let file = hayro_jbig2::File::new(&data, &settings)
+        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
+
+    assert_eq!(
+        page.decode().err(),
+        Some(hayro_jbig2::DecodeError::MemoryLimitExceeded),
+        "{stream}: memory limit not exceeded"
+    );
 }
 
 /// Decode `stream`, which is invalid, in lenient mode and check that it
@@ -78,8 +102,14 @@ fn check_pages_lenient(stream: &str, references: &[&str]) {
 
 fn compare_pages(stream: &str, references: &[&str], strict: bool) {
     let data = read_stream(stream);
-    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
-        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let file = hayro_jbig2::File::new(
+        &data,
+        &hayro_jbig2::DecodeSettings {
+            strict,
+            ..Default::default()
+        },
+    )
+    .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     assert_eq!(
         file.page_count(),
         references.len(),
@@ -109,8 +139,16 @@ fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usiz
 }
 
 fn compare(stream: &str, reference: Bitmap, strict: bool) {
+    let settings = hayro_jbig2::DecodeSettings {
+        strict,
+        ..Default::default()
+    };
+    compare_with(stream, reference, &settings);
+}
+
+fn compare_with(stream: &str, reference: Bitmap, settings: &hayro_jbig2::DecodeSettings) {
     let data = read_stream(stream);
-    let file = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings { strict })
+    let file = hayro_jbig2::File::new(&data, settings)
         .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
     let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
     compare_page(stream, &page, reference);
@@ -128,23 +166,15 @@ fn compare_page(stream: &str, page: &hayro_jbig2::Page<'_>, reference: Bitmap) {
         "{stream}: wrong page size"
     );
 
-    let mut collector = Collector::default();
-    page.decode(&mut collector)
-        .unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
+    let rows = decode(page).unwrap_or_else(|e| panic!("{stream}: decoding failed: {e}"));
 
     assert_eq!(
-        collector.rows.len(),
+        rows.len(),
         reference.len(),
         "{stream}: wrong number of rows"
     );
 
-    for (y, (actual, expected)) in collector.rows.iter().zip(&reference).enumerate() {
-        // Rows may be padded to whole chunks of 8 pixels.
-        assert!(
-            actual.len() >= expected.len(),
-            "{stream}: row {y} is too short"
-        );
-
+    for (y, (actual, expected)) in rows.iter().zip(&reference).enumerate() {
         if let Some(x) = actual.iter().zip(expected).position(|(a, e)| a != e) {
             panic!("{stream}: first mismatch at row {y}, column {x}");
         }
@@ -157,7 +187,7 @@ fn check_malformed(stream: &str) {
 
     if let Ok(file) = hayro_jbig2::File::new(&data, &hayro_jbig2::DecodeSettings::default()) {
         for page in file.pages() {
-            let _ = page.decode(&mut Collector::default());
+            let _ = decode(&page);
         }
     }
 }

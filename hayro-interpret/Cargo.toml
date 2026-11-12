@@ -12,6 +12,7 @@ readme = "README.md"
 [dependencies]
 hayro-cmap = { workspace = true }
 hayro-font = { workspace = true }
+hayro-postscript = { workspace = true }
 hayro-syntax = { workspace = true, features = ["std", "images", "unsafe"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }

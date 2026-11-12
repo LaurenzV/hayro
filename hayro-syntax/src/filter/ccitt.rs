@@ -6,7 +6,7 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
-use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
+use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
@@ -39,6 +39,7 @@ pub(crate) fn decode(
             EncodingMode::Group3_2D
         },
         strict: false,
+        cancel: None,
     };
     // The value that pixels which are white in the encoding are written as.
     let white: u8 = if params.get::<bool>(BLACK_IS_1).unwrap_or(false) {
@@ -107,8 +108,7 @@ pub(crate) fn decode(
             last_byte_mask: 0xFF_u8 << ((8 - columns % 8) % 8),
             decoded_rows: 0,
         };
-        let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
 
         // If we decoded at least one row, let's be lenient and return what we got.
         // See also 0001763.pdf.
@@ -155,8 +155,7 @@ pub(crate) fn decode(
             white,
             decoded_rows: 0,
         };
-        let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
 
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;
@@ -177,7 +176,7 @@ pub(crate) fn decode(
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
-            width: settings.columns,
+            width: columns,
             height: if rows == 0 { decoded_rows } else { rows },
         }),
     })

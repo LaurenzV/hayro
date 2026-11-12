@@ -92,7 +92,12 @@ pub(crate) fn check(
         let (reference, reference_path) = match references::load(expected) {
             Ok(reference) => reference,
             Err(err) => {
-                failures.push((index, err));
+                failures.push((
+                    index,
+                    format!(
+                        "rendered hash {hash} differs from expected {expected}, and the reference image {err}"
+                    ),
+                ));
                 continue;
             }
         };

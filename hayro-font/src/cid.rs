@@ -16,6 +16,7 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Array, Object};
 use kurbo::Vec2;
 use rustc_hash::FxHashMap;
+use std::collections::BTreeMap;
 use std::ops::Deref;
 
 #[derive(Debug)]
@@ -24,10 +25,10 @@ pub(crate) struct Type0Font {
     horizontal: bool,
     dw: f32,
     dw2: (f32, f32),
-    widths: FxHashMap<u32, f32>,
+    widths: Widths<f32>,
     encoding: CMap,
     to_unicode: Option<CMap>,
-    widths2: FxHashMap<u32, [f32; 3]>,
+    widths2: Widths<[f32; 3]>,
     cid_to_gid_map: CidToGIdMap,
     /// PostScript name from the PDF.
     postscript_name: Option<String>,
@@ -100,8 +101,7 @@ impl Type0Font {
         let mut to_unicode_is_cid_indexed = false;
 
         // If there is no ToUnicode map, try to get the UCS2 CMap.
-        if fallback
-            && to_unicode.is_none()
+        if to_unicode.is_none()
             && let Some(cc) = character_collection.as_ref()
             && let Some(ucs2_name) = cc.family.ucs2_cmap()
             && let Some(data) = (cmap_resolver)(ucs2_name)
@@ -236,7 +236,7 @@ impl Type0Font {
             && let Some(actual_width) = self.program.advance_width(glyph)
             // Only use an expected width if there is an explicit /W array,
             // not the default width, as it leads to weird results from my testing.
-            && let Some(expected_width) = self.widths.get(&cid).copied()
+            && let Some(expected_width) = self.widths.get(cid)
         {
             return stretch_factor(expected_width, actual_width);
         }
@@ -294,15 +294,15 @@ impl Type0Font {
         let cid = self.code_to_cid(code).unwrap_or(0);
         if self.horizontal {
             Vec2::new(self.horizontal_width(cid) as f64, 0.0)
-        } else if let Some([w, _, _]) = self.widths2.get(&cid) {
-            Vec2::new(0.0, *w as f64)
+        } else if let Some([w, _, _]) = self.widths2.get(cid) {
+            Vec2::new(0.0, w as f64)
         } else {
             Vec2::new(0.0, self.dw2.1 as f64)
         }
     }
 
     fn horizontal_width(&self, cid: u32) -> f32 {
-        self.widths.get(&cid).copied().unwrap_or(self.dw)
+        self.widths.get(cid).unwrap_or(self.dw)
     }
 
     pub(crate) fn is_horizontal(&self) -> bool {
@@ -329,8 +329,8 @@ impl Type0Font {
 
         if self.is_horizontal() {
             Vec2::default()
-        } else if let Some([_, v1, v2]) = self.widths2.get(&cid) {
-            Vec2::new(-*v1 as f64, -*v2 as f64)
+        } else if let Some([_, v1, v2]) = self.widths2.get(cid) {
+            Vec2::new(-v1 as f64, -v2 as f64)
         } else {
             Vec2::new(-self.horizontal_width(cid) as f64 / 2.0, -self.dw2.0 as f64)
         }
@@ -427,30 +427,71 @@ fn load_program(descriptor: &Dict<'_>, loader: &FontLoader<'_>) -> Option<FontPr
     loader.programs.load(&stream)
 }
 
-fn read_widths(arr: &Array<'_>) -> Option<FxHashMap<u32, f32>> {
-    let mut map = FxHashMap::default();
+#[derive(Debug, Default)]
+struct Widths<T> {
+    ranges: BTreeMap<u32, (u32, T)>,
+}
+
+impl<T: Copy> Widths<T> {
+    fn new(entries: Vec<(u32, u32, T)>) -> Self {
+        let mut ranges = BTreeMap::new();
+
+        for (first, last, value) in entries {
+            if let Some((&start, &(end, old))) = ranges.range(..first).next_back()
+                && end >= first
+            {
+                ranges.insert(start, (first - 1, old));
+
+                if end > last {
+                    ranges.insert(last + 1, (end, old));
+                }
+            }
+
+            while let Some((&start, &(end, old))) = ranges.range(first..=last).next() {
+                ranges.remove(&start);
+
+                if end > last {
+                    ranges.insert(last + 1, (end, old));
+                }
+            }
+
+            ranges.insert(first, (last, value));
+        }
+
+        Self { ranges }
+    }
+
+    fn get(&self, cid: u32) -> Option<T> {
+        let (_, &(last, value)) = self.ranges.range(..=cid).next_back()?;
+
+        (cid <= last).then_some(value)
+    }
+}
+
+fn read_widths(arr: &Array<'_>) -> Option<Widths<f32>> {
+    let mut ranges = vec![];
     let mut iter = arr.flex_iter();
 
     loop {
         if let Some((mut first, range)) = iter.next::<(u32, Array<'_>)>() {
             for width in range.iter::<f32>() {
-                map.insert(first, width);
+                ranges.push((first, first, width));
                 first = first.checked_add(1)?;
             }
-        } else if let Some((first, second, width)) = iter.next::<(u32, u32, f32)>() {
-            for i in first..=second {
-                map.insert(i, width);
+        } else if let Some((first, last, width)) = iter.next::<(u32, u32, f32)>() {
+            if first <= last {
+                ranges.push((first, last, width));
             }
         } else {
             break;
         }
     }
 
-    Some(map)
+    Some(Widths::new(ranges))
 }
 
-fn read_widths2(arr: &Array<'_>) -> Option<FxHashMap<u32, [f32; 3]>> {
-    let mut map = FxHashMap::default();
+fn read_widths2(arr: &Array<'_>) -> Option<Widths<[f32; 3]>> {
+    let mut ranges = vec![];
     let mut iter = arr.flex_iter();
 
     loop {
@@ -460,19 +501,19 @@ fn read_widths2(arr: &Array<'_>) -> Option<FxHashMap<u32, [f32; 3]>> {
             while let Some(w) = iter.next() {
                 let v1 = iter.next()?;
                 let v2 = iter.next()?;
-                map.insert(first, [w, v1, v2]);
+                ranges.push((first, first, [w, v1, v2]));
                 first = first.checked_add(1)?;
             }
-        } else if let Some((first, second, w, v1, v2)) = iter.next::<(u32, u32, f32, f32, f32)>() {
-            for i in first..=second {
-                map.insert(i, [w, v1, v2]);
+        } else if let Some((first, last, w, v1, v2)) = iter.next::<(u32, u32, f32, f32, f32)>() {
+            if first <= last {
+                ranges.push((first, last, [w, v1, v2]));
             }
         } else {
             break;
         }
     }
 
-    Some(map)
+    Some(Widths::new(ranges))
 }
 
 fn read_cid_system_info(descendant_font: &Dict<'_>) -> Option<CharacterCollection> {

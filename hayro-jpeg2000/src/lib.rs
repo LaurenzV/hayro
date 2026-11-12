@@ -31,7 +31,7 @@ println!(
 
 let mut ctx = DecoderContext::default();
 let decoded = image.decode(&mut ctx).unwrap();
-let bitmap = decoded.data_u8();
+let bitmap = decoded.data_u8().unwrap();
 ```
 
 If you want to see a more comprehensive example, please take a look
@@ -81,12 +81,17 @@ use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 
+mod cancel;
 pub mod error;
 pub(crate) mod math;
+mod sync;
+
+use cancel::{CHUNK, Cancel};
+pub use cancel::{CancelCheck, CancelHandle};
 
 use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 pub use error::{
-    ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
+    Cancelled, ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
 };
 pub use j2c::{ComponentData, DecoderContext};
@@ -104,7 +109,7 @@ pub(crate) const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
 pub(crate) const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
 
 /// Settings to apply during decoding.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct DecodeSettings {
     /// Whether palette indices should be resolved.
     ///
@@ -125,6 +130,8 @@ pub struct DecodeSettings {
     pub strict: bool,
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
+    /// A check for cancelling decoding.
+    pub cancel: Option<CancelHandle>,
 }
 
 impl Default for DecodeSettings {
@@ -133,6 +140,7 @@ impl Default for DecodeSettings {
             resolve_palette_indices: true,
             strict: false,
             target_resolution: None,
+            cancel: None,
         }
     }
 }
@@ -158,9 +166,22 @@ impl<'a> Image<'a> {
     /// Try to create a new JPEG2000 image from the given data.
     pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
         if data.starts_with(JP2_MAGIC) {
-            jp2::parse(data, *settings)
+            jp2::parse(data, settings.clone())
         } else if data.starts_with(CODESTREAM_MAGIC) {
-            j2c::parse(data, settings)
+            j2c::parse(data, settings, None)
+        } else {
+            err!(FormatError::InvalidSignature)
+        }
+    }
+
+    /// Try to create a new image from a raw codestream with the given number of colour channels.
+    pub fn from_codestream(
+        data: &'a [u8],
+        color_channels: u8,
+        settings: &DecodeSettings,
+    ) -> Result<Self> {
+        if data.starts_with(CODESTREAM_MAGIC) {
+            j2c::parse(data, settings, Some(color_channels))
         } else {
             err!(FormatError::InvalidSignature)
         }
@@ -199,22 +220,25 @@ impl<'a> Image<'a> {
         decoder_context: &'b mut DecoderContext<'a>,
     ) -> Result<DecodedImage<'b>> {
         let settings = &self.settings;
-        j2c::decode(self.codestream, &self.header, decoder_context)?;
+        let cancel = Cancel(settings.cancel.as_ref());
+        j2c::decode(self.codestream, &self.header, decoder_context, cancel)?;
         let mut decoded_image = DecodedImage {
             decoded_components: &mut decoder_context.channel_data,
             boxes: self.boxes.clone(),
+            cancel,
         };
 
         // Resolve palette indices.
         if settings.resolve_palette_indices {
             let components = core::mem::take(decoded_image.decoded_components);
             *decoded_image.decoded_components =
-                resolve_palette_indices(components, &decoded_image.boxes)?;
+                resolve_palette_indices(components, &decoded_image.boxes, cancel)?;
         }
 
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
             // Sort by the channel association. Note that this will only work if
             // each component is referenced only once.
+            // TODO: Move the components instead of cloning them.
             let mut components = decoded_image
                 .decoded_components
                 .iter()
@@ -378,23 +402,28 @@ impl DecodedImage<'_> {
     }
 
     /// Return the decoded image as interleaved unsigned 8-bit sample data.
-    pub fn data_u8(&self) -> Vec<u8> {
+    pub fn data_u8(&self) -> core::result::Result<Vec<u8>, Cancelled> {
         let components = self.components();
         let buffer_size = components[0].samples().len() * components.len();
         let mut buf = vec![0; buffer_size];
-        self.store_u8_into(&mut buf);
-        buf
+        self.store_u8_into(&mut buf)?;
+
+        Ok(buf)
     }
 
     /// Store the decoded image as interleaved unsigned 8-bit sample data into `buf`.
     ///
     /// The buffer must have the correct size.
-    pub fn store_u8_into(&self, buf: &mut [u8]) {
-        interleave_and_convert(self, buf);
+    pub fn store_u8_into(&self, buf: &mut [u8]) -> core::result::Result<(), Cancelled> {
+        interleave_and_convert(self, buf)
     }
 }
 
-fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
+fn interleave_and_convert(
+    image: &DecodedImage<'_>,
+    buf: &mut [u8],
+) -> core::result::Result<(), Cancelled> {
+    let cancel = image.cancel;
     let components = &*image.decoded_components;
     let num_components = components.len();
 
@@ -418,18 +447,26 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
         && num_components <= 4
     {
         let scale = to_u8_scale(bit_depth);
-        let plane = |c: usize| &components[c].container[..max_len];
+        let max_len = max_len.min(buf.len() / num_components);
+        let mut start = 0;
+        while start < max_len {
+            cancel.check()?;
 
-        match num_components {
-            // Gray-scale.
-            1 => interleave_to_u8([plane(0)], scale, buf),
-            // Gray-scale with alpha.
-            2 => interleave_to_u8([plane(0), plane(1)], scale, buf),
-            // RGB
-            3 => interleave_to_u8([plane(0), plane(1), plane(2)], scale, buf),
-            // RGBA or CMYK.
-            4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], scale, buf),
-            _ => unreachable!(),
+            let end = (start + CHUNK).min(max_len);
+            let plane = |c: usize| &components[c].container[start..end];
+            let out = &mut buf[start * num_components..end * num_components];
+            match num_components {
+                // Gray-scale.
+                1 => interleave_to_u8([plane(0)], scale, out),
+                // Gray-scale with alpha.
+                2 => interleave_to_u8([plane(0), plane(1)], scale, out),
+                // RGB
+                3 => interleave_to_u8([plane(0), plane(1), plane(2)], scale, out),
+                // RGBA or CMYK.
+                4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], scale, out),
+                _ => unreachable!(),
+            }
+            start = end;
         }
     } else {
         let scales = components
@@ -438,11 +475,17 @@ fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
             .collect::<Vec<_>>();
 
         for sample in 0..max_len {
+            if sample % CHUNK == 0 {
+                cancel.check()?;
+            }
+
             for (channel, scale) in components.iter().zip(&scales) {
                 *output_iter.next().unwrap() = math::round_to_u8(channel.container[sample] * scale);
             }
         }
     }
+
+    Ok(())
 }
 
 fn interleave_to_u8<const N: usize>(planes: [&[f32]; N], scale: f32, out: &mut [u8]) {
@@ -517,6 +560,8 @@ fn interleave_to_u8_impl<S: Simd, const N: usize>(
 }
 
 fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()> {
+    let cancel = image.cancel;
+
     if let Some(jp2::colr::ColorSpace::Enumerated(e)) = &image
         .boxes
         .color_specification
@@ -526,17 +571,17 @@ fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()
         match e {
             EnumeratedColorspace::Sycc => {
                 dispatch!(Level::new(), simd => {
-                    sycc_to_rgb(simd, image.decoded_components, bit_depth)
+                    sycc_to_rgb(simd, image.decoded_components, bit_depth, cancel)
                 })?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
                 dispatch!(Level::new(), simd => {
-                    cielab_to_rgb(simd, image.decoded_components, bit_depth, cielab)
+                    cielab_to_rgb(simd, image.decoded_components, bit_depth, cielab, cancel)
                 })?;
             }
             EnumeratedColorspace::Ycck => {
                 dispatch!(Level::new(), simd => {
-                    ycck_to_cmyk(simd, image.decoded_components, bit_depth)
+                    ycck_to_cmyk(simd, image.decoded_components, bit_depth, cancel)
                 })?;
             }
             _ => {}
@@ -605,6 +650,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
 fn resolve_palette_indices(
     components: Vec<ComponentData>,
     boxes: &ImageBoxes,
+    cancel: Cancel<'_>,
 ) -> Result<Vec<ComponentData>> {
     let Some(palette) = boxes.palette.as_ref() else {
         // Nothing to resolve.
@@ -616,6 +662,8 @@ fn resolve_palette_indices(
     let mut resolved = Vec::with_capacity(mapping.entries.len());
 
     for entry in &mapping.entries {
+        cancel.check()?;
+
         let component_idx = entry.component_index as usize;
         let component = components
             .get(component_idx)
@@ -633,7 +681,11 @@ fn resolve_palette_indices(
                 let mut mapped =
                     Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
-                for &sample in component.container.truncated() {
+                for (i, &sample) in component.container.truncated().iter().enumerate() {
+                    if i % CHUNK == 0 {
+                        cancel.check()?;
+                    }
+
                     // Lossy decoding can reconstruct indices outside the palette.
                     let index = ((sample + 0.5) as i64).clamp(0, max_index);
                     let value = palette
@@ -659,6 +711,7 @@ fn cielab_to_rgb<S: Simd>(
     components: &mut [ComponentData],
     bit_depth: u8,
     lab: &CieLab,
+    cancel: Cancel<'_>,
 ) -> Result<()> {
     let (head, _) = components
         .split_at_mut_checked(3)
@@ -723,14 +776,19 @@ fn cielab_to_rgb<S: Simd>(
     // Note that we are not doing the actual conversion with the ICC profile yet,
     // just decoding the raw LAB values.
     // We leave applying the ICC profile to the user.
-    for ((l_chunk, a_chunk), b_chunk) in l
+    for (i, ((l_chunk, a_chunk), b_chunk)) in l
         .container
         .as_chunks_mut::<SIMD_WIDTH>()
         .0
         .iter_mut()
         .zip(a.container.as_chunks_mut::<SIMD_WIDTH>().0)
         .zip(b.container.as_chunks_mut::<SIMD_WIDTH>().0)
+        .enumerate()
     {
+        if i % (CHUNK / SIMD_WIDTH) == 0 {
+            cancel.check()?;
+        }
+
         let l_v = f32x8::from_slice(simd, l_chunk);
         let a_v = f32x8::from_slice(simd, a_chunk);
         let b_v = f32x8::from_slice(simd, b_chunk);
@@ -744,14 +802,21 @@ fn cielab_to_rgb<S: Simd>(
 }
 
 #[inline(always)]
-fn ycck_to_cmyk<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
+fn ycck_to_cmyk<S: Simd>(
+    simd: S,
+    components: &mut [ComponentData],
+    bit_depth: u8,
+    cancel: Cancel<'_>,
+) -> Result<()> {
     // Convert YCbCr to CMY, preserving K (T.801, Table M.25).
-    sycc_to_rgb(simd, components, bit_depth)?;
+    sycc_to_rgb(simd, components, bit_depth, cancel)?;
 
     let max_value = ((1_u32 << bit_depth) - 1) as f32;
     let max_v = f32x8::splat(simd, max_value);
 
     for component in components.iter_mut().take(3) {
+        cancel.check()?;
+
         let (chunks, remainder) = component.container.as_chunks_mut::<SIMD_WIDTH>();
         for chunk in chunks {
             (max_v - f32x8::from_slice(simd, chunk)).store(chunk);
@@ -764,7 +829,12 @@ fn ycck_to_cmyk<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u
     Ok(())
 }
 
-fn sycc_to_rgb<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
+fn sycc_to_rgb<S: Simd>(
+    simd: S,
+    components: &mut [ComponentData],
+    bit_depth: u8,
+    cancel: Cancel<'_>,
+) -> Result<()> {
     let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
 
@@ -784,14 +854,19 @@ fn sycc_to_rgb<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8
     let cr_to_g = f32x8::splat(simd, -0.714136);
     let cb_to_b = f32x8::splat(simd, 1.772);
 
-    for ((y_chunk, cb_chunk), cr_chunk) in y
+    for (i, ((y_chunk, cb_chunk), cr_chunk)) in y
         .container
         .as_chunks_mut::<SIMD_WIDTH>()
         .0
         .iter_mut()
         .zip(cb.container.as_chunks_mut::<SIMD_WIDTH>().0)
         .zip(cr.container.as_chunks_mut::<SIMD_WIDTH>().0)
+        .enumerate()
     {
+        if i % (CHUNK / SIMD_WIDTH) == 0 {
+            cancel.check()?;
+        }
+
         let y_v = f32x8::from_slice(simd, y_chunk);
         let cb_v = f32x8::from_slice(simd, cb_chunk) - offset_v;
         let cr_v = f32x8::from_slice(simd, cr_chunk) - offset_v;

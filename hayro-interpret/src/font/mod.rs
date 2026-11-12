@@ -41,7 +41,8 @@ impl Glyph<'_> {
     ///
     /// **For CID Fonts (Type0):**
     /// 1. `ToUnicode` cmap
-    ///
+    /// 2. UCS2 `CMap` of the font's Adobe character collection (Adobe-GB1, Adobe-CNS1,
+    ///    Adobe-Japan1, Adobe-Korea1)
     ///
     /// **For Type3 Fonts:**
     /// 1. `ToUnicode` cmap
@@ -202,7 +203,7 @@ impl CacheKey for Type3Glyph<'_> {
 
 impl CacheKey for GlyphIdentifier {
     fn cache_key(&self) -> u128 {
-        Self::cache_key(self)
+        self.glyph_key()
     }
 }
 

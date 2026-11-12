@@ -454,6 +454,12 @@ mod tests {
     }
 
     #[test]
+    fn array_with_lone_plus() {
+        let array = Array::from_bytes(b"[+ 1]").unwrap();
+        assert_eq!(array.iter::<i32>().collect::<Vec<_>>(), vec![0, 1]);
+    }
+
+    #[test]
     fn array_with_unreadable_item() {
         let _ = array_ref_impl(b"[true <<>>stream false]");
     }

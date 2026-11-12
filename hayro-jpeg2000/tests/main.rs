@@ -1,6 +1,7 @@
 //! Each test decodes a JPEG 2000 file from `streams` and compares the decoded
 //! samples against an image in `references`.
 
+mod cancel;
 mod code_blocks;
 mod codestream;
 mod errors;
@@ -133,7 +134,7 @@ fn decode(stream: &str, settings: &DecodeSettings) -> Result<Decoded, String> {
         width,
         height,
         channels: decoded.components().len(),
-        samples: decoded.data_u8(),
+        samples: decoded.data_u8().map_err(|e| e.to_string())?,
     })
 }
 
