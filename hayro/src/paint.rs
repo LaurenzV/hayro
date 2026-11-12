@@ -55,7 +55,7 @@ impl Renderer<'_> {
 
                         if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
                             && let Some(native) =
-                                gradient.as_svg_gradient(&encoded, bbox, NATIVE_GRADIENT_TOLERANCE)
+                                gradient.as_svg_gradient(&encoded, NATIVE_GRADIENT_TOLERANCE)
                         {
                             paint_transform = path_transform.inverse() * native.transform;
 
