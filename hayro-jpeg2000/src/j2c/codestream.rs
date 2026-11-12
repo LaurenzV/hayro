@@ -10,7 +10,7 @@ use crate::error::{MarkerError, Result, ValidationError, bail, err};
 use crate::reader::BitReader;
 
 const MAX_LAYER_COUNT: u8 = 32;
-const MAX_RESOLUTION_COUNT: u8 = 32;
+pub(crate) const MAX_RESOLUTION_COUNT: u8 = 32;
 const MAX_PRECINCT_EXPONENT: u8 = 31;
 
 #[derive(Debug)]
