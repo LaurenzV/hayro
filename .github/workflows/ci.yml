@@ -22,6 +22,18 @@ jobs:
       - run: RUSTFLAGS="-D warnings" cargo doc --workspace --exclude hayro-demo --exclude hayro-bench --no-deps
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo --exclude hayro-bench
 
+  jpeg2000:
+    name: Test JPEG2000 decoding with and without threads
+    runs-on: ubuntu-latest
+    env:
+      RAYON_NUM_THREADS: "4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p hayro-jpeg2000
+      - run: cargo test -p hayro-jpeg2000 --features threads
+
   min-version:
     name: Check minimum Rust version
     runs-on: ubuntu-latest

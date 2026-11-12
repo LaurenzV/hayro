@@ -10,6 +10,8 @@ mod jp2;
 mod mct;
 mod packets;
 mod palette;
+#[cfg(feature = "threads")]
+mod parallel;
 mod quantization;
 mod roi;
 mod tile_parts;
