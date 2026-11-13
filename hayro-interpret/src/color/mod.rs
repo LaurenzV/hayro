@@ -324,6 +324,14 @@ impl ColorSpace {
         matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
     }
 
+    /// Return `true` if the current color space is `DeviceGray` or `DeviceRGB`.
+    pub(crate) fn is_device_gray_or_rgb(&self) -> bool {
+        matches!(
+            self.0.as_ref(),
+            ColorSpaceType::DeviceGray(_) | ColorSpaceType::DeviceRgb(_)
+        )
+    }
+
     pub(crate) fn indexed_hival(&self) -> Option<u8> {
         match self.0.as_ref() {
             ColorSpaceType::Indexed(indexed) => Some(indexed.hival()),
@@ -570,6 +578,18 @@ impl ToLuma for ColorSpace {
 #[inline(always)]
 fn f32_to_u8(val: f32) -> u8 {
     (val * 255.0 + 0.5) as u8
+}
+
+pub(crate) fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
+    [0, 1, 2, 3].map(|i| c0[i] + (c1[i] - c0[i]) * t)
+}
+
+/// The largest difference between two colors in any component.
+pub(crate) fn color_error(c0: [f32; 4], c1: [f32; 4]) -> f32 {
+    c0.iter()
+        .zip(c1)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max)
 }
 
 #[derive(Debug, Clone)]

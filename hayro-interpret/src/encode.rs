@@ -1,14 +1,16 @@
 //! Encoding shading patterns for easy sampling.
 
-use crate::color::{AlphaColor, ColorComponents, ColorSpace};
+use crate::canvas::Canvas;
+use crate::color::{AlphaColor, ColorSpace};
 use crate::function::MAX_COMPONENTS;
-use crate::gradient::finish_color;
+use crate::function_shading::draw_function;
+use crate::gradient::function_lut;
 use crate::interpret::state::ActiveTransferFunction;
+use crate::mesh::draw_mesh;
 use crate::pattern::ShadingPattern;
-use crate::shading::{ShadingFunction, ShadingType, Triangle};
+use crate::shading::{ShadingFunction, ShadingType};
 use crate::util::x_y_advances;
 use kurbo::{Affine, Point, Rect};
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 /// A shading pattern that was encoded so it can be sampled.
@@ -31,8 +33,8 @@ pub enum EncodedShadingType {
     FunctionBased(EncodedFunctionBasedShading),
     /// Axial or radial shading.
     RadialAxial(EncodedRadialAxialShading),
-    /// Mesh-based shading sampled into device pixels.
-    Sampled(EncodedSampledShading),
+    /// Triangle-mesh or patch-mesh shading.
+    Mesh(EncodedMeshShading),
     /// Empty dummy shading.
     Dummy(EncodedDummyShading),
 }
@@ -53,11 +55,10 @@ pub struct EncodedRadialAxialShading {
     pub(crate) extend: [bool; 2],
 }
 
-/// Encoded sampled mesh shading.
+/// Encoded triangle-mesh or patch-mesh shading.
 #[derive(Clone, Debug)]
-pub struct EncodedSampledShading {
-    pub(crate) samples: Arc<FxHashMap<(u16, u16), ColorComponents>>,
-    pub(crate) function: Option<ShadingFunction>,
+pub struct EncodedMeshShading {
+    pub(crate) shading_type: Arc<ShadingType>,
 }
 
 /// Encoded dummy shading.
@@ -92,13 +93,30 @@ pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
 }
 
 impl EncodedShadingPattern {
-    /// Sample the shading at the given position.
-    #[inline]
-    pub fn sample(&self, pos: Point) -> [f32; 4] {
-        self.shading_type
-            .eval(pos, self.background_color, &self.color_space)
-            .map(|v| finish_color(self, v.components()))
-            .unwrap_or([0.0, 0.0, 0.0, 0.0])
+    /// Apply the opacity and transfer function to a color.
+    pub(crate) fn finish(&self, mut color: [f32; 4]) -> [f32; 4] {
+        color[3] *= self.opacity;
+
+        match &self.transfer_function {
+            Some(tf) => tf.apply(&AlphaColor::new(color)).components(),
+            None => color,
+        }
+    }
+
+    /// Convert components in the color space of the shading into a finished color.
+    pub(crate) fn convert(&self, components: &[f32]) -> [f32; 4] {
+        self.finish(self.color_space.to_rgba(components, 1.0).components())
+    }
+
+    /// Evaluate `function` and convert the result, or return transparent if it fails.
+    pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
+        let mut out = [0.0; MAX_COMPONENTS];
+        let out = &mut out[..function.num_outputs()];
+
+        match function.eval(input, out) {
+            Some(()) => self.convert(out),
+            None => [0.0; 4],
+        }
     }
 
     /// Sample the shading on a pixel grid covering `bbox`, with `scale`
@@ -114,48 +132,35 @@ impl EncodedShadingPattern {
         &self,
         bbox: Rect,
         scale: f32,
-        mut f: impl FnMut([f32; 4]),
+        f: impl FnMut([f32; 4]),
     ) -> (u32, u32, Affine) {
-        if let EncodedShadingType::RadialAxial(shading) = &self.shading_type {
-            let lut = shading.lut(self);
-            let background = finish_color(self, self.background_color.components());
-
-            self.walk_grid(bbox, scale, |point| {
-                f(shading.position(point).map_or(background, |t| lut.get(t)));
-            })
-        } else {
-            self.walk_grid(bbox, scale, |point| f(self.sample(point)))
-        }
-    }
-
-    fn walk_grid(&self, bbox: Rect, scale: f32, mut f: impl FnMut(Point)) -> (u32, u32, Affine) {
         let (width, height) = texture_dimensions(bbox, scale);
-        let inv_scale = 1.0 / scale as f64;
+        let grid_transform =
+            Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(1.0 / scale as f64);
+        let background = self.finish(self.background_color.components());
+        let mut canvas = Canvas::new(width, height, background);
+        let transform = grid_transform.inverse() * self.base_transform.inverse();
 
-        let (x_advance, y_advance) =
-            x_y_advances(&(Affine::scale(inv_scale) * self.base_transform));
-
-        let mut start_point = self.base_transform
-            * Affine::translate((0.5 * inv_scale, 0.5 * inv_scale))
-            * Point::new(bbox.x0, bbox.y0);
-
-        for _ in 0..height {
-            let mut point = start_point;
-
-            for _ in 0..width {
-                f(point);
-
-                point += x_advance;
+        match &self.shading_type {
+            EncodedShadingType::FunctionBased(shading) => {
+                draw_function(
+                    &mut canvas,
+                    shading.domain,
+                    &shading.function,
+                    transform,
+                    self,
+                );
             }
-
-            start_point += y_advance;
+            EncodedShadingType::RadialAxial(shading) => shading.draw(&mut canvas, transform, self),
+            EncodedShadingType::Mesh(shading) => {
+                draw_mesh(&mut canvas, &shading.shading_type, transform, self);
+            }
+            EncodedShadingType::Dummy(_) => {}
         }
 
-        (
-            width,
-            height,
-            Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(inv_scale),
-        )
+        canvas.pixels.into_iter().for_each(f);
+
+        (width, height, grid_transform)
     }
 
     /// Rasterize the shading into a straight (non-premultiplied) RGBA8
@@ -217,50 +222,11 @@ impl ShadingPattern {
 
                 encoded
             }
-            ShadingType::TriangleMesh {
-                triangles,
-                function,
-            } => {
-                let full_transform = self.matrix;
-                let samples = sample_triangles(triangles, full_transform);
+            ShadingType::TriangleMesh { .. } | ShadingType::PatchMesh { .. } => {
+                base_transform = self.matrix.inverse();
 
-                base_transform = Affine::IDENTITY;
-
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
-                })
-            }
-            ShadingType::CoonsPatchMesh { patches, function } => {
-                let mut triangles = vec![];
-                for patch in patches {
-                    patch.to_triangles(&mut triangles);
-                }
-
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
-
-                base_transform = Affine::IDENTITY;
-
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
-                })
-            }
-            ShadingType::TensorProductPatchMesh { patches, function } => {
-                let mut triangles = vec![];
-                for patch in patches {
-                    patch.to_triangles(&mut triangles);
-                }
-
-                let full_transform = self.matrix;
-                let samples = sample_triangles(&triangles, full_transform);
-
-                base_transform = Affine::IDENTITY;
-
-                EncodedShadingType::Sampled(EncodedSampledShading {
-                    samples: Arc::new(samples),
-                    function: function.clone(),
+                EncodedShadingType::Mesh(EncodedMeshShading {
+                    shading_type: self.shading.shading_type.clone(),
                 })
             }
             ShadingType::Dummy => {
@@ -272,12 +238,10 @@ impl ShadingPattern {
 
         let color_space = self.shading.color_space.clone();
 
-        let background_color = self
-            .shading
-            .background
-            .as_ref()
-            .map(|b| color_space.to_rgba(b, 1.0))
-            .unwrap_or(AlphaColor::TRANSPARENT);
+        let background_color = match (&shading_type, &self.shading.background) {
+            (EncodedShadingType::Dummy(_), _) | (_, None) => AlphaColor::TRANSPARENT,
+            (_, Some(background)) => color_space.to_rgba(background, 1.0),
+        };
 
         EncodedShadingPattern {
             color_space,
@@ -334,43 +298,6 @@ fn encode_axial_shading(
     )
 }
 
-fn sample_triangles(
-    triangles: &[Triangle],
-    transform: Affine,
-) -> FxHashMap<(u16, u16), ColorComponents> {
-    let mut map = FxHashMap::default();
-
-    for t in triangles {
-        let t = {
-            let p0 = transform * t.p0.point;
-            let p1 = transform * t.p1.point;
-            let p2 = transform * t.p2.point;
-
-            let mut v0 = t.p0.clone();
-            v0.point = p0;
-            let mut v1 = t.p1.clone();
-            v1.point = p1;
-            let mut v2 = t.p2.clone();
-            v2.point = p2;
-
-            Triangle::new(v0, v1, v2)
-        };
-
-        let bbox = t.bounding_box();
-
-        for y in (bbox.y0.floor() as u16)..(bbox.y1.ceil() as u16) {
-            for x in (bbox.x0.floor() as u16)..(bbox.x1.ceil() as u16) {
-                let point = Point::new(x as f64, y as f64);
-                if t.contains_point(point) {
-                    map.insert((x, y), t.interpolate(point));
-                }
-            }
-        }
-    }
-
-    map
-}
-
 fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> EncodedShadingType {
     let domain = Rect::new(
         domain[0] as f64,
@@ -391,59 +318,29 @@ pub(crate) enum RadialAxialParams {
     Radial { p1: Point, r: Point },
 }
 
-impl EncodedShadingType {
-    pub(crate) fn eval(
-        &self,
-        pos: Point,
-        bg_color: AlphaColor,
-        color_space: &ColorSpace,
-    ) -> Option<AlphaColor> {
-        match self {
-            Self::FunctionBased(EncodedFunctionBasedShading { domain, function }) => {
-                if !domain.contains(pos) {
-                    Some(bg_color)
-                } else {
-                    let mut out = [0.0; MAX_COMPONENTS];
-                    let out = &mut out[..function.num_outputs()];
-                    function.eval(&[pos.x as f32, pos.y as f32], out)?;
-                    // TODO: Clamp out-of-range values.
-                    Some(color_space.to_rgba(out, 1.0))
+impl EncodedRadialAxialShading {
+    /// Draw the shading, with `transform` mapping shading space to the canvas.
+    fn draw(&self, canvas: &mut Canvas, transform: Affine, pattern: &EncodedShadingPattern) {
+        let lut = function_lut(&self.function, self.domain, pattern);
+        let to_shading = transform.inverse();
+        let (x_advance, y_advance) = x_y_advances(&to_shading);
+        let mut row_start = to_shading * Point::new(0.5, 0.5);
+
+        for row in canvas.pixels.chunks_exact_mut(canvas.width) {
+            let mut point = row_start;
+
+            for pixel in row {
+                if let Some(t) = self.position(point) {
+                    *pixel = lut.get(t);
                 }
-            }
-            Self::RadialAxial(shading) => {
-                let Some(t) = shading.position(pos) else {
-                    return Some(bg_color);
-                };
 
-                let [t0, t1] = shading.domain;
-                let mut val = [0.0; MAX_COMPONENTS];
-                let val = &mut val[..shading.function.num_outputs()];
-                shading.function.eval(&[t0 + (t1 - t0) * t], val)?;
-
-                Some(color_space.to_rgba(val, 1.0))
+                point += x_advance;
             }
-            Self::Sampled(EncodedSampledShading { samples, function }) => {
-                let sample_point = (pos.x as u16, pos.y as u16);
 
-                if let Some(color) = samples.get(&sample_point) {
-                    if let Some(function) = function {
-                        let mut val = [0.0; MAX_COMPONENTS];
-                        let val = &mut val[..function.num_outputs()];
-                        function.eval(color, val)?;
-                        Some(color_space.to_rgba(val, 1.0))
-                    } else {
-                        Some(color_space.to_rgba(color, 1.0))
-                    }
-                } else {
-                    Some(bg_color)
-                }
-            }
-            Self::Dummy(_) => Some(AlphaColor::TRANSPARENT),
+            row_start += y_advance;
         }
     }
-}
 
-impl EncodedRadialAxialShading {
     fn position(&self, pos: Point) -> Option<f32> {
         let t = match self.params {
             RadialAxialParams::Axial => pos.x as f32,
