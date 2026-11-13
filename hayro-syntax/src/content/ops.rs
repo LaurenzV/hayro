@@ -348,4 +348,24 @@ f
         ));
         assert!(iter.next().is_none());
     }
+
+    #[test]
+    fn inline_images_after_candidate_ends() {
+        // After each image's first candidate end come another `EI` and another
+        // image. Checking whether the data after a candidate end is content
+        // used to check the next image's candidate ends in turn, which took
+        // time exponential in the number of images and a stack frame for each.
+        let input = b"BI /W 1 /H 1 ID x EI EI ".repeat(10_000);
+
+        let mut iter = TypedIter::new(&input);
+        let mut images = 0;
+
+        while let Some(instruction) = iter.next() {
+            if matches!(instruction, TypedInstruction::InlineImage(_)) {
+                images += 1;
+            }
+        }
+
+        assert_eq!(images, 10_000);
+    }
 }
