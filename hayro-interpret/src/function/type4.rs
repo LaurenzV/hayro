@@ -198,8 +198,12 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
         };
     }
 
-    fn bf(cond: bool) -> f32 {
-        (cond as i32) as f32
+    macro_rules! compare {
+        ($eval:expr) => {
+            let n2 = arg_stack.pop()?;
+            let n1 = arg_stack.pop()?;
+            arg_stack.push(Argument::Bool($eval(n1.as_f32(), n2.as_f32())));
+        };
     }
 
     for op in procedure {
@@ -243,12 +247,9 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
                 one_f!(|n: f32| n.floor());
             }
             PostScriptOp::Idiv => {
-                two_f!(|n1: f32, n2: f32| {
-                    let n1 = n1 as i32;
-                    let n2 = n2 as i32;
-
-                    (n1 / n2) as f32
-                });
+                let n2 = arg_stack.pop()?.as_f32() as i32;
+                let n1 = arg_stack.pop()?.as_f32() as i32;
+                arg_stack.push(Argument::Float(n1.checked_div(n2)? as f32))?;
             }
             PostScriptOp::Ln => {
                 one_f!(|n: f32| n.ln());
@@ -281,7 +282,10 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
                 one_f!(|n: f32| n.trunc());
             }
             PostScriptOp::And => {
-                two_f!(|n1: f32, n2: f32| (n1 as i32 & n2 as i32) as f32);
+                four!(
+                    |n1: f32, n2: f32| ((n1 as i32) & (n2 as i32)) as f32,
+                    |b1: bool, b2: bool| b1 && b2
+                );
             }
             PostScriptOp::Bitshift => {
                 two_f!(|n1: f32, n2: f32| {
@@ -289,32 +293,32 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
                     let shift = n2 as i32;
 
                     if shift >= 0 {
-                        (num << shift) as f32
+                        num.checked_shl(shift as u32).unwrap_or(0) as f32
                     } else {
-                        (num >> -shift) as f32
+                        num.checked_shr(shift.unsigned_abs()).unwrap_or(0) as f32
                     }
                 });
             }
             PostScriptOp::Eq => {
-                two_f!(|n1: f32, n2: f32| bf(n1 == n2));
+                compare!(|n1: f32, n2: f32| n1 == n2);
             }
             PostScriptOp::False => {
                 zero!(Argument::Bool(false));
             }
             PostScriptOp::Ge => {
-                two_f!(|n1: f32, n2: f32| bf(n1 >= n2));
+                compare!(|n1: f32, n2: f32| n1 >= n2);
             }
             PostScriptOp::Gt => {
-                two_f!(|n1: f32, n2: f32| bf(n1 > n2));
+                compare!(|n1: f32, n2: f32| n1 > n2);
             }
             PostScriptOp::Le => {
-                two_f!(|n1: f32, n2: f32| bf(n1 <= n2));
+                compare!(|n1: f32, n2: f32| n1 <= n2);
             }
             PostScriptOp::Lt => {
-                two_f!(|n1: f32, n2: f32| bf(n1 < n2));
+                compare!(|n1: f32, n2: f32| n1 < n2);
             }
             PostScriptOp::Ne => {
-                two_f!(|n1: f32, n2: f32| bf(n1 != n2));
+                compare!(|n1: f32, n2: f32| n1 != n2);
             }
             PostScriptOp::Not => {
                 let arg = arg_stack.pop()?;
@@ -815,6 +819,27 @@ mod tests {
         op_impl("true not", &[0.0]);
         op_impl("false not", &[1.0]);
         op_impl("52 not", &[-53.0]);
+    }
+
+    #[test]
+    fn comparisons_are_booleans() {
+        op_impl("1 2 lt not", &[0.0]);
+        op_impl("2 1 lt not", &[1.0]);
+        op_impl("1 2 lt 3 4 lt and not", &[0.0]);
+    }
+
+    #[test]
+    fn op_idiv_by_zero() {
+        let program = parse_procedure(b"{ 1 0 idiv }").unwrap();
+        let type4 = Type4 { program };
+
+        assert!(type4.run(&[]).is_none());
+    }
+
+    #[test]
+    fn op_bitshift_out_of_range() {
+        op_impl("1 40 bitshift", &[0.0]);
+        op_impl("1 -40 bitshift", &[0.0]);
     }
 
     #[test]
