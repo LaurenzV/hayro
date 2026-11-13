@@ -15,8 +15,8 @@ use std::ops::Deref;
 mod type3;
 
 pub use hayro_font::{
-    FallbackFontQuery, FontData, FontQuery, FontStretch, GlyphId, GlyphIdentifier, HintingCache,
-    OutlineFontData, OutlineGlyph, StandardFont,
+    FallbackFontQuery, FontData, FontFlags, FontProperties, FontQuery, FontStretch, GlyphId,
+    GlyphIdentifier, HintingCache, OutlineFontData, OutlineGlyph, StandardFont,
 };
 pub(crate) use hayro_font::{Font, FontCache, FontGlyph, UNITS_PER_EM};
 
@@ -96,6 +96,7 @@ impl<'a> Deref for PositionedGlyph<'a> {
 pub struct GlyphRun<'run, 'a> {
     pub(crate) glyphs: &'run [PositionedGlyph<'a>],
     pub(crate) writing_mode: WritingMode,
+    pub(crate) font: Option<&'run FontProperties<'a>>,
 }
 
 impl<'run, 'a> GlyphRun<'run, 'a> {
@@ -107,6 +108,16 @@ impl<'run, 'a> GlyphRun<'run, 'a> {
     /// Return the writing mode of the font the run was shown with.
     pub fn writing_mode(&self) -> WritingMode {
         self.writing_mode
+    }
+
+    /// Return the properties of the font the run was shown with.
+    ///
+    /// Returns `None` if the content stream selected no font with `Tf`, or a
+    /// font its resources don't have, in which case the run is shown with
+    /// Helvetica. A font that has a dictionary always has its properties here,
+    /// even when it is drawn with a substitute font.
+    pub fn font(&self) -> Option<&'run FontProperties<'a>> {
+        self.font
     }
 }
 

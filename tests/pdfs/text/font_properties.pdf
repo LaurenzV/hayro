@@ -1,0 +1,55 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 60] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 7 0 R /F3 10 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 128 >>
+stream
+BT 10 50 Td (a) Tj ET
+BT /F1 12 Tf 10 30 Td (Bold) Tj ET
+BT /F2 12 Tf 60 30 Td <0001> Tj ET
+BT /F3 12 Tf 10 10 Td (Plain) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica-Bold /FontDescriptor 6 0 R >>
+endobj
+6 0 obj
+<< /Type /FontDescriptor /FontName /ABCDEF+Helvetica-Bold /Flags 262304 /FontWeight 700 /StemV 140 /ItalicAngle -12.5 /Ascent 718 /Descent -207 /CapHeight 718 /FontBBox [-170 -228 1003 962] >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /Composite /Encoding /Identity-H /DescendantFonts [8 0 R] >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Composite /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 9 0 R >>
+endobj
+9 0 obj
+<< /Type /FontDescriptor /FontName /Composite /Flags 4 /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 /FontBBox [0 -120 1000 880] >>
+endobj
+10 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000261 00000 n 
+0000000439 00000 n 
+0000000543 00000 n 
+0000000751 00000 n 
+0000000868 00000 n 
+0000001041 00000 n 
+0000001208 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1279
+%%EOF
