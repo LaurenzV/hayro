@@ -91,6 +91,7 @@ impl Renderer<'_> {
 
                             PaintType::Gradient(gradient)
                         } else {
+                            let bbox = bbox.expand();
                             let (width, height) = texture_dimensions(bbox, 1.0);
                             let mut image = Vec::with_capacity(width as usize * height as usize);
                             let mut may_have_transparency = false;
@@ -116,8 +117,8 @@ impl Renderer<'_> {
                             let image = Image {
                                 image: ImageSource::Pixmap(Arc::new(pixmap)),
                                 sampler: ImageSampler {
-                                    x_extend: peniko::Extend::Repeat,
-                                    y_extend: peniko::Extend::Repeat,
+                                    x_extend: peniko::Extend::Pad,
+                                    y_extend: peniko::Extend::Pad,
                                     quality: ImageQuality::Medium,
                                     alpha: 1.0,
                                 },
