@@ -2,7 +2,7 @@ use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::interpret::path::{
     close_path, end_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
@@ -225,7 +225,11 @@ fn interpret_annotation<'a>(
         context.pre_concat_affine(affine);
         context.push_root_transform();
 
-        apx.draw(resources, context, device);
+        let source = ContentSource::Appearance {
+            annotation: annot.obj_id(),
+            stream: apx.id,
+        };
+        apx.draw(&source, resources, context, device);
         context.pop_root_transform();
         context.restore_state(device);
     } else if annot.get::<Dict<'_>>(AP).is_some() {
@@ -256,7 +260,9 @@ pub fn interpret<'a>(
 
     context.save_state();
 
-    while let Some(op) = ops.next() {
+    while let Some((op, span)) = ops.next_with_span() {
+        device.operator(span);
+
         match op {
             TypedInstruction::SaveState(_) => context.save_state(),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
@@ -484,7 +490,7 @@ pub fn interpret<'a>(
                 context.fill_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context))
+                        .and_then(|d| Pattern::new(d, name, context))
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
@@ -492,7 +498,7 @@ pub fn interpret<'a>(
                 context.stroke_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context))
+                        .and_then(|d| Pattern::new(d, name, context))
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
@@ -679,7 +685,7 @@ pub fn interpret<'a>(
                         transfer_function.clone(),
                     )
                 }) {
-                    x_object.draw(resources, context, device);
+                    x_object.draw(x.0, resources, context, device);
                 }
             }
             TypedInstruction::InlineImage(i) => {

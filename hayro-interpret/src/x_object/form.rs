@@ -1,16 +1,17 @@
 use super::xobject_oc;
 use crate::context::Context;
-use crate::device::Device;
+use crate::device::{ContentSource, Device};
 use crate::{ClipPath, FillRule, interpret};
 use hayro_syntax::content::TypedIter;
-use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
+use hayro_syntax::object::{Dict, ObjectIdentifier};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use std::borrow::Cow;
 
 pub(crate) struct FormXObject<'a> {
+    pub(crate) id: ObjectIdentifier,
     pub(crate) decoded: Cow<'a, [u8]>,
     pub(crate) matrix: Affine,
     pub(crate) bbox: [f32; 4],
@@ -42,6 +43,7 @@ impl<'a> FormXObject<'a> {
         };
 
         Some(Self {
+            id: stream.obj_id(),
             decoded,
             matrix,
             is_transparency_group: group.is_some(),
@@ -55,6 +57,7 @@ impl<'a> FormXObject<'a> {
 
     pub(crate) fn draw(
         &self,
+        source: &ContentSource<'_>,
         resources: &Resources<'a>,
         context: &mut Context<'a>,
         device: &mut impl Device<'a>,
@@ -108,12 +111,14 @@ impl<'a> FormXObject<'a> {
             fill: FillRule::NonZero,
         });
 
+        device.begin_content(source);
         interpret(
             iter,
             self.resources.as_ref().unwrap_or(resources),
             context,
             device,
         );
+        device.end_content();
 
         device.pop_clip();
 

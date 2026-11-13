@@ -88,6 +88,11 @@ impl<'a> Type3Font<'a> {
         self.dict.get(RESOURCES)
     }
 
+    /// Return the dictionary of the font.
+    pub fn dict(&self) -> &Dict<'a> {
+        &self.dict
+    }
+
     pub(crate) fn new(dict: &Dict<'a>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, dict)?;
