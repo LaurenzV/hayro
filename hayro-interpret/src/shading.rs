@@ -145,6 +145,15 @@ impl Shading {
     pub(crate) fn new(dict: &Dict<'_>, stream: Option<&Stream<'_>>, cache: &Cache) -> Option<Self> {
         let cache_key = stream.map_or_else(|| dict.cache_key(), |s| s.cache_key());
 
+        cache.get_or_insert_with(cache_key, || Self::parse(dict, stream, cache, cache_key))
+    }
+
+    fn parse(
+        dict: &Dict<'_>,
+        stream: Option<&Stream<'_>>,
+        cache: &Cache,
+        cache_key: u128,
+    ) -> Option<Self> {
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
 
         let color_space = ColorSpace::new(dict.get(COLORSPACE)?, cache)?;
