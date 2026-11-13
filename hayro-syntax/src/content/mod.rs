@@ -81,6 +81,9 @@ pub struct UntypedIter<'a> {
     reader: Reader<'a>,
     stack: Stack<'a>,
     operator: Option<Operator<'a>>,
+    // Whether this iterator only looks ahead from a candidate end of an
+    // inline image's data, see `read_inline_image`.
+    lookahead: bool,
 }
 
 impl<'a> UntypedIter<'a> {
@@ -90,6 +93,7 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(data),
             stack: Stack::new(),
             operator: None,
+            lookahead: false,
         }
     }
 
@@ -99,6 +103,14 @@ impl<'a> UntypedIter<'a> {
             reader: Reader::new(&[]),
             stack: Stack::new(),
             operator: None,
+            lookahead: false,
+        }
+    }
+
+    fn lookahead(data: &'a [u8]) -> Self {
+        Self {
+            lookahead: true,
+            ..Self::new(data)
         }
     }
 
@@ -107,7 +119,7 @@ impl<'a> UntypedIter<'a> {
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
         self.stack.clear();
 
-        let operator = read_instruction(&mut self.reader, &mut self.stack)?;
+        let operator = read_instruction(&mut self.reader, &mut self.stack, self.lookahead)?;
         self.operator = Some(operator);
         Some(Instruction {
             operands: &self.stack,
@@ -116,7 +128,11 @@ impl<'a> UntypedIter<'a> {
     }
 }
 
-fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Operator<'a>> {
+fn read_instruction<'a>(
+    r: &mut Reader<'a>,
+    stack: &mut Stack<'a>,
+    lookahead: bool,
+) -> Option<Operator<'a>> {
     // Keeps the read position in a register; must be written back before calling out.
     let mut cur = r.clone();
 
@@ -156,7 +172,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
                 };
 
                 if operator.as_ref() == b"BI" {
-                    read_inline_image(r, stack)?;
+                    read_inline_image(r, stack, lookahead)?;
                 }
 
                 return Some(operator);
@@ -177,7 +193,7 @@ fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
     }
 }
 
-fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
+fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>, lookahead: bool) -> Option<()> {
     let inline_dict = r.read_without_context::<InlineImageDict<'_>>()?;
     let dict = inline_dict.get_dict().clone();
 
@@ -210,7 +226,11 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
             let mut is_content = None;
             let mut next_bi = find_needle(tail, b"BI");
 
-            while !find_reader.at_end() {
+            // Checking whether the data after a candidate end is content reads
+            // the inline images in it. Those take their first candidate end,
+            // so that the checks do not nest: nested, they take exponential
+            // time and unbounded stack.
+            while !lookahead && !find_reader.at_end() {
                 let offset = find_reader.offset();
 
                 if next_bi.is_some_and(|bi| bi < offset) {
@@ -266,7 +286,7 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
 }
 
 fn starts_with_content(data: &[u8]) -> bool {
-    let mut iter = TypedIter::new(data);
+    let mut iter = TypedIter::from_untyped(UntypedIter::lookahead(data));
     let mut counter = 0;
 
     while let Some(op) = iter.next() {
