@@ -41,9 +41,13 @@ pub(crate) fn draw_function(
     let corner =
         |column: usize, row: usize| [x0 + column * FUNCTION_CELL, y0 + row * FUNCTION_CELL];
     let sample_row = |row: usize| {
-        (0..=columns)
-            .map(|column| sampler.sample(corner(column, row)))
-            .collect::<Vec<_>>()
+        let points = (0..=columns)
+            .map(|column| pixel_corner(corner(column, row)))
+            .collect::<Vec<_>>();
+        let mut colors = vec![[0.0; 4]; points.len()];
+        sampler.sample(&points, &mut colors);
+
+        colors
     };
 
     let mut previous = sample_row(0);
@@ -80,15 +84,20 @@ struct FunctionSampler<'a> {
 }
 
 impl FunctionSampler<'_> {
-    /// The color at the given pixel corner of the canvas.
-    fn sample(&self, [x, y]: [usize; 2]) -> [f32; 4] {
-        self.sample_at(Point::new(x as f64, y as f64))
-    }
+    fn sample(&self, points: &[Point], colors: &mut [[f32; 4]]) {
+        const CHUNK: usize = 64;
 
-    fn sample_at(&self, point: Point) -> [f32; 4] {
-        let point = self.inverse * point;
-        self.pattern
-            .eval(self.function, &[point.x as f32, point.y as f32])
+        let mut inputs = [0.0; 2 * CHUNK];
+
+        for (points, colors) in points.chunks(CHUNK).zip(colors.chunks_mut(CHUNK)) {
+            for (input, point) in inputs.as_chunks_mut::<2>().0.iter_mut().zip(points) {
+                let point = self.inverse * *point;
+                *input = [point.x as f32, point.y as f32];
+            }
+
+            self.pattern
+                .eval_many(self.function, &inputs[..2 * points.len()], colors);
+        }
     }
 
     fn contains(&self, point: Point) -> bool {
@@ -119,20 +128,52 @@ fn draw_function_cell(
         .all(|p| sampler.domain.contains(p));
 
     if size <= FUNCTION_PIXEL_CELL {
-        fill_cell(canvas, sampler, [x, y], size, inside, |center, _| {
-            sampler.sample_at(center)
-        });
+        const MAX: usize = FUNCTION_PIXEL_CELL * FUNCTION_PIXEL_CELL;
+
+        let mut indices = [0; MAX];
+        let mut centers = [Point::ZERO; MAX];
+        let mut colors = [[0.0; 4]; MAX];
+        let mut count = 0;
+
+        let (width, height) = (canvas.width, canvas.height);
+
+        for_each_cell_pixel(
+            [width, height],
+            sampler,
+            [x, y],
+            size,
+            inside,
+            |index, center, _| {
+                indices[count] = index;
+                centers[count] = center;
+                count += 1;
+            },
+        );
+
+        sampler.sample(&centers[..count], &mut colors[..count]);
+
+        for (index, color) in indices[..count].iter().zip(colors) {
+            canvas.pixels[*index] = color;
+        }
 
         return;
     }
 
     let half = size / 2;
     let [c00, c10, c01, c11] = corners;
-    let top = sampler.sample([x + half, y]);
-    let left = sampler.sample([x, y + half]);
-    let middle = sampler.sample([x + half, y + half]);
-    let right = sampler.sample([x + size, y + half]);
-    let bottom = sampler.sample([x + half, y + size]);
+    let mut samples = [[0.0; 4]; 5];
+    sampler.sample(
+        &[
+            [x + half, y],
+            [x, y + half],
+            [x + half, y + half],
+            [x + size, y + half],
+            [x + half, y + size],
+        ]
+        .map(pixel_corner),
+        &mut samples,
+    );
+    let [top, left, middle, right, bottom] = samples;
 
     let error = [
         color_error(top, lerp_color(c00, c10, 0.5)),
@@ -159,30 +200,35 @@ fn draw_function_cell(
             draw_function_cell(canvas, sampler, origin, half, corners);
         } else {
             let [c00, c10, c01, c11] = corners;
-            fill_cell(canvas, sampler, origin, half, inside, |_, [u, v]| {
-                lerp_color(lerp_color(c00, c10, u), lerp_color(c01, c11, u), v)
+            let size = [canvas.width, canvas.height];
+
+            for_each_cell_pixel(size, sampler, origin, half, inside, |index, _, [u, v]| {
+                canvas.pixels[index] =
+                    lerp_color(lerp_color(c00, c10, u), lerp_color(c01, c11, u), v);
             });
         }
     }
 }
 
-/// Fill the pixels of a cell that lie in the domain, given each pixel's center and its relative
-/// position in the cell.
-fn fill_cell(
-    canvas: &mut Canvas,
+fn pixel_corner([x, y]: [usize; 2]) -> Point {
+    Point::new(x as f64, y as f64)
+}
+
+fn for_each_cell_pixel(
+    [width, height]: [usize; 2],
     sampler: &FunctionSampler<'_>,
     [x, y]: [usize; 2],
     size: usize,
     inside: bool,
-    color: impl Fn(Point, [f32; 2]) -> [f32; 4],
+    mut f: impl FnMut(usize, Point, [f32; 2]),
 ) {
-    for row in y..(y + size).min(canvas.height) {
-        for column in x..(x + size).min(canvas.width) {
+    for row in y..(y + size).min(height) {
+        for column in x..(x + size).min(width) {
             let center = Point::new(column as f64 + 0.5, row as f64 + 0.5);
 
             if inside || sampler.contains(center) {
                 let position = [column - x, row - y].map(|o| (o as f32 + 0.5) / size as f32);
-                canvas.pixels[row * canvas.width + column] = color(center, position);
+                f(row * width + column, center, position);
             }
         }
     }

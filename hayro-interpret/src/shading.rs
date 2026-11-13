@@ -39,19 +39,40 @@ impl ShadingFunction {
         }
     }
 
-    /// Evaluate the shading function for a single sample.
+    /// Evaluate the shading function for one or more samples.
     ///
-    /// `output` needs to have space for [`Self::num_outputs`] values.
+    /// `output` needs to have space for [`Self::num_outputs`] values per sample.
     pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
         match self {
             Self::Single(function) => function.eval(input, output),
             Self::Multiple(functions) => {
-                if functions.len() != output.len() {
+                const CHUNK: usize = 64;
+
+                let samples = output.len() / functions.len();
+                let num_inputs = input.len().checked_div(samples)?;
+
+                if samples * functions.len() != output.len() || samples * num_inputs != input.len()
+                {
                     return None;
                 }
 
-                for (function, output) in functions.iter().zip(output.iter_mut()) {
-                    function.eval(input, std::slice::from_mut(output))?;
+                let mut values = [0.0; CHUNK];
+
+                for (input, output) in input
+                    .chunks(CHUNK * num_inputs)
+                    .zip(output.chunks_mut(CHUNK * functions.len()))
+                {
+                    let values = &mut values[..output.len() / functions.len()];
+
+                    for (i, function) in functions.iter().enumerate() {
+                        function.eval(input, values)?;
+
+                        for (output, value) in
+                            output.chunks_exact_mut(functions.len()).zip(&*values)
+                        {
+                            output[i] = *value;
+                        }
+                    }
                 }
 
                 Some(())

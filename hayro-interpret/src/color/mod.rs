@@ -581,7 +581,12 @@ fn f32_to_u8(val: f32) -> u8 {
 }
 
 pub(crate) fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
-    [0, 1, 2, 3].map(|i| c0[i] + (c1[i] - c0[i]) * t)
+    [
+        c0[0] + (c1[0] - c0[0]) * t,
+        c0[1] + (c1[1] - c0[1]) * t,
+        c0[2] + (c1[2] - c0[2]) * t,
+        c0[3] + (c1[3] - c0[3]) * t,
+    ]
 }
 
 /// The largest difference between two colors in any component.

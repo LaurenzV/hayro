@@ -108,14 +108,35 @@ impl EncodedShadingPattern {
         self.finish(self.color_space.to_rgba(components, 1.0).components())
     }
 
-    /// Evaluate `function` and convert the result, or return transparent if it fails.
-    pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
-        let mut out = [0.0; MAX_COMPONENTS];
-        let out = &mut out[..function.num_outputs()];
+    pub(crate) fn eval_many(
+        &self,
+        function: &ShadingFunction,
+        inputs: &[f32],
+        colors: &mut [[f32; 4]],
+    ) {
+        const VALUES: usize = 2 * MAX_COMPONENTS;
 
-        match function.eval(input, out) {
-            Some(()) => self.convert(out),
-            None => [0.0; 4],
+        let Some(num_inputs) = inputs.len().checked_div(colors.len()).filter(|n| *n > 0) else {
+            return;
+        };
+        let num_outputs = function.num_outputs();
+        let chunk = VALUES / num_outputs;
+        let mut values = [0.0; VALUES];
+
+        for (inputs, colors) in inputs
+            .chunks(chunk * num_inputs)
+            .zip(colors.chunks_mut(chunk))
+        {
+            let values = &mut values[..colors.len() * num_outputs];
+
+            match function.eval(inputs, values) {
+                Some(()) => {
+                    for (color, values) in colors.iter_mut().zip(values.chunks_exact(num_outputs)) {
+                        *color = self.convert(values);
+                    }
+                }
+                None => colors.fill([0.0; 4]),
+            }
         }
     }
 

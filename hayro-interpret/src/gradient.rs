@@ -72,7 +72,7 @@ impl EncodedRadialAxialShading {
             transform: pattern.base_transform.inverse(),
             stops: pad_stops(
                 approximate_gradient_stops(
-                    |t| sample_function(&self.function, self.domain, pattern, t),
+                    |t, colors| sample_function(&self.function, self.domain, pattern, t, colors),
                     &normalized_stitching_bounds(&self.function, self.domain),
                     tolerance,
                 ),
@@ -126,7 +126,7 @@ pub(crate) fn function_lut(
     pattern: &EncodedShadingPattern,
 ) -> ColorLut {
     ColorLut::new(&approximate_gradient_stops(
-        |t| sample_function(function, range, pattern, t),
+        |t, colors| sample_function(function, range, pattern, t, colors),
         &normalized_stitching_bounds(function, range),
         LUT_TOLERANCE,
     ))
@@ -136,9 +136,20 @@ fn sample_function(
     function: &ShadingFunction,
     [t0, t1]: [f32; 2],
     pattern: &EncodedShadingPattern,
-    t: f32,
-) -> [f32; 4] {
-    pattern.eval(function, &[t0 + (t1 - t0) * t])
+    t: &[f32],
+    colors: &mut [[f32; 4]],
+) {
+    const CHUNK: usize = 16;
+
+    let mut inputs = [0.0; CHUNK];
+
+    for (t, colors) in t.chunks(CHUNK).zip(colors.chunks_mut(CHUNK)) {
+        for (input, t) in inputs.iter_mut().zip(t) {
+            *input = t0 + (t1 - t0) * t;
+        }
+
+        pattern.eval_many(function, &inputs[..t.len()], colors);
+    }
 }
 
 fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
@@ -236,7 +247,7 @@ fn pad_stops(
 }
 
 fn approximate_gradient_stops(
-    mut sample: impl FnMut(f32) -> [f32; 4],
+    mut sample: impl FnMut(&[f32], &mut [[f32; 4]]),
     breakpoints: &[f32],
     tolerance: f32,
 ) -> Vec<SvgGradientStop> {
@@ -245,33 +256,22 @@ fn approximate_gradient_stops(
     interval_bounds.extend(breakpoints.iter().copied());
     interval_bounds.push(1.0);
 
-    let mut stops = Vec::new();
-    for interval in interval_bounds.windows(2) {
-        let start_offset = interval[0];
-        let end_offset = interval[1];
+    let mut bound_colors = vec![[0.0; 4]; interval_bounds.len()];
+    sample(&interval_bounds, &mut bound_colors);
 
-        let start_color = sample(start_offset);
-        stops.push(SvgGradientStop {
-            offset: start_offset,
-            color: start_color,
+    let mut stops = Vec::new();
+    for (offsets, colors) in interval_bounds.windows(2).zip(bound_colors.windows(2)) {
+        let [start, end] = [0, 1].map(|i| GradientSample {
+            offset: offsets[i],
+            color: colors[i],
         });
 
-        let end_color = sample(end_offset);
+        stops.push(SvgGradientStop {
+            offset: start.offset,
+            color: start.color,
+        });
 
-        approximate_gradient_interval(
-            &mut sample,
-            &mut stops,
-            GradientSample {
-                offset: start_offset,
-                color: start_color,
-            },
-            GradientSample {
-                offset: end_offset,
-                color: end_color,
-            },
-            tolerance.max(0.0),
-            0,
-        );
+        approximate_gradient_interval(&mut sample, &mut stops, start, end, tolerance.max(0.0), 0);
     }
 
     stops
@@ -284,7 +284,7 @@ struct GradientSample {
 }
 
 fn approximate_gradient_interval(
-    sample: &mut impl FnMut(f32) -> [f32; 4],
+    sample: &mut impl FnMut(&[f32], &mut [[f32; 4]]),
     stops: &mut Vec<SvgGradientStop>,
     start: GradientSample,
     end: GradientSample,
@@ -292,13 +292,12 @@ fn approximate_gradient_interval(
     depth: u8,
 ) {
     let offset_delta = end.offset - start.offset;
-    let quarter_offset = start.offset + offset_delta * 0.25;
-    let mid_offset = start.offset + offset_delta * 0.5;
-    let three_quarter_offset = start.offset + offset_delta * 0.75;
+    let offsets = [0.25, 0.5, 0.75].map(|f| start.offset + offset_delta * f);
+    let mid_offset = offsets[1];
 
-    let quarter_color = sample(quarter_offset);
-    let mid_color = sample(mid_offset);
-    let three_quarter_color = sample(three_quarter_offset);
+    let mut colors = [[0.0; 4]; 3];
+    sample(&offsets, &mut colors);
+    let [quarter_color, mid_color, three_quarter_color] = colors;
 
     if color_error(quarter_color, lerp_color(start.color, end.color, 0.25)) <= tolerance
         && color_error(mid_color, lerp_color(start.color, end.color, 0.5)) <= tolerance
