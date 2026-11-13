@@ -67,15 +67,36 @@ impl Type0Font {
             match load_program(&font_descriptor, loader) {
                 Some(program) => (program, false, false),
                 None => {
-                    let (query, is_standard) =
-                        if let Some((standard, _)) = select_standard_font(dict, &font_descriptor) {
-                            (FontQuery::Standard(standard), true)
-                        } else {
-                            let mut query = FallbackFontQuery::new(dict);
-                            query.character_collection = character_collection.clone();
+                    // A font for a CJK character collection should almost never
+                    // resolve to one of the standard 14 fonts: a name such as
+                    // "NotoSansKR-Regular" would keyword-match Helvetica, which has
+                    // no CJK glyphs, and the query would not carry the collection
+                    // a resolver needs to pick a CJK fallback (#1693). The
+                    // exception is an *exact* standard-font match such as
+                    // TimesNewRomanPSMT with GBK-EUC-H, whose narrow proportional
+                    // glyphs must not become fullwidth fallback ones
+                    // (raster::pdfjs_issue11088): keep exact matches, drop
+                    // keyword matches.
+                    let is_cjk = matches!(
+                        character_collection.as_ref().map(|cc| &cc.family),
+                        Some(
+                            CidFamily::AdobeJapan1
+                                | CidFamily::AdobeGB1
+                                | CidFamily::AdobeCNS1
+                                | CidFamily::AdobeKorea1
+                        )
+                    );
+                    let standard = select_standard_font(dict, &font_descriptor)
+                        .filter(|&(_, exact)| !is_cjk || exact);
 
-                            (FontQuery::Fallback(query), false)
-                        };
+                    let (query, is_standard) = if let Some((standard, _)) = standard {
+                        (FontQuery::Standard(standard), true)
+                    } else {
+                        let mut query = FallbackFontQuery::new(dict);
+                        query.character_collection = character_collection.clone();
+
+                        (FontQuery::Fallback(query), false)
+                    };
 
                     (loader.programs.resolve(&query)?, true, is_standard)
                 }
@@ -547,5 +568,66 @@ fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<
             CMap::parse(&decoded, move |n| (resolver)(n))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod cjk_fallback_tests {
+    use super::*;
+    use crate::standard_font::StandardFont;
+    use hayro_syntax::object::FromBytes;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    fn queries_for(dict_bytes: &[u8]) -> Vec<String> {
+        let dict = Dict::from_bytes(dict_bytes).unwrap();
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_resolver = seen.clone();
+        let font_resolver: crate::FontResolverFn = Arc::new(move |query| {
+            let label = match query {
+                FontQuery::Standard(s) => format!("Standard({s:?})"),
+                FontQuery::Fallback(f) => format!(
+                    "Fallback(name={:?}, collection={:?})",
+                    f.post_script_name,
+                    f.character_collection.as_ref().map(|cc| &cc.family)
+                ),
+            };
+            seen_resolver.lock().unwrap().push(label);
+            Some(StandardFont::Helvetica.get_font_data())
+        });
+        let cmap_resolver: CMapResolverFn = Arc::new(|_| None);
+
+        let cache = crate::FontCache::new();
+        let _ = cache.font(&dict, &font_resolver, &cmap_resolver);
+        std::mem::take(&mut *seen.lock().unwrap())
+    }
+
+    #[test]
+    fn non_embedded_cjk_font_named_sans_falls_back_to_the_collection() {
+        let queries = queries_for(
+            b"<< /Type /Font /Subtype /Type0 /BaseFont /NotoSansKR-Regular /Encoding /Identity-H \
+              /DescendantFonts [ << /Type /Font /Subtype /CIDFontType0 /DW 1000 \
+              /CIDSystemInfo << /Registry (Adobe) /Ordering (Korea1) /Supplement 0 >> >> ] >>",
+        );
+        assert!(
+            queries.iter().all(|q| !q.starts_with("Standard")),
+            "a CJK-collection font must not resolve to a standard font: {queries:?}"
+        );
+        assert!(
+            queries.iter().any(|q| q.contains("AdobeKorea1")),
+            "the fallback query carries the character collection: {queries:?}"
+        );
+    }
+
+    #[test]
+    fn non_embedded_non_cjk_font_named_sans_still_matches_a_standard_font() {
+        let queries = queries_for(
+            b"<< /Type /Font /Subtype /Type0 /BaseFont /NotoSans-Regular /Encoding /Identity-H \
+              /DescendantFonts [ << /Type /Font /Subtype /CIDFontType0 /DW 1000 >> ] >>",
+        );
+        assert!(
+            queries.iter().any(|q| q.starts_with("Standard")),
+            "a non-CJK font still keyword-matches a standard font: {queries:?}"
+        );
     }
 }
