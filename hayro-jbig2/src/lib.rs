@@ -346,8 +346,54 @@ impl<'a> Page<'a> {
 
     /// Decode the page.
     pub fn decode(&self) -> Result<PageBitmap> {
+        let mut progressive = self.decode_progressive()?;
+        while progressive.step()? {}
+
+        Ok(progressive.finish())
+    }
+
+    /// Decode the page into a bitmap of size `(width, height)`, clipping or
+    /// padding decoded regions with the page default pixel when the target
+    /// dimensions differ from the JBIG2 `PageInformation` segment.
+    pub fn decode_with_size(&self, width: u32, height: u32) -> Result<PageBitmap> {
+        let mut progressive = self.decode_progressive_with_size(width, height)?;
+        while progressive.step()? {}
+
+        Ok(progressive.finish())
+    }
+
+    /// Start decoding the page one segment at a time.
+    pub fn decode_progressive<'p>(&'p self) -> Result<ProgressiveDecoder<'p, 'a>> {
+        self.decode_progressive_inner(self.size)
+    }
+
+    /// Like [`Page::decode_progressive`], but initializes the output page bitmap
+    /// to `(width, height)` instead of the dimensions declared in the JBIG2
+    /// `PageInformation` segment, clipping or padding decoded regions to fit.
+    pub fn decode_progressive_with_size<'p>(
+        &'p self,
+        width: u32,
+        height: u32,
+    ) -> Result<ProgressiveDecoder<'p, 'a>> {
+        if width == 0 || height == 0 {
+            bail!(FormatError::EmptyPage);
+        }
+
+        bitmap::check_size(width, height)?;
+
+        self.decode_progressive_inner(PageSize {
+            width,
+            height,
+            default_pixel: self.size.default_pixel,
+        })
+    }
+
+    fn decode_progressive_inner<'p>(
+        &'p self,
+        size: PageSize,
+    ) -> Result<ProgressiveDecoder<'p, 'a>> {
         let segments = match &self.segments {
-            PageSegments::Owned(segments) => segments,
+            PageSegments::Owned(segments) => segments.as_slice(),
             PageSegments::Borrowed(segments) => *segments,
         };
         let globals = match self.globals {
@@ -356,12 +402,135 @@ impl<'a> Page<'a> {
             None => None,
         };
 
-        let bitmap = decode_segments(segments, globals, self.size, &self.settings)?;
+        let cancel = Cancel(self.settings.cancel.as_ref());
+        let mut state = DecodeState::new(self.settings.memory_limit, cancel);
+        // "Bit 2: Page default pixel value. This bit contains the initial value
+        // for every pixel in the page, before any region segments are decoded
+        // or drawn." (7.4.8.5)
+        let page_bitmap = Bitmap::new_with(
+            size.width,
+            size.height,
+            0,
+            0,
+            size.default_pixel,
+            &mut state.budget,
+        )?;
+        state.budget.retain(page_bitmap.memory_size());
 
-        Ok(PageBitmap {
-            bitmap,
-            cancel: self.settings.cancel.clone(),
+        Ok(ProgressiveDecoder {
+            segments,
+            globals,
+            page_bitmap: PageBitmap {
+                bitmap: page_bitmap,
+                cancel: self.settings.cancel.clone(),
+            },
+            page_state: PageState::new(size.default_pixel),
+            standard_tables: StandardHuffmanTables::default(),
+            state,
+            next_segment: 0,
+            done: false,
+            strict: self.settings.strict,
         })
+    }
+}
+
+/// Incremental segment-by-segment decoder for a [`Page`].
+pub struct ProgressiveDecoder<'p, 'a> {
+    segments: &'p [Segment<'a>],
+    globals: Option<&'p Globals>,
+    page_bitmap: PageBitmap,
+    page_state: PageState,
+    standard_tables: StandardHuffmanTables,
+    state: DecodeState<'p>,
+    next_segment: usize,
+    done: bool,
+    strict: bool,
+}
+
+impl ProgressiveDecoder<'_, '_> {
+    /// Total number of segments associated with this page.
+    pub fn total_segments(&self) -> usize {
+        self.segments.len()
+    }
+
+    /// Number of segments processed so far by [`Self::step`].
+    pub fn processed_segments(&self) -> usize {
+        self.next_segment
+    }
+
+    /// Whether all segments on this page have been decoded.
+    pub fn is_done(&self) -> bool {
+        self.done || self.next_segment >= self.segments.len()
+    }
+
+    /// Borrow the current (possibly intermediate) page bitmap.
+    pub fn bitmap(&self) -> &PageBitmap {
+        &self.page_bitmap
+    }
+
+    /// Decode the next segment, returning `Ok(true)` if additional segments
+    /// remain or `Ok(false)` once page decoding has completed.
+    pub fn step(&mut self) -> Result<bool> {
+        if self.done || self.next_segment >= self.segments.len() {
+            self.done = true;
+            return Ok(false);
+        }
+
+        self.state.cancel.check()?;
+        let seg = &self.segments[self.next_segment];
+        self.next_segment += 1;
+
+        let result = decode_segment(
+            seg,
+            &mut self.page_bitmap.bitmap,
+            &mut self.page_state,
+            self.globals,
+            &self.standard_tables,
+            &mut self.state,
+            self.strict,
+        );
+        self.state.budget.end_segment();
+
+        match result {
+            Ok(ControlFlow::Continue(())) => {
+                if self.next_segment >= self.segments.len() {
+                    self.done = true;
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            Ok(ControlFlow::Break(())) => {
+                self.done = true;
+                Ok(false)
+            }
+            // No other segment can refer to an immediate region, so the rest of
+            // the page doesn't depend on it.
+            Err(e)
+                if !self.strict
+                    && e != DecodeError::MemoryLimitExceeded
+                    && e != DecodeError::Cancelled
+                    && seg.header.segment_type.is_immediate_region() =>
+            {
+                // It might have been decoded directly into the page.
+                self.page_state.page_pristine = false;
+                if self.next_segment >= self.segments.len() {
+                    self.done = true;
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
+            }
+            Err(e) => {
+                self.done = true;
+                Err(e)
+            }
+        }
+    }
+
+    /// Consume the progressive decoder and return the decoded [`PageBitmap`].
+    pub fn finish(self) -> PageBitmap {
+        self.page_bitmap
     }
 }
 
@@ -520,64 +689,6 @@ impl PageSize {
             default_pixel: page_info.flags.default_pixel != 0,
         })
     }
-}
-
-fn decode_segments(
-    segments: &[Segment<'_>],
-    globals: Option<&Globals>,
-    size: PageSize,
-    settings: &DecodeSettings,
-) -> Result<Bitmap> {
-    let strict = settings.strict;
-    let cancel = Cancel(settings.cancel.as_ref());
-    let mut state = DecodeState::new(settings.memory_limit, cancel);
-    // "Bit 2: Page default pixel value. This bit contains the initial value
-    // for every pixel in the page, before any region segments are decoded
-    // or drawn." (7.4.8.5)
-    let mut page_bitmap = Bitmap::new_with(
-        size.width,
-        size.height,
-        0,
-        0,
-        size.default_pixel,
-        &mut state.budget,
-    )?;
-    state.budget.retain(page_bitmap.memory_size());
-    let mut page_state = PageState::new(size.default_pixel);
-    let standard_tables = StandardHuffmanTables::default();
-
-    for seg in segments {
-        cancel.check()?;
-        let result = decode_segment(
-            seg,
-            &mut page_bitmap,
-            &mut page_state,
-            globals,
-            &standard_tables,
-            &mut state,
-            strict,
-        );
-        state.budget.end_segment();
-
-        match result {
-            Ok(ControlFlow::Continue(())) => {}
-            Ok(ControlFlow::Break(())) => break,
-            // No other segment can refer to an immediate region, so the rest of
-            // the page doesn't depend on it.
-            Err(e)
-                if !strict
-                    && e != DecodeError::MemoryLimitExceeded
-                    && e != DecodeError::Cancelled
-                    && seg.header.segment_type.is_immediate_region() =>
-            {
-                // It might have been decoded directly into the page.
-                page_state.page_pristine = false;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(page_bitmap)
 }
 
 fn decode_segment(
