@@ -160,23 +160,41 @@ impl Function {
             return None;
         }
 
+        match &repr.function_type {
+            FunctionType::Type0(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(input, output);
+                Some(())
+            }),
+            FunctionType::Type2(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(input[0], output);
+                Some(())
+            }),
+            FunctionType::Type3(f) => {
+                self.eval_samples(input, output, |input, output| f.eval(input[0], output))
+            }
+            FunctionType::Type4(f) => self.eval_samples(input, output, f.evaluator()),
+        }
+    }
+
+    fn eval_samples(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        mut eval: impl FnMut(&[f32], &mut [f32]) -> Option<()>,
+    ) -> Option<()> {
+        let repr = &self.0;
         let mut clamped = [0.0; MAX_COMPONENTS];
-        let clamped = &mut clamped[..num_inputs];
+        let clamped = &mut clamped[..self.num_inputs()];
 
         for (input, output) in input
-            .chunks_exact(num_inputs)
-            .zip(output.chunks_exact_mut(num_outputs))
+            .chunks_exact(self.num_inputs())
+            .zip(output.chunks_exact_mut(self.num_outputs()))
         {
             for ((clamped, value), domain) in clamped.iter_mut().zip(input).zip(&repr.domain) {
                 *clamped = domain.clamp(*value);
             }
 
-            match &repr.function_type {
-                FunctionType::Type0(f) => f.eval(clamped, output),
-                FunctionType::Type2(f) => f.eval(clamped[0], output),
-                FunctionType::Type3(f) => f.eval(clamped[0], output)?,
-                FunctionType::Type4(f) => f.eval(clamped, output)?,
-            }
+            eval(clamped, output)?;
 
             if let Some(range) = &repr.range {
                 for (value, range) in output.iter_mut().zip(range) {
