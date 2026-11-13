@@ -119,3 +119,42 @@ fn colr_first_wins() {
 fn colr_ycck() {
     check("jp2_colr_ycck", reference("jp2_colr_ycck"));
 }
+
+#[test]
+fn unresolved_color_space_returns_raw_components() {
+    let raw_settings = DecodeSettings {
+        resolve_color_space: false,
+        ..Default::default()
+    };
+
+    let sycc_data = read_stream("jp2_colr_sycc_444");
+    let resolved_sycc = Image::new(&sycc_data, &DecodeSettings::default()).unwrap();
+    let raw_sycc = Image::new(&sycc_data, &raw_settings).unwrap();
+    assert!(matches!(
+        raw_sycc.color_space(),
+        hayro_jpeg2000::ColorSpace::RGB
+    ));
+
+    let mut resolved_ctx = DecoderContext::default();
+    let mut raw_ctx = DecoderContext::default();
+    let resolved_samples = resolved_sycc
+        .decode(&mut resolved_ctx)
+        .unwrap()
+        .data_u8()
+        .unwrap();
+    let raw_samples = raw_sycc.decode(&mut raw_ctx).unwrap().data_u8().unwrap();
+    assert_eq!(raw_samples.len(), resolved_samples.len());
+    assert_ne!(raw_samples, resolved_samples);
+
+    let cielab_data = read_stream("integration_colr_cielab");
+    let resolved_lab = Image::new(&cielab_data, &DecodeSettings::default()).unwrap();
+    let raw_lab = Image::new(&cielab_data, &raw_settings).unwrap();
+    assert!(matches!(
+        resolved_lab.color_space(),
+        hayro_jpeg2000::ColorSpace::Icc { .. }
+    ));
+    assert!(matches!(
+        raw_lab.color_space(),
+        hayro_jpeg2000::ColorSpace::RGB
+    ));
+}
