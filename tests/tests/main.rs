@@ -281,8 +281,7 @@ pub(crate) fn render_svg(
         .collect::<Vec<_>>()
 }
 
-// We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
-// testing.
+// Liberation fonts instead of `embed-fonts`, since they have better coverage.
 fn get_standard(font: &StandardFont) -> Option<FontData> {
     match font {
         StandardFont::Helvetica => Some(Arc::new(

@@ -99,9 +99,6 @@ fn read(path: &str) -> Vec<u8> {
 }
 
 fn metadata_in_object_stream() {
-    // Normally, in an encrypted PDF file strings need to be encrypted when they are not
-    // in a stream. Therefore, we need to ensure that no encryption is applied when the object
-    // itself is in an object stream.
     let file = &read("pdfs/custom/metadata_in_object_stream_encrypted.pdf");
     let pdf = Pdf::new(file.to_vec()).unwrap();
 
@@ -151,7 +148,6 @@ fn concurrent_object_stream_resolution() {
                 scope.spawn(move || {
                     barrier.wait();
 
-                    // Objects 6..30 are split between two compressed object streams.
                     for offset in 0..24 {
                         let number = 6 + (thread * 12 + offset) % 24;
                         let value = pdf
@@ -185,7 +181,6 @@ fn concurrent_xref_repair_does_not_panic() {
                             .xref()
                             .get::<Dict<'_>>(ObjectIdentifier::new(3 + thread, 0));
                     } else {
-                        // The catalog's offset is valid even before repair.
                         assert!(pdf.xref().get::<Dict<'_>>(pdf.xref().root_id()).is_some());
                     }
                 });
@@ -214,7 +209,6 @@ fn concurrent_xref_repair_retries_original_entries() {
                 scope.spawn(move || {
                     barrier.wait();
 
-                    // Objects 3..11 have incorrect xref offsets.
                     for offset in 0..8 {
                         let number = 3 + (thread + offset) % 8;
                         let value = pdf

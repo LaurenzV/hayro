@@ -4,8 +4,6 @@ use std::time::{Duration, Instant};
 
 const MIN_REDRAW_INTERVAL: Duration = Duration::from_millis(30);
 
-/// A block of lines at the bottom of the terminal that is redrawn in place, with permanent
-/// lines being printed above it.
 pub(crate) struct Live {
     term: Term,
     block: Vec<String>,
@@ -54,10 +52,8 @@ impl Live {
         self.write(frame);
     }
 
-    /// Moves the cursor to the start of the drawn block and clears everything from there on.
     fn erase(&mut self) -> String {
-        // When the window got narrower, the terminal rewraps lines that don't fit anymore,
-        // so the height of the block needs to be computed for the current width.
+        // Narrowing the window rewraps lines, so rows are counted at the current width.
         let width = self.width();
         let rows: usize = self
             .drawn_widths
@@ -78,8 +74,7 @@ impl Live {
         let mut out = String::new();
 
         for (i, line) in self.block.iter().enumerate() {
-            // Never fill the last column, since terminals treat a completely filled line
-            // inconsistently when it comes to wrapping.
+            // Terminals wrap a completely filled line inconsistently.
             let line = truncate_str(line, width - 1, "…");
             if i > 0 {
                 out.push('\n');

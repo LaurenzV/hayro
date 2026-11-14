@@ -19,8 +19,6 @@ pub(crate) const FALLBACK_FONTS: [&str; 6] = [
     "assets/NotoSansCJKsc-Regular.otf",
 ];
 
-/// Downloads the files the given tests need that aren't present yet. Returns the outcome of
-/// every test that can't run because one of its files is still missing.
 pub(crate) fn fetch(tests: &[Test], offline: bool, ui: &mut Ui) -> HashMap<String, Outcome> {
     let missing: BTreeSet<&str> = tests
         .iter()
