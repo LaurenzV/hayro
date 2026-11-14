@@ -1,5 +1,4 @@
-//! Each test decodes a JPEG 2000 file from `streams` and compares the decoded
-//! samples against an image in `references`.
+//! Decodes the JPEG 2000 files in `streams` and compares them against `references`.
 
 mod cancel;
 mod code_blocks;

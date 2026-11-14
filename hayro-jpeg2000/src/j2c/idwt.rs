@@ -1,5 +1,3 @@
-//! Performing the inverse discrete wavelet transform, as specified in Annex F.
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -12,15 +10,8 @@ use crate::error::Result;
 use crate::j2c::Header;
 use crate::math::{self, Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 
-/// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
-    /// The buffer that will hold the final coefficients.
     pub(crate) coefficients: Vec<f32>,
-    /// The rect that the coefficients belong to. This will be equivalent
-    /// to the rectangle that forms the smallest decomposition level. It does
-    /// not have to be equivalent to the original size of the tile, as the
-    /// sub-bands that form a tile aren't necessarily aligned to it. Therefore,
-    /// the samples need to be trimmed to the tile rectangle afterward.
     pub(crate) rect: IntRect,
 }
 
@@ -37,9 +28,6 @@ struct IDWTTempOutput {
     rect: IntRect,
 }
 
-/// Apply the inverse discrete wavelet transform (see Annex F). The output
-/// will be transformed samples covering the rectangle of the smallest
-/// decomposition level.
 pub(crate) fn apply(
     storage: &DecompositionStorage<'_>,
     tile_ctx: &mut TileDecodeContext,
@@ -51,22 +39,11 @@ pub(crate) fn apply(
     let tile_decompositions = &storage.tile_decompositions[component_idx];
 
     let mut decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
-    // If we requested a lower resolution level, we can skip some decompositions.
     decompositions = &decompositions[..decompositions
         .len()
         .saturating_sub(header.skipped_resolution_levels as usize)];
     let ll_sub_band = &storage.sub_bands[tile_decompositions.first_ll_sub_band];
 
-    // To explain a bit why we have this scratch buffer and another coefficient
-    // buffer: During IDWT, we need to continuously interleave the 4 sub-bands
-    // into a new buffer, which is then either returned or used as the input
-    // for the next decomposition, etc. It would be very inefficient if we
-    // kept allocating new buffers each time. Therefore, we try to reuse them,
-    // not only for all decompositions of a single tile, but all decompositions
-    // of _all_ tiles.
-    // Due to the fact that the output from the previous iteration might be
-    // used as the input of the next, we need two separate buffers, which
-    // are continuously swapped.
     let (scratch_buf, output) = (&mut tile_ctx.idwt_scratch_buffer, &mut tile_ctx.idwt_output);
 
     let estimate_buffer_size = |decomposition: &Decomposition| {
@@ -74,15 +51,13 @@ pub(crate) fn apply(
         let total_height = decomposition.rect.height() as usize;
 
         let min = total_width * total_height;
-        // Different sub-bands can have shifts by one, so add padding
-        // for the maximum case.
+        // Sub-bands can be offset by one sample.
         let max = (total_width + 1) * (total_height + 1);
 
         (min, max)
     };
 
     if decompositions.is_empty() {
-        // Single decomposition, just copy the coefficients from the sub-band.
         output.coefficients.clear();
         output
             .coefficients
@@ -93,8 +68,6 @@ pub(crate) fn apply(
         return Ok(());
     }
 
-    // The coefficient array will always be the one that holds the coefficients
-    // from the highest decomposition. Therefore, reserve as much.
     let (s_min, s_max) = estimate_buffer_size(decompositions.last().unwrap());
     if output.coefficients.len() < s_min {
         output
@@ -103,8 +76,7 @@ pub(crate) fn apply(
     }
 
     if decompositions.len() > 1 {
-        // Due to the above, the intermediate buffer will never need more than
-        // the second-highest decomposition.
+        // The scratch buffer never holds more than the second-to-last decomposition.
         let (s_min, s_max) = estimate_buffer_size(&decompositions[decompositions.len() - 2]);
 
         if scratch_buf.len() < s_min {
@@ -112,8 +84,7 @@ pub(crate) fn apply(
         }
     }
 
-    // Determine which buffer we should use first, such that the `coefficients`
-    // array will always hold the final values.
+    // Start with the buffer that makes the last decomposition land in `coefficients`.
     let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
@@ -174,9 +145,7 @@ impl<'a> IDWTInput<'a> {
     }
 }
 
-/// The `2D_SR` procedure illustrated in Figure F.6.
 fn filter_2d(
-    // The LL sub band of the given decomposition level.
     input: IDWTInput<'_>,
     coefficients: &mut Vec<f32>,
     decomposition: &Decomposition,
@@ -206,15 +175,9 @@ fn filter_2d_inner<S: Simd>(
     let width = decomposition.rect.width() as usize;
     let height = decomposition.rect.height() as usize;
 
-    // Just a sanity check. We should have allocated enough upfront before
-    // starting the IDWT.
     assert!(coefficients.capacity() >= width * height);
 
-    // The cleaner way would be to first clear and then resize, so that we
-    // have a clean buffer with just zeroes. However, this is actually not
-    // necessary, because when interleaving and generating the border values
-    // we will replace all the data anyway, so we can save the cost of
-    // the clear operation.
+    // No clearing needed: interleaving overwrites every sample.
     cancel.resize(coefficients, width * height)?;
 
     if width == 0 || height == 0 {
@@ -233,8 +196,6 @@ fn filter_2d_inner<S: Simd>(
     filter_vertical(simd, coefficients, decomposition.rect, transform, cancel)
 }
 
-/// The `2D_INTERLEAVE` procedure described in F.3.3, combined with the `HOR_SR` procedure from
-/// F.3.4.
 #[inline(always)]
 fn interleave_and_filter_horizontal<S: Simd>(
     simd: S,
@@ -258,7 +219,6 @@ fn interleave_and_filter_horizontal<S: Simd>(
         .sub_bands
         .map(|idx| &storage.coefficients[storage.sub_bands[idx].coefficients.clone()]);
 
-    // See Figure F.8.
     let num_low = (u1.div_ceil(2) - u0.div_ceil(2)) as usize;
     let num_high = (u1 / 2 - u0 / 2) as usize;
     let mut filter = HorizontalFilter::new(transform, u0.is_multiple_of(2), num_low, num_high);
@@ -286,8 +246,6 @@ fn interleave_and_filter_horizontal<S: Simd>(
     )
 }
 
-/// Filters rows with the `1D_SR` procedure from F.3.6 while their low-pass and high-pass samples
-/// are still separate, and interleaves them afterward.
 struct HorizontalFilter {
     transform: WaveletTransform,
     low_first: bool,
@@ -403,9 +361,7 @@ impl<S: Simd> Lifting<S> for HorizontalFilter {
     }
 }
 
-/// Applies one lifting step to the band `target`, where the neighbors of sample `n` are the
-/// samples `n - offset` and `n + 1 - offset` of the band `source`. Both bands have one sample of
-/// padding on each side.
+// Both bands have one sample of padding on each side.
 #[inline(always)]
 fn lift_band<S: Simd>(
     simd: S,
@@ -415,7 +371,6 @@ fn lift_band<S: Simd>(
     f_simd: impl Fn(f32x8<S>, f32x8<S>, f32x8<S>) -> f32x8<S>,
     f_scalar: impl Fn(f32, f32, f32) -> f32,
 ) {
-    // The periodic symmetric extension (F.3.7) of a row repeats the edge samples of each band.
     let last = source.len() - 1;
     source[0] = source[1];
     source[last] = source[last - 1];
@@ -454,7 +409,6 @@ fn interleave_row<S: Simd>(simd: S, first: &[f32], second: &[f32], output: &mut 
     }
 }
 
-/// The `VER_SR` procedure from F.3.5.
 #[inline(always)]
 fn filter_vertical<S: Simd>(
     simd: S,
@@ -474,7 +428,6 @@ fn filter_vertical<S: Simd>(
     filter_1d(simd, transform, &mut filter)
 }
 
-/// Filters all columns at once with the `1D_SR` procedure from F.3.6, operating on whole rows.
 struct VerticalFilter<'a> {
     cancel: Cancel<'a>,
     coefficients: &'a mut [f32],
@@ -514,8 +467,6 @@ impl VerticalFilter<'_> {
         for row in (first_row..height).step_by(2) {
             self.cancel.check()?;
 
-            // The periodic symmetric extension (F.3.7) mirrors the columns at their first and last
-            // row.
             let above = if row == 0 { 1 } else { row - 1 };
             let below = if row == height - 1 {
                 height - 2
@@ -584,7 +535,6 @@ impl<S: Simd> Lifting<S> for VerticalFilter<'_> {
     }
 }
 
-/// A signal with low-pass samples at even and high-pass samples at odd positions.
 trait Lifting<S: Simd> {
     fn num_samples(&self) -> usize;
 
@@ -592,8 +542,6 @@ trait Lifting<S: Simd> {
 
     fn scale_high(&mut self, simd: S, factor: f32) -> Result<()>;
 
-    /// Replaces each low-pass sample `s` with `f(s, left, right)`, where `left` and `right` are
-    /// its neighboring high-pass samples.
     fn lift_low(
         &mut self,
         simd: S,
@@ -601,8 +549,6 @@ trait Lifting<S: Simd> {
         f_scalar: impl Fn(f32, f32, f32) -> f32,
     ) -> Result<()>;
 
-    /// Replaces each high-pass sample `s` with `f(s, left, right)`, where `left` and `right` are
-    /// its neighboring low-pass samples.
     fn lift_high(
         &mut self,
         simd: S,
@@ -611,7 +557,6 @@ trait Lifting<S: Simd> {
     ) -> Result<()>;
 }
 
-/// The `1D_SR` procedure from F.3.6.
 #[inline(always)]
 fn filter_1d<S: Simd>(
     simd: S,
@@ -628,10 +573,8 @@ fn filter_1d<S: Simd>(
     }
 }
 
-/// The 1D FILTER 5-3R procedure from F.3.8.1.
 #[inline(always)]
 fn filter_53r<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
-    // Equation (F-5).
     signal.lift_low(
         simd,
         #[inline(always)]
@@ -640,7 +583,6 @@ fn filter_53r<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
         |s, left, right| s - math::floor_f32(math::mul_add(left + right, 0.25, 0.5)),
     )?;
 
-    // Equation (F-6).
     signal.lift_high(
         simd,
         #[inline(always)]
@@ -652,10 +594,8 @@ fn filter_53r<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
     Ok(())
 }
 
-/// The 1D Filter 9-7I procedure from F.3.8.2.
 #[inline(always)]
 fn filter_97i<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
-    // Table F.4.
     const NEG_ALPHA: f32 = 1.586_134_3;
     const NEG_BETA: f32 = 0.052_980_117;
     const NEG_GAMMA: f32 = -0.882_911_1;
@@ -668,11 +608,9 @@ fn filter_97i<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
     let neg_gamma = f32x8::splat(simd, NEG_GAMMA);
     let neg_delta = f32x8::splat(simd, NEG_DELTA);
 
-    // Step 1 and 2.
     signal.scale_low(simd, KAPPA)?;
     signal.scale_high(simd, INV_KAPPA)?;
 
-    // Step 3.
     signal.lift_low(
         simd,
         #[inline(always)]
@@ -681,7 +619,6 @@ fn filter_97i<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
         |s, left, right| math::mul_add(left + right, NEG_DELTA, s),
     )?;
 
-    // Step 4.
     signal.lift_high(
         simd,
         #[inline(always)]
@@ -690,7 +627,6 @@ fn filter_97i<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
         |s, left, right| math::mul_add(left + right, NEG_GAMMA, s),
     )?;
 
-    // Step 5.
     signal.lift_low(
         simd,
         #[inline(always)]
@@ -699,7 +635,6 @@ fn filter_97i<S: Simd>(simd: S, signal: &mut impl Lifting<S>) -> Result<()> {
         |s, left, right| math::mul_add(left + right, NEG_BETA, s),
     )?;
 
-    // Step 6.
     signal.lift_high(
         simd,
         #[inline(always)]

@@ -1,5 +1,3 @@
-//! Code-block coding styles (Annex D.6, Table A.19).
-
 use crate::*;
 
 #[test]

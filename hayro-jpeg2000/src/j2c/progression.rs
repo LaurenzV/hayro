@@ -1,9 +1,3 @@
-//! Progression iterators, defined in Section B.12.
-//!
-//! A progression iterator essentially yields tuples of
-//! (`layer_num`, resolution, component, precinct) in a specific order that
-//! determines in which order the data appears in the codestream.
-
 use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -32,13 +26,7 @@ pub(crate) struct IteratorInput<'a> {
 
 impl<'a> IteratorInput<'a> {
     pub(crate) fn new(tile: &'a Tile<'a>) -> Self {
-        Self::new_with_custom_bounds(
-            tile,
-            // Will be clamped automatically.
-            (0, u8::MAX),
-            (0, u8::MAX),
-            (0, u8::MAX),
-        )
+        Self::new_with_custom_bounds(tile, (0, u8::MAX), (0, u8::MAX), (0, u8::MAX))
     }
 
     pub(crate) fn new_with_custom_bounds(
@@ -56,7 +44,6 @@ impl<'a> IteratorInput<'a> {
         let max_layer = tile.num_layers;
         let max_component = tile.component_infos.len() as u8;
 
-        // Make sure we don't exceed what's actually possible
         resolutions.1 = resolutions.1.min(max_resolution);
         layers.1 = layers.1.min(max_layer);
         components.1 = components.1.min(max_component);
@@ -87,9 +74,7 @@ impl<'a> IteratorInput<'a> {
 
     fn max_resolution(&self, component_idx: u8) -> u8 {
         self.total_max_resolution()
-            // It's possible that the different component tiles have different resolution levels
-            // (self.resolutions.1 stores the maximum across all component tiles), so
-            // take the minimum of both.
+            // `resolutions.1` is the maximum over all components.
             .min(self.tile.component_infos[component_idx as usize].num_resolution_levels())
     }
 
@@ -115,8 +100,6 @@ impl<'a> IteratorInput<'a> {
             .collect::<Vec<_>>()
     }
 
-    /// The number of precincts of the given component at the given
-    /// resolution, or 0 if the component doesn't have that resolution.
     fn num_precincts(
         &self,
         component_tiles: &[ComponentTile<'a>],
@@ -131,8 +114,6 @@ impl<'a> IteratorInput<'a> {
     }
 }
 
-/// Create the iterator that yields the packets of the tile in codestream order,
-/// taking progression order changes into account (B.12.3).
 pub(crate) fn progression_iterator<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
@@ -163,8 +144,7 @@ pub(crate) fn progression_iterator<'a>(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    // Each progression starts at layer 0, but packets that were already
-    // included by a previous progression must not be included again.
+    // Skip packets already emitted by an earlier progression change.
     let mut included = BTreeSet::new();
 
     Ok(Box::new(
@@ -201,7 +181,6 @@ fn progression_order_iterator<'a>(
     })
 }
 
-/// B.12.1.1 Layer-resolution level-component-position progression.
 pub(crate) fn layer_resolution_component_position_progression<'a>(
     input: IteratorInput<'a>,
 ) -> impl Iterator<Item = ProgressionData> + 'a {
@@ -252,7 +231,6 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
     })
 }
 
-/// B.12.1.2 Resolution level-layer-component-position progression.
 pub(crate) fn resolution_layer_component_position_progression<'a>(
     input: IteratorInput<'a>,
 ) -> impl Iterator<Item = ProgressionData> + 'a {
@@ -303,13 +281,6 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
     })
 }
 
-// The formula for the remaining three progressions looks very intimidating.
-// But really, all they boil down to is that we need to determine all precinct
-// indices for each component/resolution combination and sort them by ascending
-// y/x coordinate on the reference grid. Other than that, they can be treated
-// exactly the same, except that the sort order precedence of the fields change.
-
-// Note that the order of fields here is important!
 struct PrecinctStore {
     resolution: u8,
     precinct_y: u32,
@@ -353,7 +324,6 @@ fn position_progression_common<'a>(
     }))
 }
 
-/// B.12.1.3 Resolution level-position-component-layer progression.
 pub(crate) fn resolution_position_component_layer_progression<'a>(
     input: IteratorInput<'a>,
 ) -> Option<impl Iterator<Item = ProgressionData> + 'a> {
@@ -367,7 +337,6 @@ pub(crate) fn resolution_position_component_layer_progression<'a>(
     })
 }
 
-/// B.12.1.4 Position-component-resolution level-layer progression.
 pub(crate) fn position_component_resolution_layer_progression<'a>(
     input: IteratorInput<'a>,
 ) -> Option<impl Iterator<Item = ProgressionData> + 'a> {
@@ -381,7 +350,6 @@ pub(crate) fn position_component_resolution_layer_progression<'a>(
     })
 }
 
-/// B.12.1.5 Component-position-resolution level-layer progression.
 pub(crate) fn component_position_resolution_layer_progression<'a>(
     input: IteratorInput<'a>,
 ) -> Option<impl Iterator<Item = ProgressionData> + 'a> {

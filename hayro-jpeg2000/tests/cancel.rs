@@ -1,5 +1,3 @@
-//! Decoding with a cancellation check.
-
 use hayro_jpeg2000::CancelHandle;
 
 use crate::*;

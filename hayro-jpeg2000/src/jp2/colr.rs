@@ -1,5 +1,3 @@
-//! The color specification box (colr), defined in I.5.3.3.
-
 use alloc::vec::Vec;
 
 use crate::error::{FormatError, Result};
@@ -8,20 +6,12 @@ use crate::reader::BitReader;
 
 pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     if boxes.color_specification.is_some() {
-        // "A JP2 file may contain multiple Colour Specification boxes, but
-        // must contain at least one, specifying different methods
-        // for achieving "equivalent" results. A conforming JP2 reader shall
-        // ignore all Colour Specification boxes after the first.
-        // However, readers conforming to other standards may use those boxes as
-        // defined in those other standards."
-
         return Ok(());
     }
 
     let mut reader = BitReader::new(data);
 
     let meth = reader.read_byte().ok_or(FormatError::InvalidBox)?;
-    // We don't care about those.
     let _prec = reader.read_byte().ok_or(FormatError::InvalidBox)?;
     let _approx = reader.read_byte().ok_or(FormatError::InvalidBox)?;
 
@@ -106,14 +96,12 @@ impl EnumeratedColorspace {
             12 => Some(Self::Cmyk),
             13 => Some(Self::Ycck),
             14 => {
-                // M.11.7.4.1 EP field format for the CIELab colourspace
                 let rl = reader.read_u32();
                 let ol = reader.read_u32();
                 let ra = reader.read_u32();
                 let oa = reader.read_u32();
                 let rb = reader.read_u32();
                 let ob = reader.read_u32();
-                // Not supported for now.
                 let _il = reader.read_u32();
 
                 Some(Self::CieLab(CieLab {

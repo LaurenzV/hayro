@@ -108,7 +108,7 @@ pub enum DecodingError {
     InvalidBitplaneCount,
     /// A precinct was invalid.
     InvalidPrecinct,
-    /// A progression iterator ver invalid.
+    /// A progression iterator was invalid.
     InvalidProgressionIterator,
     /// Unexpected end of data.
     UnexpectedEof,

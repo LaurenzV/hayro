@@ -69,10 +69,7 @@ pub(crate) fn parse<'a>(
             header.component_infos.len() == usize::from(channels) + 1,
         )
     } else {
-        // If we are just decoding a raw codestream, we assume greyscale or
-        // RGB. The exception are three components where the last two are
-        // subsampled relative to the first one, since that's practically only
-        // done for YCbCr.
+        // Three components with subsampled chroma are practically always YCbCr.
         let subsampling = |c: &codestream::ComponentInfo| {
             (
                 c.size_info.horizontal_resolution,

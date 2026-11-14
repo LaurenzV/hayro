@@ -1,5 +1,3 @@
-//! Tile-parts (A.4).
-
 use crate::*;
 
 #[test]

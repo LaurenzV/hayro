@@ -1,5 +1,3 @@
-//! Multiple component transformations (Annex G).
-
 use crate::*;
 
 #[test]

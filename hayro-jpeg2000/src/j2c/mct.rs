@@ -1,13 +1,9 @@
-//! The irreversible multi-component transformation, as specified in
-//! Annex G.2 and G.3.
-
 use super::ComponentData;
 use super::codestream::{Header, WaveletTransform};
 use crate::cancel::{CHUNK, Cancel};
 use crate::error::{ColorError, Result, bail, err};
 use crate::math::{Level, Simd, dispatch, f32x8};
 
-/// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
     components: &mut [ComponentData],
     component_infos: &[super::codestream::ComponentInfo],
@@ -64,7 +60,6 @@ fn apply_inner_impl<S: Simd>(
     s2: &mut [f32],
 ) {
     match transform {
-        // Irreversible MCT, specified in G.3.
         WaveletTransform::Irreversible97 => {
             for ((y0, y1), y2) in s0
                 .as_chunks_mut::<8>()
@@ -89,7 +84,6 @@ fn apply_inner_impl<S: Simd>(
                 i2.store(y2);
             }
         }
-        // Reversible MCT, specified in G.2.
         WaveletTransform::Reversible53 => {
             for ((y0, y1), y2) in s0
                 .as_chunks_mut::<8>()

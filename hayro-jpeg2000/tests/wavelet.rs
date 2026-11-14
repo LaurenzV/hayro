@@ -1,5 +1,3 @@
-//! Decoding at a reduced resolution (F.1, B.5).
-
 use crate::*;
 
 #[test]
