@@ -1,7 +1,7 @@
 /*!
 A crate for converting PDF pages to SVG files.
 
-This is the pendant to [`hayro`](https://crates.io/crates/hayro), but allows you to export to
+This is the counterpart to [`hayro`](https://crates.io/crates/hayro), but allows you to export to
 SVG instead of bitmap images. See the description of that crate for more information on the
 supported features and limitations.
 
@@ -9,8 +9,9 @@ supported features and limitations.
 This crate forbids unsafe code via a crate-level attribute.
 
 ## Cargo features
-This crate has one optional feature:
+This crate has two default features:
 - `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
+- `embed-cmaps`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
 */
 
 #![forbid(unsafe_code)]
@@ -48,9 +49,6 @@ pub(crate) mod paint;
 mod path;
 
 /// A cache used by the SVG converter.
-///
-/// Ideally, such a cache should be constructed once per PDF and then reused across
-/// multiple conversion invocations on the same document.
 #[derive(Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
@@ -95,8 +93,7 @@ pub fn convert<'a>(
 /// Settings to apply during SVG rendering.
 #[derive(Debug, Clone)]
 pub struct SvgRenderSettings {
-    /// The background color in format [red, green, blue, alpha].
-    /// Determines the background color of the generated SVG root element.
+    /// The background color of the SVG root element as [red, green, blue, alpha].
     pub bg_color: [u8; 4],
 }
 
@@ -407,11 +404,7 @@ impl<'a> SvgRenderer<'a> {
         }
     }
 
-    // We need this because we have a small problem. `xmlwriter` doesn't allow us to write sub-streams
-    // of XML while we are writing our main stream. This means that objects that need to be interpreted
-    // (like patterns or mask) all need to be written to the XML in the end. On the other hand, once
-    // we get to `finish` all of the registerd resources must already have been registered. This isn't
-    // the case if masks or patterns use new resources that haven't been registered before. As a result,
+    // Defs are written in `finish`, so this first runs `f` on a throwaway writer to register them.
     pub(crate) fn with_dummy(&mut self, f: impl FnOnce(&mut Self)) {
         let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
         f(self);
@@ -426,7 +419,6 @@ impl<'a> SvgRenderer<'a> {
         self.write_native_gradient_defs();
         self.write_shading_pattern_defs();
         self.write_tiling_pattern_defs();
-        // Close the `svg` element.
         self.xml.end_element();
         self.xml.end_document()
     }

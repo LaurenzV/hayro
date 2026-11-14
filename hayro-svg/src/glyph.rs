@@ -58,7 +58,6 @@ impl<'a> SvgRenderer<'a> {
                         props.transform,
                     ),
                     DrawMode::Invisible => {
-                        // We exited above.
                         unreachable!()
                     }
                 };
@@ -100,7 +99,6 @@ impl<'a> SvgRenderer<'a> {
                         );
                     }
                     DrawMode::Invisible => {
-                        // We exited above.
                         unreachable!()
                     }
                 }
