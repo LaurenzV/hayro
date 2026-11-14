@@ -1,12 +1,9 @@
-//! Comments and white spaces.
-
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 
 const fn build_regular_character_table() -> [bool; 256] {
     let mut table = [true; 256];
 
-    // Whitespace characters.
     table[0x00] = false;
     table[0x09] = false;
     table[0x0a] = false;
@@ -14,7 +11,6 @@ const fn build_regular_character_table() -> [bool; 256] {
     table[0x0d] = false;
     table[0x20] = false;
 
-    // Delimiter characters.
     table[b'(' as usize] = false;
     table[b')' as usize] = false;
     table[b'<' as usize] = false;

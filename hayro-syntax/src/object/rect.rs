@@ -1,5 +1,3 @@
-//! Rectangles.
-
 use crate::object::Array;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, ReaderContext, ReaderExt};

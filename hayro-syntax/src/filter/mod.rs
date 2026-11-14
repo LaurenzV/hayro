@@ -1,5 +1,3 @@
-//! Results from decoding filtered data streams.
-
 mod ascii_85;
 pub(crate) mod ascii_hex;
 #[cfg(feature = "images")]

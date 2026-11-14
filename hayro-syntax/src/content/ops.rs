@@ -14,8 +14,6 @@ use crate::content::macros::{op_all, op_impl, op0, op1, op2, op3, op4, op6};
 
 include!("ops_generated.rs");
 
-// Need to special-case those because they have variable arguments.
-
 fn parse_named_color<'b, 'a>(
     objects: &'b [Object<'a>],
 ) -> Option<(

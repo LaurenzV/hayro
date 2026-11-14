@@ -1,5 +1,3 @@
-//! The null object.
-
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;

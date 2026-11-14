@@ -1,5 +1,3 @@
-// Keep in sync with `hayro-postscript/src/string/ascii_85.rs`.
-
 use crate::reader::Reader;
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
@@ -13,7 +11,6 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
         loop {
             let b = reader.read_byte()?;
 
-            // White space characters should be ignored.
             if !is_white_space_character(b) {
                 return Some(b);
             }
@@ -23,7 +20,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let flush_group = |group: &mut Vec<u8>, decoded: &mut Vec<u8>| -> Option<()> {
         let (digits, output_len): ([u32; 5], usize) = match group.len() {
             0 => return Some(()),
-            1 => return None, // A single character is not valid.
+            1 => return None,
             2 => (
                 [group[0], group[1], b'u', b'u', b'u'].map(|b| (b - b'!') as u32),
                 1,
@@ -79,13 +76,12 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
                 decoded.extend_from_slice(&[0, 0, 0, 0]);
             }
             b'~' => {
-                // Technically requires a '>', but there is a PDF where it isn't
-                // appended and decodes fine in other viewers.
+                // Lenient: accept a missing `>`.
                 flush_group(&mut group, &mut decoded)?;
 
                 return Some(decoded);
             }
-            _ => return None, // Invalid character.
+            _ => return None,
         }
     }
 }

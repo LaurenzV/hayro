@@ -1,5 +1,3 @@
-//! A byte reader.
-
 use core::ops::Range;
 
 /// A reader for reading bytes and PDF objects.

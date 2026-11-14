@@ -1,5 +1,3 @@
-//! Reading bytes and PDF objects from data.
-
 use crate::object::ObjectIdentifier;
 use crate::sync::Arc;
 use crate::trivia::{Comment, is_white_space_character};
@@ -27,14 +25,6 @@ pub trait ReaderExt<'a> {
 }
 
 impl<'a> ReaderExt<'a> for Reader<'a> {
-    // Note: If `PLAIN` is true, it means that the data we are about to read _might_ contain
-    // an object reference instead of an actual object. if `PLAIN` is false, then an object
-    // reference cannot occur. The main reason we make this distinction is that when parsing
-    // a number, we cannot unambiguously distinguish whether it's a real number or the
-    // start of an object reference. In content streams, object references cannot appear,
-    // so in order to speed this up we set `PLAIN` to false, meaning that as soon as we
-    // encounter a number we know it's a number, and don't need to do a look-ahead to ensure
-    // that it's not an object reference.
     #[inline]
     fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
         let old_offset = self.offset;

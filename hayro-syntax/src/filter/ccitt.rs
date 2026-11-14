@@ -16,8 +16,7 @@ pub(crate) fn decode(
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
-    // `Rows` should match the height of the image, but in case it doesn't,
-    // the image height takes precedence (as in other viewers).
+    // The image height takes precedence over `Rows`.
     let rows = if image_params.height > 0 {
         image_params.height
     } else {
@@ -41,24 +40,19 @@ pub(crate) fn decode(
         strict: false,
         cancel: None,
     };
-    // The value that pixels which are white in the encoding are written as.
     let white: u8 = if params.get::<bool>(BLACK_IS_1).unwrap_or(false) {
         0x00
     } else {
         0xFF
     };
 
-    // Whenever possible (if we don't have an indexed color space), we convert
-    // the data as 8-bit instead of 1-bit, so that it can be easier converted
-    // into an RGBA8 image.
-
+    // Expand to 8 bpc unless indexed, for easier RGBA8 conversion.
     let (decoded, bpc, decoded_rows) = if image_params.is_indexed {
         struct BitPackDecoder {
             output: Vec<u8>,
             columns: u32,
             stride: usize,
             white: u8,
-            /// The bits of the last byte in a row that belong to the image.
             last_byte_mask: u8,
             decoded_rows: u32,
         }
@@ -68,15 +62,13 @@ pub(crate) fn decode(
                 let start = self.decoded_rows as usize * self.stride;
                 let end = start + self.stride;
 
-                // If the number of rows is unknown, the output grows on demand.
                 if self.output.len() < end {
                     self.output.resize(end, self.white);
                 }
 
                 let row = &mut self.output[start..end];
 
-                // The row is prefilled with white, so flipping the bits of a
-                // span turns it black.
+                // Rows are prefilled with white, so flipping a span makes it black.
                 for (start, end) in black_spans(changes, self.columns) {
                     let (first, last) = (start / 8, (end - 1) / 8);
                     let first_mask = 0xFF_u8 >> (start % 8);
@@ -110,8 +102,7 @@ pub(crate) fn decode(
         };
         let result = hayro_ccitt::decode(data, &mut decoder, &settings);
 
-        // If we decoded at least one row, let's be lenient and return what we got.
-        // See also 0001763.pdf.
+        // Lenient: return partial output if at least one row decoded (0001763.pdf).
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;
         }
@@ -134,7 +125,6 @@ pub(crate) fn decode(
                 let start = self.decoded_rows as usize * self.columns as usize;
                 let end = start + self.columns as usize;
 
-                // If the number of rows is unknown, the output grows on demand.
                 if self.output.len() < end {
                     self.output.resize(end, self.white);
                 }
@@ -193,9 +183,7 @@ fn black_spans(changes: &[u32], columns: u32) -> impl Iterator<Item = (usize, us
 fn fill_short<T: Copy>(slice: &mut [T], value: T) {
     let len = slice.len();
 
-    // Most spans are short, and for them a `memset` call costs more than the
-    // stores themselves. Overlapping fixed-size stores cover every length up
-    // to 32.
+    // Overlapping fixed-size stores beat `memset` for spans up to 32.
     match len {
         0 => {}
         1..4 => {

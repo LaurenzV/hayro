@@ -17,8 +17,7 @@ pub struct Array<'a> {
     ctx: ReaderContext<'a>,
 }
 
-// Note that this is not structural equality, i.e. two arrays with the same
-// items are still considered different if they have different whitespaces.
+// Compares raw bytes, so white space matters.
 impl PartialEq for Array<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
@@ -149,8 +148,7 @@ impl<'a> Iterator for ArrayIter<'a> {
             return None;
         }
 
-        // The array was validated by skipping its items, which accepts some items that
-        // can't be read.
+        // Skipping accepts some items that can't be read.
         self.reader
             .read_with_context::<MaybeRef<Object<'_>>>(&self.ctx)
     }
