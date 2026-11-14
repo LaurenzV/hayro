@@ -1,5 +1,3 @@
-//! Regions of interest (Annex H).
-
 use crate::*;
 
 #[test]

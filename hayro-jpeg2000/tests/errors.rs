@@ -1,5 +1,3 @@
-//! Streams that must be rejected.
-
 use crate::*;
 
 #[test]

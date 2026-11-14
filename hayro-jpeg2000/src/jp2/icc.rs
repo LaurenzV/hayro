@@ -15,8 +15,6 @@ pub(crate) enum ICCColorSpace {
     OneClr,
     ThreeClr,
     FourClr,
-    // There are more, but those should be the most important
-    // ones.
 }
 
 impl ICCColorSpace {

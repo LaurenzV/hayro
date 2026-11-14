@@ -1,44 +1,14 @@
-//! The tag tree, described in Section B.10.2.
-//!
-//! Tag trees are quad trees where each leaf stores an integer value.
-//! Each intermediate node stores the smallest value of all of its children.
-//! For example, if a node stores the value 3, it means that all children
-//! have a value of 3 or higher. The root node therefore stores the smallest
-//! values across all children.
-
 use alloc::vec::Vec;
 
 use crate::reader::BitReader;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
-    /// The width of the area covered by the node.
-    ///
-    /// For leaf nodes, this value is always 1. In some cases, the width might
-    /// be 0, in which case the leaf node doesn't actually "exist" and is just
-    /// a dummy node.
     width: u32,
-    /// The height of the area covered by the node.
-    ///
-    /// For leaf nodes, this value is always 1. In some cases, the height might
-    /// be 0, in which case the leaf node doesn't actually "exist" and is just
-    /// a dummy node.
     height: u32,
-    /// The actual value stored in the node. Only valid once `initialized`
-    /// is set to `true`.
     value: u32,
-    /// Whether the node has been fully initialized. The tag tree is not
-    /// stored in its complete form in the JP2 file, but is instead built
-    /// up incrementally, each packet contributing the information of the
-    /// tag tree. The node is therefore only initialized with its actual
-    /// value once we cross it the first time.
     initialized: bool,
-    /// The level inside the tree. Zero indicates that the given node is
-    /// a leaf node, otherwise the level is > 0. The root node has the highest
-    /// level.
     level: u16,
-    /// The indices of the children of the node, some of which might be dummy
-    /// nodes (indicated by the fact that the index is `usize::MAX`).
     children: [usize; 4],
 }
 
@@ -54,12 +24,10 @@ impl TagNode {
         }
     }
 
-    /// The width of the top-left child.
     fn top_left_width(&self) -> u32 {
         u32::min(1 << (self.level - 1), self.width)
     }
 
-    /// The height of the top-left child.
     fn top_left_height(&self) -> u32 {
         u32::min(1 << (self.level - 1), self.height)
     }
@@ -70,19 +38,15 @@ impl TagNode {
         let mut tag = Self::new(width, height, level);
 
         if level == 0 {
-            // We reached the leaf node.
             assert!(width <= 1 && height <= 1);
 
             return tag;
         }
 
-        // Determine the width and height of the top-left child node. Based
-        // on this, we can infer the dimensions of all other child nodes.
         let top_left_width = tag.top_left_width();
         let top_left_height = tag.top_left_height();
 
         let mut push = |node: Self, child_idx: usize, nodes: &mut Vec<Self>| {
-            // If this is not the case, the child doesn't actually exist.
             if node.width > 0 && node.height > 0 {
                 let node_idx = nodes.len();
                 nodes.push(node);
@@ -90,10 +54,6 @@ impl TagNode {
             }
         };
 
-        // We always push four children, but some nodes might in reality have
-        // fewer than that. In this case, the resulting node will simply have
-        // a width or height of 0 and we can recognize that it technically
-        // doesn't exist.
         let n1 = Self::build(top_left_width, top_left_height, level - 1, nodes);
         push(n1, 0, nodes);
 
@@ -134,12 +94,6 @@ fn read_tag_node(
                 break;
             }
 
-            // "Each node has an associated current value, which is
-            // initialized to zero (the minimum). A 0 bit in the tag tree
-            // means that the minimum (or the value in the case of the
-            // highest level) is larger than the current value and a 1 bit
-            // means that the minimum (or the value in the case of the
-            // highest level) is equal to the current value."
             match reader.read_bits_with_stuffing(1)? {
                 0 => val += 1,
                 1 => {
@@ -153,8 +107,6 @@ fn read_tag_node(
         node.value = val;
     }
 
-    // Abort early if we already reached the leaf node or the minimum
-    // value of all children is too large.
     if node.value >= max_val || node.level == 0 {
         return Some(node.value);
     }
@@ -206,7 +158,6 @@ pub(crate) struct TagTree {
 
 impl TagTree {
     pub(crate) fn new(width: u32, height: u32, nodes: &mut Vec<TagNode>) -> Self {
-        // Calculate how many levels the tree has in total.
         let level = u32::max(
             width.next_power_of_two().ilog2(),
             height.next_power_of_two().ilog2(),

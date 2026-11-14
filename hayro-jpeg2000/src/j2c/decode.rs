@@ -1,9 +1,3 @@
-//! Decoding JPEG2000 code streams.
-//!
-//! This is the "core" module of the crate that orchestrates all
-//! stages in such a way that a given codestream is decoded into its
-//! component channels.
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -53,9 +47,7 @@ pub(crate) fn decode<'a>(
         )?;
     }
 
-    // Note that this assumes that either all tiles have MCT or none of them.
-    // In theory, only some could have it... But hopefully no such cursed
-    // images exist!
+    // Assumes either all tiles or none use MCT.
     if tiles[0].mct {
         mct::apply_inverse(
             &mut ctx.channel_data,
@@ -74,7 +66,6 @@ pub(crate) fn decode<'a>(
 #[derive(Default)]
 pub struct DecoderContext<'a> {
     tile_decode_context: TileDecodeContext,
-    /// The raw, decoded samples for each channel.
     pub(crate) channel_data: Vec<ComponentData>,
     storage: DecompositionStorage<'a>,
 }
@@ -118,16 +109,9 @@ fn decode_tile<'a, 'b>(
 ) -> Result<()> {
     storage.reset();
 
-    // This is the method that orchestrates all steps.
-
-    // First, we build the decompositions, including their sub-bands, precincts
-    // and code blocks.
     build::build(tile, storage, header.skipped_resolution_levels, cancel)?;
-    // Next, we parse the layers/segments for each code block.
     segment::parse(tile, progression_iterator, header, storage, cancel)?;
 
-    // Interleave bitplane decoding, IDWT, and storage for each component tile
-    // so we can reuse the coefficient and IDWT buffers.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
         cancel.check()?;
 
@@ -135,10 +119,7 @@ fn decode_tile<'a, 'b>(
             let count = storage.tile_decompositions[idx].coefficient_count;
             storage.coefficients[..count].fill(0.0);
         }
-        // We then decode the bitplanes of each code block, yielding the
-        // (possibly dequantized) coefficients of each code block.
         decode_component_tile_bit_planes(idx, tile, tile_ctx, storage, header, cancel)?;
-        // Next, we apply the inverse discrete wavelet transform.
         idwt::apply(
             storage,
             tile_ctx,
@@ -147,16 +128,7 @@ fn decode_tile<'a, 'b>(
             component_info.wavelet_transform(),
             cancel,
         )?;
-        // Finally, we store the raw samples for the tile area in the correct
-        // location. Note that in case we have MCT, we are not applying it yet.
-        // It will be applied in the very end once all tiles have been processed.
-        // The reason we do this is that applying MCT requires access to the
-        // data from _all_ components. If we didn't defer this until the end
-        // we would have to collect the IDWT outputs of all components before
-        // applying it. By not applying MCT here, we can get away with doing
-        // IDWT and store on a per-component basis. Thus, we only need to
-        // store one IDWT output at a time, allowing for better reuse of
-        // allocations.
+        // MCT is deferred until all tiles are stored so IDWT buffers can be reused per component.
         store(
             tile,
             header,
@@ -170,7 +142,6 @@ fn decode_tile<'a, 'b>(
     Ok(())
 }
 
-/// All decompositions for a single tile.
 #[derive(Clone)]
 pub(crate) struct TileDecompositions {
     pub(crate) first_ll_sub_band: usize,
@@ -231,8 +202,6 @@ impl Iterator for SubBandIter {
     }
 }
 
-/// A buffer so that we can reuse allocations for layers/code blocks/etc.
-/// across different tiles.
 #[derive(Default)]
 pub(crate) struct DecompositionStorage<'a> {
     pub(crate) segments: Vec<Segment<'a>>,
@@ -251,9 +220,6 @@ impl DecompositionStorage<'_> {
         self.segments.clear();
         self.layers.clear();
         self.code_blocks.clear();
-        // No need to clear the coefficients, as they will be resized
-        // and then overridden.
-        // self.coefficients.clear();
         self.precincts.clear();
         self.sub_bands.clear();
         self.decompositions.clear();
@@ -262,30 +228,16 @@ impl DecompositionStorage<'_> {
     }
 }
 
-/// A reusable context used during the decoding of a single tile.
-///
-/// Some of the fields are temporary in nature and reset after moving on to the
-/// next tile, some contain global state.
 #[derive(Default)]
 pub(crate) struct TileDecodeContext {
-    /// A reusable buffer for the IDWT output.
     pub(crate) idwt_output: IDWTOutput,
-    /// A scratch buffer used during IDWT.
     pub(crate) idwt_scratch_buffer: Vec<f32>,
-    /// A reusable context for decoding code blocks.
     pub(crate) bit_plane_decode_context: BitPlaneDecodeContext,
-    /// Reusable buffers for decoding bitplanes.
     pub(crate) bit_plane_decode_buffers: BitPlaneDecodeBuffers,
 }
 
 impl TileDecodeContext {
-    fn reset(&mut self) {
-        // This method doesn't do anything, just keeping it there in case
-        // it's needed in the future.
-        // Bitplane decode context and buffers will be reset in the
-        // corresponding methods. IDWT output and scratch buffer will be
-        // overridden on demand, so those don't need to be reset either.
-    }
+    fn reset(&mut self) {}
 }
 
 fn decode_component_tile_bit_planes<'a>(
@@ -298,7 +250,6 @@ fn decode_component_tile_bit_planes<'a>(
 ) -> Result<()> {
     let component_info = &tile.component_infos[component_idx];
 
-    // Only decode the resolution levels we actually care about.
     for resolution in 0..component_info.num_resolution_levels() - header.skipped_resolution_levels {
         let tile_composition = &storage.tile_decompositions[component_idx];
         let sub_band_iter = tile_composition.sub_band_iter(resolution, &storage.decompositions);
@@ -357,7 +308,6 @@ fn decode_sub_band_bitplanes(
 
     let num_bitplanes = {
         let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
-        // Equations (E-2) and (H-3).
         let num_bitplanes = (component_info.quantization_info.guard_bits as u16)
             .checked_add(exponent)
             .and_then(|x| x.checked_sub(1))
@@ -392,9 +342,6 @@ fn decode_sub_band_bitplanes(
                 storage,
                 header.strict,
             )?;
-
-            // Turn the signs and magnitudes into singular coefficients and
-            // copy them into the sub-band.
 
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
@@ -465,8 +412,6 @@ fn store<'a>(
         component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels,
     );
 
-    // Resolution levels can be empty (B-14), in which case there is nothing
-    // to store.
     if idwt_output.rect.width() == 0 || idwt_output.rect.height() == 0 {
         return Ok(());
     }
@@ -482,14 +427,6 @@ fn store<'a>(
     );
 
     if scale_x == 1 && scale_y == 1 {
-        // If no sub-sampling, use a fast path where we copy rows of coefficients
-        // at once.
-
-        // The rect of the IDWT output corresponds to the rect of the highest
-        // decomposition level of the tile, which is usually not 1:1 aligned
-        // with the actual tile rectangle. We also need to account for the
-        // offset of the reference grid.
-
         let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
         let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
 
@@ -521,7 +458,6 @@ fn store<'a>(
         let x_shrink_factor = header.size_data.x_shrink_factor;
         let y_shrink_factor = header.size_data.y_shrink_factor;
 
-        // Otherwise, copy sample by sample.
         let first_x = (tile.rect.x0 == header.size_data.image_area_x_offset)
             .then_some(resolution_tile.rect.x0);
         let first_y = (tile.rect.y0 == header.size_data.image_area_y_offset)

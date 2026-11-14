@@ -1,5 +1,3 @@
-//! Main header syntax and image geometry (Annex A, B.2-B.5).
-
 use crate::*;
 
 #[test]

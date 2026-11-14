@@ -5,8 +5,7 @@ A memory-safe, pure-Rust JPEG 2000 decoder.
 inside the JP2 container format. The decoder supports the vast majority of features
 defined in the JPEG2000 core coding system (ISO/IEC 15444-1) as well as some color
 spaces from the extensions (ISO/IEC 15444-2). There are still some missing pieces
-for some "obscure" features(like for example support for progression order
-changes in tile-parts), but all features that actually commonly appear in real-life
+for some "obscure" features, but all features that actually commonly appear in real-life
 images should be supported (if not, please open an issue!).
 
 The decoder abstracts away most of the internal complexity of JPEG2000
@@ -103,30 +102,15 @@ mod j2c;
 mod jp2;
 pub(crate) mod reader;
 
-/// JP2 signature box: 00 00 00 0C 6A 50 20 20
 pub(crate) const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
-/// Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
 pub(crate) const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
 
 /// Settings to apply during decoding.
 #[derive(Debug, Clone)]
 pub struct DecodeSettings {
-    /// Whether palette indices should be resolved.
-    ///
-    /// JPEG2000 images can be stored in two different ways. First, by storing
-    /// RGB values (depending on the color space) for each pixel. Secondly, by
-    /// only storing a single index for each channel, and then resolving the
-    /// actual color using the index.
-    ///
-    /// If you disable this option, in case you have an image with palette
-    /// indices, they will not be resolved, but instead a grayscale image
-    /// will be returned, with each pixel value corresponding to the palette
-    /// index of the location.
+    /// Whether to resolve palette indices to colors instead of returning them as grayscale.
     pub resolve_palette_indices: bool,
-    /// Whether strict mode should be enabled when decoding.
-    ///
-    /// It is recommended to leave this flag disabled, unless you have a
-    /// specific reason not to.
+    /// Whether to reject malformed input instead of decoding it leniently.
     pub strict: bool,
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
@@ -147,18 +131,11 @@ impl Default for DecodeSettings {
 
 /// A JPEG2000 image or codestream.
 pub struct Image<'a> {
-    /// The codestream containing the data to decode.
     pub(crate) codestream: &'a [u8],
-    /// The header of the J2C codestream.
     pub(crate) header: Header,
-    /// The JP2 boxes of the image. In the case of a raw codestream, we
-    /// will synthesize the necessary boxes.
     pub(crate) boxes: ImageBoxes,
-    /// Settings that should be applied during decoding.
     pub(crate) settings: DecodeSettings,
-    /// Whether the image has an alpha channel.
     pub(crate) has_alpha: bool,
-    /// The color space of the image.
     pub(crate) color_space: ColorSpace,
 }
 
@@ -207,10 +184,9 @@ impl<'a> Image<'a> {
         self.header.size_data.image_height()
     }
 
-    /// The original bit depth of the image. You usually don't need to do anything
-    /// with this parameter, it just exists for informational purposes.
+    /// The original bit depth of the image.
     pub fn original_bit_depth(&self) -> u8 {
-        // Note that this only works if all components have the same precision.
+        // Assumes all components share the same precision.
         self.header.component_infos[0].size_info.precision
     }
 
@@ -228,7 +204,6 @@ impl<'a> Image<'a> {
             cancel,
         };
 
-        // Resolve palette indices.
         if settings.resolve_palette_indices {
             let components = core::mem::take(decoded_image.decoded_components);
             *decoded_image.decoded_components =
@@ -236,8 +211,7 @@ impl<'a> Image<'a> {
         }
 
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
-            // Sort by the channel association. Note that this will only work if
-            // each component is referenced only once.
+            // Assumes each component is referenced only once.
             // TODO: Move the components instead of cloning them.
             let mut components = decoded_image
                 .decoded_components
@@ -256,7 +230,7 @@ impl<'a> Image<'a> {
             *decoded_image.decoded_components = components.into_iter().map(|c| c.0).collect();
         }
 
-        // Note that this is only valid if all images have the same bit depth.
+        // Assumes all components share the same bit depth.
         let bit_depth = decoded_image.decoded_components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
 
@@ -271,8 +245,6 @@ pub(crate) fn resolve_alpha_and_color_space(
 ) -> Result<(ColorSpace, bool)> {
     let mut num_components = header.component_infos.len();
 
-    // Override number of components with what is actually in the palette box
-    // in case we resolve them.
     if settings.resolve_palette_indices
         && let Some(palette_box) = &boxes.palette
     {
@@ -288,7 +260,6 @@ pub(crate) fn resolve_alpha_and_color_space(
 
     let mut color_space = get_color_space(boxes, num_components)?;
 
-    // If we didn't resolve palette indices, we need to assume grayscale image.
     if !settings.resolve_palette_indices && boxes.palette.is_some() {
         has_alpha = false;
         color_space = ColorSpace::Gray;
@@ -296,7 +267,6 @@ pub(crate) fn resolve_alpha_and_color_space(
 
     let actual_num_components = header.component_infos.len();
 
-    // Validate the number of channels.
     if boxes.palette.is_none()
         && actual_num_components
             != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
@@ -305,11 +275,9 @@ pub(crate) fn resolve_alpha_and_color_space(
             && actual_num_components == color_space.num_channels() as usize + 1
             && !has_alpha
         {
-            // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
-            // alpha channel in this case.
+            // Treat one extra component as alpha (OpenJPEG test orb-blue10-lin-j2k).
             has_alpha = true;
         } else {
-            // Color space is invalid, attempt to repair.
             if actual_num_components == 1 || (actual_num_components == 2 && has_alpha) {
                 color_space = ColorSpace::Gray;
             } else if actual_num_components == 3 {
@@ -375,14 +343,7 @@ impl ColorSpace {
 pub struct Bitmap {
     /// The color space of the image.
     pub color_space: ColorSpace,
-    /// The raw pixel data of the image. The result will always be in
-    /// 8-bit (in case the original image had a different bit-depth,
-    /// hayro-jpeg2000 always scales to 8-bit).
-    ///
-    /// The size is guaranteed to equal
-    /// `width * height * (num_channels + (if has_alpha { 1 } else { 0 })`.
-    /// Pixels are interleaved on a per-channel basis, the alpha channel always
-    /// appearing as the last channel, if available.
+    /// The interleaved 8-bit samples, with the alpha channel last.
     pub data: Vec<u8>,
     /// Whether the image has an alpha channel.
     pub has_alpha: bool,
@@ -390,8 +351,7 @@ pub struct Bitmap {
     pub width: u32,
     /// The height of the image.
     pub height: u32,
-    /// The original bit depth of the image. You usually don't need to do anything
-    /// with this parameter, it just exists for informational purposes.
+    /// The original bit depth of the image.
     pub original_bit_depth: u8,
 }
 
@@ -411,9 +371,7 @@ impl DecodedImage<'_> {
         Ok(buf)
     }
 
-    /// Store the decoded image as interleaved unsigned 8-bit sample data into `buf`.
-    ///
-    /// The buffer must have the correct size.
+    /// Store the decoded image as interleaved 8-bit samples into `buf`, which must fit exactly.
     pub fn store_u8_into(&self, buf: &mut [u8]) -> core::result::Result<(), Cancelled> {
         interleave_and_convert(self, buf)
     }
@@ -456,13 +414,9 @@ fn interleave_and_convert(
             let plane = |c: usize| &components[c].container[start..end];
             let out = &mut buf[start * num_components..end * num_components];
             match num_components {
-                // Gray-scale.
                 1 => interleave_to_u8([plane(0)], scale, out),
-                // Gray-scale with alpha.
                 2 => interleave_to_u8([plane(0), plane(1)], scale, out),
-                // RGB
                 3 => interleave_to_u8([plane(0), plane(1), plane(2)], scale, out),
-                // RGBA or CMYK.
                 4 => interleave_to_u8([plane(0), plane(1), plane(2), plane(3)], scale, out),
                 _ => unreachable!(),
             }
@@ -598,27 +552,22 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
         .map(|c| &c.color_space)
         .unwrap_or(&jp2::colr::ColorSpace::Unknown)
     {
-        jp2::colr::ColorSpace::Enumerated(e) => {
-            match e {
-                EnumeratedColorspace::Cmyk | EnumeratedColorspace::Ycck => ColorSpace::CMYK,
-                EnumeratedColorspace::Srgb => ColorSpace::RGB,
-                EnumeratedColorspace::RommRgb => {
-                    // Use an ICC profile to process the RommRGB color space.
-                    ColorSpace::Icc {
-                        profile: include_bytes!("../assets/ProPhoto-v2-micro.icc").to_vec(),
-                        num_channels: 3,
-                    }
-                }
-                EnumeratedColorspace::EsRgb => ColorSpace::RGB,
-                EnumeratedColorspace::Greyscale => ColorSpace::Gray,
-                EnumeratedColorspace::Sycc => ColorSpace::RGB,
-                EnumeratedColorspace::CieLab(_) => ColorSpace::Icc {
-                    profile: include_bytes!("../assets/LAB.icc").to_vec(),
-                    num_channels: 3,
-                },
-                _ => bail!(FormatError::Unsupported),
-            }
-        }
+        jp2::colr::ColorSpace::Enumerated(e) => match e {
+            EnumeratedColorspace::Cmyk | EnumeratedColorspace::Ycck => ColorSpace::CMYK,
+            EnumeratedColorspace::Srgb => ColorSpace::RGB,
+            EnumeratedColorspace::RommRgb => ColorSpace::Icc {
+                profile: include_bytes!("../assets/ProPhoto-v2-micro.icc").to_vec(),
+                num_channels: 3,
+            },
+            EnumeratedColorspace::EsRgb => ColorSpace::RGB,
+            EnumeratedColorspace::Greyscale => ColorSpace::Gray,
+            EnumeratedColorspace::Sycc => ColorSpace::RGB,
+            EnumeratedColorspace::CieLab(_) => ColorSpace::Icc {
+                profile: include_bytes!("../assets/LAB.icc").to_vec(),
+                num_channels: 3,
+            },
+            _ => bail!(FormatError::Unsupported),
+        },
         jp2::colr::ColorSpace::Icc(icc) => {
             if let Some(metadata) = ICCMetadata::from_data(icc) {
                 ColorSpace::Icc {
@@ -626,10 +575,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
                     num_channels: metadata.color_space.num_components(),
                 }
             } else {
-                // See OPENJPEG test orb-blue10-lin-jp2.jp2. They seem to
-                // assume RGB in this case (even though the image has 4
-                // components with no opacity channel, they assume RGBA instead
-                // of CMYK).
+                // Fall back to RGB for unparseable profiles (OpenJPEG test orb-blue10-lin-jp2).
                 ColorSpace::RGB
             }
         }
@@ -653,7 +599,6 @@ fn resolve_palette_indices(
     cancel: Cancel<'_>,
 ) -> Result<Vec<ComponentData>> {
     let Some(palette) = boxes.palette.as_ref() else {
-        // Nothing to resolve.
         return Ok(components);
     };
 
@@ -749,9 +694,6 @@ fn cielab_to_rgb<S: Simd>(
 
     let bit_max = (1_u32 << bit_depth) - 1;
 
-    // Note that we are not doing the actual conversion with the ICC profile yet,
-    // just decoding the raw LAB values.
-    // We leave applying the ICC profile to the user.
     let divisor_l = ((1 << prec0) - 1) as f32;
     let divisor_a = ((1 << prec1) - 1) as f32;
     let divisor_b = ((1 << prec2) - 1) as f32;
@@ -773,9 +715,7 @@ fn cielab_to_rgb<S: Simd>(
     let b_offset_v = f32x8::splat(simd, b_offset);
     let b_scale_v = f32x8::splat(simd, b_scale);
 
-    // Note that we are not doing the actual conversion with the ICC profile yet,
-    // just decoding the raw LAB values.
-    // We leave applying the ICC profile to the user.
+    // Only normalizes the Lab values; the color conversion happens through the Lab ICC profile.
     for (i, ((l_chunk, a_chunk), b_chunk)) in l
         .container
         .as_chunks_mut::<SIMD_WIDTH>()
@@ -808,7 +748,6 @@ fn ycck_to_cmyk<S: Simd>(
     bit_depth: u8,
     cancel: Cancel<'_>,
 ) -> Result<()> {
-    // Convert YCbCr to CMY, preserving K (T.801, Table M.25).
     sycc_to_rgb(simd, components, bit_depth, cancel)?;
 
     let max_value = ((1_u32 << bit_depth) - 1) as f32;
@@ -871,11 +810,8 @@ fn sycc_to_rgb<S: Simd>(
         let cb_v = f32x8::from_slice(simd, cb_chunk) - offset_v;
         let cr_v = f32x8::from_slice(simd, cr_chunk) - offset_v;
 
-        // r = y + 1.402 * cr
         let r = cr_v.mul_add(cr_to_r, y_v);
-        // g = y - 0.344136 * cb - 0.714136 * cr
         let g = cr_v.mul_add(cr_to_g, cb_v.mul_add(cb_to_g, y_v));
-        // b = y + 1.772 * cb
         let b = cb_v.mul_add(cb_to_b, y_v);
 
         r.min(max_v).max(zero_v).store(y_chunk);

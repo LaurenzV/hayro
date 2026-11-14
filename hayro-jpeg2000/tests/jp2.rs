@@ -1,5 +1,3 @@
-//! The JP2 and JPX file formats (Annex I, T.801 Annex M).
-
 use crate::*;
 
 #[test]

@@ -1,5 +1,3 @@
-//! Irreversible transformation and quantization (Annex E, F.3.8.2).
-
 use crate::*;
 
 #[test]

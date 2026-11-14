@@ -1,5 +1,3 @@
-//! The channel definition box (cdef), defined in I.5.3.6.
-
 use alloc::vec::Vec;
 
 use crate::error::{FormatError, Result, bail};
@@ -30,7 +28,6 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
 
     definitions.sort_by_key(|a| a.channel_index);
 
-    // Ensure channel indices increases in steps of 1, starting from 0.
     for (idx, def) in definitions.iter().enumerate() {
         if def.channel_index as usize != idx {
             bail!(FormatError::InvalidBox);
@@ -67,7 +64,6 @@ impl ChannelType {
         match value {
             0 => Some(Self::Colour),
             1 => Some(Self::Opacity),
-            // We don't support the others.
             _ => None,
         }
     }
@@ -83,7 +79,6 @@ impl ChannelAssociation {
     fn from_raw(value: u16) -> Option<Self> {
         match value {
             0 => Some(Self::WholeImage),
-            // Unspecified.
             u16::MAX => None,
             v => Some(Self::Colour(v)),
         }

@@ -1,5 +1,3 @@
-//! Combined byte and bit reader utilities.
-
 use crate::error::{MarkerError, Result, bail};
 use core::fmt::Debug;
 
@@ -123,8 +121,6 @@ impl<'a> BitReader<'a> {
         self.cur_pos % 8
     }
 
-    /// Like the normal `read_bits` method, but accounts for stuffing bits
-    /// in addition.
     #[inline]
     pub(crate) fn read_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32> {
         let mut bit = 0;
@@ -143,8 +139,6 @@ impl<'a> BitReader<'a> {
     }
 
     pub(crate) fn needs_to_read_stuff_bit(&mut self) -> bool {
-        // B.10.1: "If the value of the byte is 0xFF, the next byte includes an extra zero bit
-        // stuffed into the MSB."
         self.bit_pos() == 7 && self.data[self.byte_pos()] == 0xff
     }
 

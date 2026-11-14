@@ -21,12 +21,10 @@ impl IntRect {
     }
 
     pub(crate) fn width(&self) -> u32 {
-        // See B-11.
         self.x1 - self.x0
     }
 
     pub(crate) fn height(&self) -> u32 {
-        // See B-11.
         self.y1 - self.y0
     }
 

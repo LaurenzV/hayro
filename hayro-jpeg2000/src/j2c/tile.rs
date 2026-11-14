@@ -1,5 +1,3 @@
-//! Creating tiles and parsing their constituent tile parts.
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -12,34 +10,22 @@ use crate::error::{MarkerError, Result, TileError, ValidationError, bail, err};
 use crate::j2c::codestream;
 use crate::reader::BitReader;
 
-/// A single tile in the image.
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    /// The concatenated tile parts that contain all the information for all
-    /// constituent codeblocks.
     pub(crate) tile_parts: Vec<TilePart<'a>>,
-    /// Parameters for each component. In most cases, those are directly
-    /// inherited from the main header. But in some cases, individual tiles
-    /// might override them.
     pub(crate) component_infos: Vec<ComponentInfo>,
-    /// The rectangle making up the area of the tile. `x1` and `y1` are
-    /// exclusive.
     pub(crate) rect: IntRect,
     pub(crate) progression_order: ProgressionOrder,
-    /// The progression order changes from the tile-part headers. If there
-    /// are any, they override the ones from the main header.
     pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) num_layers: u8,
     pub(crate) mct: bool,
 }
 
-/// A tile part where packet headers and packet data are interleaved.
 #[derive(Clone, Debug)]
 pub(crate) struct MergedTilePart<'a> {
     pub(crate) data: BitReader<'a>,
 }
 
-/// A tile part where packet headers and packet data are separated.
 #[derive(Clone, Debug)]
 pub(crate) struct SeparatedTilePart<'a> {
     pub(crate) headers: Vec<BitReader<'a>>,
@@ -85,7 +71,6 @@ impl<'a> Tile<'a> {
             let x_coord = u64::from(size_data.tile_x_coord(idx));
             let y_coord = u64::from(size_data.tile_y_coord(idx));
 
-            // See B-7, B-8, B-9 and B-10.
             let x0 = u64::max(
                 u64::from(size_data.tile_x_offset) + x_coord * u64::from(size_data.tile_width),
                 u64::from(size_data.image_area_x_offset),
@@ -95,7 +80,6 @@ impl<'a> Tile<'a> {
                 u64::from(size_data.image_area_y_offset),
             ) as u32;
 
-            // Note that `x1` and `y1` are exclusive.
             let x1 = u64::min(
                 u64::from(size_data.tile_x_offset)
                     + (x_coord + 1) * u64::from(size_data.tile_width),
@@ -111,12 +95,8 @@ impl<'a> Tile<'a> {
         };
 
         Tile {
-            // Will be filled once we start parsing.
             tile_parts: vec![],
             rect,
-            // By default, each tile inherits the settings from the main
-            // header. When parsing the tile parts, some of these settings
-            // might be overridden.
             component_infos: header.component_infos.clone(),
             progression_order: header.global_coding_style.progression_order,
             progression_changes: vec![],
@@ -132,7 +112,6 @@ impl<'a> Tile<'a> {
     }
 }
 
-/// Create the tiles and parse their constituent tile parts.
 pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
     main_header: &'a Header,
@@ -178,8 +157,7 @@ fn parse_tile_part<'a>(
     let data_len = if tile_part_header.tile_part_length == 0 {
         reader.tail().map(|d| d.len()).unwrap_or(0)
     } else {
-        // Subtract 12 to account for the marker length.
-
+        // Psot includes the 12-byte SOT marker segment.
         (tile_part_header.tile_part_length as usize)
             .checked_sub(12)
             .ok_or(TileError::Invalid)?
@@ -193,9 +171,7 @@ fn parse_tile_part<'a>(
     let mut ppt_headers = vec![];
 
     loop {
-        // Tile-parts need to contain at least an SOD marker (see Table A.5),
-        // but some files contain tile-parts that only consist of the SOT
-        // marker segment. Those don't contain any data and can be skipped.
+        // Some files have tile-parts without an SOD marker.
         if reader.offset() - start >= data_len {
             return if main_header.strict {
                 err!(MarkerError::Expected("SOD"))
@@ -217,8 +193,6 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
                 break;
             }
-            // COD, COC, QCD and QCC should only be used in the _first_
-            // tile-part header, if they appear at all.
             markers::COD => {
                 reader.read_marker()?;
                 let cod = codestream::cod_marker(reader).ok_or(MarkerError::ParseFailure("COD"))?;
@@ -292,7 +266,6 @@ fn parse_tile_part<'a>(
                 );
             }
             markers::PLT => {
-                // Can be inferred ourselves.
                 reader.read_marker()?;
                 skip_marker_segment(reader).ok_or(MarkerError::ParseFailure("PLT"))?;
             }
@@ -301,11 +274,7 @@ fn parse_tile_part<'a>(
                 skip_marker_segment(reader).ok_or(MarkerError::ParseFailure("COM"))?;
             }
             (0x30..=0x3F) => {
-                // "All markers with the marker code between 0xFF30 and 0xFF3F
-                // have no marker segment parameters. They shall be skipped by
-                // the decoder."
                 reader.read_marker()?;
-                // skip_marker_segment(reader);
             }
             _ => {
                 bail!(MarkerError::Unsupported);
@@ -332,8 +301,6 @@ fn parse_tile_part<'a>(
 
     let data = match reader.read_bytes(remaining_bytes) {
         Some(data) => data,
-        // The codestream might be truncated, in which case we decode as much
-        // as is available.
         None if !main_header.strict => {
             let data = reader.tail().ok_or(TileError::Invalid)?;
             reader.jump_to_end();
@@ -359,13 +326,10 @@ fn parse_tile_part<'a>(
     Ok(())
 }
 
-/// A tile, instantiated to a specific component.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ComponentTile<'a> {
     pub(crate) tile: &'a Tile<'a>,
-    /// The information of the component of the tile.
     pub(crate) component_info: &'a ComponentInfo,
-    /// The rectangle of the component tile.
     pub(crate) rect: IntRect,
 }
 
@@ -378,7 +342,6 @@ impl<'a> ComponentTile<'a> {
         {
             tile_rect
         } else {
-            // As described in B-12.
             let t_x0 = tile_rect
                 .x0
                 .div_ceil(component_info.size_info.horizontal_resolution as u32);
@@ -412,15 +375,10 @@ impl<'a> ComponentTile<'a> {
     }
 }
 
-/// A tile instantiated to a specific resolution of a component tile.
 pub(crate) struct ResolutionTile<'a> {
-    /// The resolution of the tile.
     pub(crate) resolution: u8,
-    /// The decomposition level of the tile.
     pub(crate) decomposition_level: u8,
-    /// The underlying component tile.
     pub(crate) component_tile: ComponentTile<'a>,
-    /// The rectangle of the resolution tile.
     pub(crate) rect: IntRect,
 }
 
@@ -436,7 +394,6 @@ impl<'a> ResolutionTile<'a> {
         );
 
         let rect = {
-            // See formula B-14.
             let n_l = component_tile
                 .component_info
                 .coding_style
@@ -455,11 +412,6 @@ impl<'a> ResolutionTile<'a> {
             IntRect::from_ltrb(tx0, ty0, tx1, ty1)
         };
 
-        // Decomposition level and resolution level are inversely related
-        // to each other. In addition to that, there is always one more
-        // resolution than decomposition levels (resolution level 0 only
-        // include the LL subband of the N_L decomposition, resolution level
-        // 1 includes the HL, LH and HH subbands of the N_L decomposition.
         let decomposition_level = {
             if resolution == 0 {
                 component_tile
@@ -486,12 +438,9 @@ impl<'a> ResolutionTile<'a> {
     }
 
     pub(crate) fn sub_band_rect(&self, sub_band_type: SubBandType) -> IntRect {
-        // This is the only permissible sub-band type for the given resolution.
         if self.resolution == 0 {
             assert_eq!(sub_band_type, SubBandType::LowLow);
         }
-
-        // Formula B-15.
 
         let xo_b = if matches!(sub_band_type, SubBandType::HighLow | SubBandType::HighHigh) {
             1
@@ -507,7 +456,6 @@ impl<'a> ResolutionTile<'a> {
         let mut numerator_x = 0;
         let mut numerator_y = 0;
 
-        // If decomposition level is 0, xo_b and yo_b are 0 as well.
         if self.decomposition_level > 0 {
             numerator_x = 2_u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
             numerator_y = 2_u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
@@ -531,9 +479,6 @@ impl<'a> ResolutionTile<'a> {
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
 
-    /// The exponent for determining the horizontal size of a precinct.
-    ///
-    /// `PPx` in the specification.
     fn precinct_exponent_x(&self) -> u8 {
         self.component_tile
             .component_info
@@ -543,9 +488,6 @@ impl<'a> ResolutionTile<'a> {
             .0
     }
 
-    /// The exponent for determining the vertical size of a precinct.
-    ///
-    /// `PPx` in the specification.
     fn precinct_exponent_y(&self) -> u8 {
         self.component_tile
             .component_info
@@ -556,7 +498,6 @@ impl<'a> ResolutionTile<'a> {
     }
 
     fn num_precincts_x(&self) -> u32 {
-        // See B-16.
         let IntRect { x0, x1, .. } = self.rect;
 
         if x0 == x1 {
@@ -568,7 +509,6 @@ impl<'a> ResolutionTile<'a> {
     }
 
     fn num_precincts_y(&self) -> u32 {
-        // See B-16.
         let IntRect { y0, y1, .. } = self.rect;
 
         if y0 == y1 {
@@ -583,8 +523,6 @@ impl<'a> ResolutionTile<'a> {
         self.num_precincts_x() as u64 * self.num_precincts_y() as u64
     }
 
-    /// Return an iterator over the data of the precincts in this resolution
-    /// tile.
     pub(crate) fn precincts(&self) -> Option<impl Iterator<Item = PrecinctData>> {
         let num_precincts_y = self.num_precincts_y();
         let num_precincts_x = self.num_precincts_x();
@@ -595,9 +533,7 @@ impl<'a> ResolutionTile<'a> {
         let mut y_start = (self.rect.y0 / (1 << ppy)) * (1 << ppy);
         let mut x_start = (self.rect.x0 / (1 << ppx)) * (1 << ppx);
 
-        // It is unclear why this is necessary, but it is. The spec only
-        // mentions that ppx/ppy must be decreased when calculating codeblock
-        // dimensions, but not that it's necessary for precincts as well.
+        // The spec only reduces PPx/PPy for code-blocks, but precincts need it too.
         if self.resolution > 0 {
             ppx = ppx.checked_sub(1)?;
             ppy = ppy.checked_sub(1)?;
@@ -634,25 +570,15 @@ impl<'a> ResolutionTile<'a> {
             .vertical_resolution as u32)
             .checked_mul(y_stride)?;
 
-        // These variables are used to map the start coordinates of each
-        // precinct _on the reference grid_. Remember that the first
-        // precinct in each row/column is at the start position of the tile
-        // which might not be a multiple of precinct exponent, but all subsequent
-        // precincts are at a multiple of the exponent.
         let mut r_x = self.component_tile.tile.rect.x0;
         let mut r_y = self.component_tile.tile.rect.y0;
 
-        // The second part of the condition in the formula in B.12.1.3. If it
-        // is divisible, then we can't take the x/y position of the tile
-        // as the start of the precinct, but instead have to advance to the
-        // next multiple.
         if !r_x.is_multiple_of(precinct_x_step)
             && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
         {
             r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
         }
 
-        // Same as above.
         if !r_y.is_multiple_of(precinct_y_step)
             && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
         {
@@ -673,15 +599,11 @@ impl<'a> ResolutionTile<'a> {
                     idx: num_precincts_x as u64 * y as u64 + x as u64,
                 };
 
-                // If r_x is already aligned, we simply step by `precinct_x_step`.
-                // Otherwise (can only be the case for precincts in the first
-                // row or column), align to the next multiple.
                 r_x = (r_x + 1).next_multiple_of(precinct_x_step);
 
                 data
             });
 
-            // Same as for r_x.
             r_y = (r_y + 1).next_multiple_of(precinct_y_step);
 
             res
@@ -691,7 +613,6 @@ impl<'a> ResolutionTile<'a> {
     }
 
     pub(crate) fn code_block_width(&self) -> u32 {
-        // See B-17.
         let xcb = self
             .component_tile
             .component_info
@@ -709,7 +630,6 @@ impl<'a> ResolutionTile<'a> {
     }
 
     pub(crate) fn code_block_height(&self) -> u32 {
-        // See B-18.
         let ycb = self
             .component_tile
             .component_info
@@ -737,7 +657,6 @@ struct PptMarkerData<'a> {
     sequence_idx: u8,
 }
 
-/// PPT marker (A.7.5).
 fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<PptMarkerData<'a>> {
     let length = reader.read_u16()?.checked_sub(2)?;
     let header_len = length.checked_sub(1)?;
@@ -748,15 +667,12 @@ fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<PptMarkerData<'a>> {
     })
 }
 
-/// SOT marker (A.4.2).
 fn sot_marker(reader: &mut BitReader<'_>) -> Option<TilePartHeader> {
-    // Length.
     let _ = reader.read_u16()?;
 
     let tile_index = reader.read_u16()?;
     let tile_part_length = reader.read_u32()?;
 
-    // We infer those ourselves.
     let _tile_part_index = reader.read_byte()? as u16;
     let _num_tile_parts = reader.read_byte()?;
 
@@ -775,7 +691,6 @@ mod tests {
         WaveletTransform,
     };
 
-    /// Test case for the example in B.4.
     #[test]
     fn test_jpeg2000_standard_example_b4() {
         let component_size_info_0 = ComponentSizeInfo {
@@ -848,7 +763,6 @@ mod tests {
 
         let header = Header {
             size_data,
-            // Just dummy values.
             global_coding_style: CodingStyleDefault {
                 progression_order: ProgressionOrder::LayerResolutionComponentPosition,
                 num_layers: 0,

@@ -1,5 +1,3 @@
-//! Building and setting up decompositions, sub-bands, precincts and code-blocks.
-
 use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
@@ -10,8 +8,6 @@ use alloc::vec;
 use core::iter;
 use core::ops::Range;
 
-/// Build and allocate all necessary structures to process the code-blocks
-/// for a specific tile. Also parses the segments for each code-block.
 pub(crate) fn build(
     tile: &Tile<'_>,
     storage: &mut DecompositionStorage<'_>,
@@ -30,9 +26,7 @@ fn build_decompositions(
     let mut component_samples = vec![];
 
     for component_tile in tile.component_tiles() {
-        // The number of skipped resolution levels is determined from the main
-        // header, but tile-part headers can reduce the number of resolution
-        // levels further.
+        // Tile-part headers can lower the resolution levels below the skipped count.
         let decoded_resolutions = component_tile
             .component_info
             .num_resolution_levels()
@@ -69,7 +63,6 @@ fn build_decompositions(
 
             let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage, cancel)?;
 
-            // No need to allocate coefficients for skipped resolution levels.
             let added_coefficients = if resolution_tile.resolution < decoded_resolutions {
                 usize::try_from(sub_band_rect.area()).map_err(|_| ValidationError::ImageTooLarge)?
             } else {
@@ -92,7 +85,6 @@ fn build_decompositions(
             Ok(idx)
         };
 
-        // Resolution 0 always is the LL sub-band.
         let ll_resolution_tile = resolution_tiles.next().unwrap();
         let first_ll_sub_band = build_sub_band(SubBandType::LowLow, &ll_resolution_tile, storage)?;
 
@@ -143,8 +135,6 @@ fn build_precincts(
         let cb_width = resolution_tile.code_block_width();
         let cb_height = resolution_tile.code_block_height();
 
-        // See Figure B.9. Conceptually, the area of code-blocks is aligned
-        // to the width/height of a code block.
         let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
         let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
         let cb_x1 = (u32::min(precinct_rect.x1, sub_band_rect.x1).div_ceil(cb_width)) * cb_width;
@@ -152,9 +142,7 @@ fn build_precincts(
 
         let code_block_area = IntRect::from_ltrb(cb_x0, cb_y0, cb_x1, cb_y1);
 
-        // If the sub-band is empty, there are no code-blocks, but due to our
-        // flooring/ceiling above, we would get 1 code-block in each direction.
-        // Because of this, we need to special-case this.
+        // Rounding would otherwise yield one code-block per axis for empty sub-bands.
         let code_blocks_x = if sub_band_rect.width() == 0 {
             0
         } else {
@@ -218,20 +206,12 @@ fn build_code_blocks(
         let mut x = code_block_area.x0;
 
         for x_idx in 0..code_blocks_x {
-            // "Code-blocks in the partition may extend beyond the boundaries of
-            // the sub-band coefficients. When this happens, only the
-            // coefficients lying within the sub-band are coded using the method
-            // described in Annex D."
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
 
             let start = storage.layers.len();
             storage.layers.extend(iter::repeat_n(
-                Layer {
-                    // This will be updated once we actually read the
-                    // layer segments.
-                    segments: None,
-                },
+                Layer { segments: None },
                 tile.num_layers as usize,
             ));
             let end = storage.layers.len();
@@ -260,9 +240,8 @@ fn build_code_blocks(
 }
 
 pub(crate) struct Decomposition {
-    /// In the order low-high, high-low and high-high.
+    // In the order low-high, high-low and high-high.
     pub(crate) sub_bands: [usize; 3],
-    /// The rectangle of the decomposition.
     pub(crate) rect: IntRect,
 }
 
@@ -290,14 +269,9 @@ pub(crate) struct Precinct {
 }
 
 pub(crate) struct PrecinctData {
-    /// The x coordinate mapped back to the reference grid.
     pub(crate) r_x: u32,
-    /// The y coordinate mapped back to the reference grid.
     pub(crate) r_y: u32,
-    /// The actual rectangle of the precinct (in the sub-band coordinate
-    /// system).
     pub(crate) rect: IntRect,
-    /// The index of the precinct in the sub-band.
     pub(crate) idx: u64,
 }
 

@@ -1,5 +1,4 @@
-//! Integration with the [image] crate
-
+//! Integration with the `image` crate.
 use std::{
     ffi::OsStr,
     io::{BufRead, Seek},
@@ -31,7 +30,6 @@ impl ImageDecoder for Image<'_> {
             // We convert CMYK to RGB.
             (4, false) => ColorType::Rgb8,
             (4, true) => ColorType::Rgba8,
-            // We have to return something...
             _ => ColorType::Rgb8,
         }
     }
@@ -40,9 +38,7 @@ impl ImageDecoder for Image<'_> {
         let channel_count = self.color_space.num_channels();
         let has_alpha = self.has_alpha;
         let depth = self.original_bit_depth();
-        // match logic based on color_type() above
         match (channel_count, depth, has_alpha) {
-            // Grayscale
             (1, 1, false) => ExtendedColorType::L1,
             (1, 1, true) => ExtendedColorType::La1,
             (1, 2, false) => ExtendedColorType::L2,
@@ -53,7 +49,6 @@ impl ImageDecoder for Image<'_> {
             (1, 8, true) => ExtendedColorType::La8,
             (1, 16, false) => ExtendedColorType::L8,
             (1, 16, true) => ExtendedColorType::La8,
-            // RGB
             (3, 1, false) => ExtendedColorType::Rgb1,
             (3, 1, true) => ExtendedColorType::Rgba1,
             (3, 2, false) => ExtendedColorType::Rgb2,
@@ -64,7 +59,6 @@ impl ImageDecoder for Image<'_> {
             (3, 8, true) => ExtendedColorType::Rgba8,
             (3, 16, false) => ExtendedColorType::Rgb8,
             (3, 16, true) => ExtendedColorType::Rgba8,
-            // CMYK
             (4, 8, false) => ExtendedColorType::Cmyk8,
             (4, 16, false) => ExtendedColorType::Cmyk16,
             // CMYK with alpha is not representable
@@ -89,18 +83,9 @@ impl ImageDecoder for Image<'_> {
 }
 
 #[doc(hidden)]
-/// JPEG2000 decoder compatible with `image` decoding hook APIs that pass an `impl Read + Seek`
+/// A JPEG2000 decoder for `image`'s decoding hooks.
 pub struct Jp2Decoder {
-    // Lots of fields from `crate::Image` are duplicated here;
-    // this is necessary because `crate::Image` borrows a slice and keeping it in the same struct
-    // as `input: Vec<u8>` would create a self-referential struct that Rust cannot easily express.
-    //
-    // This approach is modeled after the integration of early versions of zune-jpeg into image:
-    // https://docs.rs/image/0.25.6/src/image/codecs/jpeg/decoder.rs.html#27-58
-    //
-    // Buffering the entire input in memory is not an issue for lossy formats like JPEG.
-    // The compression ratio is so high that an image that expands to hundreds of MB when decoded
-    // only takes up a single-digit number of MB in a compressed form.
+    // Owns the input because `Image` borrows its data.
     input: Vec<u8>,
     width: u32,
     height: u32,
@@ -110,7 +95,7 @@ pub struct Jp2Decoder {
 }
 
 impl Jp2Decoder {
-    /// Create a new decoder that decodes from the stream ```r```
+    /// Create a new decoder that reads from `r`.
     pub fn new<R: BufRead + Seek>(r: R) -> ImageResult<Self> {
         let mut input = Vec::new();
         let mut r = r;
@@ -149,19 +134,18 @@ impl ImageDecoder for Jp2Decoder {
     where
         Self: Sized,
     {
-        // we can safely .unwrap() because we've already done this on decoder creation and know this works
+        // Already succeeded in `Jp2Decoder::new`.
         let decoder = Image::new(&self.input, &DecodeSettings::default()).unwrap();
         decoder.read_image(buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        // we can safely .unwrap() because we've already done this on decoder creation and know this works
+        // Already succeeded in `Jp2Decoder::new`.
         let decoder = Image::new(&self.input, &DecodeSettings::default()).unwrap();
         decoder.read_image(buf)
     }
 }
 
-/// Private convenience function for `image` integration
 fn orig_bits_per_pixel(img: &Image<'_>) -> u8 {
     let mut channel_count = img.color_space().num_channels();
     if img.has_alpha {
@@ -243,8 +227,7 @@ fn to_srgb(
         // moxcms reads four-channel CMYK through the RGBA layout.
         (4, false) => transform(Layout::Rgba, Layout::Rgb, decoded, buf),
         (4, true) => {
-            // moxcms doesn't support CMYK interleaved with alpha, so we
-            // need to split it.
+            // moxcms doesn't support CMYK with interleaved alpha.
             let (cmyk, alpha): (Vec<[u8; 4]>, Vec<u8>) = decoded
                 .as_chunks::<5>()
                 .0
@@ -299,10 +282,7 @@ fn unsupported_color_error(color: ExtendedColorType) -> ImageError {
     ))
 }
 
-/// Registers the decoder with the `image` crate so that non-format-specific calls such as
-/// `ImageReader::open("image.jp2")?.decode()?;` work with JPEG2000 files.
-///
-/// Returns `true` on success, or `false` if the hook for JPEG2000 is already registered.
+/// Register the decoder with `image`, returning `false` if it was already registered.
 pub fn register_decoding_hook() -> bool {
     if decoding_hook_registered(OsStr::new("jp2")) {
         return false;

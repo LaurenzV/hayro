@@ -1,5 +1,3 @@
-//! Read and decode a JPEG2000 codestream, as described in Annex A.
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -21,7 +19,6 @@ pub(crate) struct Header {
     pub(crate) ppm_packets: Vec<PpmPacket>,
     pub(crate) progression_changes: Vec<ProgressionChange>,
     pub(crate) skipped_resolution_levels: u8,
-    /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
 }
 
@@ -31,7 +28,6 @@ pub(crate) struct PpmMarkerData<'a> {
     pub(crate) data: &'a [u8],
 }
 
-/// The packed packet headers of a single tile-part.
 pub(crate) type PpmPacket = Vec<u8>;
 
 pub(crate) fn read_header<'a>(
@@ -113,11 +109,7 @@ pub(crate) fn read_header<'a>(
                 skip_marker_segment(reader);
             }
             (0x30..=0x3F) => {
-                // "All markers with the marker code between 0xFF30 and 0xFF3F
-                // have no marker segment parameters. They shall be skipped by
-                // the decoder."
                 reader.read_marker()?;
-                // skip_marker_segment(reader);
             }
             _ => {
                 bail!(MarkerError::Unsupported);
@@ -147,9 +139,6 @@ pub(crate) fn read_header<'a>(
         })
         .collect();
 
-    // Components can have different number of resolution levels. In that case, we
-    // can only skip as many resolution levels as the component with the smallest
-    // number of resolution levels.
     let min_num_resolution_levels = component_infos
         .iter()
         .map(|c| c.num_resolution_levels())
@@ -174,8 +163,6 @@ pub(crate) fn read_header<'a>(
         }
         .min(min_num_resolution_levels - 1);
 
-    // If the user defined a maximum resolution level that is lower than the
-    // maximum available one, the final image needs to be shrinked further.
     size_data.x_resolution_shrink_factor *= 1 << skipped_resolution_levels;
     size_data.y_resolution_shrink_factor *= 1 << skipped_resolution_levels;
 
@@ -208,9 +195,7 @@ fn validate(header: &Header) -> Result<()> {
             quantization_style,
             QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded
         ) {
-            // See the accesses in the `exponent_mantissa` method. The largest
-            // access is 1 + (max_resolution_idx - 1) * 3 + 2.
-
+            // Must cover the largest index accessed in `exponent_mantissa`.
             if max_resolution_idx == 0 {
                 if num_precinct_exponents == 0 {
                     bail!(ValidationError::InsufficientExponents);
@@ -229,7 +214,6 @@ pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
     pub(crate) coding_style: CodingStyleComponent,
     pub(crate) quantization_info: QuantizationInfo,
-    /// The scaling value of the region of interest, from the RGN marker.
     pub(crate) roi_shift: u8,
 }
 
@@ -300,7 +284,6 @@ impl ComponentInfo {
     }
 }
 
-/// Progression order (Table A.16).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ProgressionOrder {
     LayerResolutionComponentPosition,
@@ -323,7 +306,6 @@ impl ProgressionOrder {
     }
 }
 
-/// A progression order change, from the POC marker (A.6.6).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ProgressionChange {
     pub(crate) resolution_start: u8,
@@ -334,7 +316,6 @@ pub(crate) struct ProgressionChange {
     pub(crate) progression_order: ProgressionOrder,
 }
 
-/// Wavelet transformation type (Table A.20).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WaveletTransform {
     Irreversible97,
@@ -351,7 +332,6 @@ impl WaveletTransform {
     }
 }
 
-/// Coding style flags (Table A.13).
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CodingStyleFlags {
     pub(crate) raw: u8,
@@ -375,7 +355,6 @@ impl CodingStyleFlags {
     }
 }
 
-/// Code-block style flags (Table A.19).
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CodeBlockStyle {
     pub(crate) selective_arithmetic_coding_bypass: bool,
@@ -392,14 +371,11 @@ impl CodeBlockStyle {
             reset_context_probabilities: (value & 0x02) != 0,
             termination_on_each_pass: (value & 0x04) != 0,
             vertically_causal_context: (value & 0x08) != 0,
-            // The predictable termination flag is only informative and
-            // can therefore be ignored.
             segmentation_symbols: (value & 0x20) != 0,
         }
     }
 }
 
-/// Quantization style (Table A.28).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum QuantizationStyle {
     NoQuantization,
@@ -424,7 +400,6 @@ pub(crate) struct StepSize {
     pub(crate) exponent: u16,
 }
 
-/// Quantization properties, from the QCD and QCC markers (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
 pub(crate) struct QuantizationInfo {
     pub(crate) quantization_style: QuantizationStyle,
@@ -432,24 +407,20 @@ pub(crate) struct QuantizationInfo {
     pub(crate) step_sizes: Vec<StepSize>,
 }
 
-/// Default values for coding style, from the COD marker (A.6.1).
 #[derive(Debug, Clone)]
 pub(crate) struct CodingStyleDefault {
     pub(crate) progression_order: ProgressionOrder,
     pub(crate) num_layers: u8,
     pub(crate) mct: bool,
-    // This is the default used for all components, if not overridden by COC.
     pub(crate) component_parameters: CodingStyleComponent,
 }
 
-/// Values of coding style for each component, from the COC marker (A.6.2).
 #[derive(Clone, Debug)]
 pub(crate) struct CodingStyleComponent {
     pub(crate) flags: CodingStyleFlags,
     pub(crate) parameters: CodingStyleParameters,
 }
 
-/// Shared parameters between the COC and COD marker (A.6.1 and A.6.2).
 #[derive(Clone, Debug)]
 pub(crate) struct CodingStyleParameters {
     pub(crate) num_decomposition_levels: u8,
@@ -463,48 +434,31 @@ pub(crate) struct CodingStyleParameters {
 
 #[derive(Debug)]
 pub(crate) struct SizeData {
-    /// Width of the reference grid (Xsiz).
     pub(crate) reference_grid_width: u32,
-    /// Height of the reference grid (Ysiz).
     pub(crate) reference_grid_height: u32,
-    /// Horizontal offset from the origin of the reference grid to the
-    /// left side of the image area (`XOsiz`).
     pub(crate) image_area_x_offset: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the image area (`YOsiz`).
     pub(crate) image_area_y_offset: u32,
-    /// Width of one reference tile with respect to the reference grid (`XTSiz`).
     pub(crate) tile_width: u32,
-    /// Height of one reference tile with respect to the reference grid (`YTSiz`).
     pub(crate) tile_height: u32,
-    /// Horizontal offset from the origin of the reference grid to the left side of the first tile (`XTOSiz`).
     pub(crate) tile_x_offset: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the first tile (`YTOSiz`).
     pub(crate) tile_y_offset: u32,
-    /// Component information (SSiz/XRSiz/YRSiz).
     pub(crate) component_sizes: Vec<ComponentSizeInfo>,
-    /// Shrink factor in the x direction. See the comment in the parsing method.
     pub(crate) x_shrink_factor: u32,
-    /// Shrink factor in the y direction. See the comment in the parsing method.
     pub(crate) y_shrink_factor: u32,
-    /// Shrink factor in the x direction due to requesting a lower resolution level.
     pub(crate) x_resolution_shrink_factor: u32,
-    /// Shrink factor in the y direction due to requesting a lower resolution level.
     pub(crate) y_resolution_shrink_factor: u32,
 }
 
 impl SizeData {
     pub(crate) fn tile_x_coord(&self, idx: u32) -> u32 {
-        // See B-6.
         idx % self.num_x_tiles()
     }
 
     pub(crate) fn tile_y_coord(&self, idx: u32) -> u32 {
-        // See B-6.
         idx / self.num_x_tiles()
     }
 }
 
-/// Component information (A.5.1 and Table A.11).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ComponentSizeInfo {
     pub(crate) precision: u8,
@@ -513,19 +467,14 @@ pub(crate) struct ComponentSizeInfo {
 }
 
 impl SizeData {
-    /// The number of tiles in the x direction.
     pub(crate) fn num_x_tiles(&self) -> u32 {
-        // See formula B-5.
         (self.reference_grid_width - self.tile_x_offset).div_ceil(self.tile_width)
     }
 
-    /// The number of tiles in the y direction.
     pub(crate) fn num_y_tiles(&self) -> u32 {
-        // See formula B-5.
         (self.reference_grid_height - self.tile_y_offset).div_ceil(self.tile_height)
     }
 
-    /// The total number of tiles.
     pub(crate) fn num_tiles(&self) -> Result<u32> {
         let tile_count = self
             .num_x_tiles()
@@ -543,34 +492,25 @@ impl SizeData {
         u64::from(self.y_shrink_factor) * u64::from(self.y_resolution_shrink_factor)
     }
 
-    /// The horizontal offset of the image area in the coordinate system of
-    /// the output image.
     pub(crate) fn image_x_offset(&self) -> u32 {
         u64::from(self.image_area_x_offset).div_ceil(self.x_divisor()) as u32
     }
 
-    /// The vertical offset of the image area in the coordinate system of
-    /// the output image.
     pub(crate) fn image_y_offset(&self) -> u32 {
         u64::from(self.image_area_y_offset).div_ceil(self.y_divisor()) as u32
     }
 
-    /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        // See B-1 and B-14.
         u64::from(self.reference_grid_width).div_ceil(self.x_divisor()) as u32
             - self.image_x_offset()
     }
 
-    /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        // See B-1 and B-14.
         u64::from(self.reference_grid_height).div_ceil(self.y_divisor()) as u32
             - self.image_y_offset()
     }
 }
 
-/// SIZ marker (A.5.1).
 fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
     let size_data = size_marker_inner(reader).ok_or(MarkerError::ParseFailure("SIZ"))?;
 
@@ -588,17 +528,12 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
         bail!(ValidationError::InvalidDimensions);
     }
 
-    // The tile grid offsets (XTOsiz, YTOsiz) are constrained to be no greater than the
-    // image area offsets (B-3).
     if size_data.tile_x_offset > size_data.image_area_x_offset
         || size_data.tile_y_offset > size_data.image_area_y_offset
     {
         bail!(crate::TileError::InvalidOffsets);
     }
 
-    // Also, the tile size plus the tile offset shall be greater than the image area offset.
-    // This ensures that the first tile (tile 0) will contain at least one reference grid point
-    // from the image area (B-4).
     if size_data
         .tile_x_offset
         .checked_add(size_data.tile_width)
@@ -623,9 +558,7 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
 }
 
 fn size_marker_inner(reader: &mut BitReader<'_>) -> Option<SizeData> {
-    // Length.
     let _ = reader.read_u16()?;
-    // Decoder capabilities.
     let _ = reader.read_u16()?;
 
     let xsiz = reader.read_u32()?;
@@ -653,8 +586,7 @@ fn size_marker_inner(reader: &mut BitReader<'_>) -> Option<SizeData> {
         let y_rsiz = reader.read_byte()?;
 
         let precision = (ssiz & 0x7F) + 1;
-        // No idea how to process signed images, but as far as I can tell
-        // openjpeg and others just accept it as is, so let's do the same.
+        // Signed samples are treated as unsigned, like other decoders do.
         let _is_signed = (ssiz & 0x80) != 0;
 
         // In theory up to 38 is allowed, but we don't support more than that.
@@ -669,11 +601,7 @@ fn size_marker_inner(reader: &mut BitReader<'_>) -> Option<SizeData> {
         });
     }
 
-    // In case all components are sub-sampled at the same level, we
-    // don't want to render them at the original resolution but instead
-    // reduce their dimension so that we can assume a resolution of 1 for
-    // all components. This makes the images much smaller.
-
+    // Uniformly subsampled images are decoded at component, not reference-grid, resolution.
     let mut x_shrink_factor = 1;
     let mut y_shrink_factor = 1;
 
@@ -722,7 +650,6 @@ fn coding_style_parameters(
     let code_block_width = reader.read_byte()?.checked_add(2)?;
     let code_block_height = reader.read_byte()?.checked_add(2)?;
 
-    // Table A.18.
     if code_block_width > 10 || code_block_height > 10 || code_block_width + code_block_height > 12
     {
         return None;
@@ -733,9 +660,7 @@ fn coding_style_parameters(
 
     let mut precinct_exponents = Vec::new();
     if coding_style.has_precincts() {
-        // "Entropy coder with precincts defined below."
         for _ in 0..num_resolution_levels {
-            // Table A.21.
             let precinct_size = reader.read_byte()?;
             let width_exp = precinct_size & 0xF;
             let height_exp = precinct_size >> 4;
@@ -747,7 +672,6 @@ fn coding_style_parameters(
             precinct_exponents.push((width_exp, height_exp));
         }
     } else {
-        // "Entropy coder, precincts with PPx = 15 and PPy = 15"
         for _ in 0..num_resolution_levels {
             precinct_exponents.push((15, 15));
         }
@@ -764,17 +688,14 @@ fn coding_style_parameters(
     })
 }
 
-/// COM Marker (A.9.2).
 fn com_marker(reader: &mut BitReader<'_>) -> Option<()> {
     skip_marker_segment(reader)
 }
 
-/// TLM marker (A.7.1).
 fn tlm_marker(reader: &mut BitReader<'_>) -> Option<()> {
     skip_marker_segment(reader)
 }
 
-/// PPM marker (A.7.4).
 fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
     let segment_len = reader.read_u16()?.checked_sub(2)? as usize;
     let ppm_data = reader.read_bytes(segment_len)?;
@@ -784,10 +705,8 @@ fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
     Some(PpmMarkerData { sequence_idx, data })
 }
 
-/// Split the data of all PPM markers into the packet headers of each tile-part.
 fn ppm_packets(mut markers: Vec<PpmMarkerData<'_>>) -> Option<Vec<PpmPacket>> {
-    // The packet headers of a tile-part can continue in the next marker
-    // segment (A.7.4), so the segments need to be concatenated first.
+    // A tile-part's packet headers can continue in the next PPM segment.
     markers.sort_by_key(|m| m.sequence_idx);
     let data = markers
         .iter()
@@ -806,9 +725,7 @@ fn ppm_packets(mut markers: Vec<PpmMarkerData<'_>>) -> Option<Vec<PpmPacket>> {
     Some(packets)
 }
 
-/// RGN marker (A.6.3).
 pub(crate) fn rgn_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, u8)> {
-    // Length.
     let _ = reader.read_u16()?;
 
     let component_index = if csiz < 257 {
@@ -820,8 +737,6 @@ pub(crate) fn rgn_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, 
     let roi_style = reader.read_byte()?;
     let roi_shift = reader.read_byte()?;
 
-    // Only implicit ROIs (maximum shift) are defined (see Table A.25), so
-    // ignore any other style.
     Some((component_index, if roi_style == 0 { roi_shift } else { 0 }))
 }
 
@@ -832,9 +747,7 @@ pub(crate) fn skip_marker_segment(reader: &mut BitReader<'_>) -> Option<()> {
     Some(())
 }
 
-/// COD marker (A.6.1).
 pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefault> {
-    // Length.
     let _ = reader.read_u16()?;
 
     let coding_style_flags = CodingStyleFlags::from_u8(reader.read_byte()?);
@@ -842,7 +755,6 @@ pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefaul
 
     let num_layers = reader.read_u16()?;
 
-    // We don't support more than 32-bit (and thus 32 layers).
     if num_layers == 0 || num_layers > MAX_LAYER_COUNT as u16 {
         return None;
     }
@@ -862,12 +774,10 @@ pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefaul
     })
 }
 
-/// COC marker (A.6.2).
 pub(crate) fn coc_marker(
     reader: &mut BitReader<'_>,
     csiz: u16,
 ) -> Option<(u16, CodingStyleComponent)> {
-    // Length.
     let _ = reader.read_u16()?;
 
     let component_index = if csiz < 257 {
@@ -887,7 +797,6 @@ pub(crate) fn coc_marker(
     Some((component_index, coc))
 }
 
-/// POC marker (A.6.6).
 pub(crate) fn poc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<Vec<ProgressionChange>> {
     let length = reader.read_u16()?.checked_sub(2)?;
     let mut reader = BitReader::new(reader.read_bytes(length as usize)?);
@@ -910,7 +819,6 @@ pub(crate) fn poc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<Vec<Pr
                 layer_end: reader.read_u16()?,
                 resolution_end: reader.read_byte()?,
                 component_end: match read_component_index(&mut reader)? {
-                    // See Table A.32.
                     0 => 256,
                     index => index,
                 },
@@ -920,9 +828,7 @@ pub(crate) fn poc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<Vec<Pr
         .collect()
 }
 
-/// QCD marker (A.6.4).
 pub(crate) fn qcd_marker(reader: &mut BitReader<'_>) -> Option<QuantizationInfo> {
-    // Length.
     let length = reader.read_u16()?;
 
     let sqcd_val = reader.read_byte()?;
@@ -937,7 +843,6 @@ pub(crate) fn qcd_marker(reader: &mut BitReader<'_>) -> Option<QuantizationInfo>
     Some(parameters)
 }
 
-/// QCC marker (A.6.5).
 pub(crate) fn qcc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, QuantizationInfo)> {
     let length = reader.read_u16()?;
 
@@ -979,11 +884,9 @@ fn quantization_parameters(
 
     match quantization_style {
         QuantizationStyle::NoQuantization => {
-            // 8 bits per band (5 bits exponent, 3 bits reserved)
             for _ in 0..remaining_bytes {
                 let value = reader.read_byte()? as u16;
                 step_sizes.push(StepSize {
-                    // Unused.
                     mantissa: 0,
                     exponent: (value >> 3),
                 });
@@ -1014,66 +917,42 @@ fn quantization_parameters(
     unused,
     reason = "Not all marker codes are used in every decoding path yet"
 )]
-/// Marker codes (Table A.2).
 pub(crate) mod markers {
-    /// Start of codestream - 'SOC'.
     pub(crate) const SOC: u8 = 0x4F;
-    /// Start of tile-part - 'SOT'.
     pub(crate) const SOT: u8 = 0x90;
-    /// Start of data - 'SOD'.
     pub(crate) const SOD: u8 = 0x93;
-    /// End of codestream - 'EOC'.
     pub(crate) const EOC: u8 = 0xD9;
 
-    /// Image and tile size - 'SIZ'.
     pub(crate) const SIZ: u8 = 0x51;
 
-    /// Coding style default - 'COD'.
     pub(crate) const COD: u8 = 0x52;
-    /// Coding component - 'COC'.
     pub(crate) const COC: u8 = 0x53;
-    /// Region-of-interest - 'RGN'.
     pub(crate) const RGN: u8 = 0x5E;
-    /// Quantization default - 'QCD'.
     pub(crate) const QCD: u8 = 0x5C;
-    /// Quantization component - 'QCC'.
     pub(crate) const QCC: u8 = 0x5D;
-    /// Progression order change - 'POC'.
     pub(crate) const POC: u8 = 0x5F;
 
-    /// Tile-part lengths - 'TLM'.
     pub(crate) const TLM: u8 = 0x55;
-    /// Packet length, main header - 'PLM'.
     pub(crate) const PLM: u8 = 0x57;
-    /// Packet length, tile-part header - 'PLT'.
     pub(crate) const PLT: u8 = 0x58;
-    /// Packed packet headers, main header - 'PPM'.
     pub(crate) const PPM: u8 = 0x60;
-    /// Packed packet headers, tile-part header - 'PPT'.
     pub(crate) const PPT: u8 = 0x61;
 
-    /// Start of packet - 'SOP'.
     pub(crate) const SOP: u8 = 0x91;
-    /// End of packet header - 'EPH'.
     pub(crate) const EPH: u8 = 0x92;
 
-    /// Component registration - 'CRG'.
     pub(crate) const CRG: u8 = 0x63;
-    /// Comment - 'COM'.
     pub(crate) const COM: u8 = 0x64;
 
     pub(crate) fn to_string(marker: u8) -> &'static str {
         match marker {
-            // Delimiting markers.
             SOC => "SOC",
             SOT => "SOT",
             SOD => "SOD",
             EOC => "EOC",
 
-            // Fixed information.
             SIZ => "SIZ",
 
-            // Functional markers.
             COD => "COD",
             COC => "COC",
             RGN => "RGN",
@@ -1081,18 +960,15 @@ pub(crate) mod markers {
             QCC => "QCC",
             POC => "POC",
 
-            // Pointer markers.
             TLM => "TLM",
             PLM => "PLM",
             PLT => "PLT",
             PPM => "PPM",
             PPT => "PPT",
 
-            // In-bit-stream markers.
             SOP => "SOP",
             EPH => "EPH",
 
-            // Informational markers.
             CRG => "CRG",
             COM => "COM",
 

@@ -1,5 +1,3 @@
-//! The 8-bit output of the `image` crate integration.
-
 use crate::*;
 
 #[test]

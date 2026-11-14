@@ -1,5 +1,3 @@
-//! Packets and progression orders (B.9-B.12).
-
 use crate::*;
 
 #[test]

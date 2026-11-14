@@ -495,9 +495,6 @@ mod inner {
     pub(crate) use simd_dispatch as dispatch;
 }
 
-// Note that these polyfills can be very imprecise, but hopefully good enough
-// for the vast majority of cases.
-
 #[inline(always)]
 pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
     #[cfg(all(
@@ -584,9 +581,6 @@ pub(crate) fn max_f32(a: f32, b: f32) -> f32 {
 
 pub(crate) use inner::*;
 
-/// A wrapper around `Vec<f32>` that pads the vector to a multiple of `N` elements.
-/// This allows SIMD operations to safely process the data without bounds checking
-/// at the end of the buffer.
 #[derive(Debug, Clone)]
 pub(crate) struct SimdBuffer<const N: usize> {
     data: Vec<f32>,
@@ -594,7 +588,6 @@ pub(crate) struct SimdBuffer<const N: usize> {
 }
 
 impl<const N: usize> SimdBuffer<N> {
-    /// Create a new `SimdBuffer` from a `Vec<f32>`, padding it to a multiple of `N`.
     pub(crate) fn new(mut data: Vec<f32>) -> Self {
         let original_len = data.len();
         let padded_len = Self::padded_len(original_len);
@@ -604,19 +597,16 @@ impl<const N: usize> SimdBuffer<N> {
         Self { data, original_len }
     }
 
-    /// Create a new `SimdBuffer` filled with zeros.
     pub(crate) fn zeros(original_len: usize) -> Self {
         let padded_len = Self::padded_len(original_len);
         let data = vec![0.0; padded_len];
         Self { data, original_len }
     }
 
-    /// Returns only the original (non-padded) data as an immutable slice.
     pub(crate) fn truncated(&self) -> &[f32] {
         &self.data[..self.original_len]
     }
 
-    /// Returns the length padded to a multiple of `N`
     fn padded_len(original_len: usize) -> usize {
         let remainder = original_len % N;
         let padding = N - remainder;

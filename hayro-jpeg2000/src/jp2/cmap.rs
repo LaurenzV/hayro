@@ -1,5 +1,3 @@
-//! The component mapping box (cmap), defined in I.5.3.5.
-
 use alloc::vec::Vec;
 
 use crate::error::{FormatError, Result, bail};

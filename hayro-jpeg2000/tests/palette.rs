@@ -1,5 +1,3 @@
-//! Palettes (I.5.3.4, I.5.3.5).
-
 use crate::*;
 
 #[test]
