@@ -6,9 +6,7 @@ use super::reader::Reader;
 use crate::CMapName;
 
 pub(super) static BUNDLE: LazyLock<Bundle> = LazyLock::new(|| {
-    // We already know the bundle is valid, so we can skip validation and just
-    // unwrap everywhere.
-
+    // The bundled data is known to be valid.
     let compressed = include_bytes!("../../assets/cmaps.brotli");
     let mut decompressed = Vec::new();
     let mut reader = compressed.as_slice();
@@ -27,7 +25,6 @@ pub(super) static BUNDLE: LazyLock<Bundle> = LazyLock::new(|| {
     while !reader.at_end() {
         let start = reader.position();
 
-        // Skip file magic and version.
         reader.read_bytes(6).unwrap();
         let file_len = reader.read_u32().unwrap() as usize;
 
@@ -50,10 +47,9 @@ pub(super) struct Bundle {
     entries: Vec<Range<usize>>,
 }
 
-/// Load the data for a cmap file, by name.
+/// Look up an embedded binary cmap by name.
 pub fn load_embedded(name: CMapName<'_>) -> Option<&'static [u8]> {
-    // Get the index of the font of the cmap in the bundle. They are sorted
-    // alphabetically.
+    // Indices follow the alphabetical order of the cmaps in the bundle.
     let idx = match name {
         CMapName::N83pvRksjH => 0,
         CMapName::N90msRksjH => 1,

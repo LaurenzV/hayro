@@ -20,12 +20,10 @@ pub(crate) fn parse_inner<'a>(
     get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
     depth: u32,
 ) -> Option<CMap> {
-    // Prevent stack overflow for malicious cmap files or circular references.
     if depth >= MAX_NESTING_DEPTH {
         return None;
     }
 
-    // Check if it's in our custom embedded cmap format.
     #[cfg(feature = "embed-cmaps")]
     if data.starts_with(b"bcmap") {
         return bcmap::parse(data, get_cmap, depth);
@@ -57,9 +55,7 @@ pub(crate) fn parse_inner<'a>(
 
         if name.is_literal() {
             match name.as_str() {
-                // Strictly speaking, Registry and Ordering should be strings,
-                // but some PDF generators emit names instead, so be lenient
-                // and try both.
+                // Some generators emit Registry/Ordering as names instead of strings.
                 Some("Registry") => {
                     registry = parse_string_or_name(&mut scanner);
                 }
@@ -122,13 +118,11 @@ pub(crate) fn parse_inner<'a>(
         }
     }
 
-    // Since we will use binary search for finding the correct entry, sort now.
     ranges.sort();
     notdef_ranges.sort();
     bf_entries.sort_by_key(|a| a.range.start);
 
-    // See PDFJS-3323, which has an invalid CIDSystemInfo entry.
-    // We ignore it if it's invalid.
+    // PDFJS-3323 has an invalid CIDSystemInfo, which is ignored.
     let character_collection = if let (Some(registry), Some(ordering), Some(supplement)) =
         (registry, ordering, supplement)
     {
@@ -349,7 +343,6 @@ fn parse_bf_range<F>(
     }
 }
 
-/// Convert the buffer into native-endian u16, so that we can use `String::from_utf16`.
 fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
     if bytes.is_empty() {
         return None;
@@ -358,9 +351,7 @@ fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
     let mut out = Vec::with_capacity(bytes.len().div_ceil(2));
     let mut i = 0;
 
-    // My understanding is that the bf strings should always be UTF16-BE encoded,
-    // but it seems like some PDFs only have a single byte there? I guess we just
-    // pad them? Wasn't able to find anything specific in the specifications.
+    // Some files have odd-length bf strings; treat the leading byte as its own unit.
     if !bytes.len().is_multiple_of(2) {
         out.push(u16::from(bytes[0]));
         i = 1;
