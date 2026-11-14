@@ -22,7 +22,6 @@ impl Number {
 pub(crate) fn parse(token: &[u8]) -> Result<Number> {
     let r = &mut Reader::new(token);
 
-    // Optional sign.
     let first = r.peek_byte().ok_or(Error::SyntaxError)?;
     let has_sign = first == b'+' || first == b'-';
 
@@ -30,12 +29,10 @@ pub(crate) fn parse(token: &[u8]) -> Result<Number> {
         r.forward();
     }
 
-    // Consume leading digits.
     let digit_start = r.offset();
     r.forward_while(|b| b.is_ascii_digit());
     let has_digits = r.offset() > digit_start;
 
-    // Check if number is a radix number.
     if !has_sign && has_digits && r.peek_byte() == Some(b'#') {
         let base_bytes = r.range(digit_start..r.offset()).ok_or(Error::SyntaxError)?;
         let base_str = core::str::from_utf8(base_bytes).map_err(|_| Error::SyntaxError)?;
@@ -45,7 +42,6 @@ pub(crate) fn parse(token: &[u8]) -> Result<Number> {
             return Err(Error::SyntaxError);
         }
 
-        // Skip `#`.
         r.forward();
 
         let num_start = r.offset();
@@ -69,15 +65,13 @@ pub(crate) fn parse(token: &[u8]) -> Result<Number> {
         return Ok(Number::Integer(value as i64));
     }
 
-    // Check for real number indicators: `.` or `e`/`E`.
     let has_dot = r.peek_byte() == Some(b'.');
 
     if has_dot {
-        r.forward(); // skip '.'
+        r.forward();
         r.forward_while(|b| b.is_ascii_digit());
     }
 
-    // At this point we need at least some digits (before or after the dot).
     if !has_digits && !has_dot {
         return Err(Error::SyntaxError);
     }
@@ -86,7 +80,6 @@ pub(crate) fn parse(token: &[u8]) -> Result<Number> {
     if has_exponent {
         r.forward();
 
-        // Optional exponent sign.
         if matches!(r.peek_byte(), Some(b'+' | b'-')) {
             r.forward();
         }

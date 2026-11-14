@@ -1,5 +1,3 @@
-// Keep in sync with `hayro-syntax/src/filter/ascii_85.rs`.
-
 use crate::reader::{Reader, is_whitespace};
 use alloc::vec::Vec;
 
@@ -12,7 +10,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
         loop {
             let b = reader.read_byte()?;
 
-            // White space characters should be ignored.
             if !is_whitespace(b) {
                 return Some(b);
             }
@@ -22,7 +19,7 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     let flush_group = |group: &mut Vec<u8>, decoded: &mut Vec<u8>| -> Option<()> {
         let (digits, output_len): ([u32; 5], usize) = match group.len() {
             0 => return Some(()),
-            1 => return None, // A single character is not valid.
+            1 => return None,
             2 => (
                 [group[0], group[1], b'u', b'u', b'u'].map(|b| (b - b'!') as u32),
                 1,
@@ -59,7 +56,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
 
     loop {
         let Some(b) = read_byte() else {
-            // Be lenient and accept what we have (see PDFBOX-5910).
             flush_group(&mut group, out)?;
 
             return Some(());
@@ -78,13 +74,11 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                 out.extend_from_slice(&[0, 0, 0, 0]);
             }
             b'~' => {
-                // Technically requires a '>', but there is a PDF where it isn't
-                // appended and decodes fine in other viewers.
                 flush_group(&mut group, out)?;
 
                 return Some(());
             }
-            _ => return None, // Invalid character.
+            _ => return None,
         }
     }
 }
