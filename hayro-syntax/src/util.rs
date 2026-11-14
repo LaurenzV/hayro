@@ -6,14 +6,11 @@ use smallvec::{Array, SmallVec};
 
 const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
 
-/// A number of useful methods for f32 numbers.
 pub(crate) trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
-    /// Whether the number is approximately 0.
     fn is_nearly_zero(&self) -> bool {
         self.is_nearly_zero_within_tolerance(SCALAR_NEARLY_ZERO)
     }
 
-    /// Whether the number is approximately 0, with a given tolerance.
     fn is_nearly_zero_within_tolerance(&self, tolerance: f32) -> bool;
 }
 
@@ -116,17 +113,7 @@ pub(crate) fn findr_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     }
 }
 
-/// Allows to store elements at an index with an `&self` reference.
-///
-/// This is similar to a thread-safe arena data structure, but with less moving
-/// parts and no unsafe code. It's based on the segment list presented in
-/// <https://matklad.github.io/2023/04/23/data-oriented-parallel-value-interner.html>
-///
-/// Indices should be used in order. Usage of higher indices implies more memory
-/// usage (even if lower indices are not in use).
-///
-/// The capacity is limited at 2^C - 1. Calling `get_or_init` with a higher
-/// index will lead to a panic.
+// Segment list from <https://matklad.github.io/2023/04/23/data-oriented-parallel-value-interner.html>; panics past index 2^C - 1.
 pub(crate) struct SegmentList<T, const C: usize>([OnceLock<Box<[OnceLock<T>]>>; C]);
 
 impl<T, const C: usize> SegmentList<T, C> {
@@ -172,7 +159,6 @@ mod tests {
     fn test_segment_list() {
         let e = SegmentList::<String, 10>::new();
 
-        // Ensure that it works.
         for i in 0..500 {
             e.get_or_init(i, || format!("{i}"));
         }
@@ -180,8 +166,6 @@ mod tests {
             assert_eq!(e.get(i), Some(&format!("{i}")));
         }
 
-        // Ensure that all slots in the first 8 segments are actually in use,
-        // i.e. we didn't overallocate.
         for segment in &e.0[..8] {
             assert!(segment.get().unwrap().iter().all(|s| s.get().is_some()));
         }

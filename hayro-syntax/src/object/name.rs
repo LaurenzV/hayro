@@ -1,5 +1,3 @@
-//! Names.
-
 use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
@@ -111,9 +109,7 @@ impl<'a> Name<'a> {
         Some(Self(NameInner::Owned(result)))
     }
 
-    /// Return a string representation of the name.
-    ///
-    /// Returns a placeholder in case the name is not UTF-8 encoded.
+    /// Return the name as a string, or a placeholder if it isn't UTF-8.
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(self.as_ref()).unwrap_or("{non-ascii key}")
     }
@@ -148,19 +144,13 @@ impl<'a> Readable<'a> for Name<'a> {
         skip_name_like(r, true)?;
         let end = r.offset();
 
-        // Exclude leading solidus.
         let data = r.range(start + 1..end)?;
         Self::new(data)
     }
 }
 
-// This method is shared by `Name` and the parser for content stream operators (which behave like
-// names, except that they aren't preceded by a solidus.
 pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
-    // Note that we are not validating hex escape sequences here
-    // (since this method can lie on the hot path), so it's possible
-    // this method will yield invalid names. Validation needs to happen during actual
-    // actual reading.
+    // Escapes aren't validated here; reading validates them.
     if solidus {
         r.forward_tag(b"/")?;
         r.forward_while(is_regular_character);

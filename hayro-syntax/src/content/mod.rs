@@ -1,34 +1,4 @@
-/*!
-PDF content operators.
-
-This module provides facilities to read and interpret PDF content streams using
-high-level types.
-
-```
-use hayro_syntax::object::Number;
-use hayro_syntax::content::*;
-use hayro_syntax::content::ops::*;
-
-let content_stream = b"1 0 0 -1 0 200 cm
-0 1.0 0 rg
-0 0 m
-200 0 l
-200 200 l
-0 200 l
-h
-f";
-
-let mut iter = TypedIter::new(content_stream);
-assert!(matches!(iter.next(), Some(TypedInstruction::Transform(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::NonStrokeColorDeviceRgb(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::MoveTo(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::ClosePath(_))));
-assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
-```
-*/
+//! PDF content operators.
 
 #[allow(missing_docs)]
 pub mod ops;
@@ -105,7 +75,7 @@ impl<'a> Readable<'a> for Operator<'a> {
     }
 }
 
-/// An iterator over operators in the PDF content streams, providing raw access to the instructions.
+/// An untyped iterator over the instructions of a content stream.
 #[derive(Debug, Clone)]
 pub struct UntypedIter<'a> {
     reader: Reader<'a>,
@@ -173,7 +143,6 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
         }
 
         match first {
-            // I believe booleans/null never appear as an operator?
             b'.' | b'+' | b'-' | b'0'..=b'9' | b'/' | b'[' | b'<' | b'(' => {
                 *r = cur;
                 read_operand(r, stack)?;
@@ -186,7 +155,6 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
                     return None;
                 };
 
-                // Inline images need special casing...
                 if operator.as_ref() == b"BI" {
                     read_inline_image(r, stack)?;
                 }
@@ -198,13 +166,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
 }
 
 fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
-    // See issue 994. In all sane scenarios, if the next byte is a number
-    // it has to be an operand (a number). However, it's possible that
-    // the number is followed by a regular character, in which case it
-    // should behave more like an operator (even though there exists
-    // no operator that starts with a number). In order to preserve
-    // similar behavior to Acrobat and Chromium, we try to consume
-    // such an operator and then simply skip it.
+    // A number glued to regular characters acts as an unknown operator; skip it (issue 994).
     if let Some(object) = r.read_without_context::<Object<'a>>() {
         stack.push(object)
     } else if r.read_without_context::<Operator<'a>>().is_some() {
@@ -216,11 +178,9 @@ fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
 }
 
 fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
-    // The ID operator will already be consumed by this.
     let inline_dict = r.read_without_context::<InlineImageDict<'_>>()?;
     let dict = inline_dict.get_dict().clone();
 
-    // One whitespace after "ID".
     r.read_white_space()?;
 
     let stream_data = r.tail()?;
@@ -230,7 +190,6 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
         r.read_bytes(pos)?;
 
         if r.peek_bytes(2) == Some(b"EI") {
-            // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
             if r.peek_bytes(3)
                 .is_some_and(|b| !is_white_space_character(b[2]))
             {
@@ -244,12 +203,7 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
 
             let stream = Stream::new(image_data, dict.clone());
 
-            // Note that there is a possibility that the encoded stream data
-            // contains the "EI" operator as part of the data, in which case we
-            // cannot confidently know whether we have hit the actual end of the
-            // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
-            // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
-            // new we don't bother trying to read it.
+            // `EI` can appear inside the image data, so check that content follows.
             let tail = &r.tail()?[2..];
             let mut find_reader = Reader::new(tail);
             let mut binary = BinaryTracker::default();
@@ -276,28 +230,16 @@ fn read_inline_image<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()
                 find_reader.read_bytes(next_pos - offset)?;
 
                 if is_ei {
-                    // If there is any binary data in-between, we for sure
-                    // have not reached the end.
                     if binary.found_before(tail, next_pos) {
                         r.read_bytes(2)?;
                         continue 'outer;
                     }
 
-                    // Otherwise, the only possibility that we reached an
-                    // "EI", even though the previous one was valid, is
-                    // that it's part of a string in the content
-                    // stream that follows the inline image. Therefore,
-                    // it should be valid to interpret `tail` as a content
-                    // stream.
                     if !*is_content.get_or_insert_with(|| starts_with_content(tail)) {
-                        // Seems like the data in-between is not a valid content
-                        // stream, so we are likely still within the image data.
                         r.read_bytes(2)?;
                         continue 'outer;
                     }
                 } else {
-                    // Possibly another inline image, if so, the previously found "EI"
-                    // is indeed the end of data.
                     let mut cloned = find_reader.clone();
                     cloned.read_bytes(2)?;
                     if cloned
@@ -328,11 +270,7 @@ fn starts_with_content(data: &[u8]) -> bool {
     let mut counter = 0;
 
     while let Some(op) = iter.next() {
-        // If we have read more than 20 valid operators, it should be
-        // safe to assume that we are in a content stream, so abort
-        // early. The only situation where this could reasonably
-        // be violated is if we have 20 subsequent instances of
-        // q/Q in the image data, which seems very unlikely.
+        // 20 valid operators in a row are very unlikely in image data.
         if counter >= 20 {
             return true;
         }
@@ -353,8 +291,7 @@ fn starts_with_content(data: &[u8]) -> bool {
     false
 }
 
-// Content streams only hold non-ASCII bytes within strings, so one outside
-// of them means that we are still within binary image data.
+// Non-ASCII bytes outside strings mean we're still in image data.
 #[derive(Default)]
 struct BinaryTracker {
     pos: usize,
@@ -394,8 +331,7 @@ impl BinaryTracker {
     }
 }
 
-/// An iterator over PDF content streams that provide access to the instructions
-/// in a typed fashion.
+/// A typed iterator over the instructions of a content stream.
 #[derive(Clone)]
 pub struct TypedIter<'a> {
     untyped: UntypedIter<'a>,
@@ -420,10 +356,7 @@ impl<'a> TypedIter<'a> {
         // TODO: Explore whether dispatching can be made more efficient.
         match TypedInstruction::dispatch(&op) {
             Some(op) => Some(op),
-            // In case this returns `None`, the content stream is invalid. In case a path-drawing
-            // operator was used, let's abort completely, otherwise we might end up drawing random stuff.
-            // However, for other operators it could be worth it to just skip it but keep attempting
-            // to read other content operators.
+            // Abort on invalid path operators to avoid drawing garbage, and skip other operators.
             None => {
                 if [
                     &b"m"[..],
@@ -445,12 +378,12 @@ impl<'a> TypedIter<'a> {
     }
 }
 
-/// An instruction (= operator and its operands) in a content stream.
+/// An operator and its operands.
 #[derive(Debug)]
 pub struct Instruction<'b, 'a> {
     /// The stack containing the operands.
     pub operands: &'b Stack<'a>,
-    /// The actual operator.
+    /// The operator.
     pub operator: &'b Operator<'a>,
 }
 
@@ -690,10 +623,7 @@ mod macros {
         };
     }
 
-    // The `shift` parameter will always be 0 in valid PDFs. The purpose of the parameter is
-    // so that in case there are garbage operands in the content stream, we prefer to use
-    // the operands that are closer to the operator instead of the values at the bottom
-    // of the stack.
+    // With garbage operands, prefer those closest to the operator.
 
     macro_rules! op0 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {

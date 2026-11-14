@@ -18,7 +18,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-/// Attributes that can be inherited.
 #[derive(Debug, Clone)]
 struct PagesContext<'a> {
     media_box: Option<Rect>,
@@ -45,7 +44,6 @@ pub struct Pages<'a> {
 }
 
 impl<'a> Pages<'a> {
-    /// Create a new `Pages` object.
     pub(crate) fn new(
         pages_dict: &Dict<'a>,
         ctx: &ReaderContext<'a>,
@@ -58,10 +56,6 @@ impl<'a> Pages<'a> {
         Some(Self { pages, xref })
     }
 
-    /// Create a new `Pages` object by bruteforce-searching.
-    ///
-    /// Of course this could result in the order of pages being messed up, but
-    /// this is still better than nothing.
     pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Self> {
         let mut pages = vec![];
 
@@ -80,7 +74,7 @@ impl<'a> Pages<'a> {
         Some(Self { pages, xref })
     }
 
-    /// Return the xref table (of the document the pages belong to).   
+    /// Return the xref table (of the document the pages belong to).
     pub fn xref(&self) -> &'a XRef {
         self.xref
     }
@@ -159,8 +153,7 @@ fn resolve_pages<'a>(
                     stack.push(child);
                 }
             }
-            // Let's be lenient and assume it's a `Page` in case it's `None` or something else
-            // (see corpus test case 0083781).
+            // Lenient: treat a missing or unknown `Type` as a page (corpus 0083781).
             _ => {
                 if let Some(page) = Page::new(&dict, &frame.ctx, reader_ctx, false) {
                     entries.push(page);
@@ -203,8 +196,6 @@ impl<'a> Page<'a> {
         reader_ctx: &ReaderContext<'a>,
         brute_force: bool,
     ) -> Option<Self> {
-        // In general, pages without content are allowed, but in case we are brute-forcing
-        // we ignore them.
         if brute_force && !dict.contains_key(CONTENTS) {
             return None;
         }
@@ -311,8 +302,7 @@ impl<'a> Page<'a> {
         self.crop_box().intersect(self.media_box())
     }
 
-    /// Return the base dimensions of the page (same as `intersected_crop_box`, but with special
-    /// handling applied for zero-area pages).
+    /// Return the dimensions of the intersected crop box, or A4 for zero-area pages.
     pub fn base_dimensions(&self) -> (f32, f32) {
         let crop_box = self.intersected_crop_box();
 
@@ -327,10 +317,7 @@ impl<'a> Page<'a> {
         }
     }
 
-    /// Return the with and height of the page that should be assumed when rendering the page.
-    ///
-    /// Depending on the document, it is either based on the media box or the crop box
-    /// of the page. In addition to that, it also takes the rotation of the page into account.
+    /// Return the rotated width and height of the page.
     pub fn render_dimensions(&self) -> (f32, f32) {
         let (mut base_width, mut base_height) = self.base_dimensions();
 
@@ -364,11 +351,7 @@ impl<'a> Page<'a> {
         TypedIter::from_untyped(self.operations())
     }
 
-    /// Return the initial transform that should be applied when rendering.
-    ///
-    /// This accounts for the mismatch between PDF's y-up and most renderers'
-    /// y-down coordinate system, the rotation of the page and the offset of
-    /// the crop box.
+    /// Return the initial transform for rendering the page.
     pub fn initial_transform(&self, invert_y: bool) -> Transform {
         let crop_box = self.intersected_crop_box();
         let (_, base_height) = self.base_dimensions();
@@ -483,7 +466,6 @@ impl<'a> Resources<'a> {
     }
 }
 
-// <https://github.com/apache/pdfbox/blob/a53a70db16ea3133994120bcf1e216b9e760c05b/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/common/PDRectangle.java#L38>
 const POINTS_PER_INCH: f64 = 72.0;
 const POINTS_PER_MM: f64 = 1.0 / (10.0 * 2.54) * POINTS_PER_INCH;
 
@@ -501,8 +483,7 @@ pub(crate) mod cached {
     use crate::xref::XRef;
     use core::ops::Deref;
 
-    // Keep in sync with the implementation in `sync`. We duplicate it here
-    // to make it more visible since we have unsafe code here.
+    // Keep in sync with the `sync` module.
     #[cfg(feature = "std")]
     pub(crate) use std::sync::Arc;
 
@@ -511,8 +492,7 @@ pub(crate) mod cached {
 
     pub(crate) struct CachedPages {
         pages: Pages<'static>,
-        // NOTE: `pages` references the data in `xref`, so it's important that `xref`
-        // appears after `pages` in the struct definition to ensure correct drop order.
+        // Must come after `pages`, which borrows from it.
         _xref: Arc<XRef>,
     }
 

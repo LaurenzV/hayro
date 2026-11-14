@@ -11,33 +11,15 @@ pub struct Metadata {
     /// The modification date of the document.
     pub modification_date: Option<DateTime>,
     /// The title of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub title: Option<Box<[u8]>>,
     /// The author of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub author: Option<Box<[u8]>>,
     /// The subject of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub subject: Option<Box<[u8]>>,
     /// The keywords of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub keywords: Option<Box<[u8]>>,
     /// The creator of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub creator: Option<Box<[u8]>>,
     /// The producer of the document.
-    ///
-    /// In the vast majority of cases, this is going to be an ASCII string, but it doesn't have to
-    /// be.
     pub producer: Option<Box<[u8]>>,
 }

@@ -109,7 +109,6 @@ pub(crate) mod lzw {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    /// Decode a LZW-encoded stream.
     pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
         let early_change = params
             .get::<u8>(EARLY_CHANGE)
@@ -187,9 +186,8 @@ pub(crate) mod lzw {
         fn new(early_change: bool) -> Self {
             let mut entries: Vec<_> = (0..=255).map(|b| Some(vec![b])).collect();
 
-            // Clear table and EOD don't have any data.
-            entries.push(None); // 256 = CLEAR_TABLE
-            entries.push(None); // 257 = EOD
+            entries.push(None);
+            entries.push(None);
 
             Self {
                 early_change,

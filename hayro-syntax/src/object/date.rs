@@ -6,7 +6,7 @@ use core::str::FromStr;
 pub struct DateTime {
     /// The year.
     pub year: u16,
-    /// The year.
+    /// The month.
     pub month: u8,
     /// The day.
     pub day: u8,

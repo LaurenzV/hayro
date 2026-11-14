@@ -1,5 +1,3 @@
-//! Object references.
-
 use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
@@ -67,7 +65,7 @@ impl Readable<'_> for ObjRef {
     }
 }
 
-/// A struct that is either an object or a reference to an object.
+/// Either an object or a reference to one.
 #[derive(PartialEq, Eq)]
 pub enum MaybeRef<T> {
     /// A reference to an object.
@@ -91,7 +89,6 @@ impl<'a, T> MaybeRef<T>
 where
     T: ObjectLike<'a>,
 {
-    /// Resolve the `MaybeRef` object with the given xref table.
     pub(crate) fn resolve(self, ctx: &ReaderContext<'a>) -> Option<T> {
         match self {
             Self::Ref(r) => ctx.xref().get_with::<T>(r.into(), ctx),

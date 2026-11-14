@@ -1,5 +1,3 @@
-//! Numbers.
-
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -253,8 +251,7 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
         return None;
     }
 
-    // See issue 994. Don't accept numbers that are followed by a regular character
-    // without any white space in-between.
+    // See issue 994. Don't accept numbers that are followed by a regular character.
     if r.peek_byte().is_some_and(is_regular_character) {
         return None;
     }
@@ -295,13 +292,11 @@ macro_rules! int_num {
                 r.forward_if(|b| b == b'+' || b == b'-');
                 r.forward_while_1(is_digit)?;
 
-                // We have a float instead of an integer.
                 if r.peek_byte() == Some(b'.') {
                     return None;
                 }
 
-                // See issue 994. Don't accept numbers that are followed by a regular character
-                // without any white space in-between.
+                // See issue 994. Don't accept numbers that are followed by a regular character.
                 if r.peek_byte().is_some_and(is_regular_character) {
                     return None;
                 }

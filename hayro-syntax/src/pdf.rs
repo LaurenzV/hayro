@@ -1,5 +1,3 @@
-//! The starting point for reading PDF files.
-
 use crate::PdfData;
 use crate::object::Object;
 use crate::page::Pages;
@@ -31,15 +29,11 @@ pub enum LoadPdfError {
 #[allow(clippy::len_without_is_empty)]
 impl Pdf {
     /// Try to read the given PDF file.
-    ///
-    /// Returns `Err` if it was unable to read it.
     pub fn new(data: impl Into<PdfData>) -> Result<Self, LoadPdfError> {
         Self::new_with_password(data, "")
     }
 
     /// Try to read the given PDF file with a password.
-    ///
-    /// Returns `Err` if it was unable to read it or if the password is incorrect.
     pub fn new_with_password(
         data: impl Into<PdfData>,
         password: &str,

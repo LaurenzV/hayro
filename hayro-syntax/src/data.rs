@@ -51,17 +51,7 @@ impl From<Vec<u8>> for PdfData {
     }
 }
 
-/// A structure for storing the data of the PDF.
-// To explain further: This crate uses a zero-parse approach, meaning that objects like
-// dictionaries or arrays always store the underlying data and parse objects lazily as needed,
-// instead of allocating the data and storing it in an owned way. However, the problem is that
-// not all data is readily available in the original data of the PDF: Objects can also be
-// stored in an object streams, in which case we first need to decode the stream before we can
-// access the data.
-//
-// The purpose of `Data` is to allow us to access the original data as well as maybe decoded data
-// by faking the same lifetime, so that we don't run into lifetime issues when dealing with
-// PDF objects that actually stem from different data sources.
+// Gives decoded object streams the same lifetime as the original data.
 pub(crate) struct Data {
     data: PdfData,
     // 32 segments are more than enough as we can't have more objects than this.
@@ -76,7 +66,6 @@ impl Debug for Data {
 }
 
 impl Data {
-    /// Create a new `Data` structure.
     pub(crate) fn new(data: PdfData) -> Self {
         Self {
             data,
@@ -85,12 +74,10 @@ impl Data {
         }
     }
 
-    /// Get access to the original data of the PDF.
     pub(crate) fn get(&self) -> &PdfData {
         &self.data
     }
 
-    /// Get access to a decoded object stream.
     pub(crate) fn object_stream(
         &self,
         id: ObjectIdentifier,

@@ -92,7 +92,6 @@ pub(crate) fn unfilter_row(filter: RowFilter, bpp: usize, previous: &[u8], curre
 fn unfilter(mut filter: RowFilter, tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8]) {
     use self::RowFilter::*;
 
-    // If the previous row is empty, then treat it as if it were filled with zeros.
     if previous.is_empty() {
         if filter == Paeth {
             filter = Sub;

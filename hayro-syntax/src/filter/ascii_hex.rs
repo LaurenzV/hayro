@@ -9,7 +9,6 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
 }
 
 pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
-    // Find end (at `>` or end of data) and check for whitespace.
     let mut has_whitespace = false;
     let mut end = data.len();
 
@@ -26,7 +25,6 @@ pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
     let mut decoded = B::with_capacity(data.len().div_ceil(2));
 
     if !has_whitespace {
-        // Fast path, don't need to worry about white spaces.
         let (chunks, remainder) = data.as_chunks::<2>();
 
         for &[hi, lo] in chunks {
@@ -37,7 +35,6 @@ pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
             decoded.push(decode_hex_digit(*hi)? << 4);
         }
     } else {
-        // Slow path, need to strip white spaces.
         let mut iter = data.iter().copied();
         let mut read_byte = || -> Option<u8> {
             loop {
@@ -93,8 +90,6 @@ mod tests {
     }
 
     #[test]
-    // Not valid for ASCII hex streams since they require a trailing >,
-    // but used by PDF hex strings as well.
     fn decode_without_gt() {
         let input = b"AF3E2901";
         assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x01]);

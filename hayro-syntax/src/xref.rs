@@ -38,7 +38,6 @@ pub(crate) enum XRefError {
     Encryption(DecryptionError),
 }
 
-/// Parse the "root" xref from the PDF.
 pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
     let xref_pos = find_last_xref_pos(data.as_ref()).ok_or(XRefError::Unknown)?;
@@ -54,7 +53,6 @@ pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefErro
     )
 }
 
-/// Try to manually parse the PDF to build an xref table and trailer dictionary.
 pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
     let (xref_map, xref_input) = fallback_xref_map(&data, password);
 
@@ -88,11 +86,9 @@ fn fallback_xref_map_inner<'a>(
 
         let mut old_r = r.clone();
 
-        // First try to check if we have an object identifier.
         if r.peek_byte().is_some_and(|b: u8| b.is_ascii_digit()) {
             if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
                 let mut cloned = r.clone();
-                // Check that the object following it is actually valid before inserting it.
                 cloned.skip_white_spaces_and_comments();
                 if cloned.skip::<Object<'_>>(false).is_some() {
                     xref_map.insert(obj_id, EntryType::Normal(cur_pos));
@@ -100,12 +96,9 @@ fn fallback_xref_map_inner<'a>(
                     dummy_ctx.set_obj_number(obj_id);
                 }
             } else {
-                // There must be a white space before the next object number.
                 r.forward_while(|b| !is_white_space_character(b));
             }
         } else {
-            // Then, try to check whether we have a dictionary, in particular a trailer
-            // dictionary.
             let mut probe_reader = r.clone();
             if r.peek_bytes(2).is_some_and(|b| b == b"<<")
                 && let Some(probe) =
@@ -142,10 +135,6 @@ fn fallback_xref_map_inner<'a>(
                                 }
 
                                 let id = ObjectIdentifier::new(*obj_num, 0);
-                                // If we already found an entry for that object number that was not
-                                // inside an object stream. Somewhat arbitrary and maybe
-                                // we can do better, but that seems to work for the current
-                                // set of tests.
                                 if xref_map
                                     .get(&id)
                                     .is_none_or(|e| !matches!(e, &EntryType::Normal(_)))
@@ -160,9 +149,6 @@ fn fallback_xref_map_inner<'a>(
                     }
                 }
             } else {
-                // We can skip everything until the next white space character,
-                // as there cannot possibly be any new dictionary/object identifier
-                // until then.
                 let old_pos = r.offset;
                 r.forward_while(|b| !is_white_space_character(b));
                 if r.offset == old_pos {
@@ -176,7 +162,6 @@ fn fallback_xref_map_inner<'a>(
         }
     }
 
-    // Try to choose the right trailer dict by doing basic validation.
     let mut trailer_dict = None;
 
     for dict in trailer_dicts {
@@ -237,10 +222,7 @@ fn fallback_xref_map_inner<'a>(
         .is_some_and(|t| t.contains_key(ENCRYPT));
 
     if has_encryption && recurse {
-        // The problem is that in this case, we have used a dummy reader context which does not have
-        // a decryptor. Therefore, we were unable to decrypt any of the object streams and missed
-        // all objects that are inside of such a stream. Therefore, we need to redo the process
-        // using a `ReaderContext` that does have the ability to decrypt.
+        // Redo with a decrypting context to find objects in encrypted object streams.
         if let Ok(xref) = XRef::new(
             data.clone(),
             xref_map.clone(),
@@ -280,9 +262,7 @@ impl XRef {
         repaired: bool,
         password: &[u8],
     ) -> Result<Self, XRefError> {
-        // This is a bit hacky, but the problem is we can't read the resolved trailer dictionary
-        // before we actually created the xref struct. So we first create it using dummy data
-        // and then populate the data.
+        // The trailer can only be resolved once the xref exists.
         let trailer_data = TrailerData::dummy();
 
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
@@ -295,9 +275,7 @@ impl XRef {
             password: password.to_vec(),
         })));
 
-        // We read the trailer twice, once to determine the encryption used and then a second
-        // time to resolve the catalog dictionary, etc. This allows us to support catalog dictionaries
-        // that are stored in an encrypted object stream.
+        // Read the trailer twice so the catalog can be in an encrypted object stream.
 
         let decryptor = {
             match input {
@@ -444,8 +422,6 @@ impl XRef {
                     })
                     .collect::<Vec<_>>();
 
-                // Try to yield in the order the objects appeared in the
-                // PDF.
                 elements.sort_by_key(|e1| e1.1);
 
                 let mut iter = elements.into_iter();
@@ -455,7 +431,6 @@ impl XRef {
                         if let Some(obj) = self.get_with(next.0, &ReaderContext::new(self, false)) {
                             return Some(obj);
                         } else {
-                            // Skip invalid objects.
                             continue;
                         }
                     }
@@ -518,7 +493,6 @@ impl XRef {
         self.get_with(id, &ctx)
     }
 
-    /// Return the object with the given identifier.
     #[allow(private_bounds)]
     pub(crate) fn get_with<'a, T>(
         &'a self,
@@ -535,7 +509,6 @@ impl XRef {
         // The flag must describe the map this entry came from.
         let (entry, was_repaired) = {
             let locked = repr.map.get();
-            // References to undefined objects are treated as null.
             (*locked.xref_map.get(&id)?, locked.repaired)
         };
 
@@ -555,8 +528,7 @@ impl XRef {
                         return Some(object.get());
                     }
                 } else {
-                    // There is a valid object at the offset, it's just not of the type the caller
-                    // expected, which is fine.
+                    // A valid object of another type needs no repair.
                     if r.skip::<IndirectObject<Object<'_>>>(false).is_some() {
                         return None;
                     }
@@ -565,15 +537,12 @@ impl XRef {
                 self.repair_and_get(id, caller_ctx, was_repaired)
             }
             EntryType::ObjStream(obj_stram_gen_num, index) => {
-                // Generation number is implicitly 0.
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num, 0);
 
                 if obj_stream_id == id || ctx.parent_chain_contains(&id) {
                     return None;
                 }
 
-                // An object stream is a stream, so it can't itself be stored in an object
-                // stream (ISO 32000-2, 7.5.7).
                 if !matches!(
                     repr.map.get().xref_map.get(&obj_stream_id),
                     Some(EntryType::Normal(_))
@@ -603,32 +572,19 @@ impl XRef {
     where
         T: ObjectLike<'a>,
     {
-        // The xref table is broken, try to repair if not already repaired.
         if was_repaired {
             None
         } else {
             self.repair();
 
-            // Now try reading again.
             self.get_with::<T>(id, ctx)
         }
     }
 }
 
-/// An input that is passed to the xref constructor so that we can fully resolve
-/// the PDF.
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum XRefInput<'a> {
-    /// This option is going to be uesd in 99.999% of the case. It contains the
-    /// raw data of the trailer dictionary which is then going to be processed.
     TrailerDictData(&'a [u8]),
-    /// In case the trailer dictionary could not be read (for example because
-    /// it is cut-off), we just pass the object ID of the root dictionary
-    /// in case we have found one, and try our best to build the PDF just
-    /// with the information we have there.
-    ///
-    /// Note that this won't work if the document is encrypted, as we
-    /// can't access the crypto dictionary.
     RootRef(ObjectIdentifier),
 }
 
@@ -642,20 +598,14 @@ pub(crate) fn find_last_xref_pos(data: &[u8]) -> Option<usize> {
     finder.read_without_context::<i32>()?.try_into().ok()
 }
 
-/// A type of xref entry.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum EntryType {
-    /// An indirect object that is at a specific offset in the original data.
     Normal(usize),
-    /// An indirect object that is part of an object stream. First number indicates the object
-    /// number of the _object stream_ (the generation number is always 0), the second number indicates
-    /// the index in the object stream.
     ObjStream(u32, u32),
 }
 
 type XrefMap = FxHashMap<ObjectIdentifier, EntryType>;
 
-/// Representation of a proper xref table.
 #[derive(Debug)]
 struct MapRepr {
     xref_map: XrefMap,
@@ -692,9 +642,7 @@ struct SomeRepr {
 
 #[derive(Debug, Clone)]
 enum Inner {
-    /// A dummy xref table that doesn't have any entries.
     Dummy,
-    /// A proper xref table.
     Some(Arc<SomeRepr>),
 }
 
@@ -741,7 +689,6 @@ fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) ->
     populate_xref_impl_inner(data, pos, xref_map, &mut visited)
 }
 
-/// Maximum number of allowed xref `Prev` pointers before we abort.
 const MAX_XREF_CHAIN_DEPTH: usize = 256;
 
 fn populate_xref_impl_inner<'a>(
@@ -792,7 +739,6 @@ impl Readable<'_> for SubsectionHeader {
     }
 }
 
-/// Populate the xref table, and return the trailer dict.
 fn populate_from_xref_table<'a>(
     data: &'a [u8],
     reader: &mut Reader<'a>,
@@ -811,12 +757,10 @@ fn populate_from_xref_table<'a>(
     let mut max_obj = 0;
 
     if let Some(prev) = trailer.get::<i32>(PREV) {
-        // First insert the entries from any previous xref tables.
         populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
     }
 
-    // In hybrid files, entries in `XRefStm` should have higher priority, therefore we insert them
-    // after looking at `PREV`.
+    // In hybrid files, `XRefStm` entries override `Prev` ones.
     if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
         populate_xref_impl_inner(data, xref_stm as usize, insert_map, visited)?;
     }
@@ -832,8 +776,7 @@ fn populate_from_xref_table<'a>(
             let bytes = reader.read_bytes(XREF_ENTRY_LEN)?;
             let entry = XRefEntry::read(bytes)?;
 
-            // Specification says we should ignore any object number > SIZE, but probably
-            // not important?
+            // Entries beyond `Size` are not ignored.
             if entry.used {
                 insert_map.insert(
                     ObjectIdentifier::new(obj_number, entry.gen_number),
@@ -857,7 +800,6 @@ fn populate_from_xref_stream<'a>(
         .get();
 
     if let Some(prev) = stream.dict().get::<i32>(PREV) {
-        // First insert the entries from any previous xref tables.
         let _ = populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
     }
 
@@ -934,14 +876,13 @@ fn xref_stream_subsection<'a>(
         let f_type = if f1_len == 0 {
             1
         } else {
-            // We assume a length of 1.
+            // TODO: Support a first-field width other than 1.
             xref_reader.read_bytes(1)?[0]
         };
 
         let obj_number = start.checked_add(i)?;
 
         match f_type {
-            // We don't care about free objects.
             0 => {
                 xref_reader.skip_bytes(f2_len as usize + f3_len as usize)?;
             }
@@ -1020,7 +961,6 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
         {
             id.to_vec()
         } else {
-            // Assume an empty ID entry.
             vec![]
         };
 
@@ -1054,15 +994,12 @@ impl ObjectStream {
 
         for _ in 0..num_objects {
             r.skip_white_spaces_and_comments();
-            // Skip object number
             let obj_num = r.read_without_context::<u32>()?;
             r.skip_white_spaces_and_comments();
             let relative_offset = r.read_without_context::<usize>()?;
             let offset = first_offset + relative_offset;
 
-            // Offsets must increase, otherwise any number of objects could share one member.
-            // The start of the previous member excludes the white space before it, so that
-            // offsets into that white space can't share it either.
+            // Offsets must strictly increase, or members could overlap.
             if offset >= data.len() || last_offset.is_some_and(|last| offset <= last) {
                 offsets.push((obj_num, None));
             } else {

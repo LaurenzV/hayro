@@ -5,10 +5,6 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
-/// Decode JBIG2 data from a PDF stream.
-///
-/// The `params` dictionary may contain a `JBIG2Globals` entry pointing to
-/// a stream with shared symbol dictionaries.
 pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
@@ -26,12 +22,8 @@ pub(crate) fn decode(
     let page = hayro_jbig2::Page::new_embedded(data, globals.as_ref(), &settings).ok()?;
     let bitmap = page.decode().ok()?;
 
-    // Whenever possible (if we don't have an indexed color space), we convert
-    // the data as 8-bit instead of 1-bit, so that it can be easier converted
-    // into an RGBA8 image.
-
-    // We need to invert the color because JBIG2 uses black = 1 and
-    // white = 0, but PDF uses the opposite.
+    // Expand to 8 bpc unless indexed, for easier RGBA8 conversion.
+    // JBIG2 uses 1 for black, PDF uses 0.
     let (decoded, bpc) = if image_params.is_indexed {
         let width = bitmap.width() as usize;
         let row_bytes = width.div_ceil(8);

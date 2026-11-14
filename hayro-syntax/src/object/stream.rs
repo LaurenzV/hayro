@@ -43,9 +43,7 @@ pub struct ImageDecodeParams {
     pub bpc: Option<u8>,
     /// The components per channel of the image, if that information is available.
     pub num_components: Option<u8>,
-    /// A target resolution for the image. Note that this is only a hint so that
-    /// in case it's possible, a version of the image will be extracted that
-    /// is as close as possible to the hinted dimension.
+    /// A hint for the desired image dimensions.
     pub target_dimension: Option<(u32, u32)>,
     /// The width of the image as indicated by the image dictionary.
     pub width: u32,
@@ -108,9 +106,7 @@ impl<'a> Stream<'a> {
         }
     }
 
-    /// Return the raw, decrypted data of the stream.
-    ///
-    /// Stream filters will not be applied.
+    /// Return the decrypted but undecoded data of the stream.
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
         let ctx = self.dict.ctx();
 
@@ -130,7 +126,6 @@ impl<'a> Stream<'a> {
                         // TODO: MAybe an error would be better?
                         .unwrap_or_default(),
                 ),
-                // Should not be reachable, as streams always have IDs.
                 None => Cow::Borrowed(self.data),
             }
         } else {
@@ -145,11 +140,9 @@ impl<'a> Stream<'a> {
 
     /// Return the object identifier of the stream.
     pub fn obj_id(&self) -> ObjectIdentifier {
-        self.dict.obj_id().unwrap_or_else(|| {
-            // In theory shouldn't ever happen, but could theoretically be
-            // triggered in a crafted PDF.
-            ObjectIdentifier::new(0, 0)
-        })
+        self.dict
+            .obj_id()
+            .unwrap_or_else(|| ObjectIdentifier::new(0, 0))
     }
 
     /// Return the filters that are applied to the stream.
@@ -158,19 +151,12 @@ impl<'a> Stream<'a> {
     }
 
     /// Return the decoded data of the stream.
-    ///
-    /// Note that the result of this method will not be cached, so calling it multiple
-    /// times is expensive.
     pub fn decoded(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         self.decoded_image(&ImageDecodeParams::default())
             .map(|r| r.data)
     }
 
-    /// Return the decoded data of a stream that isn't an image.
-    ///
-    /// Fails with [`DecodeFailure::ImageDecode`] if the stream uses an image filter
-    /// (`DCTDecode`, `JPXDecode`, `JBIG2Decode` or `CCITTFaxDecode`). Use
-    /// [`Stream::decoded_image`] for those.
+    /// Return the decoded data of a stream that doesn't use an image filter.
     pub fn decoded_data(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         if self.filters().iter().any(|filter| {
             matches!(
@@ -187,8 +173,7 @@ impl<'a> Stream<'a> {
         self.decoded()
     }
 
-    /// Return the decoded data of the stream, and return image metadata
-    /// if available.
+    /// Return the decoded data of the stream, with image metadata if available.
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,

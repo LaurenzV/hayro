@@ -33,10 +33,8 @@ pub mod array;
 pub mod dict;
 pub mod stream;
 
-/// A trait for PDF objects.
 pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {}
 
-/// A trait for PDF objects that can be borrowed directly from an [`Object`].
 pub(crate) trait ObjectRefLike<'a>: Sized {
     fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self>;
 }
@@ -59,8 +57,6 @@ pub enum Object<'a> {
     /// An array object.
     Array(Array<'a>),
     /// A stream object.
-    // Can only be an indirect object in theory and thus comes with some caveats,
-    // but we just treat it the same.
     Stream(Stream<'a>),
 }
 
@@ -80,7 +76,6 @@ impl Display for Object<'_> {
 }
 
 impl<'a> Object<'a> {
-    /// Try casting the object to a specific subtype.
     pub(crate) fn cast<T>(self) -> Option<T>
     where
         T: ObjectLike<'a>,
@@ -88,7 +83,6 @@ impl<'a> Object<'a> {
         self.try_into().ok()
     }
 
-    /// Try casting the object to a reference of the specific type.
     pub(crate) fn cast_ref<T>(&self) -> Option<&T>
     where
         T: ObjectRefLike<'a>,
@@ -187,15 +181,13 @@ impl Skippable for Object<'_> {
             b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
             b'<' => match r.peek_bytes(2)? {
-                // A stream can never appear in a dict/array, so it should never be skipped.
                 b"<<" => Dict::skip_with_depth(r, is_content_stream, depth),
                 _ => String::skip(r, is_content_stream),
             },
             b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
-            // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
-            // array
+            // Lenient: skip content operators inside arrays.
             _ => skip_name_like(r, false),
         }
     }
@@ -301,10 +293,7 @@ impl Skippable for ObjectIdentifier {
     }
 }
 
-/// A convenience function that extracts a dict and a stream from an object.
-/// If the object is just a dictionary, it will return `None` for the stream.
-/// If the object is a stream, it will return its dictionary as well as the stream
-/// itself.
+/// Return the dictionary of an object, and the stream if it is one.
 pub fn dict_or_stream<'a, 'b>(
     obj: &'b Object<'a>,
 ) -> Option<(&'b Dict<'a>, Option<&'b Stream<'a>>)> {

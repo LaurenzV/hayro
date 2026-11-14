@@ -1,5 +1,3 @@
-//! A simple bit reader and writer.
-
 use core::fmt::Debug;
 
 /// A bit reader.
@@ -33,9 +31,7 @@ impl<'a> BitReader<'a> {
         }
     }
 
-    /// Read the given number of bits from the byte stream.
-    ///
-    /// Returns `None` if `bit_size` > 32.
+    /// Read up to 32 bits.
     #[inline(always)]
     pub fn read(&mut self, bit_size: u8) -> Option<u32> {
         if !(1..=32).contains(&bit_size) {
@@ -76,7 +72,7 @@ impl<'a> BitReader<'a> {
         Some(item)
     }
 
-    /// Peak the given number of bits.
+    /// Peek the given number of bits.
     pub fn peak(&mut self, bit_size: u8) -> Option<u32> {
         self.clone().read(bit_size)
     }

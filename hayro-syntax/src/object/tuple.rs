@@ -3,10 +3,6 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use core::fmt::Debug;
-// Note that tuples don't correspond to any specific PDF object. Instead, they simply
-// represent a number of PDF objects that are only separated by whitespaces, i.e.
-// in an array. We only have those implementations so that it is easier to iterate
-// over tuples of items in a PDF array, which happens quite often.
 
 impl<'a, T, U> Readable<'a> for (T, U)
 where
