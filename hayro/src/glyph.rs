@@ -100,7 +100,6 @@ impl Renderer<'_> {
             .unwrap_or_default()
     }
 
-    // Unhinted outlines are stored with a size of 0.
     fn cached_path(
         &self,
         id: u128,

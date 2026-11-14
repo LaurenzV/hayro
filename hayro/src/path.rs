@@ -9,21 +9,17 @@ impl Renderer<'_> {
     pub(super) fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
         let threshold = if is_text { 0.25 } else { 1.0 };
 
-        // Best-effort attempt to ensure a line width of at least 1.0, as required by the PDF
-        // specification. If we are stroking text, we reduce the threshold as it will otherwise
-        // lead to very bold-looking text at low resolutions.
+        // Text gets a lower minimum width, since 1.0 makes it look bold at low resolutions.
         let min_factor = max_factor(self.ctx.transform());
         let mut line_width = stroke_props.line_width.max(0.01 / min_factor);
         let transformed_width = line_width * min_factor;
 
-        // Only enforce line width if not inside of pattern or type 3 glyph.
         if transformed_width < threshold && !self.inside_pattern && !self.in_type3_glyph {
             line_width /= transformed_width;
             line_width *= threshold;
         }
 
-        // At a device width of at most one pixel, round caps and joins are indistinguishable
-        // from square caps and bevel joins, which are much cheaper to construct.
+        // At most one pixel wide, round caps/joins look like square/bevel and are cheaper.
         let is_thin = transformed_width <= 1.0;
         let cap = match stroke_props.line_cap {
             kurbo::Cap::Round if is_thin => kurbo::Cap::Square,

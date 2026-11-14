@@ -32,7 +32,6 @@ impl Renderer<'_> {
                     let mut bbox = path_transform.transform_rect_bbox(path_bbox());
 
                     if is_stroke {
-                        // Try to account for stroke in bbox.
                         let (a1, a2) = x_y_advances(path_transform);
                         let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
                         bbox = bbox.inflate(factor, factor);
