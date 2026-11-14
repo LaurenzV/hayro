@@ -60,3 +60,89 @@ pub use kurbo;
 pub use types::*;
 pub use util::{RectExt, TransformExt};
 pub use x_object::soft_mask::*;
+
+#[cfg(test)]
+mod tests {
+    use crate::font::{Glyph, GlyphRun};
+    use crate::{
+        BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+        InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
+    };
+    use hayro_cmap::BfString;
+    use hayro_syntax::Pdf;
+    use kurbo::{Affine, BezPath, Rect};
+    use std::sync::Arc;
+
+    #[derive(Default)]
+    struct RecordingDevice {
+        text: String,
+        x_positions: Vec<f64>,
+    }
+
+    impl<'a> Device<'a> for RecordingDevice {
+        fn draw_path(&mut self, _: &BezPath, _: DrawProps<'a>, _: &DrawMode) {}
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+        fn push_transparency_group(
+            &mut self,
+            _: f32,
+            _: Option<SoftMask<'a>>,
+            _: BlendMode,
+            _: bool,
+            _: bool,
+        ) {
+        }
+        fn draw_glyph_run(&mut self, run: &GlyphRun<'_, 'a>, _: DrawProps<'a>, _: &DrawMode) {
+            for positioned in run.glyphs() {
+                self.x_positions
+                    .push(positioned.transform().translation().x);
+                if let Glyph::Outline(outline) = &**positioned {
+                    assert!(outline.outline().is_empty());
+                }
+                if let Some(BfString::Char(c)) = positioned.as_unicode() {
+                    self.text.push(c);
+                }
+            }
+        }
+        fn draw_image(&mut self, _: Image<'a, '_>, _: ImageDrawProps<'a>) {}
+        fn pop_clip(&mut self) {}
+        fn pop_transparency_group(&mut self) {}
+    }
+
+    #[test]
+    fn interpret_standard_font_without_font_resolver_data() {
+        let pdf_bytes = b"%PDF-1.4\n\
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100]\n\
+  /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>\n\
+  /Contents 4 0 R >> endobj\n\
+4 0 obj << /Length 31 >> stream\n\
+BT /F1 10 Tf 10 50 Td (Hi) Tj ET\n\
+endstream\nendobj\n\
+trailer << /Root 1 0 R >>\n%%EOF";
+
+        let pdf = Pdf::new(pdf_bytes.to_vec()).unwrap();
+        let settings = InterpreterSettings {
+            font_resolver: Arc::new(|_| None),
+            cmap_resolver: Arc::new(|_| None),
+            warning_sink: Arc::new(|_| {}),
+            ..InterpreterSettings::default()
+        };
+        let cache = InterpreterCache::new();
+        let mut ctx = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            &cache,
+            pdf.xref(),
+            settings,
+        );
+        let mut device = RecordingDevice::default();
+        interpret_page(&pdf.pages()[0], &mut ctx, &mut device);
+
+        assert_eq!(device.text, "Hi");
+        assert_eq!(device.x_positions.len(), 2);
+        // Helvetica 'H' width is 722 upem -> 7.22 user units at 10pt starting at x = 10.
+        assert!((device.x_positions[0] - 10.0).abs() < 1e-3);
+        assert!((device.x_positions[1] - 17.22).abs() < 1e-2);
+    }
+}

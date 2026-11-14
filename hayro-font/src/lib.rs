@@ -316,7 +316,7 @@ pub enum FontGlyph<'a> {
 #[derive(Clone, Debug)]
 pub struct OutlineGlyph {
     id: GlyphId,
-    program: FontProgram,
+    program: Option<FontProgram>,
     hidden: bool,
     font: OutlineFont,
     char_code: u32,
@@ -327,8 +327,10 @@ impl OutlineGlyph {
     pub fn outline(&self) -> BezPath {
         if self.hidden {
             BezPath::new()
+        } else if let Some(program) = &self.program {
+            program.outline(self.id)
         } else {
-            self.program.outline(self.id)
+            BezPath::new()
         }
     }
 
@@ -338,14 +340,18 @@ impl OutlineGlyph {
             return Some(BezPath::new());
         }
 
-        self.program.hinted_outline(self.id, ppem, cache)
+        let Some(program) = &self.program else {
+            return Some(BezPath::new());
+        };
+
+        program.hinted_outline(self.id, ppem, cache)
     }
 
     /// Return the identifier of the glyph.
     pub fn identifier(&self) -> GlyphIdentifier {
         GlyphIdentifier {
+            glyph: (!self.hidden && self.program.is_some()).then_some(self.id),
             program: self.program.clone(),
-            glyph: (!self.hidden).then_some(self.id),
         }
     }
 
@@ -393,7 +399,7 @@ impl OutlineGlyph {
 /// An identifier for the outline of a glyph and the font program it belongs to.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphIdentifier {
-    program: FontProgram,
+    program: Option<FontProgram>,
     glyph: Option<GlyphId>,
 }
 
@@ -406,8 +412,10 @@ impl GlyphIdentifier {
 
     /// Return a key that identifies the font program the glyph belongs to, for every font
     /// type. Glyph IDs are only unique within a single font program.
+    ///
+    /// Returns `0` when an unembedded standard font was loaded without a resolved font program.
     pub fn font_key(&self) -> u128 {
-        self.program.content_hash()
+        self.program.as_ref().map_or(0, FontProgram::content_hash)
     }
 }
 
@@ -853,5 +861,74 @@ mod tests {
         assert_eq!(map("uni000A0020").as_deref(), Some("\n "));
         assert_eq!(map("u41"), None);
         assert_eq!(map("u110000"), None);
+    }
+
+    #[test]
+    fn standard_font_without_resolved_program() {
+        use super::{
+            CMapResolverFn, FontCache, FontGlyph, FontResolverFn, GlyphId, HintingCache,
+            StandardFont,
+        };
+        use hayro_syntax::Pdf;
+        use hayro_syntax::object::Dict;
+        use hayro_syntax::object::dict::keys::FONT;
+        use std::sync::Arc;
+
+        let pdf_bytes = b"%PDF-1.4\n\
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100]\n\
+  /Resources << /Font <<\n\
+    /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\n\
+    /F2 << /Type /Font /Subtype /Type1 /BaseFont /Symbol >>\n\
+  >> >>\n\
+  /Contents 4 0 R >> endobj\n\
+4 0 obj << /Length 0 >> stream\nendstream\nendobj\n\
+trailer << /Root 1 0 R >>\n%%EOF";
+
+        let pdf = Pdf::new(pdf_bytes.to_vec()).unwrap();
+        let fonts = pdf.pages()[0]
+            .raw()
+            .get::<Dict<'_>>(b"Resources")
+            .unwrap()
+            .get::<Dict<'_>>(FONT)
+            .unwrap();
+
+        let no_program: FontResolverFn = Arc::new(|_| None);
+        let no_cmap: CMapResolverFn = Arc::new(|_| None);
+        let cache = FontCache::new();
+        let hinting = HintingCache::new();
+
+        let f1_dict = fonts.get::<Dict<'_>>(b"F1").unwrap();
+        let helvetica = cache.font(&f1_dict, &no_program, &no_cmap).unwrap();
+        assert_eq!(helvetica.map_code(u32::from(b'A')), GlyphId::NOTDEF);
+        assert_eq!(helvetica.code_advance(u32::from(b'A')).x, 667.0);
+        assert_eq!(
+            helvetica.glyph_stretch(GlyphId::NOTDEF, u32::from(b'A')),
+            1.0
+        );
+
+        let FontGlyph::Outline(glyph_a) = helvetica.glyph(GlyphId::NOTDEF, u32::from(b'A')) else {
+            panic!("expected outline glyph");
+        };
+        assert_eq!(glyph_a.as_unicode(), Some(BfString::Char('A')));
+        assert_eq!(glyph_a.advance_width(), Some(667.0));
+        assert!(glyph_a.outline().is_empty());
+        assert!(glyph_a.hinted_outline(12.0, &hinting).unwrap().is_empty());
+        assert!(glyph_a.font_data().is_none());
+        assert_eq!(glyph_a.identifier().font_key(), 0);
+
+        let f2_dict = fonts.get::<Dict<'_>>(b"F2").unwrap();
+        let symbol = cache.font(&f2_dict, &no_program, &no_cmap).unwrap();
+        let FontGlyph::Outline(alpha) = symbol.glyph(GlyphId::NOTDEF, u32::from(b'a')) else {
+            panic!("expected outline glyph");
+        };
+        assert_eq!(alpha.as_unicode(), Some(BfString::Char('\u{03B1}')));
+        assert_eq!(alpha.advance_width(), Some(631.0));
+
+        let direct = cache
+            .standard_font(StandardFont::Courier, &no_program)
+            .unwrap();
+        assert_eq!(direct.code_advance(u32::from(b'M')).x, 600.0);
     }
 }
