@@ -90,7 +90,6 @@ pub(crate) trait BezPathExt {
 }
 
 impl BezPathExt for BezPath {
-    /// Write the SVG representation of this path to the provided buffer.
     fn write_to_f32<W: Write>(&self, mut writer: W) -> io::Result<()> {
         for (i, el) in self.elements().iter().enumerate() {
             if i > 0 {
