@@ -130,9 +130,7 @@ fn check_jpx_images(folder: &str) {
                         });
 
                         match decoded {
-                            Ok(Ok(_)) => {
-                                // println!("ok!")
-                            }
+                            Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
                                 eprintln!("{}", name);
                                 eprintln!("{}", e);
@@ -283,7 +281,6 @@ fn check_cmaps(folder: &str) {
                         continue;
                     };
 
-                    // Check if it looks like a CMap.
                     if memchr::memmem::find(&decoded, b"begincmap").is_none() {
                         continue;
                     }

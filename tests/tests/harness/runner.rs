@@ -66,8 +66,7 @@ pub(crate) fn current_test() -> Option<String> {
     CURRENT_TEST.with(|test| test.borrow().clone())
 }
 
-// Panics on threads spawned by a test itself. They resurface on the worker as a generic
-// "a scoped thread panicked", so the original message is kept here.
+// Panics of test-spawned threads, which reach the worker only as "a scoped thread panicked".
 static THREAD_PANIC: Mutex<Option<String>> = Mutex::new(None);
 
 pub(crate) fn run(tests: Vec<Test>, jobs: usize, ui: &mut Ui) -> Vec<TestResult> {

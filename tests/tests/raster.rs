@@ -5,7 +5,6 @@ use crate::harness::snapshot::{Suite, check};
 use crate::{interpreter_settings, render_pdf, try_load_pdf};
 use hayro::RenderSettings;
 
-/// Returns the raster tests of all manifests, as well as the names of the ignored ones.
 pub(crate) fn tests() -> (Vec<Test>, Vec<String>) {
     let mut tests = vec![];
     let mut ignored = vec![];

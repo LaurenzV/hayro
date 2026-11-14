@@ -28,7 +28,6 @@ static LOCKFILE: LazyLock<BTreeMap<String, String>> = LazyLock::new(|| {
 
 static RENDERED: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
 
-// Concurrent downloads of the same reference image would write to the same file.
 static DOWNLOAD: Mutex<()> = Mutex::new(());
 
 pub(crate) fn lockfile_path() -> PathBuf {

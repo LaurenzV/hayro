@@ -94,7 +94,6 @@ const TESTS: &[WriteTest] = &[
         &[0, 1, 7],
         Kind::Page,
     ),
-    // Original PDF contains reference for `ToUnicode`, but doesn't actually have it in the PDF.
     (
         "write_page_missing_ref",
         "write_page_missing_ref",
@@ -123,8 +122,6 @@ const TESTS: &[WriteTest] = &[
         &[0],
         Kind::Page,
     ),
-    // This PDF uses named property lists in `BDC` operators, so its `Properties` resources must be
-    // preserved. Omitting them causes rendering issues in Quartz and a warning in Ghostscript.
     (
         "write_page_with_properties",
         "write_page_with_properties",
@@ -280,15 +277,12 @@ fn dont_cache_page_references() {
     )
     .unwrap();
 
-    // Adobe Acrobat does not seem to like reusing the same page reference, so we must always
-    // create a new one and not cache them.
     assert_ne!(
         extracted.root_refs[0].unwrap(),
         extracted.root_refs[1].unwrap()
     );
 }
 
-// See also https://github.com/LaurenzV/krilla/pull/410 for more info.
 fn write_xobject_does_not_synthesize_group() {
     let hayro_pdf = load_pdf("pdfs/custom/clip_path_evenodd.pdf");
     let extracted = hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &[0]);
@@ -299,7 +293,6 @@ fn write_xobject_does_not_synthesize_group() {
     assert!(x_object.dict().get::<Dict<'_>>(GROUP).is_none());
 }
 
-// See also https://github.com/LaurenzV/krilla/pull/410 for more info.
 fn write_xobject_preserves_page_group() {
     let hayro_pdf = load_pdf("pdfs/custom/shading_operator_2.pdf");
     let extracted = hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &[0]);
@@ -334,9 +327,6 @@ fn write_xobject_preserves_page_group() {
 
 fn write_null_objects() {
     let hayro_pdf = load_pdf("pdfs/other/issue188.pdf");
-    // Ghostscript still complains that this is an invalid PDF since a dictionary is expected
-    // for fonts, but not sure if there is anything better we can do in the first place if the
-    // object doesn't exist at all / is invalid.
     let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
 
     let reread = Pdf::new(extracted).unwrap();

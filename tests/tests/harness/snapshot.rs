@@ -26,8 +26,6 @@ impl Suite {
     }
 }
 
-/// Compares the rendered pages against the reference images of the snapshot `name`, allowing up
-/// to `max_diff_pixels` pixels per page to deviate by more than the tolerance.
 pub(crate) fn check(
     suite: Suite,
     name: &str,
@@ -233,8 +231,7 @@ fn get_diff(expected: &RgbaImage, actual: &RgbaImage, tolerance: u8) -> Diff {
     }
 }
 
-// Single differing pixels disappear when the report shows a page scaled down, so they are
-// surrounded by a translucent halo of the same color.
+// Keeps single differing pixels visible when the report scales a page down.
 fn add_halo(mask: &mut RgbaImage) {
     const RADIUS: i64 = 3;
 
