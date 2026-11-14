@@ -36,9 +36,7 @@ pub(crate) trait WriteDirect {
 
 impl WriteDirect for object::ObjRef {
     fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
-        // Check whether the object is actually valid/exists. Otherwise, we need to write a null
-        // object instead. If we don't, we might end up with dangling object references that
-        // don't actually exist in the PDF chunk, which will lead to a panic in krilla when renumbering.
+        // A ref to a missing object would dangle in the output chunk, so write null instead.
         let valid = *ctx.valid_ref_cache.entry(*self).or_insert_with(|| {
             let id = ObjectIdentifier::new(self.obj_number, self.gen_number);
             ctx.pdf.xref().get::<Object<'_>>(id).is_some()
