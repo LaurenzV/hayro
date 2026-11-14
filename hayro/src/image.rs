@@ -10,13 +10,7 @@ use std::sync::Arc;
 use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{Image, ImageSource, Mask, PixelMetadata, Pixmap, peniko};
 
-// Previously, we used `CatmullRom`. The problem with that one is that it
-// can have negative weights. If we pass a premultiplied buffer to
-// `pic-scale`, it can happen that any of the RGB variants end up
-// slightly larger than the alpha channel, leading to pixel artifacts when
-// rendering. In order to avoid having to do another pass over the buffer
-// to clamp, we instead use Hermite, which has similar quality but doesn't
-// have this problem.
+// Hermite has no negative weights, so resampled premultiplied color never exceeds alpha.
 pub(super) const RESAMPLING_FUNCTION: ResamplingFunction = ResamplingFunction::Hermite;
 
 #[derive(Clone, Copy)]
@@ -109,10 +103,7 @@ impl Renderer<'_> {
             None,
         );
         self.ctx.set_transform(mask_transform);
-        // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
-        // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
-        // values between alpha_data and rgb_data don't match. Here we use a
-        // `SolidColorImage` so it doesn't affect it.
+        // No recursion: the solid image's size and interpolation always match `alpha_data`.
         self.draw_image(RenderImageData::Solid(mask_image), Some(alpha_data));
         self.ctx.pop_layer();
         self.ctx.pop_layer();
@@ -166,8 +157,6 @@ impl Renderer<'_> {
             (img_width, img_height)
         };
 
-        // For luma images without alpha, we can resize as single-channel and
-        // expand to RGBA afterwards, which is ~4x faster.
         let mut needs_premultiplication = has_alpha;
         let mut rgba_data = if matches!(&image_data, RenderImageData::Solid(_)) && has_alpha {
             let RenderImageData::Solid(solid) = image_data else {
@@ -202,7 +191,6 @@ impl Renderer<'_> {
                 .flat_map(|a| [r, g, b, *a])
                 .collect::<Vec<_>>()
         } else if matches!(&image_data, RenderImageData::Luma(_)) && !has_alpha {
-            // We cannot lift this up due to borrowing issues.
             let RenderImageData::Luma(luma) = image_data else {
                 unreachable!()
             };
@@ -369,11 +357,7 @@ impl Renderer<'_> {
             premultiply_rgba(self.global.level, &mut rgba_data);
         }
 
-        // The problem is that by default, when applying a bilinear or bicubic scaling, we will
-        // sample pixels using an extend (pad/reflect/repeat). For glyphs, this is undesirable
-        // as the glyphs will look very bold. Therefore, for glyphs it is more desirable to sample
-        // a transparent pixel when reaching the border. Thus, we wrap glyphs in a transparent frame
-        // of pixel width 2.
+        // Pad Type3 glyph images with transparent pixels so edge sampling doesn't make them look bold.
         if self.in_type3_glyph {
             let mut padded_image = vec![];
             padded_image.extend(vec![0; (4 * img_width as usize + 16) * 2]);

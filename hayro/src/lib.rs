@@ -5,29 +5,27 @@ This crate allows you to render pages of a PDF file into bitmaps. It is supposed
 lightweight, since we do not have any dependencies on the GPU. All the rendering happens on the CPU.
 
 The ultimate goal of this crate is to be a *feature-complete* and *performant* PDF rasterizer.
-With that said, we are currently still very far away from reaching that goal: So far, no effort
-has been put into performance optimizations, as we are still working on implementing missing features.
-However, this crate is currently the most comprehensive and feature-complete
+While there is still work to be done on both fronts, this crate is currently the most comprehensive and feature-complete
 implementation of a PDF rasterizer in pure Rust. This claim is supported by the fact that we currently
-include over 1000 PDF files in our regression test suite. The majority of those have been scraped
+include over 1500 PDF files in our regression test suite. The majority of those have been scraped
 from the `pdf.js` and `PDFBOX` test suites and therefore represent a very large and diverse sample
 of PDF files.
 
-As mentioned, there are still some serious limitations, including lack of support for
-encrypted/password-protected PDF files, blending and isolation, knockout groups as well as a range
-of smaller features such as color key masking. But you should be able to render the vast majority
+There are still some limitations, including lack of support for isolated and knockout
+transparency groups as well as a range of smaller features. But you should be able to render the vast majority
 of PDF files without too many issues.
 
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
 
 ## Examples
-For usage examples, see the [example](https://github.com/LaurenzV/hayro/tree/master/hayro/examples) in
+For usage examples, see the [example](https://github.com/LaurenzV/hayro/tree/main/hayro/examples) in
 the GitHub repository.
 
 ## Cargo features
-This crate has one optional feature:
+This crate has two default features:
 - `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
+- `embed-cmaps`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
 */
 
 #![forbid(unsafe_code)]
@@ -197,10 +195,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
     }
 }
 
-/// A cache used by the renderer.
-///
-/// Ideally, such a cache should be constructed once per PDF and then reused across
-/// multiple render invocations on the same document.
+/// A cache shared across renders of pages from the same PDF.
 // TODO: Allow clearing the cache.
 #[derive(Default)]
 pub struct RenderCache<'a> {
@@ -227,10 +222,7 @@ impl<'a> RenderCache<'a> {
 pub struct RenderSettings {
     /// Whether all images should forcibly be rendered with bilinear interpolation.
     pub force_image_interpolation: bool,
-    /// The aliasing threshold for fills and strokes.
-    ///
-    /// `None` (the default) enables anti-aliasing; `Some(threshold)` paints pixels
-    /// whose coverage exceeds the threshold.
+    /// Coverage threshold above which pixels are painted, or `None` for anti-aliasing.
     pub aliasing_threshold: Option<u8>,
     /// Whether text should be hinted.
     pub hinting: bool,
@@ -271,12 +263,6 @@ impl Default for PixmapSettings {
 }
 
 /// Render a page to a pixmap with the given settings.
-///
-/// This is a "simplified" method in case all you want to achieve is rendering a
-/// page with a certain scale factor.
-///
-/// If you want to have more control over how exactly the page is rendered (e.g. with
-/// an arbitrary transform or into a custom pixel buffer), use [`render_into`]
 pub fn render<'a>(
     page: &'a Page<'a>,
     cache: &RenderCache<'a>,
@@ -315,11 +301,7 @@ pub fn render<'a>(
     pixmap
 }
 
-/// Render a page into the given [`RenderContext`] with the
-/// given transform.
-///
-/// See the [following example](https://github.com/LaurenzV/hayro/blob/main/hayro/examples/render.rs)
-/// if you are unsure how to call this method.
+/// Render a page into the given [`RenderContext`] with the given transform.
 pub fn render_into<'a>(
     page: &'a Page<'a>,
     cache: &RenderCache<'a>,
@@ -363,7 +345,6 @@ pub fn render_into<'a>(
     }
 }
 
-// Just a convenience method for testing.
 #[doc(hidden)]
 pub fn render_pdf(
     pdf: &Pdf,
