@@ -101,7 +101,6 @@ impl TrueTypeFont {
     pub(crate) fn is_italic(&self) -> bool {
         match &self.kind {
             Kind::Embedded(e) => {
-                // Check PDF font flags first
                 if let Some(flags) = &e.font_flags
                     && flags.contains(FontFlags::ITALIC)
                 {
@@ -126,7 +125,6 @@ impl TrueTypeFont {
     pub(crate) fn is_monospace(&self) -> bool {
         match &self.kind {
             Kind::Embedded(e) => {
-                // Check PDF font flags first
                 if let Some(flags) = &e.font_flags
                     && flags.contains(FontFlags::FIXED_PITCH)
                 {
@@ -188,7 +186,6 @@ struct EmbeddedKind {
     encoding: Encoding,
     differences: FxHashMap<u8, String>,
     code_to_glyph: Box<[GlyphId; 256]>,
-    /// PostScript name from the PDF.
     postscript_name: Option<String>,
     is_zapf_dingbats: bool,
 }
@@ -246,8 +243,7 @@ impl EmbeddedKind {
             .get(&code)
             .map(|s| s.as_str())
             .or_else(|| self.encoding.map_code(code))
-            // See PDFJS-6410 - PDF has no base encoding, so let's fallback to
-            // standard here.
+            // Fall back to StandardEncoding when there is no base encoding (PDFJS-6410).
             .or_else(|| standard::get(code))
     }
 

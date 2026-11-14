@@ -40,14 +40,14 @@ pub enum StandardFont {
     TimesItalic,
     /// Times Bold Italic.
     TimesBoldItalic,
-    /// Zapf Dingbats - a decorative symbol font.
+    /// Zapf Dingbats.
     ZapfDingBats,
-    /// Symbol - a mathematical symbol font.
+    /// Symbol.
     Symbol,
 }
 
 impl StandardFont {
-    /// Return the postscrit name of the font.
+    /// Return the PostScript name of the font.
     pub fn postscript_name(&self) -> &'static str {
         match self {
             Self::Helvetica => "Helvetica",
@@ -67,14 +67,7 @@ impl StandardFont {
         }
     }
 
-    /// Return suitable font data for the given standard font.
-    ///
-    /// Currently, this will return the corresponding Foxit font, which is a set of permissibly
-    /// licensed fonts that is also very light-weight.
-    ///
-    /// You can use the result of this method in your implementation of [`FontResolverFn`].
-    ///
-    /// [`FontResolverFn`]: crate::FontResolverFn
+    /// Return the embedded substitute font data and its collection index for the standard font.
     #[cfg(feature = "embed-fonts")]
     pub fn get_font_data(&self) -> (crate::FontData, u32) {
         use std::sync::Arc;
@@ -104,8 +97,6 @@ impl StandardFont {
     pub(crate) fn code_to_name(&self, code: u8) -> Option<&'static str> {
         match self {
             Self::Symbol => symbol::get(code),
-            // Note that this font does not return postscript character names,
-            // but instead has a custom encoding.
             Self::ZapfDingBats => zapf_dings::get(code),
             _ => standard::get(code),
         }
@@ -250,7 +241,6 @@ impl StandardKind {
                 self.program
                     .glyph_by_name(c)
                     .or_else(|| {
-                        // If the font doesn't have a POST table, try to map via unicode instead.
                         glyph_names::get(c)
                             .and_then(|c| c.chars().next())
                             .and_then(|c| self.program.cmap_glyph(c))
@@ -260,8 +250,6 @@ impl StandardKind {
             .unwrap_or(GlyphId::NOTDEF)
     }
 
-    // The substitute font might have different metrics than the standard font it
-    // replaces, so its glyphs need to be stretched to the expected widths.
     pub(crate) fn glyph_stretch(&self, glyph: GlyphId, code: u8) -> f64 {
         let Some(actual_width) = self.program.advance_width(glyph).or_else(|| {
             self.code_to_ps_name(code)
@@ -270,11 +258,7 @@ impl StandardKind {
             return 1.0;
         };
 
-        // From my experiments: Most PDF viewers, if they detect a font is a
-        // standard font, they completely ignore the widths array, even if
-        // different widths are indicated there. So only if it's an unknown
-        // font do we check the widths array. Otherwise, we always use the
-        // base font metrics.
+        // Viewers ignore `Widths` for recognised standard fonts, so only substitutes use it.
         let expected_width = if self.fallback {
             match self.widths.get(code as usize).copied() {
                 Some(Width::Value(w)) => w,
@@ -332,7 +316,6 @@ pub(crate) fn select_standard_font(
     let base_font = dict.get::<Name<'_>>(BASE_FONT)?;
     let name = strip_subset_prefix(base_font.as_str());
 
-    // First try whether it matches literally.
     match name {
         "Helvetica" => return Some((StandardFont::Helvetica, true)),
         "Helvetica-Bold" => return Some((StandardFont::HelveticaBold, true)),
@@ -351,8 +334,6 @@ pub(crate) fn select_standard_font(
         _ => {}
     }
 
-    // Now, we bruteforce, trying to determine a suitable font based on the
-    // keywords that appear in the name.
     let lower = name.to_ascii_lowercase();
 
     let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
