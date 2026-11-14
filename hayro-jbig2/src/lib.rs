@@ -90,15 +90,9 @@ use sync::{Arc, OnceLock};
 /// Settings for decoding JBIG2 images.
 #[derive(Debug, Clone)]
 pub struct DecodeSettings {
-    /// Whether to reject data that violates the specification, instead of
-    /// decoding it as well as possible.
-    ///
-    /// Defaults to `false`.
+    /// Whether to reject data that violates the specification. Defaults to `false`.
     pub strict: bool,
-    /// The maximum number of bytes that decoding a page may hold at once, or
-    /// `None` for no limit.
-    ///
-    /// Defaults to 1 GiB.
+    /// The maximum number of bytes a page decode may hold at once (`None` = unlimited). Defaults to 1 GiB.
     pub memory_limit: Option<usize>,
     /// A check for cancelling decoding.
     pub cancel: Option<CancelHandle>,
@@ -114,7 +108,7 @@ impl Default for DecodeSettings {
     }
 }
 
-/// A JBIG2 file in the sequential or random-access organization (Annex D.1, D.2).
+/// A standalone JBIG2 file.
 pub struct File<'a> {
     pages: Vec<FilePage<'a>>,
     globals: Option<LazyGlobals<'a>>,
@@ -127,7 +121,6 @@ struct FilePage<'a> {
     size: PageSize,
 }
 
-/// The global segments of a [`File`], decoded on first use.
 struct LazyGlobals<'a> {
     segments: Vec<Segment<'a>>,
     decoded: OnceLock<Result<Globals>>,
@@ -242,14 +235,13 @@ impl<'a> File<'a> {
     }
 }
 
-/// Decoded global segments that embedded images can share, such as a PDF
-/// `JBIG2Globals` stream.
+/// Decoded global segments shared by embedded pages.
 pub struct Globals {
     dictionaries: Dictionaries,
 }
 
 impl Globals {
-    /// Parse and decode global segments in the embedded organization (Annex D.3).
+    /// Parse and decode embedded global segments.
     pub fn new(data: &[u8], settings: &DecodeSettings) -> Result<Self> {
         let mut segments = Vec::new();
         let mut reader = Reader::new(data);
@@ -302,7 +294,7 @@ enum GlobalsRef<'a> {
 }
 
 impl<'a> Page<'a> {
-    /// Parse a page in the embedded organization (Annex D.3), with optional globals.
+    /// Parse an embedded page, with optional globals.
     pub fn new_embedded(
         data: &'a [u8],
         globals: Option<&'a Globals>,
@@ -365,8 +357,7 @@ impl<'a> Page<'a> {
     }
 }
 
-/// The decoded pixels of a page, as rows of `u32` words with the first pixel in the most
-/// significant bit and black pixels set to 1.
+/// Decoded page pixels as rows of `u32` words, first pixel in the MSB, black as 1.
 pub struct PageBitmap {
     bitmap: Bitmap,
     cancel: Option<CancelHandle>,
@@ -499,9 +490,6 @@ impl PageSize {
         let mut reader = Reader::new(page_info_seg.data);
         let page_info = parse_page_information(&mut reader)?;
 
-        // "A page's bitmap height may be declared in its page information segment
-        // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
-        // page must be striped." (7.4.8.2)
         let height = if page_info.height == 0xFFFF_FFFF {
             height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
         } else {
@@ -531,9 +519,6 @@ fn decode_segments(
     let strict = settings.strict;
     let cancel = Cancel(settings.cancel.as_ref());
     let mut state = DecodeState::new(settings.memory_limit, cancel);
-    // "Bit 2: Page default pixel value. This bit contains the initial value
-    // for every pixel in the page, before any region segments are decoded
-    // or drawn." (7.4.8.5)
     let mut page_bitmap = Bitmap::new_with(
         size.width,
         size.height,
@@ -562,8 +547,7 @@ fn decode_segments(
         match result {
             Ok(ControlFlow::Continue(())) => {}
             Ok(ControlFlow::Break(())) => break,
-            // No other segment can refer to an immediate region, so the rest of
-            // the page doesn't depend on it.
+            // Nothing refers to immediate regions, so the page doesn't depend on a failed one.
             Err(e)
                 if !strict
                     && e != DecodeError::MemoryLimitExceeded
@@ -612,7 +596,6 @@ fn decode_segment(
             page_state.page_pristine = false;
         }
         SegmentType::IntermediateGenericRegion => {
-            // Intermediate segments cannot have unknown length.
             let header = generic::parse(&mut reader, false, strict)?;
             let region = generic::decode(&header, state)?;
             page_state.store_region(seg.header.segment_number, region.bitmap, &mut state.budget);
@@ -715,7 +698,6 @@ fn decode_segment(
             page_state.store_region(seg.header.segment_number, region.bitmap, &mut state.budget);
         }
         SegmentType::IntermediateGenericRefinementRegion => {
-            // Same logic as immediate refinement, but store result instead of combining.
             let referred_segment =
                 page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
 
@@ -744,14 +726,6 @@ fn decode_segment(
         }
         SegmentType::ImmediateGenericRefinementRegion
         | SegmentType::ImmediateLosslessGenericRefinementRegion => {
-            // "3) Determine the buffer associated with the region segment that
-            // this segment refers to." (7.4.7.5)
-            //
-            // "If this segment does not refer to another region segment, set
-            // GRREFERENCE to be a bitmap containing the current contents of the
-            // page buffer (see clause 8), restricted to the area of the page
-            // buffer specified by this segment's region segment information
-            // field." (7.4.7.4)
             let referred_segment =
                 page_state.get_refined_region(&seg.header.referred_to_segments, strict)?;
 
@@ -790,7 +764,6 @@ fn decode_segment(
         SegmentType::EndOfPage | SegmentType::EndOfFile => {
             return Ok(ControlFlow::Break(()));
         }
-        // Other segment types not yet implemented.
         _ => {}
     }
 
@@ -817,15 +790,12 @@ fn decode_dictionary_segment(
             dictionaries.store_pattern_dictionary(seg.header.segment_number, dictionary);
         }
         SegmentType::SymbolDictionary => {
-            // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
-            // (6.5.5, step 1)
             let (input_symbols, referred_tables) = dictionaries.get_symbols_and_tables(
                 &seg.header.referred_to_segments,
                 globals,
                 strict,
             )?;
 
-            // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
             let retained_contexts = seg
                 .header
                 .referred_to_segments
@@ -847,9 +817,6 @@ fn decode_dictionary_segment(
             dictionaries.store_symbol_dictionary(seg.header.segment_number, dictionary);
         }
         SegmentType::Tables => {
-            // "Tables – see 7.4.13." (type 53)
-            // "This segment contains data which defines one or more user-supplied
-            // Huffman coding tables." (7.4.13)
             let table = HuffmanTable::read_custom(&mut reader)?;
             dictionaries.store_huffman_table(seg.header.segment_number, table);
         }
@@ -865,15 +832,10 @@ fn decode_dictionary_segment(
     Ok(())
 }
 
-/// Page-level decoding state for a JBIG2 page.
 pub(crate) struct PageState {
-    /// The page's default pixel value.
     pub(crate) default_pixel: bool,
-    /// Whether the page bitmap is still in its initial state (not yet painted to).
     pub(crate) page_pristine: bool,
-    /// Decoded intermediate regions, stored as (`segment_number`, region) pairs.
     pub(crate) referred_segments: Vec<(u32, Bitmap)>,
-    /// The dictionaries and tables of the page.
     pub(crate) dictionaries: Dictionaries,
 }
 
@@ -887,7 +849,6 @@ impl PageState {
         }
     }
 
-    /// Check if an immediate region can be decoded directly into the page bitmap.
     fn can_decode_directly(
         &self,
         page_bitmap: &Bitmap,
@@ -921,13 +882,11 @@ impl PageState {
         }
     }
 
-    /// Store a decoded region for later reference.
     fn store_region(&mut self, segment_number: u32, region: Bitmap, budget: &mut MemoryBudget) {
         budget.retain(region.memory_size());
         self.referred_segments.push((segment_number, region));
     }
 
-    /// Look up a referred segment by number.
     fn get_referred_segment(&self, segment_number: u32) -> Option<&Bitmap> {
         self.referred_segments
             .binary_search_by_key(&segment_number, |(num, _)| *num)
@@ -951,7 +910,6 @@ impl PageState {
     }
 }
 
-/// Decoded dictionaries and tables, stored as (`segment_number`, value) pairs.
 #[derive(Default)]
 pub(crate) struct Dictionaries {
     pattern_dictionaries: Vec<(u32, PatternDictionary)>,

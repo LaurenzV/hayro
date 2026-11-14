@@ -1,5 +1,3 @@
-//! Combining regions on the page (clause 8).
-
 use crate::check;
 
 #[test]

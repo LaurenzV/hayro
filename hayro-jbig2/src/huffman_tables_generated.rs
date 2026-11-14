@@ -6,7 +6,6 @@ type L = LeafData;
 
 const fn nz(n: u32) -> NonZeroU32 { NonZeroU32::new(n).unwrap() }
 
-/// Standard Huffman table A (Table B.1).
 #[rustfmt::skip]
 const TABLE_A: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -54,7 +53,6 @@ const TABLE_A: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table B (Table B.2).
 #[rustfmt::skip]
 const TABLE_B: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -102,7 +100,6 @@ const TABLE_B: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table C (Table B.3).
 #[rustfmt::skip]
 const TABLE_C: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(9)), one: Some(nz(1)) },
@@ -150,7 +147,6 @@ const TABLE_C: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table D (Table B.4).
 #[rustfmt::skip]
 const TABLE_D: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -198,7 +194,6 @@ const TABLE_D: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table E (Table B.5).
 #[rustfmt::skip]
 const TABLE_E: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(8)), one: Some(nz(1)) },
@@ -246,7 +241,6 @@ const TABLE_E: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table F (Table B.6).
 #[rustfmt::skip]
 const TABLE_F: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(16)), one: Some(nz(1)) },
@@ -294,7 +288,6 @@ const TABLE_F: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table G (Table B.7).
 #[rustfmt::skip]
 const TABLE_G: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(5)), one: Some(nz(1)) },
@@ -342,7 +335,6 @@ const TABLE_G: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table H (Table B.8).
 #[rustfmt::skip]
 const TABLE_H: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(19)), one: Some(nz(1)) },
@@ -390,7 +382,6 @@ const TABLE_H: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table I (Table B.9).
 #[rustfmt::skip]
 const TABLE_I: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(19)), one: Some(nz(1)) },
@@ -438,7 +429,6 @@ const TABLE_I: [N; INLINE_TABLE_SIZE] = [
         N::Leaf(L { range_low: 0, range_length: 0, is_lower: false, is_out_of_band: true }),
 ];
 
-/// Standard Huffman table J (Table B.10).
 #[rustfmt::skip]
 const TABLE_J: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(16)), one: Some(nz(1)) },
@@ -486,7 +476,6 @@ const TABLE_J: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table K (Table B.11).
 #[rustfmt::skip]
 const TABLE_K: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -534,7 +523,6 @@ const TABLE_K: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table L (Table B.12).
 #[rustfmt::skip]
 const TABLE_L: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -582,7 +570,6 @@ const TABLE_L: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table M (Table B.13).
 #[rustfmt::skip]
 const TABLE_M: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(1)), one: Some(nz(2)) },
@@ -630,7 +617,6 @@ const TABLE_M: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table N (Table B.14).
 #[rustfmt::skip]
 const TABLE_N: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(5)), one: Some(nz(1)) },
@@ -678,7 +664,6 @@ const TABLE_N: [N; INLINE_TABLE_SIZE] = [
         N::Empty,
 ];
 
-/// Standard Huffman table O (Table B.15).
 #[rustfmt::skip]
 const TABLE_O: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(nz(16)), one: Some(nz(1)) },

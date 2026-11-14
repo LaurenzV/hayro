@@ -1,5 +1,3 @@
-//! Symbol dictionaries (6.5): refinement/aggregate coding, context reuse and segment numbering.
-
 use crate::check;
 
 #[test]

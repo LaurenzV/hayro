@@ -424,19 +424,9 @@ def main():
     output.append("const fn nz(n: u32) -> NonZeroU32 { NonZeroU32::new(n).unwrap() }")
     output.append("")
 
-    # Map table names to their B.X numbers
-    table_numbers = {
-        "TABLE_A": 1, "TABLE_B": 2, "TABLE_C": 3, "TABLE_D": 4,
-        "TABLE_E": 5, "TABLE_F": 6, "TABLE_G": 7, "TABLE_H": 8,
-        "TABLE_I": 9, "TABLE_J": 10, "TABLE_K": 11, "TABLE_L": 12,
-        "TABLE_M": 13, "TABLE_N": 14, "TABLE_O": 15,
-    }
-
     for name, lines in STANDARD_TABLES.items():
         nodes = build_huffman_table(lines)
         print(f"{name}: {len(nodes)} nodes")
-        table_num = table_numbers[name]
-        output.append(f"/// Standard Huffman table {name[-1]} (Table B.{table_num}).")
         output.append(generate_rust_table(name, nodes))
         output.append("")
 

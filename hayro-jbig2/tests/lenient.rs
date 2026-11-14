@@ -1,5 +1,3 @@
-//! Invalid streams that are decoded leniently, like most other decoders do.
-
 use crate::{check_lenient, check_pages_lenient};
 
 #[test]

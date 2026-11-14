@@ -1,5 +1,3 @@
-//! Pattern dictionaries and halftone regions (6.6, 6.7).
-
 use crate::{check, check_crop};
 
 #[test]

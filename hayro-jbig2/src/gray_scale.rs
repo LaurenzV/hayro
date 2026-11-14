@@ -1,5 +1,3 @@
-//! Gray-scale image decoding procedure (Annex C).
-
 use alloc::vec::Vec;
 
 use crate::DecodeState;
@@ -12,34 +10,23 @@ use crate::error::{OverflowError, ParseError, Result, bail};
 use crate::memory::MemoryBudget;
 use crate::simd::{self, Level, Simd, u32x8};
 
-/// Input parameters to the gray-scale image decoding procedure (Table C.1).
 #[derive(Debug, Clone)]
 pub(crate) struct GrayScaleParams<'a> {
-    /// `GSMMR` - Specifies whether MMR is used.
     pub(crate) use_mmr: bool,
-    /// `GSBPP` - The number of bits per gray-scale value.
     pub(crate) bits_per_pixel: u32,
-    /// `GSW` - The width of the gray-scale image.
     pub(crate) width: u32,
-    /// `GSH` - The height of the gray-scale image.
     pub(crate) height: u32,
-    /// `GSTEMPLATE` - The template used to code the gray-scale bitplanes.
     pub(crate) template: Template,
-    /// `GSKIP` - A mask indicating which values should be skipped.
-    /// None if `GSUSESKIP` = 0.
     pub(crate) skip_mask: Option<&'a [u32]>,
-    /// Whether strict mode is enabled.
     pub(crate) strict: bool,
 }
 
-/// The gray-scale image decoding procedure (Annex C, C.5).
 #[inline(always)]
 pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     ctx: &mut DecodeState<'_>,
 ) -> Result<GrayScaleImage> {
-    // Table C.1: "GSMMR specifies whether MMR is used."
     if params.use_mmr {
         decode_mmr(data, params, &mut ctx.budget, ctx.cancel)
     } else {
@@ -47,20 +34,14 @@ pub(crate) fn decode_gray_scale_image(
     }
 }
 
-/// The gray-scale image decoding procedure using MMR (Annex C, C.5).
-///
-/// Table C.4: "MMR = GSMMR"
 fn decode_mmr(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     budget: &mut MemoryBudget,
     cancel: Cancel<'_>,
 ) -> Result<GrayScaleImage> {
-    // `GSW` - The width of the gray-scale image.
     let width = params.width;
-    // `GSH` - The height of the gray-scale image.
     let height = params.height;
-    // `GSBPP` - The number of bits per gray-scale value.
     let bits_per_pixel = params.bits_per_pixel;
 
     let mut offset = 0;
@@ -71,7 +52,6 @@ fn decode_mmr(
         budget,
         cancel,
         |_, bitplane| {
-            // Table C.4: "GBW = GSW, GBH = GSH"
             offset += decode_bitmap_mmr(bitplane, &data[offset..], params.strict, cancel)?;
 
             Ok(())
@@ -79,32 +59,23 @@ fn decode_mmr(
     )
 }
 
-/// The gray-scale image decoding procedure using arithmetic coding (Annex C, C.5).
-///
-/// Table C.4: "GBTEMPLATE = GSTEMPLATE, TPGDON = 0, USESKIP = GSUSESKIP, SKIP = GSKIP"
 fn decode_arithmetic(
     data: &[u8],
     params: &GrayScaleParams<'_>,
     ctx: &mut DecodeState<'_>,
 ) -> Result<GrayScaleImage> {
-    // `GSW` - The width of the gray-scale image.
     let width = params.width;
-    // `GSH` - The height of the gray-scale image.
     let height = params.height;
 
     if width > MAX_DIMENSION || height > MAX_DIMENSION {
         bail!(OverflowError::BitmapDimension);
     }
 
-    // `GSBPP` - The number of bits per gray-scale value.
     let bits_per_pixel = params.bits_per_pixel;
-    // `GSKIP` - The skip mask (if GSUSESKIP = 1).
     let skip_mask = params.skip_mask;
     let skip_stride = width.div_ceil(32);
-    // `GSTEMPLATE` - The template used for bitplane decoding.
     let template = params.template;
 
-    // Table C.4: Adaptive template pixel positions.
     let at_pixels: [AdaptiveTemplatePixel; 4] = match template {
         Template::Template0 => [
             AdaptiveTemplatePixel { x: 3, y: -1 },
@@ -114,14 +85,12 @@ fn decode_arithmetic(
         ],
         Template::Template1 => [
             AdaptiveTemplatePixel { x: 3, y: -1 },
-            // Unused.
             AdaptiveTemplatePixel::default(),
             AdaptiveTemplatePixel::default(),
             AdaptiveTemplatePixel::default(),
         ],
         Template::Template2 | Template::Template3 => [
             AdaptiveTemplatePixel { x: 2, y: -1 },
-            // Unused.
             AdaptiveTemplatePixel::default(),
             AdaptiveTemplatePixel::default(),
             AdaptiveTemplatePixel::default(),
@@ -146,7 +115,6 @@ fn decode_arithmetic(
                 &mut ctx.budget,
                 cancel,
                 |_, bitplane| {
-                    // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
                     let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
                     for y in 0..height {
@@ -162,7 +130,6 @@ fn decode_arithmetic(
                         for x in 0..width {
                             gatherer.maybe_reload_buffers(bitplane, x);
 
-                            // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
                             if let Some(mask) = skip_mask {
                                 let word_idx = (y * skip_stride + x / 32) as usize;
                                 let bit_pos = 31 - (x % 32);
@@ -218,10 +185,6 @@ impl GrayScaleImage {
     }
 }
 
-/// The bitplane decoding procedure (C.5).
-///
-/// The closure `decode_next` is called for each bitplane, receiving the bitplane
-/// index (`GSBPP`-1 down to 0) and a zeroed bitmap to decode into.
 #[inline(never)]
 fn decode_bitplanes<F>(
     width: u32,
@@ -242,7 +205,6 @@ where
             let mut bitplane = Bitmap::new(width, height, budget)?;
             decode_next(j, &mut bitplane)?;
 
-            // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
             if let Some(previous) = planes.last() {
                 xor_planes(simd, &mut bitplane.data, &previous.data);
             }
@@ -283,8 +245,6 @@ fn extract_bits<S: Simd>(
     stride: u32,
     j: u32,
 ) {
-    /// Bit masks for extracting individual bits from a packed u32 word (MSB-first).
-    /// `BIT_MASKS[i] = 1 << (31 - i)`.
     const BIT_MASKS: [u32; 32] = {
         let mut masks = [0_u32; 32];
         let mut i = 0;
@@ -303,7 +263,6 @@ fn extract_bits<S: Simd>(
         let row_data = y * stride as usize;
         let row_vals = y * width as usize;
 
-        // Handle in chunks of 8.
         for x in (0..simd_end).step_by(simd::SIMD_WIDTH) {
             let word = data[row_data + x / 32];
             let bit_offset = x % 32;
@@ -319,7 +278,6 @@ fn extract_bits<S: Simd>(
             (current | contribution).store(vals);
         }
 
-        // Handle the tail.
         for x in simd_end..width as usize {
             let word_idx = row_data + x / 32;
             let bit_pos = 31 - (x % 32);

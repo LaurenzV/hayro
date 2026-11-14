@@ -1,5 +1,3 @@
-//! Halftone region segment parsing and decoding (7.4.5, 6.6).
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -14,7 +12,6 @@ use crate::gray_scale::{GrayScaleImage, GrayScaleParams, decode_gray_scale_image
 use crate::memory::MemoryBudget;
 use crate::reader::Reader;
 
-/// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
@@ -57,14 +54,11 @@ pub(crate) fn decode_into(
         None
     };
 
-    // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
     let bits_per_pixel = (pattern_dict.patterns.len() as u32)
         .saturating_sub(1)
         .checked_ilog2()
         .map_or(1, |n| n + 1);
 
-    // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
-    // the gray-scale image decoding procedure as described in Annex C." (6.6.5)
     let gs_params = GrayScaleParams {
         use_mmr: header.flags.mmr,
         bits_per_pixel,
@@ -76,8 +70,6 @@ pub(crate) fn decode_into(
     };
     let gi = decode_gray_scale_image(header.data, &gs_params, ctx)?;
 
-    // "5) Place sequentially the patterns corresponding to the values in GI into
-    // HTREG by the procedure described in 6.6.5.2." (6.6.5)
     render_patterns(
         htreg,
         &gi,
@@ -90,7 +82,6 @@ pub(crate) fn decode_into(
     Ok(())
 }
 
-/// Parse a halftone region segment header (7.4.5.1).
 pub(crate) fn parse<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<HalftoneRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
@@ -146,7 +137,6 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>, strict: bool) -> Result<Halfton
     })
 }
 
-/// Parsed halftone region segment flags (7.4.5.1.1).
 #[derive(Debug, Clone)]
 pub(crate) struct HalftoneRegionFlags {
     pub(crate) mmr: bool,
@@ -156,7 +146,6 @@ pub(crate) struct HalftoneRegionFlags {
     pub(crate) initial_pixel_color: bool,
 }
 
-/// Halftone grid position and size (7.4.5.1.2).
 #[derive(Debug, Clone)]
 pub(crate) struct HalftoneGridPositionAndSize {
     pub(crate) width: u32,
@@ -165,16 +154,12 @@ pub(crate) struct HalftoneGridPositionAndSize {
     pub(crate) vertical_offset: i32,
 }
 
-/// Halftone grid vector (7.4.5.1.3).
 #[derive(Debug, Clone)]
 pub(crate) struct HalftoneGridVector {
-    /// `HRX` - 256 times the horizontal coordinate of the halftone grid vector.
     pub(crate) x_vector: u16,
-    /// `HRY` - 256 times the vertical coordinate of the halftone grid vector.
     pub(crate) y_vector: u16,
 }
 
-/// Parsed halftone region segment header (7.4.5.1).
 #[derive(Debug, Clone)]
 pub(crate) struct HalftoneRegionHeader<'a> {
     pub(crate) region_info: RegionSegmentInfo,
@@ -226,7 +211,6 @@ impl GridCoords {
     }
 }
 
-/// Compute the HSKIP bitmap (6.6.5.1).
 fn compute_skip_bitmap(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
@@ -271,7 +255,6 @@ fn lies_outside(x: i64, y: i64, pattern_dict: &PatternDictionary, region: &Bitma
         || y >= i64::from(region.height)
 }
 
-/// Render patterns into the target region (6.6.5.2).
 fn render_patterns(
     region: &mut Bitmap,
     gi: &GrayScaleImage,
@@ -287,7 +270,6 @@ fn render_patterns(
     let stride = region.stride;
     let num_patterns = pattern_dict.patterns.len();
 
-    // The original pattern mask has 1s in the top `pw` bits.
     let original_mask = if pw >= WORD_BITS {
         !0_u32
     } else {
@@ -346,8 +328,6 @@ fn render_patterns(
                 continue;
             }
 
-            // Patterns that are at most one word wide and lie inside the region
-            // can be blitted row by row.
             if pw <= WORD_BITS
                 && x >= 0
                 && y >= 0

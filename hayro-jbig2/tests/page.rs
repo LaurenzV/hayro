@@ -1,5 +1,3 @@
-//! Page striping (7.4.8.6, 7.4.10).
-
 use crate::check;
 
 #[test]

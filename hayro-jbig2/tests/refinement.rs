@@ -1,5 +1,3 @@
-//! Generic refinement regions (6.3).
-
 use crate::check;
 
 #[test]

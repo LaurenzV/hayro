@@ -1,5 +1,3 @@
-//! File organisation and segment header details (Annex D, 7.2).
-
 use crate::{check, check_pages};
 
 #[test]

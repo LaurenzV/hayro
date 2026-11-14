@@ -1,5 +1,3 @@
-//! Malformed streams, which must be rejected or decoded without panicking.
-
 use crate::check_malformed;
 
 #[test]

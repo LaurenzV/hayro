@@ -1,5 +1,3 @@
-//! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
-
 use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::DecodeState;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
@@ -9,7 +7,6 @@ use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec::Vec;
 
-/// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 pub(crate) fn decode(
     header: &PatternDictionaryHeader<'_>,
     scratch: &mut DecodeState<'_>,
@@ -21,17 +18,12 @@ pub(crate) fn decode(
         .checked_add(1)
         .ok_or(OverflowError::BitmapDimension)?;
 
-    // "1) Create a bitmap B_HDC. The height of this bitmap is HDPH. The width
-    // of the bitmap is (GRAYMAX + 1) × HDPW. This bitmap contains all the
-    // patterns concatenated left to right." (6.7.5)
     let collective_width = num_patterns
         .checked_mul(pattern_width)
         .ok_or(OverflowError::BitmapDimension)?;
 
     let mut collective_bitmap = Bitmap::new(collective_width, pattern_height, &mut scratch.budget)?;
 
-    // "2) Decode the collective bitmap using a generic region decoding procedure
-    // as described in 6.2." (6.7.5)
     if header.mmr {
         let _ = generic::decode_bitmap_mmr(
             &mut collective_bitmap,
@@ -55,7 +47,6 @@ pub(crate) fn decode(
                     x: -(pattern_width as i8),
                     y: 0,
                 },
-                // Unused.
                 AdaptiveTemplatePixel::default(),
                 AdaptiveTemplatePixel::default(),
                 AdaptiveTemplatePixel::default(),
@@ -80,8 +71,6 @@ pub(crate) fn decode(
         )?;
     }
 
-    // "3) Set: GRAY = 0" (6.7.5)
-    // "4) While GRAY ≤ GRAYMAX:" (6.7.5)
     let mut patterns = Vec::with_capacity(num_patterns as usize);
 
     let src_stride = collective_bitmap.stride;
@@ -94,9 +83,6 @@ pub(crate) fn decode(
     for gray in 0..num_patterns {
         work.add(pattern_work, scratch.cancel)?;
 
-        // "a) Let the subimage of B_HDC consisting of HPH rows and columns
-        // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
-        // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
         let mut pattern = Bitmap::new(pattern_width, pattern_height, &mut scratch.budget)?;
 
@@ -125,7 +111,6 @@ pub(crate) fn decode(
                 pattern.data[dst_row + w as usize] = word;
             }
 
-            // Clear trailing bits in the last word beyond `pattern_width`.
             let trailing = pattern_width % WORD_BITS;
             if trailing != 0 {
                 let last = dst_row + (dst_stride - 1) as usize;
@@ -143,7 +128,6 @@ pub(crate) fn decode(
     })
 }
 
-/// A decoded pattern dictionary.
 #[derive(Debug, Clone)]
 pub(crate) struct PatternDictionary {
     pub(crate) patterns: Vec<Bitmap>,
@@ -151,22 +135,17 @@ pub(crate) struct PatternDictionary {
     pub(crate) pattern_height: u32,
 }
 
-/// Parsed pattern dictionary segment header (7.4.4.1).
 #[derive(Debug, Clone)]
 pub(crate) struct PatternDictionaryHeader<'a> {
     pub(crate) mmr: bool,
     pub(crate) template: Template,
-    /// `HDPW`
     pub(crate) pattern_width: u8,
-    /// `HDPH`
     pub(crate) pattern_height: u8,
-    /// `GRAYMAX`
     pub(crate) num_patterns: u32,
     pub(crate) data: &'a [u8],
     pub(crate) strict: bool,
 }
 
-/// Parse a pattern dictionary segment header (7.4.4.1).
 pub(crate) fn parse<'a>(
     reader: &mut Reader<'a>,
     strict: bool,
