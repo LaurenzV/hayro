@@ -62,7 +62,6 @@ pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     skip_literal(r)?;
     let end = r.offset();
-    // Exclude outer parentheses.
     r.range(start + 1..end - 1)
 }
 
@@ -261,7 +260,6 @@ mod tests {
 
     #[test]
     fn ascii85_simple() {
-        // "Hello" in ASCII85 is "87cURDZ"
         assert_eq!(decode_a85(b"<~87cURDZ~>").unwrap(), b"Hello");
     }
 

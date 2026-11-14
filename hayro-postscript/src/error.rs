@@ -1,5 +1,3 @@
-//! Error types for the PostScript scanner.
-
 use core::fmt;
 
 /// A specialized [`Result`] type for PostScript scanner operations.

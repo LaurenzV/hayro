@@ -9,7 +9,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     out.reserve(data.len().div_ceil(2));
 
     if !has_whitespace {
-        // Fast path, don't need to worry about white spaces.
         let mut i = 0;
         while i + 1 < data.len() {
             out.push(decode_hex_digit(data[i])? << 4 | decode_hex_digit(data[i + 1])?);
@@ -19,7 +18,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
             out.push(decode_hex_digit(data[i])? << 4);
         }
     } else {
-        // Slow path, need to strip white spaces.
         let mut iter = data.iter().copied();
         let mut read_byte = || -> Option<u8> {
             loop {

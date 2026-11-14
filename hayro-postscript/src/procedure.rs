@@ -14,8 +14,7 @@ impl<'a> Procedure<'a> {
         Self { data }
     }
 
-    /// Return a [`Scanner`](crate::Scanner) that iterates over the tokens inside
-    /// this procedure.
+    /// Return a [`Scanner`](crate::Scanner) over the tokens of this procedure.
     pub fn tokens(&self) -> crate::Scanner<'a> {
         crate::Scanner::new(self.data)
     }

@@ -55,11 +55,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                         b')' => out.push(b')'),
                         b'\\' => out.push(b'\\'),
                         b'\n' | b'\r' => {
-                            // "If the \ is followed immediately by a newline
-                            // (CR, LF, or CR-LF pair), the scanner ignores
-                            // both the initial \ and the newline; this breaks
-                            // a string into multiple lines without including
-                            // the newline character as part of the string."
                             r.skip_eol();
                         }
                         _ => out.push(next),
@@ -67,8 +62,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                 }
             }
             b'(' | b')' => out.push(byte),
-            // "But if a newline appears without a preceding \, the result is
-            // equivalent to \n."
             b'\n' | b'\r' => {
                 out.push(b'\n');
                 r.skip_eol();
