@@ -1,5 +1,3 @@
-//! Bit-level reader for CCITT encoded data streams.
-
 use crate::{DecodeError, Result};
 use core::fmt::Debug;
 
@@ -7,12 +5,8 @@ use core::fmt::Debug;
 pub(crate) struct BitReader<'a> {
     data: &'a [u8],
     bit_offset: usize,
-    /// The bits starting at `bit_offset`, with the next bit in the most
-    /// significant position. Always contains at least 32 valid bits, bits past
-    /// the end of the data are zero.
+    // Next bit in the MSB; at least 32 valid bits, zero past the end of the data.
     buffer: u64,
-    /// The bit offset up to which bits can be consumed without refilling the
-    /// buffer or reaching the end of the data.
     limit: usize,
 }
 
@@ -37,14 +31,11 @@ impl<'a> BitReader<'a> {
         Ok(bit)
     }
 
-    /// Return the next 32 bits without consuming them. Bits past the end of the
-    /// data are zero.
     #[inline(always)]
     pub(crate) fn peek_u32(&self) -> u32 {
         (self.buffer >> 32) as u32
     }
 
-    /// Consume up to 32 bits.
     #[inline(always)]
     pub(crate) fn consume(&mut self, num_bits: usize) -> Result<()> {
         let bit_offset = self.bit_offset + num_bits;
@@ -111,8 +102,7 @@ impl<'a> BitReader<'a> {
         };
 
         self.buffer = word << self.bit_pos();
-        // The buffer contains bits up to `byte_pos * 8 + 64`. Refill once fewer
-        // than 32 of them are left.
+        // Refill once fewer than 32 buffered bits remain.
         self.limit = (byte_pos * 8 + 32).min(self.data.len() * 8);
     }
 }

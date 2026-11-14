@@ -47,15 +47,7 @@ mod tables;
 pub use cancel::{CancelCheck, CancelHandle};
 pub use error::{DecodeError, Result};
 
-/// Decode the given image using the provided settings and decoder.
-///
-/// If decoding was successful, the number of bytes that have been read in total
-/// is returned.
-///
-/// If an error is returned, it means that the file is somehow malformed.
-/// However, even if that's the case, it is possible that a number
-/// of rows were decoded successfully and written into the decoder, so those
-/// can still be used, but the image might be truncated.
+/// Decode `data` into `decoder`, returning the number of bytes read.
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Result<usize> {
     if settings.columns == 0 {
         return Ok(0);
@@ -76,49 +68,32 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
 
 /// A sink for the rows of a CCITT image.
 pub trait Decoder {
-    /// Push a decoded row.
-    ///
-    /// `changes` contains the positions at which the color changes, in strictly
-    /// ascending order and each smaller than the number of columns. Each row
-    /// starts white, so the pixels from `changes[0]` up to `changes[1]` are
-    /// black, those from `changes[2]` up to `changes[3]` again, and so on. If
-    /// the number of changes is odd, the row ends black.
+    /// Push a row as the ascending positions where its color changes, starting from white.
     fn push_row(&mut self, changes: &[u32]);
 }
 
 /// Settings to apply during decoding.
 #[derive(Debug, Clone)]
 pub struct DecodeSettings {
-    /// How many columns the image has (i.e. its width).
+    /// The width of the image.
     pub columns: u32,
-    /// How many rows the image has (i.e. its height).
-    ///
-    /// In case `end_of_block` has been set to true, decoding will run until
-    /// the given number of rows have been decoded, or the `end_of_block` marker
-    /// has been encountered, whichever occurs first.
-    ///
-    /// If set to 0, decoding runs until the end-of-block marker or the end of the data.
+    /// The height of the image, or 0 to decode until an end-of-block marker or the end of data.
     pub rows: u32,
-    /// Whether the stream _MAY_ contain an end-of-block marker
-    /// (It doesn't have to. In that case this is set to `true` but there are
-    /// no end-of-block markers, hayro-ccitt will still use the value of `rows`
-    /// to determine when to stop decoding).
+    /// Whether the stream may contain an end-of-block marker.
     pub end_of_block: bool,
     /// Whether the stream contains end-of-line markers.
     pub end_of_line: bool,
-    /// Whether the data in the stream for each row is aligned to the byte
-    /// boundary.
+    /// Whether each row starts at a byte boundary.
     pub rows_are_byte_aligned: bool,
     /// The encoding mode used by the image.
     pub encoding: EncodingMode,
-    /// Whether to reject data that violates the specification, instead of
-    /// decoding it as well as possible.
+    /// Whether to reject malformed data instead of decoding it leniently.
     pub strict: bool,
     /// A check for cancelling decoding.
     pub cancel: Option<CancelHandle>,
 }
 
-/// The encoding mode for CCITT fax decoding.
+/// A CCITT encoding mode.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EncodingMode {
     /// Group 4 (MMR).

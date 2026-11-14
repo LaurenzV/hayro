@@ -3,19 +3,14 @@ use crate::context::Color;
 use crate::tables::{BLACK_LOOKUP, LOOKUP_BITS, LOOKUP_INVALID, WHITE_LOOKUP};
 use crate::{DecodeError, Result};
 
-/// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
-    /// Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
     Pass,
-    /// Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
     Horizontal,
-    /// Vertical mode with offset (T.4 Section 4.2.1.3.2b, T.6 Section 2.2.3.2).
     Vertical(i8),
 }
 
 impl BitReader<'_> {
-    /// Decode a run length for the specified color.
     #[inline(always)]
     pub(crate) fn decode_run(&mut self, color: Color) -> Result<u32> {
         match color {
@@ -24,7 +19,6 @@ impl BitReader<'_> {
         }
     }
 
-    /// Decode a 2D mode code (T.4 Table 4, T.6 Table 1).
     #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Result<Mode> {
         let bits = self.peek_u32();
@@ -35,8 +29,6 @@ impl BitReader<'_> {
         }
 
         let zeros = bits.leading_zeros();
-        // The bit following the first 1 determines the direction of vertical
-        // modes.
         let offset = if bits.checked_shl(zeros + 1).unwrap_or(0) >> 31 == 1 {
             1
         } else {
@@ -60,16 +52,10 @@ impl BitReader<'_> {
         Ok(mode)
     }
 
-    /// Read EOL (End-of-Line) codes if present (T.4 Section 4.1.2).
-    ///
-    /// EOL is defined as `000000000001` (11 zeros followed by a 1).
-    /// Fill bits (T.4 Section 4.1.3) may precede the EOL as a variable-length
-    /// string of zeros.
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         self.read_eols(usize::MAX)
     }
 
-    /// Like [`Self::read_eol_if_available`], but reads at most `max` EOLs.
     pub(crate) fn read_eols(&mut self, max: usize) -> usize {
         let mut count = 0;
 
@@ -87,9 +73,6 @@ impl BitReader<'_> {
         count
     }
 
-    /// Advance to the start of the next EOL (including any fill preceding it),
-    /// without consuming it. Returns `false` and doesn't advance if there is
-    /// none.
     pub(crate) fn skip_to_eol(&mut self) -> bool {
         let mut reader = self.clone();
 
@@ -105,10 +88,6 @@ impl BitReader<'_> {
         false
     }
 
-    /// Decode a run length using the given lookup table (T.4 Section 4.1.1, T.6 Section 2.2.4).
-    ///
-    /// Run lengths 0-63 use terminating codes.
-    /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
     #[inline(always)]
     fn decode_run_inner(&mut self, lookup: &[u16; 1 << LOOKUP_BITS]) -> Result<u32> {
         let mut total: u32 = 0;
@@ -125,16 +104,12 @@ impl BitReader<'_> {
 
             total = total.checked_add(len as u32).ok_or(DecodeError::Overflow)?;
 
-            // For decoding black/white runs, less than 64 means we have
-            // a terminating code.
             if len < 64 {
                 return Ok(total);
             }
         }
     }
 
-    /// Count the zeros at the current position and return a reader positioned
-    /// after the 1 that terminates them, if there is one.
     fn zero_run(&self) -> (usize, Option<Self>) {
         let mut reader = self.clone();
         let mut zeros = 0;
