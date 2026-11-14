@@ -23,7 +23,9 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
             .ok_or(FormatError::InvalidBox)?;
         let is_signed = (descriptor & 0x80) != 0;
 
-        if is_signed {
+        // In theory up to 38 bits are allowed, but just like for component
+        // precisions in the SIZ marker, we don't support more than 31.
+        if is_signed || bit_depth > 31 {
             bail!(FormatError::InvalidBox);
         }
 
