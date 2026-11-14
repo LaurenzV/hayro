@@ -1,7 +1,4 @@
-//! Inspired by pdf.js, we use a custom binary format to optionally embed
-//! the required cmaps in a space-efficient manner. However, we don't use
-//! their format description but have a custom one. For more information,
-//! see <https://github.com/LaurenzV/cmap-resources/tree/hayro>.
+//! Format: <https://github.com/LaurenzV/cmap-resources/tree/hayro>.
 
 pub(crate) mod embedded;
 pub(crate) mod huffman;
@@ -53,16 +50,12 @@ pub(crate) fn parse<'a>(
     get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
     depth: u32,
 ) -> Option<CMap> {
-    // While in theory we can assume that all binary cmaps are valid, it can
-    // of course happen that an invalid one has been passed from outside, so
-    // we still need to do proper validation.
-
     if data.get(..5)? != BCMAP_MAGIC || *data.get(5)? != BCMAP_VERSION {
         return None;
     }
 
     let mut reader = Reader::new(data);
-    reader.read_bytes(6)?; // Skip magic + version.
+    reader.read_bytes(6)?;
 
     let file_len = reader.read_u32()? as usize;
 
@@ -78,7 +71,6 @@ pub(crate) fn parse<'a>(
     let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
 
-    // Start parsing all segments of the file.
     let mut reader = Reader::new(data.get(BCMAP_FILE_HEADER_SIZE..file_len)?);
 
     while !reader.at_end() {
@@ -92,7 +84,6 @@ pub(crate) fn parse<'a>(
                 cmap_name = Some(Vec::from(payload));
             }
             SEGMENT_CID_SYSTEM_INFO => {
-                // Format: Each string is 0-terminated.
                 let mut r = Reader::new(payload);
                 let registry = Vec::from(r.eat_until(|b| b == 0));
                 r.read_u8()?;
@@ -257,19 +248,6 @@ fn parse_cid_segment(
         return Some(());
     }
 
-    // There are two types of CID segments, all of which are stored in a columnar
-    // fastion in the file:
-    // For the first type, we have a simple mapping from a single code to a single
-    // CID. In this case, the data stream first contains all codes using delta-coding,
-    // encoded using huffman coding. This is followed by all CIDs, stored as
-    // u16 (either as a raw CID, or as `0` in case the CID is +1 the previous CID).
-    //
-    // For the second type, we have a range of consecutive codes, which map
-    // to a range of consecutive CIDs. In this case, we have an additional "count"
-    // column that stores how many codes are mapped consecutively. These are also
-    // encoded using huffman coding.
-
-    // Read deltas for the start code points.
     let delta_len = r.read_u32()? as usize;
     let delta_data = r.read_bytes(delta_len)?;
 
@@ -280,7 +258,6 @@ fn parse_cid_segment(
         deltas.push(delta_table.decode(&mut delta_reader)?);
     }
 
-    // Read the counts for each consecutive code range.
     let mut counts = Vec::new();
     if let Some(ct) = count_table {
         let count_len = r.read_u32()? as usize;
@@ -293,7 +270,6 @@ fn parse_cid_segment(
         }
     }
 
-    // Read the CIDs and reconstruct the character codes that map to them.
     let is_range = count_table.is_some();
     let mut prev_end: Option<u32> = None;
     let mut prev_cid: Option<u32> = None;
@@ -302,24 +278,19 @@ fn parse_cid_segment(
     for i in 0..n_entries {
         let raw_cid = r.read_u16()?;
 
-        // Note that start deltas and counts are encoded minus one, so we
-        // need to add one when reconstructing them.
-
-        // Reconstruct start code.
+        // Start deltas and counts are stored minus one.
         let start = if let Some(pe) = prev_end {
             pe + 1 + deltas[i]
         } else {
             deltas[i]
         };
 
-        // Reconstruct end code.
         let end = if is_range {
             start + counts[i] + 1
         } else {
             start
         };
 
-        // CID 0 means it's consecutive to the last seen CID, plus 1.
         let cid = if raw_cid == 0 {
             if let Some(pc) = prev_cid {
                 pc + prev_range_len + 1
@@ -365,7 +336,6 @@ fn parse_bf_segment(
         deltas.push(delta_table.decode(&mut delta_reader)?);
     }
 
-    // Read counts for range segments.
     let mut counts = Vec::new();
     if let Some(ct) = count_table {
         let count_len = r.read_u32()? as usize;
@@ -382,7 +352,6 @@ fn parse_bf_segment(
     let mut prev_end: Option<u32> = None;
 
     for i in 0..n_entries {
-        // Fixed-width segments encode destinations without a length prefix.
         let n_units = match fixed_units {
             Some(nu) => nu,
             None => r.read_u8()? as usize,

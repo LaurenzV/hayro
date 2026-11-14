@@ -6,25 +6,19 @@ use super::reader::Reader;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum HuffmanNode {
-    /// Intermediate node with optional children.
     Intermediate {
-        /// Index of the zero-child.
         zero: Option<NonZeroU32>,
-        /// Index of the one-child.
         one: Option<NonZeroU32>,
     },
-    /// Leaf node holding a decoded symbol value.
     Leaf(u32),
 }
 
-/// A Huffman table built from canonical codes.
 #[derive(Debug)]
 pub(super) struct HuffmanTable {
     nodes: Vec<HuffmanNode>,
 }
 
 impl HuffmanTable {
-    /// Decode a single symbol from the bit reader.
     pub(super) fn decode(&self, reader: &mut Reader<'_>) -> Option<u32> {
         let mut idx = 0_u32;
 
