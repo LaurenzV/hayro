@@ -18,9 +18,7 @@ pub(crate) struct DeviceN {
 impl DeviceN {
     pub(super) fn new(array: &Array<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         let mut iter = array.flex_iter();
-        // Skip `/DeviceN`
         let _ = iter.next::<Name<'_>>()?;
-        // Skip `Name`.
         let names = iter
             .next::<Array<'_>>()?
             .iter::<Name<'_>>()

@@ -44,10 +44,7 @@ pub trait Device<'a> {
     fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
         self.draw_path(&rect.to_path(0.1), props, draw_mode);
     }
-    /// Called at the beginning of a marked content sequence (BMC/BDC).
-    ///
-    /// The tag is the marked content tag (e.g. b"P", b"Span"). The properties are the property list
-    /// dictionary.
+    /// Called at the start of a marked-content sequence with its tag and property list.
     fn begin_marked_content(&mut self, _tag: &[u8], _properties: Option<&Dict<'_>>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}

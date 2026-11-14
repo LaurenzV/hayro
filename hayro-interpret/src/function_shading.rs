@@ -1,19 +1,13 @@
-//! Rasterization of function-based shadings.
-
 use crate::canvas::{Canvas, bounds};
 use crate::color::{color_error, lerp_color};
 use crate::encode::EncodedShadingPattern;
 use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point, Rect};
 
-/// Initial cell size in pixels.
 const FUNCTION_CELL: usize = 16;
-/// Largest color error a cell may have before it is split further.
 const FUNCTION_TOLERANCE: f32 = 0.01;
-/// Size in pixels up to which cells are sampled at every pixel.
 const FUNCTION_PIXEL_CELL: usize = 4;
 
-/// Draw a function-based shading, with `transform` mapping its domain to the canvas.
 pub(crate) fn draw_function(
     canvas: &mut Canvas,
     domain: Rect,
@@ -80,7 +74,6 @@ struct FunctionSampler<'a> {
 }
 
 impl FunctionSampler<'_> {
-    /// The color at the given pixel corner of the canvas.
     fn sample(&self, [x, y]: [usize; 2]) -> [f32; 4] {
         self.sample_at(Point::new(x as f64, y as f64))
     }
@@ -96,7 +89,6 @@ impl FunctionSampler<'_> {
     }
 }
 
-/// Draw a cell from its corner colors (ordered by `y`, then `x`), refining it as needed.
 fn draw_function_cell(
     canvas: &mut Canvas,
     sampler: &FunctionSampler<'_>,
@@ -166,8 +158,6 @@ fn draw_function_cell(
     }
 }
 
-/// Fill the pixels of a cell that lie in the domain, given each pixel's center and its relative
-/// position in the cell.
 fn fill_cell(
     canvas: &mut Canvas,
     sampler: &FunctionSampler<'_>,

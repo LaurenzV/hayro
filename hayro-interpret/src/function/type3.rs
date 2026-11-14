@@ -4,7 +4,6 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{BOUNDS, ENCODE, FUNCTIONS};
 
-/// A type 3 function (stitching function).
 #[derive(Debug)]
 pub(crate) struct Type3 {
     functions: Vec<Function>,
@@ -13,7 +12,6 @@ pub(crate) struct Type3 {
 }
 
 impl Type3 {
-    /// Create a new type 3 function.
     pub(crate) fn new(dict: &Dict<'_>, domain: Interval, depth: u8) -> Option<Self> {
         let functions = dict
             .get::<Array<'_>>(FUNCTIONS)?
@@ -55,7 +53,6 @@ impl Type3 {
         self.functions[0].num_outputs()
     }
 
-    /// Evaluate the function with the given input.
     pub(crate) fn eval(&self, input: f32, output: &mut [f32]) -> Option<()> {
         let index = self.find_interval(input);
         let interval = Interval {

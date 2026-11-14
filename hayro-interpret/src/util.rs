@@ -19,12 +19,12 @@ pub trait Float32Ext: Sized + Sub<f32, Output = f32> + Copy + PartialOrd<f32> {
         (*self - other).is_nearly_zero()
     }
 
-    /// Whether the number is nearly equal to another number.
+    /// Whether the number is less than or nearly equal to `other`.
     fn is_nearly_less_or_equal(&self, other: f32) -> bool {
         (*self - other).is_nearly_zero() || *self < other
     }
 
-    /// Whether the number is nearly equal to another number.
+    /// Whether the number is greater than or nearly equal to `other`.
     fn is_nearly_greater_or_equal(&self, other: f32) -> bool {
         (*self - other).is_nearly_zero() || *self > other
     }
@@ -53,12 +53,12 @@ pub trait Float64Ext: Sized + Sub<f64, Output = f64> + Copy + PartialOrd<f64> {
         (*self - other).is_nearly_zero()
     }
 
-    /// Whether the number is nearly equal to another number.
+    /// Whether the number is less than or nearly equal to `other`.
     fn is_nearly_less_or_equal(&self, other: f64) -> bool {
         (*self - other).is_nearly_zero() || *self < other
     }
 
-    /// Whether the number is nearly equal to another number.
+    /// Whether the number is greater than or nearly equal to `other`.
     fn is_nearly_greater_or_equal(&self, other: f64) -> bool {
         (*self - other).is_nearly_zero() || *self > other
     }
@@ -94,7 +94,6 @@ impl PointExt for kurbo::Point {
     }
 }
 
-/// Calculate a 128-bit siphash of a value.
 pub(crate) fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
     let mut state = SipHasher13::new();
     value.hash(&mut state);
@@ -167,8 +166,7 @@ impl RectExt for hayro_syntax::object::Rect {
     }
 }
 
-/// Return the vectors by which a point in the transformed space moves when
-/// advancing by one unit in the x or y direction, ignoring translation.
+/// The transformed unit x and y vectors, ignoring translation.
 pub fn x_y_advances(transform: &kurbo::Affine) -> (kurbo::Vec2, kurbo::Vec2) {
     let scale_skew_transform = {
         let c = transform.as_coeffs();

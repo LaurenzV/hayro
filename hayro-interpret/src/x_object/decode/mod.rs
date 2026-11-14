@@ -122,10 +122,8 @@ fn fix_image_length<T: Copy>(
     let row_len = width as usize * num_components;
 
     if (row_len * *height as usize) <= image.len() {
-        // Too much data (or just the right amount), truncate it.
         image.truncate(row_len * *height as usize);
     } else {
-        // Too little data, adapt the height and pad.
         *height = image.len().div_ceil(row_len) as u32;
 
         if !image.len().is_multiple_of(row_len) {
@@ -375,8 +373,7 @@ fn for_each_sample(
     for _ in 0..height {
         for _ in 0..width {
             for _ in 0..num_components {
-                // See `stream_ccit_not_enough_data`, some images seemingly don't have
-                // enough data, so we just pad with zeroes in this case.
+                // Some images lack data, pad with zeros.
                 visit(reader.read(bits_per_component).unwrap_or(0), index)?;
                 index += 1;
             }

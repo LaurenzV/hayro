@@ -4,14 +4,12 @@ use hayro_syntax::object::Stream;
 const MAX_PROCEDURE_DEPTH: usize = 256;
 const MAX_STACK_DEPTH: usize = 100;
 
-/// A type 4 function (postscript function).
 #[derive(Debug)]
 pub(crate) struct Type4 {
     code: Vec<PostScriptOp>,
 }
 
 impl Type4 {
-    /// Create a new type 4 function.
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
         Some(Self {
             code: parse_procedure(&stream.decoded_data().ok()?)?,
@@ -491,7 +489,6 @@ mod tests {
     #[test]
     fn op_cos() {
         op_impl("0 cos", &[1.0]);
-        // Should be zero, but floating point impreciseness.
         op_impl("90 cos", &[-4.371139e-8]);
     }
 
@@ -569,8 +566,7 @@ mod tests {
         op_impl("3.2 round", &[3.0]);
         op_impl("6.5 round", &[7.0]);
         op_impl("-4.8 round", &[-5.0]);
-        // TODO: This rounding doesn't match the PS spec.
-        // op_impl("-6.5 round", &[-6.0]);
+        // TODO: `-6.5 round` should yield -6 per the PostScript spec.
         op_impl("99 round", &[99.0]);
     }
 

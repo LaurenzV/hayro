@@ -73,18 +73,13 @@ pub struct ShadingTexture {
     pub width: u32,
     /// The height of the texture in pixels.
     pub height: u32,
-    /// The transform from texture space to the space of the rasterized
-    /// bounding box.
+    /// The transform from texture space to the space of the bounding box.
     pub transform: Affine,
     /// Whether any pixel of the texture is not fully opaque.
     pub has_transparency: bool,
 }
 
-/// Return the texture dimensions [`EncodedShadingPattern::sample_texture`]
-/// uses for the given bounding box and scale factor.
-///
-/// Exposed so that callers can bound the size of the resulting texture
-/// before sampling.
+/// The texture dimensions for `bbox` at `scale` pixels per unit.
 pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
     (
         (bbox.width() as f32 * scale).max(1.0).ceil() as u32,
@@ -93,7 +88,6 @@ pub fn texture_dimensions(bbox: Rect, scale: f32) -> (u32, u32) {
 }
 
 impl EncodedShadingPattern {
-    /// Apply the opacity and transfer function to a color.
     pub(crate) fn finish(&self, mut color: [f32; 4]) -> [f32; 4] {
         color[3] *= self.opacity;
 
@@ -103,12 +97,10 @@ impl EncodedShadingPattern {
         }
     }
 
-    /// Convert components in the color space of the shading into a finished color.
     pub(crate) fn convert(&self, components: &[f32]) -> [f32; 4] {
         self.finish(self.color_space.to_rgba(components, 1.0).components())
     }
 
-    /// Evaluate `function` and convert the result, or return transparent if it fails.
     pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
         let mut out = [0.0; MAX_COMPONENTS];
         let out = &mut out[..function.num_outputs()];
@@ -119,15 +111,7 @@ impl EncodedShadingPattern {
         }
     }
 
-    /// Sample the shading on a pixel grid covering `bbox`, with `scale`
-    /// pixels per unit of `bbox`.
-    ///
-    /// The callback is invoked once per pixel in row-major order with the
-    /// straight (non-premultiplied) RGBA sample, letting callers apply their
-    /// own conversion. Returns the dimensions of the grid (see
-    /// [`texture_dimensions`]) and the transform from grid space to the space
-    /// of `bbox`. No size cap is applied — callers that need to bound the
-    /// texture size should check [`texture_dimensions`] first.
+    /// Call `f` with the straight RGBA color of each pixel of a grid covering `bbox`, in row-major order.
     pub fn sample_texture(
         &self,
         bbox: Rect,
@@ -163,10 +147,7 @@ impl EncodedShadingPattern {
         (width, height, grid_transform)
     }
 
-    /// Rasterize the shading into a straight (non-premultiplied) RGBA8
-    /// texture covering `bbox`, with `scale` pixels per unit of `bbox`.
-    ///
-    /// See [`sample_texture`](Self::sample_texture) for the grid semantics.
+    /// Rasterize the shading into a straight RGBA8 texture covering `bbox`.
     pub fn render_texture(&self, bbox: Rect, scale: f32) -> ShadingTexture {
         let (width, height) = texture_dimensions(bbox, scale);
         let mut data = Vec::with_capacity(width as usize * height as usize * 4);
@@ -319,7 +300,6 @@ pub(crate) enum RadialAxialParams {
 }
 
 impl EncodedRadialAxialShading {
-    /// Draw the shading, with `transform` mapping shading space to the canvas.
     fn draw(&self, canvas: &mut Canvas, transform: Affine, pattern: &EncodedShadingPattern) {
         let lut = function_lut(&self.function, self.domain, pattern);
         let to_shading = transform.inverse();
@@ -399,7 +379,6 @@ fn radial_pos(
 
     let discriminant = b * b - 4.0 * a * c;
 
-    // No solution available.
     if discriminant < 0.0 {
         return None;
     }

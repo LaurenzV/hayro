@@ -26,8 +26,7 @@ pub(crate) fn render_glyph<'a>(
         * Affine::scale(UNITS_PER_EM as f64);
     state.ctm = root_transform;
 
-    // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
-    // (though the graphics state itself should be preserved).
+    // The text state is reset for glyph procedures, the graphics state is kept.
     state.text_state = TextState::default();
 
     let program = glyph.glyph.program()?;

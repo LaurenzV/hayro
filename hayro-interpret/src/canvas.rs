@@ -1,8 +1,5 @@
-//! A canvas that shadings are rasterized into.
-
 use kurbo::{Point, Rect};
 
-/// A grid of straight (non-premultiplied) RGBA pixels.
 pub(crate) struct Canvas {
     pub(crate) width: usize,
     pub(crate) height: usize,
@@ -28,7 +25,6 @@ impl Canvas {
         bounds(points).overlaps(self.bounds())
     }
 
-    /// Fill the pixel centers in the triangle; centers on an edge go to the triangle below or right.
     pub(crate) fn fill_triangle<const N: usize>(
         &mut self,
         points: [Point; 3],
@@ -95,12 +91,10 @@ impl Canvas {
     }
 }
 
-/// The first pixel whose center is at or past `coordinate`, clamped to `[0, len]`.
 fn pixel_index(coordinate: f64, len: usize) -> usize {
     (coordinate - 0.5).ceil().clamp(0.0, len as f64) as usize
 }
 
-/// The x at which the edge `ab` crosses `y`, independent of the order of `a` and `b`.
 fn edge_x(a: Point, b: Point, y: f64) -> f64 {
     let (a, b) = if (a.y, a.x) <= (b.y, b.x) {
         (a, b)

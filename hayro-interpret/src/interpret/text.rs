@@ -34,9 +34,6 @@ pub(crate) fn append_text_string<'a>(
 
     let bytes = text.as_bytes();
 
-    // In case we have a fallback font (which occurs if either no font was set at all
-    // in the content stream, or an invalid one), we only want to show the glyphs
-    // using Helvetica if the bytes are actually valid ASCII.
     let show_glyphs = matches!(font, TextStateFont::Font(_))
         || (matches!(font, TextStateFont::Fallback(_)) && bytes.is_ascii());
 
@@ -121,8 +118,7 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
                 device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
             }
             TextRenderingMode::Invisible => {
-                // Still call draw_glyph_run for invisible text, so that it can
-                // for example be used for text extraction.
+                // Invisible text still reaches the device, e.g. for text extraction.
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
             }
             TextRenderingMode::FillAndClip => {

@@ -1,8 +1,3 @@
-//! PDF functions.
-//!
-//! PDF has the concept of functions, representing objects that take a certain number of values
-//! as input, do some processing on them and then return some output.
-
 mod type0;
 mod type2;
 mod type3;
@@ -144,12 +139,7 @@ impl Function {
         self.0.num_outputs
     }
 
-    /// Evaluate the function for one or more samples.
-    ///
-    /// `input` needs to consist of samples with [`Self::num_inputs`] values each, and
-    /// `output` needs to have space for the same number of samples with
-    /// [`Self::num_outputs`] values each. Returns `None` if the lengths don't match or the
-    /// function couldn't be evaluated.
+    /// Evaluate the function on consecutive samples of `input`, writing them to `output`.
     pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
         let repr = &self.0;
         let (num_inputs, num_outputs) = (self.num_inputs(), self.num_outputs());
@@ -261,8 +251,6 @@ impl TransferFunction {
     }
 }
 
-/// Linearly interpolate the value `x`, assuming that it lies within the range `x_min` and `x_max`,
-/// to the range `y_min` and `y_max`.
 pub(crate) fn interpolate(x: f32, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> f32 {
     y_min + (x - x_min) * (y_max - y_min) / (x_max - x_min)
 }

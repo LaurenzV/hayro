@@ -40,57 +40,11 @@ pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 #[derive(Clone)]
 /// Settings that should be applied during the interpretation process.
 pub struct InterpreterSettings {
-    /// Nearly every PDF contains text. In most cases, PDF files embed the fonts they use, and
-    /// hayro can therefore read the font files and do all the processing needed. However, there
-    /// are two problems:
-    /// - Fonts don't _have_ to be embedded, it's possible that the PDF file only defines the basic
-    ///   metadata of the font, like its name, but relies on the PDF processor to find that font
-    ///   in its environment.
-    /// - The PDF specification requires a list of 14 fonts that should always be available to a
-    ///   PDF processor. These include:
-    ///   - Times New Roman (Normal, Bold, Italic, `BoldItalic`)
-    ///   - Courier (Normal, Bold, Italic, `BoldItalic`)
-    ///   - Helvetica (Normal, Bold, Italic, `BoldItalic`)
-    ///   - `ZapfDingBats`
-    ///   - Symbol
-    ///
-    /// Because of this, if any of the above situations occurs, this callback will be called, which
-    /// expects the data of an appropriate font to be returned, if available. If no such font is
-    /// provided, the text will most likely fail to render.
-    ///
-    /// For the font data, there are two different formats that are accepted:
-    /// - Any valid TTF/OTF font.
-    /// - A valid CFF font program.
-    ///
-    /// The following recommendations are given for the implementation of this callback function.
-    ///
-    /// For the standard fonts, in case the original fonts are available on the system, you should
-    /// just return those. Otherwise, for Helvetica, Courier and Times New Roman, the best alternative
-    /// are the corresponding fonts of the [Liberation font family](https://github.com/liberationfonts/liberation-fonts).
-    /// If you prefer smaller fonts, you can use the [Foxit CFF fonts](https://github.com/LaurenzV/hayro/tree/master/assets/standard_fonts),
-    /// which are much smaller but are missing glyphs for certain scripts.
-    ///
-    /// For the `Symbol` and `ZapfDingBats` fonts, you should also prefer the system fonts, and if
-    /// not available to you, you can, similarly to above, use the corresponding fonts from Foxit.
-    ///
-    /// If you don't want having to deal with this, you can just enable the `embed-fonts` feature
-    /// and use the default implementation of the callback.
+    /// Resolves fonts that aren't embedded in the PDF, including the standard 14 fonts.
     pub font_resolver: FontResolverFn,
-    /// A callback for resolving cmaps that aren't embedded.
-    ///
-    /// When the PDF requires using a cmap that is not directly embedded in the PDF,
-    /// this callback will be called to attempt fetching the data of the file.
-    ///
-    /// When the `embed-cmaps` feature is enabled, this uses `load_embedded`
-    /// method from `hayro-cmap` by default, which embeds the cmap files for
-    /// all 61 predefined cmaps
-    /// that the PDF specification requires to be readily available on a system.
-    /// Otherwise, you can implement your custom logic for lazily fetching the
-    /// data. If you are fine not supporting such PDFs, you can simply pass a closure
-    /// that always returns `None`.
+    /// Resolves cmaps that aren't embedded in the PDF.
     pub cmap_resolver: CMapResolverFn,
-    /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
-    /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
+    /// Receives the warnings emitted during interpretation.
     pub warning_sink: WarningSinkFn,
     /// Which parts of a page should be rendered.
     pub render_content: RenderContent,
@@ -135,12 +89,11 @@ pub enum InterpreterWarning {
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
-    /// An annotation has an `AP` dictionary, but its normal appearance could not
-    /// be selected or loaded, so the annotation was not drawn.
+    /// The normal appearance of an annotation could not be loaded.
     UnresolvedAnnotationAppearance,
 }
 
-/// interpret the contents of the page and render them into the device.
+/// Interpret the page and render it into the device.
 pub fn interpret_page<'a>(
     page: &Page<'a>,
     context: &mut Context<'a>,
@@ -180,15 +133,6 @@ fn interpret_annotation<'a>(
         };
 
         let annot_rect = rect.to_kurbo();
-        // 12.5.5. Appearance streams
-        // "The algorithm outlined in this subclause shall be used
-        // to map from the coordinate system of the appearance XObject."
-
-        // 1) The appearance’s bounding box (specified by its BBox entry)
-        // shall be transformed, using Matrix, to produce a
-        // quadrilateral with arbitrary orientation. The transformed
-        // appearance box is the smallest upright rectangle that
-        // encompasses this quadrilateral.
         let transformed_rect = (apx.matrix
             * kurbo::Rect::new(
                 apx.bbox[0] as f64,
@@ -199,14 +143,6 @@ fn interpret_annotation<'a>(
             .to_path(0.1))
         .bounding_box();
 
-        // 2) A matrix A shall be computed that scales and translates
-        // the transformed appearance box to align with the edges
-        // of the annotation’s rectangle (specified by the Rect entry).
-        // A maps the lower-left corner (the corner with the smallest
-        // x and y coordinates) and the upper-right corner (the
-        // corner with the greatest x and y coordinates) of the
-        // transformed appearance box to the corresponding corners
-        // of the annotation’s rectangle.
         let sx = annot_rect.width() / transformed_rect.width();
         let sy = annot_rect.height() / transformed_rect.height();
         let affine = Affine::new([
@@ -218,9 +154,6 @@ fn interpret_annotation<'a>(
             annot_rect.y0 - sy * transformed_rect.y0,
         ]);
 
-        // 3) Matrix shall be concatenated with A to form a matrix
-        // AA that maps from the appearance’s coordinate system to
-        // the annotation’s rectangle in default user space.
         context.save_state();
         context.pre_concat_affine(affine);
         context.push_root_transform();
@@ -428,16 +361,12 @@ pub fn interpret<'a>(
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
             TypedInstruction::RestoreState(_) => {
-                // Ignore a `Q` without a matching `q` in this stream: it would otherwise
-                // restore the state saved on entry and let later operators change the
-                // caller's state.
+                // An unmatched `Q` must not restore the state saved on entry to this stream.
                 if context.num_states() > num_states + 1 {
                     context.restore_state(device);
                 }
             }
-            TypedInstruction::FlatnessTolerance(_) => {
-                // Ignore for now.
-            }
+            TypedInstruction::FlatnessTolerance(_) => {}
             TypedInstruction::ColorSpaceStroke(c) => {
                 let cs = if let Some(named) = ColorSpace::new_from_name(c.0) {
                     named
@@ -476,9 +405,7 @@ pub fn interpret<'a>(
                         .map(|n| if n == 0.0 { 0.01 } else { n })
                         .collect();
             }
-            TypedInstruction::RenderingIntent(_) => {
-                // Ignore for now.
-            }
+            TypedInstruction::RenderingIntent(_) => {}
             TypedInstruction::NonStrokeColorNamed(n) => {
                 context.fill_paint_mut().color = n.0.into_iter().map(|n| n.as_f32()).collect();
                 context.fill_paint_mut().pattern = n.1.and_then(|name| {
@@ -496,10 +423,6 @@ pub fn interpret<'a>(
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
-                // Properties can be either:
-                // 1. A Name that references an entry in the Resources/Properties dictionary
-                // 2. An inline property-list dictionary
-
                 let properties = bdc
                     .1
                     .clone()
@@ -574,12 +497,6 @@ pub fn interpret<'a>(
             TypedInstruction::TextFont(t) => {
                 let name = t.0;
 
-                // In case we are unable to resolve the font, two scenarios:
-                // 1) If the font doesn't exist in the first place in the resource dictionary,
-                // assume Helvetica (this seems to be what other PDF viewers do).
-                // 2) In case it's `None` because we were unable to resolve the font
-                // (for whatever reason), leave it as `None`. Better showing no
-                // text at all than garbage text.
                 let font = if let Some(font_dict) = font_dict_cache.get(name).cloned() {
                     context.resolve_font(&font_dict)
                 } else if let Some(font_dict) = resources.get_font(name) {
@@ -594,8 +511,6 @@ pub fn interpret<'a>(
             }
             TypedInstruction::ShowText(s) => {
                 if context.text_state().font.is_none() {
-                    // Even if no explicit font was set, we try to assume Helvetica. Acrobat
-                    // seems to do the same.
                     context.text_state_mut().font = context.fallback_font();
                 }
 
@@ -603,8 +518,6 @@ pub fn interpret<'a>(
             }
             TypedInstruction::ShowTexts(s) => {
                 if context.text_state().font.is_none() {
-                    // Even if no explicit font was set, we try to assume Helvetica. Acrobat
-                    // seems to do the same.
                     context.text_state_mut().font = context.fallback_font();
                 }
 
@@ -710,13 +623,11 @@ pub fn interpret<'a>(
                     let (dict, stream) = dict_or_stream(&o)?;
                     Shading::new(dict, stream, &context.interpreter_cache.object_cache)
                 }) {
-                    // The background only applies to shading patterns, not to `sh`.
                     shading.background = None;
 
                     let mut bbox = context.bbox();
                     if let Some(bounds) = shading.mesh_bounds {
-                        // Snapped outwards to whole pixels, so that the sampled texture stays
-                        // aligned with the device pixels.
+                        // Snapped outwards so the sampled texture stays aligned with device pixels.
                         let bounds = context.ctm().transform_rect_bbox(bounds);
                         bbox = bbox.intersect(bounds.expand().inflate(1.0, 1.0));
                     }
@@ -753,8 +664,7 @@ pub fn interpret<'a>(
         }
     }
 
-    // A path object, including a pending `W` or `W*`, can't continue beyond the content
-    // stream it starts in.
+    // A pending path, including `W`/`W*`, can't continue past its content stream.
     context.path_mut().truncate(0);
     *(context.clip_mut()) = None;
 

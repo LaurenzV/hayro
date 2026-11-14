@@ -4,7 +4,6 @@ use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
 
-/// A type 0 function (sampled function).
 #[derive(Debug)]
 pub(crate) struct Type0 {
     inputs: Vec<SampledInput>,
@@ -37,7 +36,6 @@ impl SampledInput {
 }
 
 impl Type0 {
-    /// Create a new type 0 function.
     pub(crate) fn new(
         stream: &Stream<'_>,
         domain: &[Interval],
@@ -109,7 +107,6 @@ impl Type0 {
         })
     }
 
-    /// Evaluate a type 0 function with the given input.
     pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) {
         let mut offset = 0;
         let mut fractions = [(0, 0.0); MAX_COMPONENTS];

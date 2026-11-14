@@ -13,7 +13,6 @@ pub(crate) struct Lab {
 impl Lab {
     pub(super) fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
-        // Not sure how this should be used.
         let _black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let range = dict
             .get::<[f32; 4]>(RANGE)

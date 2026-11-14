@@ -10,10 +10,7 @@ pub(crate) struct CalRgb {
     gamma: [f32; 3],
 }
 
-// See <https://github.com/mozilla/pdf.js/blob/06f44916c8936b92f464d337fe3a0a6b2b78d5b4/src/core/colorspace.js#L846>
-// Completely copied from there without really understanding the logic, but we get the same results as Firefox
-// which should be good enough (and by viewing the `calrgb.pdf` test file in different viewers you will
-// see that in many cases each viewer does whatever it wants, even Acrobat), so this is good enough for us.
+// Ported from pdf.js: <https://github.com/mozilla/pdf.js/blob/06f44916c8936b92f464d337fe3a0a6b2b78d5b4/src/core/colorspace.js#L846>
 impl CalRgb {
     pub(super) fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
