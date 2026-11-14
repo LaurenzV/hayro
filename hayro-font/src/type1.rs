@@ -91,9 +91,7 @@ impl Type1Font {
         if let Some(to_unicode) = &self.1
             && let Some(c) = to_unicode.lookup_bf_string(char_code)
         {
-            // Skip null character mappings and fall back to glyph name
-            // lookup. Some PDFs have incorrect ToUnicode mappings that map
-            // to U+0000.
+            // Some PDFs wrongly map codes to U+0000 in `ToUnicode`.
             if c != BfString::Char('\0') {
                 return Some(c);
             }
@@ -156,9 +154,7 @@ impl EmbeddedKind {
             self.glyph_by_name(entry)
         } else {
             match self.encoding {
-                // For OpenType programs, this uses the encoding of the CFF table instead of
-                // the "cmap" table described in 9.6.5.4 of the PDF specification, as other
-                // viewers do.
+                // Deliberately uses the CFF encoding of OpenType programs instead of their `cmap`.
                 Encoding::BuiltIn => self.program.builtin_encoding_glyph(code),
                 _ => self
                     .encoding
@@ -185,7 +181,6 @@ impl EmbeddedKind {
             Some(Width::Value(w)) => Some(w),
             Some(Width::Missing) => Some(self.missing_width),
             _ => {
-                // If font looks like a standard font, get the width from there.
                 let sf = self.standard_font?;
                 self.code_to_ps_name(code)
                     .and_then(|name| sf.get_width(name))

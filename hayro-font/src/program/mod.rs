@@ -28,8 +28,7 @@ impl FontProgram {
     pub(crate) fn new(data: FontData, index: u32) -> Option<Self> {
         let mut font = Font::new(data.clone(), index)?;
 
-        // OpenType fonts embedded in PDFs sometimes only contain the tables needed for their
-        // CFF outlines and lack `maxp`, which skrifa needs to know the number of glyphs.
+        // Some embedded OpenType fonts lack `maxp`, so skrifa finds no glyphs.
         if matches!(font.kind(), Kind::Sfnt(..))
             && font.num_glyphs() == 0
             && let Some(cff) = cff_table_font(&data, index)
@@ -37,9 +36,7 @@ impl FontProgram {
             font = cff;
         }
 
-        // Reject fonts with invalid post table version, fixes pdf.js issue 9462. Not sure
-        // if there is a better fix, for some reason skrifa accepts the font which is
-        // completely invalid.
+        // Reject invalid `post` versions, which skrifa accepts (pdf.js issue 9462).
         if matches!(font.kind(), Kind::Sfnt(..))
             && font.tables().post().is_ok_and(|p| {
                 !matches!(

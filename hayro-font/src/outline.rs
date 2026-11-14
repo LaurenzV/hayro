@@ -5,20 +5,20 @@ use crate::type1::Type1Font;
 use hayro_cmap::BfString;
 use std::rc::Rc;
 
-/// Font data and metadata for downstream use.
+/// The data and metadata of an outline font.
 #[derive(Clone)]
 pub struct OutlineFontData {
-    /// Raw font bytes (TrueType/OpenType/CFF data).
+    /// The raw font bytes.
     pub data: crate::FontData,
-    /// A key that identifies the font data, for deduplication.
+    /// A key that identifies the font data.
     pub cache_key: u128,
-    /// PostScript name (e.g., "TimesNewRomanPS-BoldMT").
+    /// The PostScript name.
     pub postscript_name: Option<String>,
-    /// Font weight (100-900, 400=normal, 700=bold).
+    /// The font weight.
     pub weight: Option<u32>,
-    /// Whether the font is italic/oblique.
+    /// Whether the font is italic.
     pub is_italic: bool,
-    /// Whether the font is serif (vs sans-serif).
+    /// Whether the font is serif.
     pub is_serif: bool,
     /// Whether the font is monospace.
     pub is_monospace: bool,
@@ -40,8 +40,7 @@ impl OutlineFont {
         }
     }
 
-    // The `.notdef` glyph of the standard fonts is empty, but the one of the fonts
-    // used in place of them might not be.
+    // Standard fonts have an empty `.notdef`, but their substitutes might not.
     pub(crate) fn hides_notdef(&self) -> bool {
         match self {
             Self::Type1(t) => t.is_standard(),
@@ -58,7 +57,6 @@ impl OutlineFont {
         }
     }
 
-    /// Get the advance width for a glyph by character code.
     pub(crate) fn glyph_advance_width(&self, char_code: u32) -> Option<f32> {
         match self {
             Self::Type1(t) => t.glyph_width(char_code as u8),
@@ -67,9 +65,6 @@ impl OutlineFont {
         }
     }
 
-    /// Get raw font bytes and metadata.
-    ///
-    /// Returns None for Type1 fonts and non-embedded TrueType fonts.
     pub(crate) fn font_data(&self) -> Option<OutlineFontData> {
         let cache_key = self.program().content_hash();
 

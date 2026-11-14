@@ -112,8 +112,7 @@ impl<'a> Type3Font<'a> {
 
         let to_unicode = read_to_unicode(dict, cmap_resolver);
 
-        // Type 3 fonts don't have glyph IDs, so each glyph procedure is assigned one,
-        // starting at 1 so that 0 remains `.notdef`.
+        // Glyph IDs are indices into `glyph_names` plus one, keeping 0 for `.notdef`.
         let mut glyph_names = char_procs.keys().cloned().collect::<Vec<_>>();
         glyph_names.sort_unstable();
 
@@ -149,9 +148,7 @@ impl<'a> Type3Font<'a> {
         if let Some(to_unicode) = &self.to_unicode
             && let Some(c) = to_unicode.lookup_bf_string(char_code)
         {
-            // Skip null character mappings and fall back to glyph name
-            // lookup. Some PDFs have incorrect ToUnicode mappings that map
-            // to U+0000.
+            // Some PDFs wrongly map codes to U+0000 in `ToUnicode`.
             if c != BfString::Char('\0') {
                 return Some(c);
             }

@@ -58,10 +58,7 @@ pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 pub use type3::{Type3Font, Type3Glyph};
 
-/// A callback function for resolving font queries.
-///
-/// The first argument is the raw data, the second argument is the index in case the font
-/// is a TTC, otherwise it should be 0.
+/// A callback that resolves a font query to font data and its index in a collection.
 pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
 /// A callback function for resolving cmap names to their files.
 pub type CMapResolverFn = Arc<dyn Fn(CMapName<'_>) -> Option<&'static [u8]> + Send + Sync>;
@@ -140,8 +137,7 @@ impl<'a> Font<'a> {
         FontGlyph::Outline(OutlineGlyph::new(font, glyph, char_code))
     }
 
-    /// Return the horizontal scale factor that stretches a glyph to the width the PDF
-    /// font expects for it.
+    /// Return the horizontal scale factor that fits a glyph to its expected width.
     pub fn glyph_stretch(&self, glyph: GlyphId, code: u32) -> f64 {
         match &self.0 {
             FontType::Type1(t) => t.glyph_stretch(glyph, code as u8),
@@ -223,8 +219,7 @@ impl<'a> Font<'a> {
     }
 }
 
-/// A cache for the fonts of a document and the font programs they use, so that each of
-/// them is only loaded once.
+/// A cache for the fonts of a document and their font programs.
 #[derive(Clone, Default)]
 pub struct FontCache<'a>(Rc<FontCacheInner<'a>>);
 
@@ -354,9 +349,7 @@ impl OutlineGlyph {
         self.font.char_code_to_unicode(self.char_code)
     }
 
-    /// Get raw font bytes and metadata for downstream use.
-    ///
-    /// Returns `None` for Type1 fonts.
+    /// Return the raw font bytes and metadata, if available.
     pub fn font_data(&self) -> Option<OutlineFontData> {
         self.font.font_data()
     }
@@ -372,9 +365,6 @@ impl OutlineGlyph {
     }
 
     /// Get the advance width for this glyph.
-    ///
-    /// The advance width is how far to move horizontally after drawing
-    /// this glyph before drawing the next one.
     pub fn advance_width(&self) -> Option<f32> {
         self.font.glyph_advance_width(self.char_code)
     }
@@ -398,14 +388,12 @@ pub struct GlyphIdentifier {
 }
 
 impl GlyphIdentifier {
-    /// Return a key that uniquely identifies the outline of the glyph, across all font
-    /// programs.
+    /// Return a key that uniquely identifies the outline of the glyph.
     pub fn glyph_key(&self) -> u128 {
         hash128(self)
     }
 
-    /// Return a key that identifies the font program the glyph belongs to, for every font
-    /// type. Glyph IDs are only unique within a single font program.
+    /// Return a key that identifies the font program of the glyph.
     pub fn font_key(&self) -> u128 {
         self.program.content_hash()
     }
@@ -417,9 +405,6 @@ pub enum FontQuery {
     /// A query for one of the 14 PDF standard fonts.
     Standard(StandardFont),
     /// A query for a font that is not embedded in the PDF file.
-    ///
-    /// Note that this type of query is currently not supported,
-    /// but will be implemented in the future.
     Fallback(FallbackFontQuery),
 }
 
@@ -446,7 +431,7 @@ pub struct FallbackFontQuery {
     pub is_bold: bool,
     /// Whether the font is small cap.
     pub is_small_cap: bool,
-    /// The character collection (registry/ordering) if this is a CID font.
+    /// The character collection of a CID font.
     pub character_collection: Option<CharacterCollection>,
 }
 
@@ -497,7 +482,7 @@ impl FallbackFontQuery {
         data
     }
 
-    /// Do a best-effort fallback to the 14 standard fonts based on the query.
+    /// Return the standard font that best matches the query.
     pub fn pick_standard_font(&self) -> StandardFont {
         if self.is_fixed_pitch {
             match (self.is_bold, self.is_italic) {
@@ -667,7 +652,6 @@ impl Encoding {
 }
 
 bitflags! {
-    /// Bitflags describing various characteristics of fonts.
     #[derive(Debug)]
     pub(crate) struct FontFlags: u32 {
         const FIXED_PITCH = 1 << 0;
@@ -690,11 +674,6 @@ pub(crate) fn stretch_factor(expected_width: f32, actual_width: f32) -> f64 {
     }
 }
 
-/// Strip the 6-character subset prefix from a PostScript font name.
-///
-/// PDF subset fonts use names like "ABCDEF+TimesNewRoman". This function
-/// returns `TimesNewRoman` from such a name, or the original name if no
-/// valid prefix is found.
 pub(crate) fn strip_subset_prefix(name: &str) -> &str {
     match name.split_once('+') {
         Some((prefix, rest)) if prefix.len() == 6 => rest,
@@ -702,9 +681,6 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
     }
 }
 
-/// Convert a glyph name to its Unicode value, if possible, as described in the Adobe Glyph List
-/// Specification (<https://github.com/adobe-type-tools/agl-specification>), with the AGL
-/// extended by glyph names used in the Computer Modern and AMS fonts.
 pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Option<BfString> {
     let base = name.split('.').next().unwrap_or_default();
     let mut out = String::new();
@@ -790,8 +766,7 @@ pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
 pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
     dict.get::<Stream<'_>>(TO_UNICODE)
         .and_then(|s| s.decoded_data().ok())
-        // See PDFJS-11915, where `Identity-H` is used for `ToUnicode`. I don't
-        // believe it's valid, but at least mupdf seems to be able to deal with it.
+        // Some PDFs name a predefined CMap such as `Identity-H` as `ToUnicode` (PDFJS-11915).
         .or_else(|| {
             dict.get::<Name<'_>>(TO_UNICODE)
                 .and_then(|name| (cmap_resolver)(CMapName::from_bytes(name.as_ref())))
@@ -803,8 +778,6 @@ pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -
         })
 }
 
-// When mapping to glyphs, some fonts might only have a glyph for the "normalized"
-// name.
 pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
     if name == "nbspace" {
         name = "space";

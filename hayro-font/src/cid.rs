@@ -30,14 +30,9 @@ pub(crate) struct Type0Font {
     to_unicode: Option<CMap>,
     widths2: Widths<[f32; 3]>,
     cid_to_gid_map: CidToGIdMap,
-    /// PostScript name from the PDF.
     postscript_name: Option<String>,
-    /// Font flags from the font descriptor.
     font_flags: Option<FontFlags>,
-    /// Whether this font is using a fallback (non-embedded) font.
     fallback: bool,
-    /// Whether the `to_unicode` map is a UCS2 `CMap` (CID-indexed) rather than
-    /// a `ToUnicode` `CMap` (code-indexed).
     to_unicode_is_cid_indexed: bool,
 }
 
@@ -100,7 +95,6 @@ impl Type0Font {
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
         let mut to_unicode_is_cid_indexed = false;
 
-        // If there is no ToUnicode map, try to get the UCS2 CMap.
         if to_unicode.is_none()
             && let Some(cc) = character_collection.as_ref()
             && let Some(ucs2_name) = cc.family.ucs2_cmap()
@@ -117,7 +111,6 @@ impl Type0Font {
             .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
-        // Extract font flags from descriptor
         let font_flags = font_descriptor
             .get::<u32>(FLAGS)
             .and_then(FontFlags::from_bits);
@@ -144,8 +137,6 @@ impl Type0Font {
             return GlyphId::NOTDEF;
         };
 
-        // UCS2 maps are indexed by CIDs, while embededd `ToUnicode` maps are
-        // indexed by character code.
         let to_unicode_key = if self.to_unicode_is_cid_indexed {
             cid
         } else {
@@ -155,20 +146,14 @@ impl Type0Font {
         if self.fallback
             && let Some(glyph) = self.map_via_unicode(to_unicode_key)
         {
-            // Yay, Unicode worked!
             return glyph;
         }
-
-        // At this point, not much we can do anymore. Just hope that the
-        // selected font has the right glyph order, and map via that.
 
         match self.program.kind() {
             ProgramKind::Sfnt => self.cid_to_gid_map.map(cid as u16),
             ProgramKind::Cff => {
                 if self.program.is_cid_keyed() {
-                    // Very confusing stuff going on here, see https://github.com/mozilla/pdf.js/pull/15563.
-                    // The PDF spec makes it sounds like cid-to-gid map should only be used for TrueType fonts,
-                    // but Acrobat also seems to support it for CFF fonts with some weird behavior.
+                    // Acrobat applies `CIDToGIDMap`s to CFF fonts inversely (pdf.js PR 15563).
                     if matches!(self.cid_to_gid_map, CidToGIdMap::Identity) {
                         self.program.glyph_by_cid(cid).unwrap_or(GlyphId::NOTDEF)
                     } else {
@@ -178,15 +163,10 @@ impl Type0Font {
                     self.cid_to_gid_map.map(cid as u16)
                 }
             }
-            // Maybe we need similar processing to CFF fonts? But since
-            // Type1 fonts are invalid anyway, let's just ignore for now.
             ProgramKind::Type1 => GlyphId::new(cid),
         }
     }
 
-    /// Map a character code (or CID) to a glyph ID
-    /// by first getting its Unicode and then looking up the codepoint in the
-    /// font's cmap.
     fn map_via_unicode(&self, key: u32) -> Option<GlyphId> {
         let to_unicode = self.to_unicode.as_ref()?;
 
@@ -210,7 +190,6 @@ impl Type0Font {
 
         match self.program.kind() {
             ProgramKind::Sfnt => self.program.cmap_glyph(character),
-            // Map the character to a glyph name via the AGL, and then look it up.
             ProgramKind::Cff | ProgramKind::Type1 => glyph_names::get_reverse(character)
                 .and_then(|name| self.program.glyph_by_name(name)),
         }
@@ -234,8 +213,7 @@ impl Type0Font {
         if self.fallback
             && let Some(cid) = self.code_to_cid(code)
             && let Some(actual_width) = self.program.advance_width(glyph)
-            // Only use an expected width if there is an explicit /W array,
-            // not the default width, as it leads to weird results from my testing.
+            // Stretching to `DW` gives bad results, so only explicit `W` entries count.
             && let Some(expected_width) = self.widths.get(cid)
         {
             return stretch_factor(expected_width, actual_width);
@@ -251,19 +229,14 @@ impl Type0Font {
         }
     }
 
-    /// Get the PostScript name.
     pub(crate) fn postscript_name(&self) -> Option<&str> {
         self.postscript_name.as_deref()
     }
 
-    /// Get the font weight (100-900, 400=normal, 700=bold).
-    ///
-    /// Returns `None` if weight cannot be determined (CFF fonts or invalid weight).
     pub(crate) fn weight(&self) -> Option<u32> {
         self.program.weight()
     }
 
-    /// Check if font is italic based on font flags or font attributes.
     pub(crate) fn is_italic(&self) -> bool {
         if let Some(flags) = &self.font_flags
             && flags.contains(FontFlags::ITALIC)
@@ -273,14 +246,12 @@ impl Type0Font {
         self.program.is_italic()
     }
 
-    /// Check if font is serif based on font flags.
     pub(crate) fn is_serif(&self) -> bool {
         self.font_flags
             .as_ref()
             .is_some_and(|f| f.contains(FontFlags::SERIF))
     }
 
-    /// Check if font is monospace based on font flags or font metrics.
     pub(crate) fn is_monospace(&self) -> bool {
         if let Some(flags) = &self.font_flags
             && flags.contains(FontFlags::FIXED_PITCH)
@@ -344,8 +315,7 @@ impl Type0Font {
         }
 
         to_unicode.lookup_bf_string(code).or_else(|| {
-            // See pdfjs_issue9367, whose `ToUnicode` map has its Unicode values
-            // in `cidrange`s rather than `bfrange`s.
+            // Some `ToUnicode` maps use `cidrange` instead of `bfrange` (pdfjs_issue9367).
             let value = (1..=4).find_map(|len| to_unicode.lookup_cid_code(code, len))?;
             char::from_u32(value).map(BfString::Char)
         })
@@ -414,14 +384,11 @@ impl CidToGIdMap {
 }
 
 fn load_program(descriptor: &Dict<'_>, loader: &FontLoader<'_>) -> Option<FontProgram> {
-    // PDF has a distinction between CIDFontType0 and CIDFontType 2, with
-    // specific requirements what font type can appear where. However, some
-    // PDFs use wrong metadata, so we simply bruteforce without even looking
-    // at the metadata.
+    // Ignore the CIDFont subtype, as some PDFs pair it with the wrong font file.
     let stream = descriptor
         .get::<Stream<'_>>(FONT_FILE2)
         .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE3))
-        // See PDFBOX-2599. Apparently, Acrobat accepts this as well.
+        // `FontFile` is not allowed for CIDFonts, but Acrobat accepts it (PDFBOX-2599).
         .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE))?;
 
     loader.programs.load(&stream)
