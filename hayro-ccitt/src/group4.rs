@@ -17,10 +17,7 @@ pub(crate) fn decode(
             return Err(DecodeError::Cancelled);
         }
 
-        // EOLs aren't part of Group 4, but PDF requires decoders to accept them
-        // anyway. An EOFB consists of two consecutive EOLs. Data that follows
-        // an EOFB (after padding to a byte boundary) can start like another
-        // EOL, so no more than that is read.
+        // PDF allows EOLs; read at most an EOFB's two, as data after it can look like an EOL.
         let eol_count = if ctx.settings.end_of_block {
             reader.read_eols(2)
         } else {

@@ -12,7 +12,7 @@ impl<F: Fn() -> bool + Send + Sync> CancelCheck for F {
     }
 }
 
-/// A shared [`CancelCheck`] that can be stored in the decode settings.
+/// A shared [`CancelCheck`].
 #[derive(Clone)]
 pub struct CancelHandle(Arc<dyn CancelCheck>);
 

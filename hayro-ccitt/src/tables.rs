@@ -1,24 +1,11 @@
-//! Lookup tables for decoding CCITT run length codes.
-
-/// The number of bits used to look up a run length code. The longest code has
-/// 13 bits.
 pub(crate) const LOOKUP_BITS: u32 = 13;
-/// The value of a lookup table entry whose bits don't start with a valid code.
 pub(crate) const LOOKUP_INVALID: u16 = 0xFFF;
-/// Lookup table for white run length codes.
 pub(crate) static WHITE_LOOKUP: [u16; 1 << LOOKUP_BITS] =
     build_lookup(&WHITE_TERMINATING, &WHITE_MAKEUP);
-/// Lookup table for black run length codes.
 pub(crate) static BLACK_LOOKUP: [u16; 1 << LOOKUP_BITS] =
     build_lookup(&BLACK_TERMINATING, &BLACK_MAKEUP);
 
-/// Build a lookup table that maps the next `LOOKUP_BITS` bits to the run length
-/// of the code they start with (lower 12 bits) and the length of that code
-/// (upper 4 bits).
-///
-/// If the bits don't start with a valid code, the run length is
-/// `LOOKUP_INVALID` and the length is the number of bits up to and including
-/// the first bit that doesn't continue any code.
+// Entry: code length in the upper 4 bits, run length (or LOOKUP_INVALID) in the lower 12.
 const fn build_lookup(
     terminating: &[(u16, u8, u16)],
     makeup: &[(u16, u8, u16)],
@@ -83,7 +70,6 @@ const fn build_lookup(
     table
 }
 
-/// White terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).
 const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 8, 0b00110101),
     (1, 6, 0b000111),
@@ -151,7 +137,6 @@ const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 8, 0b00110100),
 ];
 
-/// White make-up codes (T.4 Table 3a/T.4, T.6 Table 3/T.6).
 const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 5, 0b11011),
     (128, 5, 0b10010),
@@ -182,7 +167,6 @@ const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 9, 0b010011011),
 ];
 
-/// Black terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).
 const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 10, 0b0000110111),
     (1, 3, 0b010),
@@ -250,7 +234,6 @@ const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 12, 0b000001100111),
 ];
 
-/// Black make-up codes (T.4 Table 3a/T.4, T.6 Table 3/T.6).
 const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 10, 0b0000001111),
     (128, 12, 0b000011001000),
@@ -281,7 +264,6 @@ const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 13, 0b0000001100101),
 ];
 
-/// Extended make-up codes for run lengths > 1728 (T.4 Table 3b/T.4, T.6 Table 3/T.6).
 const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (1792, 11, 0b00000001000),
     (1856, 11, 0b00000001100),

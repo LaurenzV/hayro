@@ -1,5 +1,4 @@
-//! Each test decodes a raw CCITT stream from `streams` and compares the result
-//! against an image in `references`.
+//! Decodes the CCITT streams in `streams` and compares them against `references`.
 
 mod cancel;
 mod codes;
@@ -23,7 +22,6 @@ fn tests_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests")
 }
 
-/// Rows of pixels, where `true` means white.
 type Bitmap = Vec<Vec<bool>>;
 
 fn load_reference(name: &str) -> Bitmap {
@@ -64,8 +62,6 @@ impl Decoder for Collector {
     }
 }
 
-/// Decode `stream` and check that it matches `reference` and that the whole
-/// stream was consumed.
 fn check(stream: &str, reference: &str, configure: impl FnOnce(&mut DecodeSettings)) {
     check_consumed(stream, reference, None, configure);
 }
@@ -127,7 +123,6 @@ fn check_consumed(
     );
 }
 
-/// Decode `stream`, which is malformed, and check that it doesn't panic.
 fn check_malformed(
     stream: &str,
     columns: u32,

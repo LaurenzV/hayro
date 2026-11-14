@@ -3,7 +3,7 @@
 pub enum DecodeError {
     /// Unexpected end of input while reading bits.
     UnexpectedEof,
-    /// Invalid Huffman code sequence was encountered during decoding.
+    /// An invalid code was encountered.
     InvalidCode,
     /// Arithmetic overflow in run length or position calculation.
     Overflow,
@@ -24,5 +24,5 @@ impl core::fmt::Display for DecodeError {
 
 impl core::error::Error for DecodeError {}
 
-/// A specialized Result type for CCITT decoding operations.
+/// The result type of decoding.
 pub type Result<T> = core::result::Result<T, DecodeError>;

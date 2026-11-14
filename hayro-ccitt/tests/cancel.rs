@@ -1,5 +1,3 @@
-//! Decoding with a cancellation check.
-
 use hayro_ccitt::{CancelHandle, DecodeError, DecodeSettings, decode};
 
 use crate::{Collector, G4, load_reference, tests_dir};
