@@ -24,7 +24,7 @@ use std::sync::Arc;
 /// The function supplied to a shading.
 #[derive(Debug, Clone)]
 pub enum ShadingFunction {
-    /// A single function, which should be used to evaluate all components of the shading.
+    /// A single function for all components.
     Single(Function),
     /// Multiple 1-in, 1-out functions, one for each color component.
     Multiple(Vec<Function>),
@@ -40,8 +40,6 @@ impl ShadingFunction {
     }
 
     /// Evaluate the shading function for a single sample.
-    ///
-    /// `output` needs to have space for [`Self::num_outputs`] values.
     pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
         match self {
             Self::Single(function) => function.eval(input, output),
@@ -91,13 +89,7 @@ pub enum ShadingType {
     },
     /// A radial-axial shading.
     RadialAxial {
-        /// The coordinates of the shading.
-        ///
-        /// For axial shadings, only the first 4 entries are relevant, representing the x/y coordinates
-        /// of the first point and the coordinates for the second point.
-        ///
-        /// For radial shadings, the coordinates contain the x/y coordinates as well as the radius
-        /// for both circles.
+        /// `x0 y0 x1 y1` for axial shadings, `x0 y0 r0 x1 y1 r1` for radial ones.
         coords: [f32; 6],
         /// The domain of the shading.
         domain: [f32; 2],
@@ -423,7 +415,6 @@ fn read_free_form_triangles(
     Some((triangles, bounds))
 }
 
-/// Common interpolation functions used across different shading types.
 struct InterpolationHelpers {
     bp_coord: u8,
     bp_comp: u8,
@@ -511,7 +502,6 @@ impl InterpolationHelpers {
     }
 }
 
-/// Split decode array into coordinate bounds and component decode values.
 fn split_decode(decode: &[f32]) -> Option<([f32; 4], &[f32])> {
     decode.split_first_chunk::<4>().map(|(a, b)| (*a, b))
 }
@@ -683,7 +673,6 @@ fn read_patch_mesh(
     Some((patches, bounds))
 }
 
-/// The stream index of each tensor-product control point, by `u` and then `v`.
 const STREAM_ORDER: [[usize; 4]; 4] =
     [[0, 1, 2, 3], [11, 12, 13, 4], [10, 15, 14, 5], [9, 8, 7, 6]];
 

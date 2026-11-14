@@ -30,13 +30,7 @@ pub struct StencilImage<'a, 'b> {
 }
 
 impl<'a, 'b> StencilImage<'a, 'b> {
-    /// Perform some operation with the stencil data of the image.
-    ///
-    /// The second argument allows you to give the image decoder a hint for
-    /// what resolution of the image you want to have. Note that this does not
-    /// mean that the resulting image will have that dimension. Instead, it allows
-    /// the image decoder to extract a lower-resolution version of the image in
-    /// certain cases.
+    /// Run `func` with the decoded stencil data, optionally hinting at the desired resolution.
     pub fn with_stencil(
         &self,
         func: impl FnOnce(LumaData, &Paint<'a>),
@@ -47,15 +41,12 @@ impl<'a, 'b> StencilImage<'a, 'b> {
         }
     }
 
-    /// Return the underlying stream object.
-    ///
-    /// This allows you to get access to the raw encoded image data, without doing any decoding.
+    /// Return the underlying image stream.
     pub fn stream(&self) -> &Stream<'b> {
         self.image_xobject.stream()
     }
 
-    // These are hidden since clients are supposed to call get the
-    // width/height from `LumaData` instead.
+    // Hidden: clients should use the dimensions of the decoded data.
     #[doc(hidden)]
     pub fn width(&self) -> u32 {
         self.image_xobject.width()
@@ -77,13 +68,7 @@ impl CacheKey for StencilImage<'_, '_> {
 pub struct RasterImage<'a>(pub(crate) ImageXObject<'a>);
 
 impl RasterImage<'_> {
-    /// Perform some operation with the RGB and alpha channel of the image.
-    ///
-    /// The second argument allows you to give the image decoder a hint for
-    /// what resolution of the image you want to have. Note that this does not
-    /// mean that the resulting image will have that dimension. Instead, it allows
-    /// the image decoder to extract a lower-resolution version of the image in
-    /// certain cases.
+    /// Run `func` with the decoded RGB and alpha data, optionally hinting at the desired resolution.
     pub fn with_rgba(
         &self,
         func: impl FnOnce(ImageData, Option<LumaData>),
@@ -94,15 +79,12 @@ impl RasterImage<'_> {
         }
     }
 
-    /// Return the underlying stream object.
-    ///
-    /// This allows you to get access to the raw encoded image data, without doing any decoding.
+    /// Return the underlying image stream.
     pub fn stream(&self) -> &Stream<'_> {
         self.0.stream()
     }
 
-    // These are hidden since clients are supposed to call get the
-    // width/height from `LumaData` instead.
+    // Hidden: clients should use the dimensions of the decoded data.
     #[doc(hidden)]
     pub fn width(&self) -> u32 {
         self.0.width()
@@ -129,8 +111,7 @@ pub enum Image<'a, 'b> {
 }
 
 impl Image<'_, '_> {
-    // These are hidden since clients are supposed to call get the
-    // width/height from `LumaData/RgbData` instead.
+    // Hidden: clients should use the dimensions of the decoded data.
     #[doc(hidden)]
     pub fn width(&self) -> u32 {
         match self {
@@ -139,8 +120,7 @@ impl Image<'_, '_> {
         }
     }
 
-    // These are hidden since clients are supposed to call get the
-    // width/height from `LumaData/RgbData` instead.
+    // Hidden: clients should use the dimensions of the decoded data.
     #[doc(hidden)]
     pub fn height(&self) -> u32 {
         match self {
@@ -162,7 +142,7 @@ impl CacheKey for Image<'_, '_> {
 /// A structure holding 3-channel RGB data.
 #[derive(Clone)]
 pub struct RgbData {
-    /// The actual data. It is guaranteed to have the length width * height * 3.
+    /// The pixel data, of length `width * height * 3`.
     pub data: Vec<u8>,
     /// The width.
     pub width: u32,
@@ -170,25 +150,14 @@ pub struct RgbData {
     pub height: u32,
     /// Whether the image should be interpolated.
     pub interpolate: bool,
-    /// Additional scaling factors to apply to the image.
-    ///
-    /// In most cases, those factors will just be 1.0, and you can
-    /// ignore them. There are two situations in which they will not be equal
-    /// to 1:
-    /// 1) The PDF provided wrong metadata about the width/height of the image,
-    ///    which needs to be corrected
-    /// 2) A lower resolution of the image was requested, in which case it needs
-    ///    to be scaled up so that it still covers the same area.
-    ///
-    /// The first number indicates the x scaling factor, the second number the
-    /// y scaling factor.
+    /// The x and y factors to scale the image by so that it covers its intended area.
     pub scale_factors: (f32, f32),
 }
 
 /// A structure holding 1-channel luma data.
 #[derive(Clone)]
 pub struct LumaData {
-    /// The actual data. It is guaranteed to have the length width * height.
+    /// The pixel data, of length `width * height`.
     pub data: Vec<u8>,
     /// The width.
     pub width: u32,
@@ -196,18 +165,7 @@ pub struct LumaData {
     pub height: u32,
     /// Whether the image should be interpolated.
     pub interpolate: bool,
-    /// Additional scaling factors to apply to the image.
-    ///
-    /// In most cases, those factors will just be 1.0, and you can
-    /// ignore them. There are two situations in which they will not be equal
-    /// to 1:
-    /// 1) The PDF provided wrong metadata about the width/height of the image,
-    ///    which needs to be corrected
-    /// 2) A lower resolution of the image was requested, in which case it needs
-    ///    to be scaled up so that it still covers the same area.
-    ///
-    /// The first number indicates the x scaling factor, the second number the
-    /// y scaling factor.
+    /// The x and y factors to scale the image by so that it covers its intended area.
     pub scale_factors: (f32, f32),
 }
 

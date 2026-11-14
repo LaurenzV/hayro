@@ -26,8 +26,7 @@ pub enum ActiveTransferFunction {
 }
 
 impl ActiveTransferFunction {
-    /// Apply the transfer function to the RGB channels of an RGBA color.
-    /// The alpha channel is left unchanged.
+    /// Apply the transfer function to the RGB channels of a color.
     pub fn apply(&self, color: &AlphaColor) -> AlphaColor {
         let mut rgba = color.components();
 
@@ -51,7 +50,6 @@ impl ActiveTransferFunction {
         match self {
             Self::Single(function) => function.apply_to(values),
             Self::Four(functions) => {
-                // Since we are converting to RGB, we only need the first three.
                 for (channel, function) in functions[..3].iter().enumerate() {
                     function.apply_to_stride(&mut values[channel..], 3);
                 }
@@ -66,7 +64,6 @@ pub(crate) enum ClipType {
     Real,
 }
 
-/// The graphics state.
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
     pub(crate) ctm: Affine,
@@ -101,10 +98,7 @@ impl<'a> State<'a> {
 
 #[derive(Clone, Debug)]
 pub(crate) enum TextStateFont<'a> {
-    /// The font in the text state was explicitly set and resolves to a valid
-    /// font.
     Font(Font<'a>),
-    /// The font was not set or an invalid font was set.
     Fallback(Font<'a>),
 }
 
@@ -123,7 +117,7 @@ impl<'a> Deref for TextStateFont<'a> {
 pub(crate) struct TextState<'a> {
     pub(crate) char_space: f32,
     pub(crate) word_space: f32,
-    // Note that this stores 1/100 of the actual scaling.
+    // In percent, as given by `Tz`.
     pub(crate) horizontal_scaling: f32,
     pub(crate) leading: f32,
     pub(crate) font: Option<TextStateFont<'a>>,
@@ -134,8 +128,6 @@ pub(crate) struct TextState<'a> {
     pub(crate) text_matrix: Affine,
     pub(crate) text_line_matrix: Affine,
 
-    // When setting the text rendering mode to `clip`, the glyphs should instead be collected
-    // as paths and then applied as 1 single clip path. This field stores those clip paths.
     pub(crate) clip_paths: BezPath,
 }
 
@@ -226,7 +218,7 @@ impl Default for TextState<'_> {
             horizontal_scaling: 100.0,
             leading: 0.0,
             font: None,
-            // Not in the specification, but we just define it so we don't need to use an option.
+            // Unspecified; defaulted to avoid an `Option`.
             font_size: 1.0,
             render_mode: TextRenderingMode::default(),
             text_matrix: Affine::IDENTITY,
@@ -237,7 +229,6 @@ impl Default for TextState<'_> {
     }
 }
 
-/// Paint parameters for strokes or fills.
 #[derive(Clone, Debug)]
 pub(crate) struct PaintState<'a> {
     pub(crate) color: ColorComponents,
@@ -257,7 +248,6 @@ impl Default for PaintState<'_> {
     }
 }
 
-/// Compositing parameters.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CompositingState<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,

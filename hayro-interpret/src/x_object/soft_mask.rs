@@ -19,7 +19,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::rc::Rc;
 
-/// Type type of mask.
+/// The type of a soft mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskType {
     /// A luminosity mask.

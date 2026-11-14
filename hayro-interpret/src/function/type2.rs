@@ -2,7 +2,6 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Number;
 use hayro_syntax::object::dict::keys::{C0, C1, N};
 
-/// A type 2 function (exponential function).
 #[derive(Debug)]
 pub(crate) struct Type2 {
     c0: Vec<f32>,
@@ -11,7 +10,6 @@ pub(crate) struct Type2 {
 }
 
 impl Type2 {
-    /// Create a new type 2 function.
     pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let c0 = dict.get::<Vec<f32>>(C0).unwrap_or(vec![0.0]);
         let c1 = dict.get::<Vec<f32>>(C1).unwrap_or(vec![1.0]);
@@ -29,7 +27,6 @@ impl Type2 {
         self.c0.len()
     }
 
-    /// Evaluate the function with the given input.
     pub(crate) fn eval(&self, input: f32, output: &mut [f32]) {
         let factor = if self.n == 1.0 {
             input

@@ -83,7 +83,6 @@ impl<'a> ImageXObject<'a> {
         }
 
         let image_cs = if kind.is_mask() {
-            // Masks are always single-channel.
             Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
@@ -93,9 +92,7 @@ impl<'a> ImageXObject<'a> {
             cs_obj
                 .clone()
                 .and_then(|c| ColorSpace::new(c, cache))
-                // Inline images can also refer to color spaces by name.
-                // Apparently, some PDF producers also do this for normal images,
-                // though the PDF spec forbids it. See https://github.com/LaurenzV/hayro/pull/1311.
+                // Against the spec, some producers name color spaces in image XObjects (#1311).
                 .or_else(|| {
                     cs_obj
                         .and_then(|c| c.into_name())
@@ -160,8 +157,6 @@ impl<'a> ImageXObject<'a> {
         let mut soft_mask = std::mem::take(&mut context.compositing_mut().soft_mask);
         let blend_mode = std::mem::take(&mut context.compositing_mut().blend_mode);
 
-        // If image has a soft mask, the soft mask from the graphics state
-        // should be discarded.
         if has_alpha {
             soft_mask = None;
         }

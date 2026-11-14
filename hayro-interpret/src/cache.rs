@@ -29,8 +29,7 @@ impl Cache {
     ) -> Option<T> {
         let mut locked = self.0.lock().unwrap();
 
-        // We can't use `get_or_insert_with` here, because if the closure makes another access to the
-        // cache, we end up with a deadlock.
+        // `get_or_insert_with` would deadlock if the closure accesses the cache.
         match locked.entry(id) {
             Entry::Occupied(o) => o
                 .get()

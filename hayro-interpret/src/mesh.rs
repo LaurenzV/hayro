@@ -1,5 +1,3 @@
-//! Rasterization of mesh shadings.
-
 use crate::canvas::{Canvas, bounds};
 use crate::color::ColorComponents;
 use crate::encode::EncodedShadingPattern;
@@ -8,13 +6,10 @@ use crate::gradient::{ColorLut, function_lut};
 use crate::shading::{Patch, ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point, Rect};
 
-/// Target edge length in pixels of the pieces a mesh is split into.
 const MESH_SEGMENT: f64 = 8.0;
 const MAX_DEPTH: u32 = 10;
-/// Approximate maximum number of pieces a mesh is split into.
 const MAX_PIECES: f64 = (1 << 20) as f64;
 
-/// Draw a mesh shading, with `transform` mapping shading space to the canvas.
 pub(crate) fn draw_mesh(
     canvas: &mut Canvas,
     shading_type: &ShadingType,
@@ -67,7 +62,6 @@ pub(crate) fn draw_mesh(
     }
 }
 
-/// The depth to which all pieces are split; one shared depth keeps shared edges crack-free.
 fn mesh_depth(canvas: Rect, pieces: impl Iterator<Item = (f64, Rect)>) -> u32 {
     let mut max_extent: f64 = 0.0;
     let mut visible_area = 0.0;
@@ -98,13 +92,11 @@ fn mesh_depth(canvas: Rect, pieces: impl Iterator<Item = (f64, Rect)>) -> u32 {
     depth
 }
 
-/// How `N` per-corner values are interpolated across a mesh and turned into colors.
 trait MeshColors<const N: usize> {
     fn values(&self, components: &[f32]) -> [f32; N];
     fn shade(&self, values: &[f32; N]) -> [f32; 4];
 }
 
-/// Colors given by the input of a 1-in function, looked up in a table.
 struct Parameter {
     lut: ColorLut,
     t0: f32,
@@ -142,13 +134,11 @@ impl MeshColors<1> for Parameter {
     }
 }
 
-/// Colors converted from components at the corners and interpolated as RGBA.
 struct Direct<'a> {
     pattern: &'a EncodedShadingPattern,
 }
 
 impl Direct<'_> {
-    /// Whether interpolating converted colors equals converting interpolated components.
     fn is_linear(&self) -> bool {
         self.pattern.color_space.is_device_gray_or_rgb() && self.pattern.transfer_function.is_none()
     }
@@ -164,7 +154,6 @@ impl MeshColors<4> for Direct<'_> {
     }
 }
 
-/// Mix color components with the given weights.
 fn mix<'a, const K: usize>(
     colors: [&ColorComponents; K],
     weights: [f32; K],
@@ -188,7 +177,6 @@ fn mix<'a, const K: usize>(
     &out[..len]
 }
 
-/// A triangle of a mesh, in canvas space.
 struct CanvasTriangle<'a> {
     points: [Point; 3],
     colors: [&'a ColorComponents; 3],
@@ -225,7 +213,6 @@ fn draw_triangles<const N: usize>(
     }
 }
 
-/// Draw the piece of `triangle` with the given corners and barycentric `weights`.
 fn draw_triangle_piece<const N: usize>(
     canvas: &mut Canvas,
     triangle: &CanvasTriangle<'_>,
@@ -262,7 +249,6 @@ fn draw_triangle_piece<const N: usize>(
     }
 }
 
-/// A patch of a mesh, in canvas space.
 struct CanvasPatch<'a> {
     points: [[Point; 4]; 4],
     colors: &'a [[ColorComponents; 2]; 2],
@@ -278,7 +264,6 @@ impl<'a> CanvasPatch<'a> {
         }
     }
 
-    /// The length of the longest row or column of the control net.
     fn extent(&self) -> f64 {
         let length = |points: [Point; 4]| points.windows(2).map(|w| (w[1] - w[0]).hypot()).sum();
         let columns = self.points.map(length);
@@ -291,7 +276,6 @@ impl<'a> CanvasPatch<'a> {
         bounds(self.points.as_flattened())
     }
 
-    /// The color components at the given position within the patch.
     fn components<'b>(&self, u: f32, v: f32, out: &'b mut [f32; MAX_COMPONENTS]) -> &'b [f32] {
         let [[c00, c01], [c10, c11]] = self.colors;
         let weights = [(1.0 - u) * (1.0 - v), (1.0 - u) * v, u * (1.0 - v), u * v];
@@ -312,7 +296,6 @@ fn draw_patches<const N: usize>(
     }
 }
 
-/// Draw a patch piece, splitting along `v` before `u` so that larger `v`, then `u`, paints last.
 fn draw_patch_piece<const N: usize>(
     canvas: &mut Canvas,
     patch: &CanvasPatch<'_>,
@@ -373,14 +356,12 @@ fn draw_patch_piece<const N: usize>(
     }
 }
 
-/// Split a control net at `v = 0.5`.
 fn split_rows(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
     let split = points.map(split_cubic);
 
     (split.map(|(low, _)| low), split.map(|(_, high)| high))
 }
 
-/// Split a control net at `u = 0.5`.
 fn split_columns(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
     let mut low = points;
     let mut high = points;
@@ -397,7 +378,6 @@ fn split_columns(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) 
     (low, high)
 }
 
-/// Split a cubic Bézier curve at `t = 0.5`.
 fn split_cubic([p0, p1, p2, p3]: [Point; 4]) -> ([Point; 4], [Point; 4]) {
     let (p01, p12, p23) = (p0.midpoint(p1), p1.midpoint(p2), p2.midpoint(p3));
     let (p012, p123) = (p01.midpoint(p12), p12.midpoint(p23));

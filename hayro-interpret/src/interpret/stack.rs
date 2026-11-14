@@ -1,10 +1,7 @@
-//! The graphics state stack.
-
 use crate::StrokeProps;
 use crate::interpret::state::{ClipType, CompositingState, PaintState, State, TextState};
 use kurbo::Affine;
 
-/// A copy-on-write group of graphics state parameters.
 struct Group<T> {
     // Sorted by depth, with at most one item per depth.
     items: Vec<(T, u16)>,
@@ -47,10 +44,8 @@ struct Frame {
     clips: u32,
 }
 
-/// The graphics state stack.
 pub(crate) struct StateStack<'a> {
     frames: Vec<Frame>,
-    // Saves beyond the maximum depth.
     // TODO: Return an error instead once interpretation is fallible.
     overflow: usize,
     ctm: Group<Affine>,
@@ -119,7 +114,6 @@ impl<'a> StateStack<'a> {
         CompositingState<'a>
     );
 
-    /// The number of states, including the initial one.
     pub(crate) fn len(&self) -> usize {
         self.frames.len() + self.overflow
     }
@@ -135,7 +129,6 @@ impl<'a> StateStack<'a> {
         self.frames.push(frame);
     }
 
-    /// The number of clips to keep when restoring, or `None` if there is nothing to restore.
     pub(crate) fn restore_target_clips(&self) -> Option<usize> {
         if self.overflow > 0 {
             return Some(self.clips.len());
@@ -144,7 +137,6 @@ impl<'a> StateStack<'a> {
         (self.frames.len() > 1).then(|| self.top().clips as usize)
     }
 
-    /// Restore the previous state. Excess clips must have been popped already.
     pub(crate) fn restore(&mut self) {
         if self.overflow > 0 {
             self.overflow -= 1;
@@ -177,7 +169,6 @@ impl<'a> StateStack<'a> {
         self.clips.len()
     }
 
-    /// A copy of the current state.
     pub(crate) fn snapshot(&self) -> State<'a> {
         State {
             ctm: *self.ctm(),

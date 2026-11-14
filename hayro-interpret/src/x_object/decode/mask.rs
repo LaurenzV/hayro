@@ -28,12 +28,7 @@ pub(crate) fn decode_mask(
     let width = ctx.width;
     let scale_factors = ctx.scale_factors;
 
-    // Note: The semantics between "normal" soft masks (i.e. masks defined in
-    // the graphics state or via `Mask`/`SMask` are inverted compared to
-    // stencil masks (defined via `ImageMask`). The former match the semantics
-    // of normal alpha images, where 0 stands for invisible and MAX stands for
-    // fully opaque. For stencil masks, it's the other way around: 1 means the
-    // paint is visible, while 0 means it's invisible.
+    // Stencil masks use 1 for painted, the inverse of soft masks.
     let invert = obj.kind == ImageKind::StencilMask;
     let (data, height) = decode_mask_data(ctx, invert)?;
 
@@ -126,8 +121,7 @@ fn decode_bilevel_mask_data(ctx: &DecodeContext<'_>, should_invert: bool) -> Vec
     let tail_bits = width % 8;
     let lut = &**BILEVEL_MASK_LUT;
     let mut out = Vec::with_capacity(width * height);
-    // To avoid repeatedly calling `extend`, which turns out to be very
-    // expensive.
+    // Buffered because repeated `extend` calls are expensive.
     let mut buffer = [[0; 8]; 32];
 
     for row in data.chunks(row_bytes).take(height) {

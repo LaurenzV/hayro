@@ -20,13 +20,9 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use smallvec::smallvec;
 
-/// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
 pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 
-/// A cache used by the interpreter.
-///
-/// Ideally, such a cache should be constructed once per PDF and then reused across
-/// multiple interpreter invocations on the same document.
+/// A cache shared by interpreter invocations on the same document.
 // TODO: Cache keys are only unique within a document (streams, for example, are keyed by
 // their object identifier), so a cache shared across documents can mix up their objects.
 #[derive(Clone)]
@@ -140,7 +136,6 @@ impl<'a> Context<'a> {
         if let Some(clip_rect) = path_as_rect(&clip_path) {
             let cur_bbox = self.bbox();
 
-            // If the clip path is a rect and completely covers the current bbox, don't emit it.
             if cur_bbox
                 .min_x()
                 .is_nearly_greater_or_equal(clip_rect.min_x())
@@ -242,7 +237,6 @@ impl<'a> Context<'a> {
 
                 Paint::Pattern(Box::new(pattern))
             } else {
-                // Pattern was likely invalid, use transparent paint.
                 Paint::Color(Color::new(ColorSpace::device_gray(), smallvec![0.0], 0.0))
             }
         } else {
@@ -332,7 +326,6 @@ impl<'a> Context<'a> {
         self.stack.compositing_mut()
     }
 
-    /// A copy of the current graphics state.
     pub(crate) fn snapshot(&self) -> State<'a> {
         self.stack.snapshot()
     }

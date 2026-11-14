@@ -1,8 +1,4 @@
-//! SVG-like gradient conversion for encoded shadings.
-//!
-//! PDF shadings are very expensive to evaluate. Because of this, at least for
-//! radial-axial shadings it's useful if we can instead approximate them by
-//! SVG-like sRGB gradients.
+//! SVG-like gradient approximations of encoded shadings.
 
 use crate::color::{color_error, lerp_color};
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
@@ -119,7 +115,6 @@ impl EncodedRadialAxialShading {
     }
 }
 
-/// A lookup table of `function`'s colors over `range`, indexed by the normalized position in it.
 pub(crate) fn function_lut(
     function: &ShadingFunction,
     range: [f32; 2],

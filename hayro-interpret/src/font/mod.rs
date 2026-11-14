@@ -29,30 +29,7 @@ pub enum Glyph<'a> {
 }
 
 impl Glyph<'_> {
-    /// Returns the Unicode code point for this glyph, if available.
-    ///
-    /// This method attempts to determine the Unicode character that this glyph
-    /// represents. The exact fallback chain depends on the font type:
-    ///
-    /// **For Outline Fonts (Type1, TrueType, CFF):**
-    /// 1. `ToUnicode` cmap
-    /// 2. Glyph name → Unicode (via Adobe Glyph List)
-    /// 3. Unicode naming conventions (e.g., "uni0041", "u0041")
-    ///
-    /// **For CID Fonts (Type0):**
-    /// 1. `ToUnicode` cmap
-    /// 2. UCS2 `CMap` of the font's Adobe character collection (Adobe-GB1, Adobe-CNS1,
-    ///    Adobe-Japan1, Adobe-Korea1)
-    ///
-    /// **For Type3 Fonts:**
-    /// 1. `ToUnicode` cmap
-    /// 2. Glyph name → Unicode (via Adobe Glyph List)
-    /// 3. Unicode naming conventions (e.g., "uni0041", "u0041")
-    ///
-    /// Returns `None` if the Unicode value could not be determined.
-    ///
-    /// Please note that this method is still somewhat experimental and might
-    /// not work reliably in all cases.
+    /// Return the Unicode text of the glyph, if it can be determined.
     pub fn as_unicode(&self) -> Option<BfString> {
         match self {
             Glyph::Outline(g) => g.as_unicode(),
@@ -60,9 +37,7 @@ impl Glyph<'_> {
         }
     }
 
-    /// Return the character code that selected this glyph.
-    ///
-    /// For composite fonts, this is the code read with the font's `CMap`, not the CID.
+    /// Return the character code (not the CID) that selected this glyph.
     pub fn char_code(&self) -> u32 {
         match self {
             Glyph::Outline(g) => g.char_code(),
@@ -123,7 +98,6 @@ pub struct Type3Glyph<'a> {
     pub(crate) nesting_depth: u32,
 }
 
-/// A glyph defined by PDF drawing instructions.
 impl<'a> Type3Glyph<'a> {
     /// Draw the type3 glyph to the given device.
     pub fn interpret(
@@ -136,9 +110,7 @@ impl<'a> Type3Glyph<'a> {
         type3::render_glyph(self, transform, glyph_transform, paint, device);
     }
 
-    /// Returns the Unicode code point for this glyph, if available.
-    ///
-    /// See [`Glyph::as_unicode`] for details on the fallback chain used.
+    /// Return the Unicode text of the glyph, if it can be determined.
     pub fn as_unicode(&self) -> Option<BfString> {
         self.glyph.as_unicode()
     }
@@ -148,10 +120,7 @@ impl<'a> Type3Glyph<'a> {
         self.glyph.char_code()
     }
 
-    /// Get the advance width for this glyph.
-    ///
-    /// The advance width is how far to move horizontally after drawing
-    /// this glyph before drawing the next one.
+    /// Return the advance width of the glyph.
     pub fn advance_width(&self) -> Option<f32> {
         Some(self.glyph.advance_width())
     }

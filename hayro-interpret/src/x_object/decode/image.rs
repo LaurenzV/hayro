@@ -87,9 +87,6 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         };
 
         let mut components = if let Some(invert) = direct_invert {
-            // This is actually the most common case, where the PDF is embedded
-            // in such a way where we don't need to decode. In this case,
-            // we can use the raw decoded component values directly.
             fix_image_length(
                 self.ctx.decoded.data.to_mut(),
                 self.ctx.width,
@@ -194,8 +191,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             return Some(alpha);
         }
 
-        // If the alpha channel is invalid, return no alpha so the main image can
-        // still be returned (see PDFJS-19611).
+        // Drop an invalid alpha channel so the image itself still renders (PDFJS-19611).
         let dict = self.obj.stream.dict();
 
         if let Some(1) = dict.get::<u8>(SMASK_IN_DATA) {
@@ -214,7 +210,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
                 interpolate: self.obj.interpolate,
                 scale_factors: self.ctx.scale_factors,
             })
-            // Note: `SMASK` field takes precedence over `MASK`, so order matters here.
+            // `SMask` takes precedence over `Mask`.
         } else if let Some(s_mask) = dict
             .get::<Stream<'_>>(SMASK)
             .or_else(|| dict.get::<Stream<'_>>(MASK))
@@ -239,8 +235,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             return None;
         }
 
-        // In theory, matte needs to be applied in the image's original color space,
-        // but we always do it in RGB for now.
+        // Matte is applied in RGB rather than the image's color space.
         let mut matte_rgb = [0_u8; 3];
         self.ctx.color_space.convert_values(&matte, &mut matte_rgb);
 
