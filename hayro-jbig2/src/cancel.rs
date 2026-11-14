@@ -89,8 +89,7 @@ pub(crate) fn copy_work(width: u32) -> u32 {
 
 #[inline]
 pub(crate) fn row_mask(row_work: u32) -> u32 {
-    // Rows also cost something apart from their pixels, which matters for
-    // very narrow bitmaps.
+    // Rows have a fixed cost too, which matters for very narrow bitmaps.
     let rows = (CHECK_INTERVAL / row_work.max(1)).clamp(1, 1024);
     (1 << rows.ilog2()) - 1
 }

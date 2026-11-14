@@ -1,8 +1,6 @@
-//! Error types for JBIG2 decoding.
-
 use core::fmt;
 
-/// The main error type for JBIG2 decoding operations.
+/// An error that occurred while decoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecodeError {
     /// Errors related to reading/parsing data.
@@ -89,7 +87,7 @@ pub enum HuffmanError {
     MissingTables,
     /// Unexpected out-of-band value.
     UnexpectedOob,
-    /// Huffman tree has conflicting codes (one code is a prefix of another).
+    /// Huffman table has conflicting codes.
     ConflictingCodes,
 }
 
@@ -100,7 +98,7 @@ pub enum RegionError {
     InvalidCombinationOperator,
     /// Region with invalid dimension.
     InvalidDimension,
-    /// MMR (Modified Modified Read) decoding failed.
+    /// MMR decoding failed.
     InvalidMmrData,
     /// Gray-scale value exceeds pattern count.
     GrayScaleOutOfRange,

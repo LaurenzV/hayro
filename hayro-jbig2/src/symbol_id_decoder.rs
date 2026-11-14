@@ -1,5 +1,3 @@
-//! Symbol ID (IAID) decoder (A.3).
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -12,8 +10,6 @@ pub(crate) struct SymbolIdDecoder {
 
 impl SymbolIdDecoder {
     pub(crate) fn new(code_len: u32) -> Self {
-        // A.3: "The number of contexts required is 2^SBSYMCODELEN, which is less
-        // than twice the maximum symbol ID."
         let num_contexts = 1_usize << code_len;
 
         Self {

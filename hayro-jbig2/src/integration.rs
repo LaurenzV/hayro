@@ -119,10 +119,7 @@ impl From<crate::Cancelled> for ImageError {
 
 const JBIG2_MAGIC: &[u8] = &[0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A];
 
-/// Registers the decoder with the `image` crate so that non-format-specific calls such as
-/// `ImageReader::open("image.jbig2")?.decode()?;` work with JBIG2 files.
-///
-/// Returns `true` on success, or `false` if the hook for JBIG2 is already registered.
+/// Register the JBIG2 decoding hook with `image`; returns `false` if it is already registered.
 pub fn register_decoding_hook() -> bool {
     if decoding_hook_registered(OsStr::new("jbig2")) {
         return false;

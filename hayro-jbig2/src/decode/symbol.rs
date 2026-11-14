@@ -1,5 +1,3 @@
-//! Symbol dictionary segment parsing and decoding (7.4.2, 6.5).
-
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -27,7 +25,6 @@ use crate::sync::Arc;
 
 pub(crate) const MAX_SYMBOLS: u32 = 1 << 20;
 
-/// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
     header: &SymbolDictionaryHeader<'_>,
     input_symbols: &[&Arc<Bitmap>],
@@ -100,8 +97,6 @@ pub(crate) fn decode(
         ctx.total_width = 0;
         ctx.height_class_first_symbol = ctx.symbols_decoded_count;
 
-        // "If the result of this decoding is OOB then all the symbols
-        // in this height class have been decoded."
         while let Some(width_delta) = read_symbol_width_delta(&mut ctx)? {
             // Prevent infinite loop for invalid files.
             if ctx.symbols_decoded_count >= num_new_symbols {
@@ -127,8 +122,6 @@ pub(crate) fn decode(
 
             match (ctx.header.flags.use_huffman, ctx.header.flags.use_refagg) {
                 (false, false) => {
-                    // Decode a single symbol using a simple generic decoding procedure,
-                    // described in 6.5.8.1.
                     let mut region =
                         Bitmap::new(symbol_width, ctx.height_class_height, ctx.budget)?;
                     generic::decode_bitmap_arithmetic_coding(
@@ -144,13 +137,9 @@ pub(crate) fn decode(
                     ctx.symbols.new.push(Arc::new(region));
                 }
                 (true, false) => {
-                    // Decode a single symbol width. We don't actually decode the symbols
-                    // yet, those will be decoded later on from the collective bitmap.
                     ctx.symbol_widths.push(symbol_width);
                 }
                 (_, true) => {
-                    // Also decode a single symbol, but using refinement-aggregation.
-                    // In this case, we can have both, huffman and arithmetic coding.
                     let symbol = decode_refinement_aggregation_bitmap(&mut ctx, symbol_width)?;
 
                     ctx.symbols.new.push(Arc::new(symbol));
@@ -167,9 +156,6 @@ pub(crate) fn decode(
         }
 
         if ctx.header.flags.use_huffman && !ctx.header.flags.use_refagg {
-            // In case we have huffman coding and no refinement-aggregation, we use
-            // the previously decoded symbol widths to decode the collective bitmap
-            // and extract the individual symbols from that bitmap.
             decode_height_class_collective_bitmap(&mut ctx)?;
         }
     }
@@ -201,19 +187,16 @@ pub(crate) struct RetainedContexts {
     pub(crate) refinement_region: Vec<ArithmeticDecoderContext>,
 }
 
-/// A decoded symbol dictionary segment.
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
     pub(crate) exported_symbols: Vec<Arc<Bitmap>>,
     pub(crate) retained_contexts: Option<RetainedContexts>,
 }
 
-/// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
 fn decode_refinement_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
 ) -> Result<Bitmap> {
-    // 6.5.8.2.1 Number of symbol instances in the aggregation.
     let aggregation_instance_count = if ctx.header.flags.use_huffman {
         ctx.h_ctx
             .aggregation_instance_count_table
@@ -234,7 +217,6 @@ fn decode_refinement_aggregation_bitmap(
     }
 }
 
-/// Decode a refinement bitmap symbol with a single aggregate (6.5.8.2).
 fn decode_refinement_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
@@ -243,7 +225,6 @@ fn decode_refinement_bitmap(
     let mut symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let (symbol_id, refinement_x_offset, refinement_y_offset) = if use_huffman {
-        // See 6.5.8.2.3, the value should be at least 1 if we use huffman coding.
         symbol_code_length = symbol_code_length.max(1);
 
         let symbol_id = ctx
@@ -266,8 +247,7 @@ fn decode_refinement_bitmap(
 
         (symbol_id, refinement_x_offset, refinement_y_offset)
     } else {
-        // Note that the contexts should be reused across multiple
-        // bitmaps in the same symbol dictionary.
+        // Contexts are shared across all bitmaps of the dictionary.
         let contexts = ctx
             .a_ctx
             .text_region_contexts
@@ -337,15 +317,12 @@ fn decode_refinement_bitmap(
     Ok(region)
 }
 
-/// Decode an aggregation bitmap with more than one aggregate (6.5.8.2).
 fn decode_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
     aggregation_instance_count: u32,
 ) -> Result<Bitmap> {
     let use_huffman = ctx.header.flags.use_huffman;
-
-    // Set all parameters according to Table 17.
 
     let symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
@@ -493,13 +470,9 @@ impl SymbolDecodeContext<'_> {
 
 struct ArithmeticContext<'a> {
     decoder: ArithmeticDecoder<'a>,
-    /// `IADH`
     height_class_delta_decoder: IntegerDecoder,
-    /// `IADW`
     symbol_width_delta_decoder: IntegerDecoder,
-    /// `IAEX`
     export_run_length_decoder: IntegerDecoder,
-    /// `IAAI`
     aggregation_instance_count_decoder: IntegerDecoder,
     generic_region_contexts: Vec<ArithmeticDecoderContext>,
     refinement_region_contexts: Vec<ArithmeticDecoderContext>,
@@ -523,9 +496,6 @@ impl<'a> ArithmeticContext<'a> {
             if header.flags.bitmap_context_used {
                 let ctx = input_contexts.ok_or(SymbolError::Invalid)?;
 
-                // "The values of [...] SDTEMPLATE, SDRTEMPLATE [...] must match the
-                // corresponding values from the symbol dictionary whose context
-                // values are being used." (7.4.2.2)
                 if ctx.template != header.flags.template
                     || ctx.refinement_template != header.flags.refinement_template
                 {
@@ -558,17 +528,11 @@ impl<'a> ArithmeticContext<'a> {
 }
 
 struct HuffmanContext<'a> {
-    /// `SDHUFFDH`
     height_class_delta_table: &'a HuffmanTable,
-    /// `SDHUFFDW`
     symbol_width_delta_table: &'a HuffmanTable,
-    /// `SDHUFFBMSIZE`
     collective_bitmap_size_table: &'a HuffmanTable,
-    /// `SDHUFFAGGINST`
     aggregation_instance_count_table: &'a HuffmanTable,
     export_run_length_table: &'a HuffmanTable,
-    /// The symbol ID codes of aggregations (6.5.8.2.3), which are the same
-    /// for all of them.
     aggregation_symbol_codes: Option<HuffmanTable>,
     reader: Reader<'a>,
 }
@@ -603,7 +567,6 @@ impl<'a> HuffmanContext<'a> {
             table
         };
 
-        // Select Huffman tables based on flags (7.4.2.1.6).
         let mut get_table = |selection: HuffmanTableSelection| -> &HuffmanTable {
             match selection {
                 HuffmanTableSelection::TableB1 => standard_tables.table_a(),
@@ -633,7 +596,6 @@ impl<'a> HuffmanContext<'a> {
     }
 }
 
-/// Decode a height class collective bitmap (6.5.9).
 fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
     let bitmap_size = ctx
         .h_ctx
@@ -645,8 +607,6 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     ctx.h_ctx.reader.align();
 
     let collective_bitmap = if bitmap_size == 0 {
-        // Bitmap is stored uncompressed, so we basically just copy-paste
-        // each byte. Rows are padded to the byte boundary.
         let row_bytes = ctx.total_width.div_ceil(8) as usize;
         let data = row_bytes
             .checked_mul(ctx.height_class_height as usize)
@@ -674,7 +634,6 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         }
         bitmap
     } else {
-        // Otherwise, we need to use MMR decoding.
         let bitmap_data = ctx
             .h_ctx
             .reader
@@ -686,8 +645,6 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         bitmap
     };
 
-    // Finally, we simply chop up the collective bitmap into its constituent
-    // symbols.
     let mut x_offset: u32 = 0;
     let mut work = WorkCounter::new();
 
@@ -716,7 +673,6 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
                 symbol.data[dest_row + w as usize] = word;
             }
 
-            // Clear trailing bits in the last word beyond `symbol_width`.
             let trailing = symbol_width % WORD_BITS;
             if trailing != 0 && symbol.stride > 0 {
                 let last = dest_row + (symbol.stride - 1) as usize;
@@ -733,7 +689,6 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     Ok(())
 }
 
-/// Exported symbols (6.5.10).
 fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<Arc<Bitmap>>> {
     let total_symbols = ctx.total_symbols();
 
@@ -801,7 +756,6 @@ pub(crate) enum HuffmanTableSelection {
     UserSupplied,
 }
 
-/// Parsed symbol dictionary segment flags (7.4.2.1.1).
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryFlags {
     pub(crate) use_huffman: bool,
@@ -816,7 +770,6 @@ pub(crate) struct SymbolDictionaryFlags {
     pub(crate) refinement_template: RefinementTemplate,
 }
 
-/// Parsed symbol dictionary segment header (7.4.2.1).
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryHeader<'a> {
     pub(crate) flags: SymbolDictionaryFlags,
@@ -828,7 +781,6 @@ pub(crate) struct SymbolDictionaryHeader<'a> {
     pub(crate) strict: bool,
 }
 
-/// Parse a symbol dictionary segment header (7.4.2.1).
 pub(crate) fn parse<'a>(
     reader: &mut Reader<'a>,
     strict: bool,
@@ -884,7 +836,6 @@ pub(crate) fn parse<'a>(
     let at_pixels = if !use_huffman {
         parse_adaptive_template_pixels(reader, template)?
     } else {
-        // Unused.
         [AdaptiveTemplatePixel::default(); 4]
     };
 

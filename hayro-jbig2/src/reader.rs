@@ -1,9 +1,6 @@
-/// A reader for reading bits and bytes from a byte stream.
 #[derive(Debug, Clone)]
 pub(crate) struct Reader<'a> {
-    /// The underlying data.
     data: &'a [u8],
-    /// The position in bits.
     cur_pos: usize,
 }
 
@@ -32,9 +29,6 @@ impl<'a> Reader<'a> {
         self.data.get(self.byte_pos()..)
     }
 
-    /// Read the given number of bytes.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
         debug_assert_eq!(self.bit_pos(), 0);
@@ -45,9 +39,6 @@ impl<'a> Reader<'a> {
         Some(bytes)
     }
 
-    /// Read a single byte.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn read_byte(&mut self) -> Option<u8> {
         debug_assert_eq!(self.bit_pos(), 0);
@@ -58,7 +49,6 @@ impl<'a> Reader<'a> {
         Some(byte)
     }
 
-    /// Read a single byte, returning `None` if it's zero.
     #[inline(always)]
     pub(crate) fn read_nonzero_byte(&mut self) -> Option<u8> {
         let byte = self.read_byte()?;
@@ -66,9 +56,6 @@ impl<'a> Reader<'a> {
         if byte == 0 { None } else { Some(byte) }
     }
 
-    /// Skip the given number of bytes.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn skip_bytes(&mut self, len: usize) -> Option<()> {
         debug_assert_eq!(self.bit_pos(), 0);
@@ -76,9 +63,6 @@ impl<'a> Reader<'a> {
         self.read_bytes(len).map(|_| ())
     }
 
-    /// Peek the given number of bytes.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn peek_bytes(&self, len: usize) -> Option<&'a [u8]> {
         debug_assert_eq!(self.bit_pos(), 0);
@@ -88,9 +72,6 @@ impl<'a> Reader<'a> {
         self.data.get(start..end)
     }
 
-    /// Peek the next byte.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn peek_byte(&self) -> Option<u8> {
         debug_assert_eq!(self.bit_pos(), 0);
@@ -98,25 +79,16 @@ impl<'a> Reader<'a> {
         self.data.get(self.byte_pos()).copied()
     }
 
-    /// Read an u16 number.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn read_u16(&mut self) -> Option<u16> {
         Some(u16::from_be_bytes(self.read_bytes(2)?.try_into().ok()?))
     }
 
-    /// Read an u32 number.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn read_u32(&mut self) -> Option<u32> {
         Some(u32::from_be_bytes(self.read_bytes(4)?.try_into().ok()?))
     }
 
-    /// Read an i32 number.
-    ///
-    /// Assumes that the reader is currently byte-aligned.
     #[inline(always)]
     pub(crate) fn read_i32(&mut self) -> Option<i32> {
         Some(i32::from_be_bytes(self.read_bytes(4)?.try_into().ok()?))

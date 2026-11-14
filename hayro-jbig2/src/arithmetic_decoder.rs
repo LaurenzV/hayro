@@ -1,29 +1,15 @@
-// Note: This is a copy of the arithmetic decoder from `hayro-jpeg2000`,
-// keep the two in sync.
-
-//! The arithmetic decoder, described in Annex C.
-//!
-//! The arithmetic decoder keeps track of some state and continuously receives
-//! context labels as input, each time yielding a new bit from the original data
-//! as output.
+// Copy of hayro-jpeg2000's arithmetic decoder; keep the two in sync.
 
 pub(crate) struct ArithmeticDecoder<'a> {
-    /// The underlying encoded data.
     data: &'a [u8],
-    /// The C-register (see Table C.1).
     c: u32,
-    /// The A-register (see Table C.1).
     a: u32,
-    /// The pointer to the current byte.
     base_pointer: u32,
-    /// The bit shift counter.
     shift_count: u32,
-    /// How often `BYTEIN` ran into the marker that ends the data.
     markers_seen: u32,
 }
 
-// Encoders may trim trailing 0xFF 0x7F pairs (E.2.10), so valid data can also
-// run into its end many times.
+// Encoders may trim trailing 0xFF 0x7F pairs, so valid data can hit the end marker many times.
 const MAX_MARKERS: u32 = 65_536;
 
 impl<'a> ArithmeticDecoder<'a> {
@@ -47,15 +33,11 @@ impl<'a> ArithmeticDecoder<'a> {
         self.markers_seen > MAX_MARKERS
     }
 
-    /// Read the next bit using the given context label.
     #[inline(always)]
     pub(crate) fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         self.decode(context)
     }
 
-    /// The INITDEC procedure from C.3.5.
-    ///
-    /// We use the version from Annex G in <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     fn initialize(&mut self) {
         self.c = ((self.current_byte() as u32) ^ 0xff) << 16;
         self.read_byte();
@@ -65,9 +47,6 @@ impl<'a> ArithmeticDecoder<'a> {
         self.a = 0x8000;
     }
 
-    /// The BYTEIN procedure from C.3.4.
-    ///
-    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     #[inline(always)]
     fn read_byte(&mut self) {
         if self.current_byte() == 0xff {
@@ -94,25 +73,8 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The RENORMD procedure from C.3.3.
     #[inline(always)]
     fn renormalize(&mut self) {
-        // Original code:
-        // loop {
-        //     if self.shift_count == 0 {
-        //         self.read_byte();
-        //     }
-        //
-        //     self.a <<= 1;
-        //     self.c <<= 1;
-        //     self.shift_count -= 1;
-        //
-        //     if self.a & 0x8000 != 0 {
-        //         break;
-        //     }
-        // }
-
-        // Optimization: Batch shifts.
         while self.a & 0x8000 == 0 {
             if self.shift_count == 0 {
                 self.read_byte();
@@ -126,39 +88,15 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The `LPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
     #[allow(unused, reason = "for reference")]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        // Original code:
-        // let d;
-        //
-        // if self.a < qe_entry.qe {
-        //     self.a = qe_entry.qe;
-        //     d = context.mps;
-        //     context.index = qe_entry.nmps;
-        // } else {
-        //     self.a = qe_entry.qe;
-        //     d = 1 - context.mps;
-        //
-        //     if qe_entry.switch {
-        //         context.mps = 1 - context.mps;
-        //     }
-        //
-        //     context.index = qe_entry.nlps;
-        // }
-
-        // Branchless version, shows better performance.
-
         let cond = (self.a < qe_entry.qe) as u32;
         let inv_cond = 1 - cond;
 
         self.a = qe_entry.qe;
-        // d = if cond { mps } else { 1 - mps }
         let d = context.mps() ^ inv_cond;
-        // flip mps only when !cond && switch
         context.xor_mps(inv_cond & (qe_entry.switch as u32));
-        // index = if cond { nmps } else { nlps }
         let cond_u8 = cond as u8;
         let inv_cond_u8 = inv_cond as u8;
         context.set_index(cond_u8 * qe_entry.nmps + inv_cond_u8 * qe_entry.nlps);
@@ -166,116 +104,43 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    /// The `MPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
     #[allow(unused, reason = "for reference")]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        // Original code:
-        //  let d;
-        //
-        //  if self.a < qe_entry.qe {
-        //      d = 1 - context.mps;
-        //
-        //      if qe_entry.switch {
-        //          context.mps = 1 - context.mps;
-        //      }
-        //
-        //      context.index = qe_entry.nlps;
-        //  } else {
-        //      d = context.mps;
-        //      context.index = qe_entry.nmps;
-        //  }
-
-        // Branchless version, shows better performance.
         let cond = (self.a < qe_entry.qe) as u32;
         let inv_cond = 1 - cond;
-        // d = if cond { 1 - mps } else { mps }
         let d = context.mps() ^ cond;
-        // flip mps only when cond && switch
         context.xor_mps(cond & (qe_entry.switch as u32));
-        // index = if cond { nlps } else { nmps }
         let cond_u8 = cond as u8;
         let inv_cond_u8 = inv_cond as u8;
         context.set_index(cond_u8 * qe_entry.nlps + inv_cond_u8 * qe_entry.nmps);
         d
     }
 
-    /// The DECODE procedure from C.3.2.
-    ///
-    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     #[inline(always)]
     pub(crate) fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index() as usize];
 
         self.a -= qe_entry.qe;
 
-        // Old code:
-        // let d;
-        //
-        // if (self.c >> 16) < self.a {
-        //     if self.a & 0x8000 == 0 {
-        //         d = self.exchange_mps(context, qe_entry);
-        //         self.renormalize();
-        //     } else {
-        //         d = context.mps();
-        //     }
-        // } else {
-        //     self.c -= self.a << 16;
-        //
-        //     d = self.exchange_lps(context, qe_entry);
-        //     self.renormalize();
-        // }
-        //
-        // d
-
-        // This is a faster version that reduces branching, which has shown
-        // itself to be the main limiting factor for better performance.
-        // We short-circuit the case where just the most probably symbol is
-        // returned, and otherwise use a code path that works for both,
-        // MPS_EXCHANGE and LPS_EXCHANGE.
-
         if (self.c >> 16) < self.a && self.a & 0x8000 != 0 {
             return context.mps();
         }
 
-        // Unified branchless MPS_EXCHANGE / LPS_EXCHANGE.
-        //
-        // Compare with exchange_mps and exchange_lps above — the only
-        // difference between them is that LPS flips the role of cond:
-        //   exchange_mps: d = mps ^ cond,       flip when cond,      index = cond*nlps + inv*nmps
-        //   exchange_lps: d = mps ^ inv_cond,   flip when inv_cond,  index = cond*nmps + inv*nlps
-        //
-        // This is equivalent to XOR-ing cond with is_lps, so we can handle
-        // both paths with a single branchless computation.
-        //
-        // As can be seen above, renormalization is always performed.
         let is_lps = ((self.c >> 16) >= self.a) as u32;
 
-        // LPS: C -= A << 16 (no-op when MPS).
-        let lps_mask = is_lps.wrapping_neg(); // 0xFFFF_FFFF if LPS, 0 if MPS
+        let lps_mask = is_lps.wrapping_neg();
         self.c -= (self.a << 16) & lps_mask;
 
-        // Same condition as in exchange_mps / exchange_lps.
         let cond = (self.a < qe_entry.qe) as u32;
 
-        // LPS: a = qe (no-op when MPS, a stays as a - qe).
         self.a = (self.a & !lps_mask) | (qe_entry.qe & lps_mask);
 
-        // exchange_mps: d = mps ^ cond       →  cond ^ 0
-        // exchange_lps: d = mps ^ inv_cond   →  cond ^ 1
-        // unified:      d = mps ^ (cond ^ is_lps)
         let d = context.mps() ^ cond ^ is_lps;
 
-        // exchange_mps: flip mps when cond & switch       →  (cond ^ 0) & switch
-        // exchange_lps: flip mps when inv_cond & switch   →  (cond ^ 1) & switch
-        // unified:      flip mps when (cond ^ is_lps) & switch
         context.xor_mps((cond ^ is_lps) & (qe_entry.switch as u32));
 
-        // exchange_mps: index = cond * nlps + inv_cond * nmps
-        // exchange_lps: index = cond * nmps + inv_cond * nlps  (swapped)
-        // unified: the result is always exactly nmps or nlps —
-        //          pick nlps when (cond ^ is_lps) == 1, nmps otherwise.
-        let pick_nlps = ((cond ^ is_lps) as u8).wrapping_neg(); // 0xFF or 0x00
+        let pick_nlps = ((cond ^ is_lps) as u8).wrapping_neg();
         context.set_index(qe_entry.nmps ^ ((qe_entry.nmps ^ qe_entry.nlps) & pick_nlps));
 
         self.renormalize();
@@ -283,13 +148,7 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    /// Decodes `count` symbols with `context` if all of them are the more
-    /// probable symbol of the context and are decoded without
-    /// renormalization, and returns whether it did.
-    ///
-    /// Such decodes only subtract Qe from A and leave the context unchanged,
-    /// so whether all of them stay on that path only depends on the current
-    /// state.
+    // Decodes `count` MPS at once if none would renormalize; otherwise decodes nothing and returns false.
     #[inline(always)]
     pub(crate) fn decode_mps_run(&mut self, context: ArithmeticDecoderContext, count: u32) -> bool {
         let total_qe = QE_TABLE[context.index() as usize].qe * count;
@@ -308,11 +167,6 @@ impl<'a> ArithmeticDecoder<'a> {
         self.data
             .get(self.base_pointer as usize)
             .copied()
-            // "The number of bytes corresponding to the coding passes is
-            // specified in the packet header. Often at that point there are
-            // more symbols to be decoded. Therefore, the decoder shall extend
-            // the input bit stream to the arithmetic coder with 0xFF bytes,
-            // as necessary, until all symbols have been decoded."
             .unwrap_or(0xFF)
     }
 
@@ -325,11 +179,6 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 }
 
-// Previously, we stored the context as 2 u32's, but doing it with a bit-packed
-// u8 seems to be slightly better (though it doesn't make that huge of a
-// difference).
-/// Bits 0-6 = index (0-46).
-/// Bit 7 = mps (0 or 1).
 #[derive(Copy, Clone, Debug, Default)]
 pub(crate) struct ArithmeticDecoderContext(u8);
 
@@ -378,7 +227,6 @@ macro_rules! qe {
     };
 }
 
-/// QE values and associated data from Table C.2.
 #[rustfmt::skip]
 static QE_TABLE: [QeData; 47] = qe!(
     0x5601, 1, 1, true,

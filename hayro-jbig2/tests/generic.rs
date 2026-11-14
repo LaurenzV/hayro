@@ -1,5 +1,3 @@
-//! Generic regions (6.2): templates, adaptive template pixels, TPGDON and MMR.
-
 use crate::{check, check_crop};
 
 #[test]

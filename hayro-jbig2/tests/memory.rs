@@ -1,5 +1,3 @@
-//! Streams decoded with a memory limit.
-
 use crate::{check_memory_limit_exceeded, check_with_memory_limit};
 
 #[test]

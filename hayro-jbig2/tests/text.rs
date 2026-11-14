@@ -1,5 +1,3 @@
-//! Text regions (6.4): reference corners, transposition, offsets, refinement and combination operators.
-
 use crate::check;
 
 #[test]

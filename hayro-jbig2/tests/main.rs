@@ -1,5 +1,4 @@
-//! Each test decodes a JBIG2 file from `streams` and compares the result
-//! against an image in `references`.
+//! Decodes the JBIG2 files in `streams` and compares them against `references`.
 
 mod cancel;
 mod composite;
@@ -21,7 +20,6 @@ fn tests_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests")
 }
 
-/// Rows of pixels, where `true` means black.
 type Bitmap = Vec<Vec<bool>>;
 
 fn load_reference(name: &str) -> Bitmap {
@@ -50,13 +48,10 @@ fn decode(page: &hayro_jbig2::Page<'_>) -> hayro_jbig2::Result<Bitmap> {
         .collect())
 }
 
-/// Decode `stream` in strict mode and check that it matches `reference`.
 fn check(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), true);
 }
 
-/// Decode `stream` in lenient mode with the given memory limit and check that
-/// it matches `reference`.
 fn check_with_memory_limit(stream: &str, reference: &str, memory_limit: usize) {
     let settings = hayro_jbig2::DecodeSettings {
         memory_limit: Some(memory_limit),
@@ -65,8 +60,6 @@ fn check_with_memory_limit(stream: &str, reference: &str, memory_limit: usize) {
     compare_with(stream, load_reference(reference), &settings);
 }
 
-/// Decode `stream` in lenient mode with the given memory limit and check that
-/// decoding fails because the limit is exceeded.
 fn check_memory_limit_exceeded(stream: &str, memory_limit: usize) {
     let data = read_stream(stream);
     let settings = hayro_jbig2::DecodeSettings {
@@ -84,14 +77,10 @@ fn check_memory_limit_exceeded(stream: &str, memory_limit: usize) {
     );
 }
 
-/// Decode `stream`, which is invalid, in lenient mode and check that it
-/// matches `reference`.
 fn check_lenient(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), false);
 }
 
-/// Decode all pages of `stream` in strict mode and check that they match
-/// `references`.
 fn check_pages(stream: &str, references: &[&str]) {
     compare_pages(stream, references, true);
 }
@@ -128,8 +117,6 @@ fn compare_pages(stream: &str, references: &[&str], strict: bool) {
     }
 }
 
-/// Decode `stream` in strict mode and check that it matches the given part
-/// (x, y, width, height) of `reference`.
 fn check_crop(stream: &str, reference: &str, (x, y, width, height): (usize, usize, usize, usize)) {
     let reference = load_reference(reference)[y..y + height]
         .iter()
@@ -181,7 +168,6 @@ fn compare_page(stream: &str, page: &hayro_jbig2::Page<'_>, reference: Bitmap) {
     }
 }
 
-/// Decode `stream`, which is malformed, and check that it doesn't panic.
 fn check_malformed(stream: &str) {
     let data = read_stream(stream);
 

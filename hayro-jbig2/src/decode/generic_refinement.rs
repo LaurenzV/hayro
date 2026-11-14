@@ -1,5 +1,3 @@
-//! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
-
 use alloc::vec::Vec;
 
 use super::{
@@ -14,7 +12,6 @@ use crate::decode::generic::ContextGatherer;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
-/// Generic refinement region decoding procedure (6.3).
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
@@ -37,7 +34,6 @@ pub(crate) fn decode(
     })
 }
 
-/// Decode a generic refinement region directly into an existing bitmap.
 pub(crate) fn decode_into(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
@@ -89,7 +85,6 @@ pub(crate) fn decode_into(
     Ok(())
 }
 
-/// Parsed generic refinement region segment header (7.4.7.1).
 #[derive(Debug, Clone)]
 pub(crate) struct GenericRefinementRegionHeader<'a> {
     pub(crate) region_info: RegionSegmentInfo,
@@ -99,7 +94,6 @@ pub(crate) struct GenericRefinementRegionHeader<'a> {
     pub(crate) data: &'a [u8],
 }
 
-/// Parse a generic refinement region segment header (7.4.7.1).
 pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<GenericRefinementRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
@@ -157,9 +151,7 @@ impl<'a> RefinementContextGatherer<'a> {
         reference_dx: i32,
         reference_dy: i32,
     ) -> Self {
-        // Bitmaps are at most `MAX_DIMENSION` pixels wide and high, so with
-        // larger offsets all reference pixels lie outside the reference bitmap
-        // anyway. Clamping keeps the coordinates within `i32`.
+        // Larger offsets put all reference pixels outside the bitmap; clamping keeps coordinates in `i32`.
         const MAX_OFFSET: i32 = 4 * MAX_DIMENSION as i32;
 
         let use_default_at =
@@ -258,8 +250,6 @@ impl<'a> RefinementContextGatherer<'a> {
         }
     }
 
-    /// Load the rows above, at and below the current row of the reference
-    /// bitmap, starting at column `start`, which may be negative.
     fn load_reference_words(&mut self, reference: &Bitmap, start: i32) {
         let ref_y = self.reg_y as i32 - self.reference_dy;
         let load = |row: i32| {
@@ -280,8 +270,6 @@ impl<'a> RefinementContextGatherer<'a> {
         self.ref_p1 = load(ref_y + 1);
     }
 
-    /// The position of the reference pixel corresponding to region pixel `x`
-    /// within the reference buffers.
     #[inline(always)]
     fn reference_buffer_x(&self, x: u32) -> u32 {
         (x as i32 - self.reference_dx - self.ref_cur_x) as u32
@@ -291,8 +279,7 @@ impl<'a> RefinementContextGatherer<'a> {
     pub(crate) fn tpgr_all_same(&self, x: u32) -> bool {
         let rbx = self.reference_buffer_x(x);
 
-        // The buffers are reloaded such that the pixels left and right of
-        // `rbx` always lie within them.
+        // The buffers are reloaded so that the pixels left and right of `rbx` always lie within them.
         #[inline(always)]
         fn extract_3bits(buf: Word, rbx: u32) -> u32 {
             #[allow(trivial_numeric_casts)]
@@ -306,7 +293,6 @@ impl<'a> RefinementContextGatherer<'a> {
         let cur = extract_3bits(self.ref_cur, rbx);
         let p1 = extract_3bits(self.ref_p1, rbx);
 
-        // Check that all 9 pixels are the same.
         m1 == cur && cur == p1 && (cur == 0 || cur == 0b111)
     }
 
@@ -388,7 +374,6 @@ impl<'a> RefinementContextGatherer<'a> {
     }
 }
 
-/// Decode a refinement bitmap (6.3.5.6).
 pub(crate) fn decode_bitmap(
     decoder: &mut ArithmeticDecoder<'_>,
     contexts: &mut [ArithmeticDecoderContext],
@@ -407,11 +392,9 @@ pub(crate) fn decode_bitmap(
             let width = region.width;
             let height = region.height;
 
-            // "1) Set LTP = 0." (6.3.5.6)
             let mut ltp = false;
             let check_mask = row_mask(width);
 
-            // "3) Decode each row as follows:" (6.3.5.6)
             for y in 0..height {
                 if decoder.is_exhausted() {
                     bail!(ParseError::UnexpectedEof);
@@ -421,18 +404,13 @@ pub(crate) fn decode_bitmap(
                     cancel.check()?;
                 }
 
-                // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
-                // coder" (6.3.5.6)
                 if $tpgron {
                     let sltp = decoder.read_bit(&mut contexts[$sltp_context as usize]);
-                    // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
                     ltp = ltp != (sltp != 0);
                 }
 
                 gatherer.start_row(region, reference, y);
 
-                // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
-                // of the current row of GRREG." (6.3.5.6)
                 if !ltp {
                     for x in 0..width {
                         gatherer.maybe_reload_buffers(region, reference, x);
@@ -446,26 +424,12 @@ pub(crate) fn decode_bitmap(
                         }
                     }
                 } else {
-                    // "d) If LTP = 1 then, from left to right, implicitly decode certain
-                    // pixels of the current row of GRREG, and explicitly decode the rest."
-                    // (6.3.5.6)
                     for x in 0..width {
                         gatherer.maybe_reload_buffers(region, reference, x);
 
                         let context = ($gather)(gatherer, region, reference, x) as usize;
 
-                        // "i) Set TPGRPIX equal to 1 if:
-                        //    - TPGRON is 1 AND;
-                        //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
-                        //      centred at the location corresponding to the current pixel,
-                        //      contains pixels all of the same value." (6.3.5.6)
                         if gatherer.tpgr_all_same(x) {
-                            // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
-                            // by setting it equal to its predicted value (TPGRVAL)." (6.3.5.6)
-                            //
-                            // "When TPGRPIX is set to 1, set TPGRVAL equal to the current pixel
-                            // predicted value, which is the common value of the nine adjacent
-                            // pixels in the 3 × 3 array." (6.3.5.6)
                             let val = gatherer.ref_center_pixel(x);
 
                             if val != 0 {
@@ -473,8 +437,6 @@ pub(crate) fn decode_bitmap(
                                 gatherer.update_current_row(x, val);
                             }
                         } else {
-                            // "iii) Otherwise, explicitly decode the current pixel using the
-                            // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
                             let pixel = decoder.read_bit(&mut contexts[context]);
                             let value = pixel as u8;
 
@@ -496,7 +458,6 @@ pub(crate) fn decode_bitmap(
         reference_dy,
     );
 
-    // Context for SLTP depends on template (Figures 14, 15).
     let sltp_context: u16 = match gr_template {
         RefinementTemplate::Template0 => 0b0000000010000,
         RefinementTemplate::Template1 => 0b0000001000,

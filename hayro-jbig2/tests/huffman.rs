@@ -1,5 +1,3 @@
-//! Symbol dictionaries and text regions with Huffman coding (Annex B).
-
 use crate::check;
 
 #[test]
