@@ -4,9 +4,9 @@ use crate::harness::snapshot::encode_png;
 use crate::harness::ui::Ui;
 use crate::harness::{args, assets, references, report, runner, ui};
 use hayro::RenderSettings;
-use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
+use hayro::hayro_interpret::{AnnotationFilterFn, InterpreterSettings};
 use hayro::vello_cpu::Pixels;
 use hayro::vello_cpu::peniko::ImageAlphaType;
 use hayro_svg::SvgRenderSettings;
@@ -19,7 +19,7 @@ use resvg::usvg::{Options, Transform, Tree};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 mod harness;
 mod load;
@@ -113,7 +113,10 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
-        .chain([Test::unit("visibility", visibility)])
+        .chain([
+            Test::unit("visibility", visibility),
+            Test::unit("annotation_filter", annotation_filter),
+        ])
         .filter(|test| args.matches(&test.name))
         .collect();
     tests.sort_by(|a, b| a.name.cmp(&b.name));
@@ -342,4 +345,63 @@ fn visibility() {
             LoadPdfError::Invalid => {}
         }
     }
+}
+
+fn annotation_filter() {
+    fn render(pdf: &Pdf, filter: Option<AnnotationFilterFn>) -> Vec<Vec<u8>> {
+        let settings = InterpreterSettings {
+            annotation_filter: filter,
+            ..Default::default()
+        };
+        hayro::render_pdf(pdf, 1.0, settings, &RenderSettings::default(), None)
+            .unwrap()
+            .iter()
+            .map(|pixmap| pixmap.data_as_u8_slice().to_vec())
+            .collect()
+    }
+
+    let pdf = load_pdf("pdfs/custom/annotation_checkbox.pdf");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let only_unchecked: AnnotationFilterFn = {
+        let seen = seen.clone();
+        Arc::new(move |annot| {
+            let name = annot
+                .get::<hayro_syntax::object::String<'_>>(b"T")
+                .map(|t| t.as_bytes().to_vec())
+                .unwrap_or_default();
+            let keep = name == b"unchecked";
+            seen.lock().unwrap().push(name);
+            keep
+        })
+    };
+
+    let all = render(&pdf, None);
+    let none = render(&pdf, Some(Arc::new(|_| false)));
+    let one = render(&pdf, Some(only_unchecked));
+
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            &b"checked-cross"[..],
+            b"unchecked",
+            b"checked-custom",
+            b"unchecked-dictcase",
+            b"direct-normal-appearance",
+        ]
+    );
+    assert_ne!(all, none);
+    assert_ne!(one, none);
+    assert_ne!(one, all);
+
+    let pdf = load_pdf("pdfs/custom/annotation_no_view.pdf");
+    let calls = Arc::new(Mutex::new(0));
+    let counter = calls.clone();
+    render(
+        &pdf,
+        Some(Arc::new(move |_| {
+            *counter.lock().unwrap() += 1;
+            true
+        })),
+    );
+    assert_eq!(*calls.lock().unwrap(), 1);
 }

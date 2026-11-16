@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Breaking change: `InterpreterSettings::annotation_filter` for choosing which annotations are
+  rendered.
+
 ## [0.9.0] - 2026-11-02
 
 This release has an [MSRV] of 1.92.

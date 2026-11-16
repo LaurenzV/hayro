@@ -36,6 +36,8 @@ pub use state::ActiveTransferFunction;
 pub use hayro_font::{CMapResolverFn, FontResolverFn};
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
+/// A callback deciding whether an annotation is drawn.
+pub type AnnotationFilterFn = Arc<dyn Fn(&Dict<'_>) -> bool + Send + Sync>;
 
 #[derive(Clone)]
 /// Settings that should be applied during the interpretation process.
@@ -48,6 +50,8 @@ pub struct InterpreterSettings {
     pub warning_sink: WarningSinkFn,
     /// Which parts of a page should be rendered.
     pub render_content: RenderContent,
+    /// Which annotations should be rendered, or `None` for all of them.
+    pub annotation_filter: Option<AnnotationFilterFn>,
 }
 
 impl Default for InterpreterSettings {
@@ -66,6 +70,7 @@ impl Default for InterpreterSettings {
             cmap_resolver: Arc::new(|_| None),
             warning_sink: Arc::new(|_| {}),
             render_content: RenderContent::all(),
+            annotation_filter: None,
         }
     }
 }
@@ -124,6 +129,12 @@ fn interpret_annotation<'a>(
     let flags = annot.get::<u32>(F).unwrap_or(0);
 
     if flags & (ANNOTATION_HIDDEN | ANNOTATION_NO_VIEW) != 0 {
+        return;
+    }
+
+    if let Some(filter) = &context.settings.annotation_filter
+        && !filter(annot)
+    {
         return;
     }
 
