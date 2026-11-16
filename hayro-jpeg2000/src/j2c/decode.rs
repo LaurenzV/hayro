@@ -31,21 +31,14 @@ pub(crate) fn decode<'a>(
 
     ctx.reset(header, &tiles[0], cancel)?;
 
-    for tile in &tiles {
-        cancel.check()?;
-
-        let progression_iterator = progression_iterator(tile, header)?;
-
-        decode_tile(
-            tile,
-            header,
-            progression_iterator,
-            &mut ctx.tile_decode_context,
-            &mut ctx.channel_data,
-            &mut ctx.storage,
-            cancel,
-        )?;
+    #[cfg(feature = "threads")]
+    if tiles.len() > 1 && rayon::current_num_threads() > 1 {
+        decode_tiles_parallel(&tiles, header, &mut ctx.channel_data, cancel)?;
+    } else {
+        decode_tiles_serial(&tiles, header, ctx, cancel)?;
     }
+    #[cfg(not(feature = "threads"))]
+    decode_tiles_serial(&tiles, header, ctx, cancel)?;
 
     // Assumes either all tiles or none use MCT.
     if tiles[0].mct {
@@ -60,6 +53,80 @@ pub(crate) fn decode<'a>(
     apply_sign_shift(&mut ctx.channel_data, &header.component_infos, cancel)?;
 
     Ok(())
+}
+
+fn decode_tiles_serial<'a>(
+    tiles: &[Tile<'a>],
+    header: &Header,
+    ctx: &mut DecoderContext<'a>,
+    cancel: Cancel<'_>,
+) -> Result<()> {
+    for tile in tiles {
+        cancel.check()?;
+        decode_tile(
+            tile,
+            header,
+            progression_iterator(tile, header)?,
+            &mut ctx.tile_decode_context,
+            |idx, tile_ctx, component_info| {
+                store(
+                    tile,
+                    header,
+                    tile_ctx,
+                    &mut ctx.channel_data[idx],
+                    component_info,
+                    cancel,
+                )
+            },
+            &mut ctx.storage,
+            cancel,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "threads")]
+fn decode_tiles_parallel<'a>(
+    tiles: &[Tile<'a>],
+    header: &Header,
+    channel_data: &mut [ComponentData],
+    cancel: Cancel<'_>,
+) -> Result<()> {
+    use rayon::prelude::*;
+    use std::sync::Mutex;
+
+    // Only the final copy is synchronized, independently for each component.
+    // All expensive decoding stages run in parallel, without raw output pointers
+    // or assumptions about disjoint writes for subsampled components.
+    let channels: Vec<_> = channel_data.iter_mut().map(Mutex::new).collect();
+    tiles
+        .par_iter()
+        // Rayon initializes scratch per job, not per worker. Limit splitting so
+        // the number of scratch contexts cannot exceed the pool's thread count.
+        .with_min_len(tiles.len().div_ceil(rayon::current_num_threads()))
+        .try_for_each_init(
+            || {
+                (
+                    TileDecodeContext::default(),
+                    DecompositionStorage::default(),
+                )
+            },
+            |(tile_ctx, storage), tile| {
+                cancel.check()?;
+                decode_tile(
+                    tile,
+                    header,
+                    progression_iterator(tile, header)?,
+                    tile_ctx,
+                    |idx, tile_ctx, component_info| {
+                        let mut channel = channels[idx].lock().unwrap();
+                        store(tile, header, tile_ctx, &mut channel, component_info, cancel)
+                    },
+                    storage,
+                    cancel,
+                )
+            },
+        )
 }
 
 /// A decoder context for decoding JPEG2000 images.
@@ -103,7 +170,7 @@ fn decode_tile<'a, 'b>(
     header: &Header,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext,
-    channel_data: &mut [ComponentData],
+    mut store_component: impl FnMut(usize, &mut TileDecodeContext, &ComponentInfo) -> Result<()>,
     storage: &mut DecompositionStorage<'a>,
     cancel: Cancel<'_>,
 ) -> Result<()> {
@@ -129,14 +196,7 @@ fn decode_tile<'a, 'b>(
             cancel,
         )?;
         // MCT is deferred until all tiles are stored so IDWT buffers can be reused per component.
-        store(
-            tile,
-            header,
-            tile_ctx,
-            &mut channel_data[idx],
-            component_info,
-            cancel,
-        )?;
+        store_component(idx, tile_ctx, component_info)?;
     }
 
     Ok(())
