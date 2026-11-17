@@ -204,8 +204,10 @@ pub(crate) fn decode_with(
                 },
                 SymbolBitmap::Owned(bitmap) => bitmap,
             };
-            let symbol_width = symbol_bitmap_ref.width as i32;
-            let symbol_height = symbol_bitmap_ref.height as i32;
+            let symbol_width = i32::try_from(symbol_bitmap_ref.width)
+                .map_err(|_| OverflowError::PlacementCoordinate)?;
+            let symbol_height = i32::try_from(symbol_bitmap_ref.height)
+                .map_err(|_| OverflowError::PlacementCoordinate)?;
 
             if !header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopRight

@@ -1,4 +1,5 @@
-use crate::check;
+use crate::{check, check_error, check_quickly};
+use hayro_jbig2::{DecodeError, OverflowError};
 
 #[test]
 fn bottomleft() {
@@ -103,4 +104,22 @@ fn large_integer() {
 #[test]
 fn composition() {
     check("text_composition", "honeycomb");
+}
+
+#[test]
+fn zero_width_symbol() {
+    check_quickly("text_zero_width_symbol", "blank");
+}
+
+#[test]
+fn zero_height_symbol() {
+    check_quickly("text_zero_height_symbol", "blank");
+}
+
+#[test]
+fn empty_symbol_too_wide() {
+    check_error(
+        "text_placement_empty_symbol_too_wide",
+        DecodeError::Overflow(OverflowError::PlacementCoordinate),
+    );
 }

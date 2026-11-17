@@ -1,4 +1,4 @@
-use crate::check;
+use crate::{check, check_quickly};
 
 #[test]
 fn text_refine_large_offsets() {
@@ -113,4 +113,19 @@ fn text_refine_custom_data_size() {
 #[test]
 fn text_refine_global_tables() {
     check("huffman_text_refine_global_tables", "honeycomb");
+}
+
+#[test]
+fn zero_width_symbol() {
+    check_quickly("huffman_zero_width_symbol", "blank");
+}
+
+#[test]
+fn zero_height_symbol() {
+    check_quickly("huffman_zero_height_symbol", "blank");
+}
+
+#[test]
+fn zero_width_symbol_mmr() {
+    check_quickly("huffman_zero_width_symbol_mmr", "blank");
 }

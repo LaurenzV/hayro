@@ -77,6 +77,29 @@ fn check_memory_limit_exceeded(stream: &str, memory_limit: usize) {
     );
 }
 
+fn check_quickly(stream: &str, reference: &str) {
+    let start = std::time::Instant::now();
+    check(stream, reference);
+
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(5),
+        "{stream}: decoding took too long"
+    );
+}
+
+fn check_error(stream: &str, error: hayro_jbig2::DecodeError) {
+    let data = read_stream(stream);
+    let settings = hayro_jbig2::DecodeSettings {
+        strict: true,
+        ..Default::default()
+    };
+    let file = hayro_jbig2::File::new(&data, &settings)
+        .unwrap_or_else(|e| panic!("{stream}: parsing failed: {e}"));
+    let page = file.page(0).unwrap_or_else(|| panic!("{stream}: no pages"));
+
+    assert_eq!(page.decode().err(), Some(error), "{stream}: wrong error");
+}
+
 fn check_lenient(stream: &str, reference: &str) {
     compare(stream, load_reference(reference), false);
 }

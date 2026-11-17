@@ -41,6 +41,23 @@ impl Bitmap {
         Self::new_with(width, height, 0, 0, false, budget)
     }
 
+    pub(crate) fn new_symbol(width: u32, height: u32, budget: &mut MemoryBudget) -> Result<Self> {
+        if width != 0 && height != 0 {
+            return Self::new(width, height, budget);
+        }
+
+        budget.charge(Self::memory_size_for(0))?;
+
+        Ok(Self {
+            width,
+            height,
+            stride: width.div_ceil(WORD_BITS),
+            data: Vec::new(),
+            x_location: 0,
+            y_location: 0,
+        })
+    }
+
     pub(crate) fn new_with(
         width: u32,
         height: u32,

@@ -1,4 +1,4 @@
-use crate::check;
+use crate::{check, check_quickly};
 
 #[test]
 fn basic() {
@@ -133,4 +133,14 @@ fn huffman_context_reuse_refine() {
 #[test]
 fn huffman_context_reuse_refine_table() {
     check("symbol_huffman_context_reuse_refine_table", "honeycomb");
+}
+
+#[test]
+fn zero_width_symbol() {
+    check_quickly("symbol_zero_width", "blank");
+}
+
+#[test]
+fn zero_height_symbol() {
+    check_quickly("symbol_zero_height", "blank");
 }

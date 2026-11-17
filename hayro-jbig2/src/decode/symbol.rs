@@ -123,7 +123,7 @@ pub(crate) fn decode(
             match (ctx.header.flags.use_huffman, ctx.header.flags.use_refagg) {
                 (false, false) => {
                     let mut region =
-                        Bitmap::new(symbol_width, ctx.height_class_height, ctx.budget)?;
+                        Bitmap::new_symbol(symbol_width, ctx.height_class_height, ctx.budget)?;
                     generic::decode_bitmap_arithmetic_coding(
                         &mut region,
                         &mut ctx.a_ctx.decoder,
@@ -613,10 +613,15 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .and_then(|len| ctx.h_ctx.reader.read_bytes(len))
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height, ctx.budget)?;
+        let mut bitmap = Bitmap::new_symbol(ctx.total_width, ctx.height_class_height, ctx.budget)?;
         let check_mask = row_mask(ctx.total_width);
+        let rows = if row_bytes == 0 {
+            0
+        } else {
+            ctx.height_class_height
+        };
 
-        for y in 0..ctx.height_class_height {
+        for y in 0..rows {
             if y & check_mask == check_mask {
                 ctx.cancel.check()?;
             }
@@ -640,8 +645,10 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .read_bytes(bitmap_size as usize)
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height, ctx.budget)?;
-        decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict, ctx.cancel)?;
+        let mut bitmap = Bitmap::new_symbol(ctx.total_width, ctx.height_class_height, ctx.budget)?;
+        if ctx.total_width != 0 && ctx.height_class_height != 0 {
+            decode_bitmap_mmr(&mut bitmap, bitmap_data, ctx.header.strict, ctx.cancel)?;
+        }
         bitmap
     };
 
@@ -654,9 +661,14 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             u64::from(copy_work(symbol_width).max(1)) * u64::from(ctx.height_class_height),
             ctx.cancel,
         )?;
-        let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height, ctx.budget)?;
+        let mut symbol = Bitmap::new_symbol(symbol_width, ctx.height_class_height, ctx.budget)?;
+        let rows = if symbol_width == 0 {
+            0
+        } else {
+            ctx.height_class_height
+        };
 
-        for y in 0..ctx.height_class_height {
+        for y in 0..rows {
             let src_bit_offset = x_offset % WORD_BITS;
             let src_word_start = x_offset / WORD_BITS;
             let dest_row = (y * symbol.stride) as usize;
