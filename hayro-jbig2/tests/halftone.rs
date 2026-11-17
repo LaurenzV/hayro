@@ -119,3 +119,8 @@ fn large_patterns() {
 fn tall_patterns() {
     check("halftone_tall_patterns", "truchet");
 }
+
+#[test]
+fn single_pattern() {
+    check("halftone_single_pattern", "halftone_single_pattern");
+}
