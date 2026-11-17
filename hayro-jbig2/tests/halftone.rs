@@ -119,3 +119,13 @@ fn large_patterns() {
 fn tall_patterns() {
     check("halftone_tall_patterns", "truchet");
 }
+
+#[test]
+fn pattern_width_129() {
+    check("halftone_pattern_width_129", "halftone_pattern_width");
+}
+
+#[test]
+fn pattern_width_255() {
+    check("halftone_pattern_width_255", "halftone_pattern_width");
+}
