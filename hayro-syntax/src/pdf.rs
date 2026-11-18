@@ -27,7 +27,7 @@ pub enum LoadPdfError {
 }
 
 impl core::fmt::Display for LoadPdfError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Decryption(e) => {
                 write!(f, "Failed to decrypt the PDF: {e}")
