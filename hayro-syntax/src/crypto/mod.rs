@@ -39,6 +39,17 @@ pub enum DecryptionError {
     UnsupportedAlgorithm,
 }
 
+impl core::fmt::Display for DecryptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingIDEntry => write!(f, "Missing ID Entry"),
+            Self::PasswordProtected => write!(f, "Password Protected"),
+            Self::InvalidEncryption => write!(f, "Invalid Encryption"),
+            Self::UnsupportedAlgorithm => write!(f, "Unsupported Algorithm"),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum DecryptorTag {
     None,
