@@ -26,6 +26,24 @@ pub enum LoadPdfError {
     Invalid,
 }
 
+impl core::fmt::Display for LoadPdfError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Decryption(_) => write!(f, "failed to decrypt PDF"),
+            Self::Invalid => write!(f, "invalid PDF"),
+        }
+    }
+}
+
+impl core::error::Error for LoadPdfError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Decryption(e) => Some(e),
+            Self::Invalid => None,
+        }
+    }
+}
+
 #[allow(clippy::len_without_is_empty)]
 impl Pdf {
     /// Try to read the given PDF file.
