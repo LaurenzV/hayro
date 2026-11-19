@@ -172,12 +172,12 @@ fn parse_adaptive_template_pixel(reader: &mut Reader<'_>) -> Result<AdaptiveTemp
         bail!(TemplateError::InvalidAtPixel);
     }
 
-    Ok(AdaptiveTemplatePixel { x, y })
+    Ok(AdaptiveTemplatePixel { x: i16::from(x), y })
 }
 
-const TEMPLATE0_DEFAULT: [(i8, i8); 4] = [(3, -1), (-3, -1), (2, -2), (-2, -2)];
+const TEMPLATE0_DEFAULT: [(i16, i8); 4] = [(3, -1), (-3, -1), (2, -2), (-2, -2)];
 
-const EXTENDED_TEMPLATE_NOMINAL: [(i8, i8); 12] = [
+const EXTENDED_TEMPLATE_NOMINAL: [(i16, i8); 12] = [
     (-2, 0),
     (0, -2),
     (-2, -1),
