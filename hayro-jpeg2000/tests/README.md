@@ -199,6 +199,8 @@ The tests replace a suite of files from SerenityOS, OpenJPEG and hayro itself. E
 | `too_few_exponents` | OpenJPEG (`4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2`), OpenJPEG (`dwt_interleave_h.gsr105.jp2`) |
 | `reduced_below_tile_levels` | OpenJPEG (`issue399.j2k`) |
 | `jp2_invalid_codestream` | OpenJPEG (`4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2`), OpenJPEG (`dwt_interleave_h.gsr105.jp2`) |
+| `palette_empty_cmap` | Custom |
+| `palette_column_too_deep` | Custom |
 
 ### `roi`
 
@@ -248,6 +250,7 @@ The tests replace a suite of files from SerenityOS, OpenJPEG and hayro itself. E
 | `cdef` | OpenJPEG (`issue412.jp2`) |
 | `cmap_outside_jp2h` | OpenJPEG (`issue235.jp2`) |
 | `unresolved` | OpenJPEG (`file9.jp2`) |
+| `column_too_deep_ignored` | Custom |
 
 ### `wavelet`
 
