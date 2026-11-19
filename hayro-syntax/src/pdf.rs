@@ -29,12 +29,17 @@ pub enum LoadPdfError {
 impl core::fmt::Display for LoadPdfError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Decryption(e) => {
-                write!(f, "Failed to decrypt the PDF: {e}")
-            }
-            Self::Invalid => {
-                write!(f, "Failed to load the PDF: invalid PDF")
-            }
+            Self::Decryption(_) => write!(f, "failed to decrypt PDF"),
+            Self::Invalid => write!(f, "invalid PDF"),
+        }
+    }
+}
+
+impl core::error::Error for LoadPdfError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Decryption(e) => Some(e),
+            Self::Invalid => None,
         }
     }
 }
