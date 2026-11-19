@@ -111,6 +111,16 @@ fn tiles_replace() {
 }
 
 #[test]
+fn single_pattern() {
+    check("halftone_single_pattern", "truchet");
+}
+
+#[test]
+fn single_pattern_mmr() {
+    check("halftone_single_pattern_mmr", "truchet");
+}
+
+#[test]
 fn large_patterns() {
     check("halftone_large_patterns", "truchet");
 }
@@ -118,9 +128,4 @@ fn large_patterns() {
 #[test]
 fn tall_patterns() {
     check("halftone_tall_patterns", "truchet");
-}
-
-#[test]
-fn single_pattern() {
-    check("halftone_single_pattern", "halftone_single_pattern");
 }
