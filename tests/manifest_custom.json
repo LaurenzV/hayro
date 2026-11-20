@@ -1472,5 +1472,9 @@
     "id": "pattern_tiling_clip_scaled",
     "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
     "svg": true
+  },
+  {
+    "id": "font_standard_suffixed_glyph_name",
+    "file": "pdfs/custom/font_standard_suffixed_glyph_name.pdf"
   }
 ]
