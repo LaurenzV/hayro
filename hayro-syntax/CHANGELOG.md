@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Pdf::new_with_password_bytes` accepts already encoded password bytes, including legacy PDF passwords.
+
 ## [0.9.0] - 2026-11-02
 
 This release has an [MSRV] of 1.92.

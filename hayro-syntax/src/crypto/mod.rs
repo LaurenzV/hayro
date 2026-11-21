@@ -414,7 +414,6 @@ fn decryption_key_rev1234(
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut md5_input = vec![];
 
-    // TODO: Convert to PDFDocEncoding.
     let mut padded_password = [0_u8; 32];
     let copy_len = password.len().min(32);
     padded_password[..copy_len].copy_from_slice(&password[..copy_len]);
