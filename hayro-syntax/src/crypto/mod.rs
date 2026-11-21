@@ -101,13 +101,13 @@ impl Decryptor {
             Self::None => Some(data.to_vec()),
             Self::Rc4 { key } => match target {
                 DecryptionTarget::Named(_) => None,
-                _ => decrypt_rc4(key, data, id),
+                _ => decrypt_rc4(key, data, Some(id)),
             },
             Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
-                let crypt_dict = match target {
-                    DecryptionTarget::String => dict.string_filter,
-                    DecryptionTarget::Stream => dict.stream_filter,
-                    DecryptionTarget::Named(name) => *dict.crypt_filters.get(name)?,
+                let (crypt_dict, id) = match target {
+                    DecryptionTarget::String => (dict.string_filter, Some(id)),
+                    DecryptionTarget::Stream => (dict.stream_filter, Some(id)),
+                    DecryptionTarget::Named(name) => (*dict.crypt_filters.get(name)?, None),
                 };
 
                 match crypt_dict.cfm {
@@ -221,7 +221,7 @@ fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     Some(cipher.decrypt_cbc(data, &iv, true))
 }
 
-fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
+fn decrypt_aes128(key: &[u8], data: &[u8], id: Option<ObjectIdentifier>) -> Option<Vec<u8>> {
     decrypt_rc_aes(key, id, true, |key| {
         let cipher = AES128Cipher::new(key)?;
         let (iv, data) = data.split_at_checked(16)?;
@@ -231,7 +231,7 @@ fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u
     })
 }
 
-fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
+fn decrypt_rc4(key: &[u8], data: &[u8], id: Option<ObjectIdentifier>) -> Option<Vec<u8>> {
     decrypt_rc_aes(key, id, false, |key| {
         let mut rc = Rc4::new(key);
         Some(rc.decrypt(data))
@@ -240,10 +240,14 @@ fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>>
 
 fn decrypt_rc_aes(
     key: &[u8],
-    id: ObjectIdentifier,
+    id: Option<ObjectIdentifier>,
     aes: bool,
     with_key: impl FnOnce(&[u8]) -> Option<Vec<u8>>,
 ) -> Option<Vec<u8>> {
+    // An explicit Crypt filter uses the shared file key directly (ISO 32000-2, 7.4.10).
+    let Some(id) = id else {
+        return with_key(key);
+    };
     let n = key.len();
     let mut key = key.to_vec();
 
