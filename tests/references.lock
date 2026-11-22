@@ -815,7 +815,7 @@ raster/pdfbox/3499.png b6fc8b783bb389c472e7864fbd18a5a7
 raster/pdfbox/3500.png b22f8a20e771920c9aee5107c53a456b
 raster/pdfbox/3501.png 667cab19c0e3f2bf272dd6512a85c0fe
 raster/pdfbox/3505.png 3ecc22ef0d412a25ac5755994acb63dc
-raster/pdfbox/3516.png 3d71a1319bc675242348275ff9b6df87
+raster/pdfbox/3516.png 68f54407ea28840d4b3141d2abed076d
 raster/pdfbox/3526.png 52a9eb011a66587ea4dd2928c712ba64
 raster/pdfbox/3558.png 599e033aa4b4bd8fb77367f38ab9deea
 raster/pdfbox/3562.png 14379701b45085b001785e5077db159b
@@ -827,7 +827,7 @@ raster/pdfbox/3591_p1.png 55ff2cfe655cc085fb75e84386e1bdb3
 raster/pdfbox/3591_p2.png a0147d9494d87cc9cd523c0eb7d1723a
 raster/pdfbox/3592.png 4eb3e6bb59e75ae8aa16d13686b3442b
 raster/pdfbox/3615.png 4c4ae24ff59754b0755064b9a78da9b8
-raster/pdfbox/3622.png 2315c382df8ae9cb4a3799268d6320c5
+raster/pdfbox/3622.png 4947e33a2772edb8460717f47b14a91d
 raster/pdfbox/3627_p0.png 3aa8862cb97e5aa414575557a23c3658
 raster/pdfbox/3627_p1.png db3026ebd859649c664aa11f0505e4b4
 raster/pdfbox/3627_p2.png 40591262e054de08f2b18c6786f693bc
@@ -1172,7 +1172,7 @@ raster/pdfium/40643678_p4.png 00bc62170b7d58a7f9aecc8168371f30
 raster/pdfium/40643678_p5.png 3a662d23482e465d600cea58733c1c5b
 raster/pdfium/412524377_p0.png 181846bf2d4247464364b98c527dc012
 raster/pdfium/412524377_p1.png cad0c5d74c8d404f409e0e7b03f44010
-raster/pdfium/413597066.png 41000fe5f199f7af6cfa7ba477f67257
+raster/pdfium/413597066.png 58540720ea422717da86bfa9c842e4b0
 raster/pdfium/413635900_1.png 079dcc41890d5e0ec1d53380ee6240ec
 raster/pdfium/413635900_2.png a9b079bfe04ae41537397ce726e3861a
 raster/pdfium/413635900_3.png 5855adc2ee7ea8809e0ab89801dbb595
@@ -1594,7 +1594,7 @@ raster/pdfjs/issue1127_p3.png 0efb9ffad2418095105aadb20eee895c
 raster/pdfjs/issue11287.png 1044a736a0ac2f21550cf1673fa3ec44
 raster/pdfjs/issue11306.png 66b7d830a701c8341ce783b69e1fc414
 raster/pdfjs/issue11330.png 27c55f5773a049c04c799f75a21a633c
-raster/pdfjs/issue1133_p0.png 0ccbc3deb673aac1cc94b7833c325161
+raster/pdfjs/issue1133_p0.png cc6fe9b90b31f4083f4348eb9077aa41
 raster/pdfjs/issue1133_p1.png 6d56ba36fa9ce34d9757a341bfeeb393
 raster/pdfjs/issue1133_p10.png 545097a999cff39448d1b46c3b0ade8b
 raster/pdfjs/issue1133_p2.png cb6645f721de7534ed34d9bc2b7535a4
@@ -1885,8 +1885,8 @@ raster/pdfjs/issue19633.png 7bfb179a3a9902e62b60e551ba471112
 raster/pdfjs/issue19802.png d4f1181487fa55b4d794b7920064bfb9
 raster/pdfjs/issue19848.png 706923b175db098b9abb35a4e6a65e3a
 raster/pdfjs/issue19971.png 0e322e1a9fbcd3d7da2b4f8590e454d2
-raster/pdfjs/issue1998_p0.png bfdf867d2cca5c7fc1e543232eff8393
-raster/pdfjs/issue1998_p1.png 7cac8f216a0f3d0798876c35b1d4d0e9
+raster/pdfjs/issue1998_p0.png c0ce6eaa10f1ed4cfe391a2a6154ecb1
+raster/pdfjs/issue1998_p1.png bc8651d59cd3b207bc203bb883d08e47
 raster/pdfjs/issue2006.png b94dec39b9c230c29c700a40a929f99c
 raster/pdfjs/issue2017.png 65b16f61dbc5a2738609a7696997f703
 raster/pdfjs/issue2074.png 9051f1fd8c1d3ef70a7660a2ec499140
