@@ -19,6 +19,7 @@ pub(crate) struct ImageXObject<'a> {
     pub(crate) cache: Cache,
     pub(crate) interpolate: bool,
     pub(crate) kind: ImageKind,
+    pub(super) selected_as_alternate: bool,
     pub(crate) stream: Stream<'a>,
     pub(crate) transfer_function: Option<ActiveTransferFunction>,
     pub(crate) warning_sink: WarningSinkFn,
@@ -120,6 +121,7 @@ impl<'a> ImageXObject<'a> {
             warning_sink: warning_sink.clone(),
             transfer_function,
             interpolate,
+            selected_as_alternate: false,
             stream: stream.clone(),
             kind,
         })
@@ -130,7 +132,7 @@ impl<'a> ImageXObject<'a> {
             return;
         }
 
-        let has_oc = xobject_oc(self.stream.dict(), context);
+        let has_oc = !self.selected_as_alternate && xobject_oc(self.stream.dict(), context);
         if !context.ocg_state.is_visible() {
             if has_oc {
                 context.ocg_state.end_marked_content();

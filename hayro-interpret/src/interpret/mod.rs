@@ -89,6 +89,8 @@ pub enum InterpreterWarning {
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
+    /// The image has too many alternate entries to inspect.
+    ImageAlternateLimit,
     /// The normal appearance of an annotation could not be loaded.
     UnresolvedAnnotationAppearance,
 }
@@ -580,18 +582,10 @@ pub fn interpret<'a>(
             }
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
-                let cache = context.interpreter_cache.object_cache.clone();
-                let warning_sink = context.settings.warning_sink.clone();
-                let transfer_function = context.compositing().transfer_function.clone();
-                if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
-                    XObject::new(
-                        &s,
-                        |name| context.get_color_space(resources, name),
-                        &warning_sink,
-                        &cache,
-                        transfer_function.clone(),
-                    )
-                }) {
+                if let Some(x_object) = resources
+                    .get_x_object(x.0)
+                    .and_then(|s| XObject::new(&s, resources, context))
+                {
                     x_object.draw(resources, context, device);
                 }
             }
