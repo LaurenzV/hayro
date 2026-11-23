@@ -41,7 +41,7 @@ impl<'a> XObject<'a> {
                 cache,
                 transfer_function,
             )?)),
-            FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
+            FORM => Some(Self::FormXObject(FormXObject::new_cached(stream, cache)?)),
             _ => None,
         }
     }
