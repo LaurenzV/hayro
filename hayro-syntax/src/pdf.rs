@@ -207,4 +207,14 @@ mod tests {
 
         assert_eq!(stream.decoded().unwrap().len(), 98);
     }
+
+    #[test]
+    fn stream_with_blanks_before_eol() {
+        let data = std::fs::read("../tests/pdfs/custom/blank-before-eol.pdf").unwrap();
+        let pdf = Pdf::new(data).unwrap();
+        let pages = pdf.pages();
+        assert_eq!(pages.len(), 1);
+        let stream = pages[0].page_stream().expect("page content stream");
+        assert!(stream.starts_with(b"0 0 0 rg"));
+    }
 }
