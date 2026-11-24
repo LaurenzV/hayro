@@ -22,6 +22,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
 
     let settings = DecodeSettings {
         resolve_palette_indices: false,
+        resolve_color_space: true,
         strict: false,
         target_resolution: params.target_dimension,
         cancel: None,
