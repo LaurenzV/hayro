@@ -35,7 +35,7 @@ pub(crate) fn decode(
         let at_pixels = match header.template {
             Template::Template0 => [
                 AdaptiveTemplatePixel {
-                    x: -(pattern_width as i8),
+                    x: -(pattern_width as i16),
                     y: 0,
                 },
                 AdaptiveTemplatePixel { x: -3, y: -1 },
@@ -44,7 +44,7 @@ pub(crate) fn decode(
             ],
             Template::Template1 | Template::Template2 | Template::Template3 => [
                 AdaptiveTemplatePixel {
-                    x: -(pattern_width as i8),
+                    x: -(pattern_width as i16),
                     y: 0,
                 },
                 AdaptiveTemplatePixel::default(),

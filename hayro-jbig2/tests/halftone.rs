@@ -111,8 +111,33 @@ fn tiles_replace() {
 }
 
 #[test]
+fn single_pattern() {
+    check("halftone_single_pattern", "truchet");
+}
+
+#[test]
+fn single_pattern_mmr() {
+    check("halftone_single_pattern_mmr", "truchet");
+}
+
+#[test]
 fn large_patterns() {
     check("halftone_large_patterns", "truchet");
+}
+
+#[test]
+fn pattern_width_128() {
+    check("halftone_pattern_width_128", "truchet");
+}
+
+#[test]
+fn pattern_width_129() {
+    check("halftone_pattern_width_129", "truchet");
+}
+
+#[test]
+fn pattern_width_255() {
+    check("halftone_pattern_width_255", "truchet");
 }
 
 #[test]

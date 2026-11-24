@@ -57,7 +57,7 @@ pub(crate) fn decode_into(
     let bits_per_pixel = (pattern_dict.patterns.len() as u32)
         .saturating_sub(1)
         .checked_ilog2()
-        .map_or(1, |n| n + 1);
+        .map_or(0, |n| n + 1);
 
     let gs_params = GrayScaleParams {
         use_mmr: header.flags.mmr,

@@ -110,7 +110,7 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AdaptiveTemplatePixel {
-    pub(crate) x: i8,
+    pub(crate) x: i16,
     pub(crate) y: i8,
 }
 
@@ -124,8 +124,14 @@ pub(crate) fn parse_refinement_at_pixels(
     let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
     Ok(vec![
-        AdaptiveTemplatePixel { x: x1, y: y1 },
-        AdaptiveTemplatePixel { x: x2, y: y2 },
+        AdaptiveTemplatePixel {
+            x: i16::from(x1),
+            y: y1,
+        },
+        AdaptiveTemplatePixel {
+            x: i16::from(x2),
+            y: y2,
+        },
     ])
 }
 
