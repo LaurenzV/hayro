@@ -573,19 +573,24 @@ impl<'a> ResolutionTile<'a> {
         let mut r_x = self.component_tile.tile.rect.x0;
         let mut r_y = self.component_tile.tile.rect.y0;
 
-        if !r_x.is_multiple_of(precinct_x_step)
-            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
-        {
-            r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
-        }
+        let rows = if num_precincts_x == 0 || num_precincts_y == 0 {
+            0
+        } else {
+            if !r_x.is_multiple_of(precinct_x_step)
+                && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
+            {
+                r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
+            }
 
-        if !r_y.is_multiple_of(precinct_y_step)
-            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
-        {
-            r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
-        }
+            if !r_y.is_multiple_of(precinct_y_step)
+                && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
+            {
+                r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
+            }
+            num_precincts_y
+        };
 
-        let iter = (0..num_precincts_y).flat_map(move |y| {
+        let iter = (0..rows).flat_map(move |y| {
             let y0 = y * ppy_pow2 + y_start;
             let mut r_x = r_x;
 
@@ -599,12 +604,18 @@ impl<'a> ResolutionTile<'a> {
                     idx: num_precincts_x as u64 * y as u64 + x as u64,
                 };
 
-                r_x = (r_x + 1).next_multiple_of(precinct_x_step);
+                r_x = r_x
+                    .checked_add(1)
+                    .and_then(|v| v.checked_next_multiple_of(precinct_x_step))
+                    .unwrap_or(u32::MAX);
 
                 data
             });
 
-            r_y = (r_y + 1).next_multiple_of(precinct_y_step);
+            r_y = r_y
+                .checked_add(1)
+                .and_then(|v| v.checked_next_multiple_of(precinct_y_step))
+                .unwrap_or(u32::MAX);
 
             res
         });
@@ -690,6 +701,63 @@ mod tests {
         CodingStyleParameters, ComponentSizeInfo, QuantizationInfo, QuantizationStyle, SizeData,
         WaveletTransform,
     };
+
+    #[test]
+    fn empty_and_terminal_precincts_at_large_origins() {
+        let component = ComponentInfo {
+            size_info: ComponentSizeInfo {
+                precision: 8,
+                horizontal_resolution: 1,
+                vertical_resolution: 1,
+            },
+            coding_style: CodingStyleComponent {
+                flags: CodingStyleFlags::default(),
+                parameters: CodingStyleParameters {
+                    num_decomposition_levels: 4,
+                    num_resolution_levels: 5,
+                    code_block_width: 4,
+                    code_block_height: 4,
+                    code_block_style: CodeBlockStyle::default(),
+                    transformation: WaveletTransform::Reversible53,
+                    precinct_exponents: vec![(1, 1); 5],
+                },
+            },
+            quantization_info: QuantizationInfo {
+                quantization_style: QuantizationStyle::NoQuantization,
+                guard_bits: 0,
+                step_sizes: vec![],
+            },
+            roi_shift: 0,
+        };
+        let mut tile = Tile {
+            tile_parts: vec![],
+            component_infos: vec![component],
+            rect: IntRect::from_xywh(0, 0, 1, 1),
+            progression_order: ProgressionOrder::ResolutionPositionComponentLayer,
+            progression_changes: vec![],
+            num_layers: 1,
+            mct: false,
+        };
+        let max = u32::MAX;
+        for (x, y, width, height) in [(max - 7, 0, 1, max), (0, max - 7, max, 1)] {
+            tile.rect = IntRect::from_xywh(x, y, width, height);
+            let resolution =
+                ResolutionTile::new(ComponentTile::new(&tile, &tile.component_infos[0]), 0);
+            assert_eq!(resolution.num_precincts(), 0);
+            assert!(resolution.precincts().unwrap().next().is_none());
+        }
+        for (x, y) in [(max - 31, 0), (0, max - 31)] {
+            tile.rect = IntRect::from_xywh(x, y, 1, 1);
+            let resolution =
+                ResolutionTile::new(ComponentTile::new(&tile, &tile.component_infos[0]), 0);
+            let positions: Vec<_> = resolution
+                .precincts()
+                .unwrap()
+                .map(|p| (p.r_x, p.r_y))
+                .collect();
+            assert_eq!(positions, [(x, y)]);
+        }
+    }
 
     #[test]
     fn test_jpeg2000_standard_example_b4() {
