@@ -61,6 +61,7 @@ pub struct Context<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
+    pub(crate) shape_paints: Option<(Paint<'a>, Paint<'a>)>,
     pub(crate) glyph_scratch: Vec<PositionedGlyph<'a>>,
 }
 
@@ -107,6 +108,7 @@ impl<'a> Context<'a> {
             interpreter_cache: cache.clone(),
             ocg_state,
             nesting_depth,
+            shape_paints: None,
             glyph_scratch: Vec::new(),
         }
     }
@@ -212,6 +214,10 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn get_paint(&self, is_stroke: bool) -> Paint<'a> {
+        if let Some((fill, stroke)) = &self.shape_paints {
+            return if is_stroke { stroke } else { fill }.clone();
+        }
+
         let paint = if is_stroke {
             self.stroke_paint()
         } else {

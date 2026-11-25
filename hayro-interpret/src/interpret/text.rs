@@ -107,34 +107,22 @@ pub(crate) fn show_glyph_run<'a>(ctx: &mut Context<'a>, device: &mut impl Device
         };
 
         match render_mode {
-            TextRenderingMode::Fill => {
-                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
-            }
-            TextRenderingMode::Stroke => {
-                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
-            }
-            TextRenderingMode::FillStroke => {
-                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
-                device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
-            }
-            TextRenderingMode::Invisible => {
-                // Invisible text still reaches the device, e.g. for text extraction.
+            TextRenderingMode::Invisible | TextRenderingMode::Clip => {
+                // Invisible and clipping-only text still reach text extraction devices.
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
             }
-            TextRenderingMode::FillAndClip => {
+            _ if matches!(&*run.glyphs[0], Glyph::Type3(_)) => {
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
             }
-            TextRenderingMode::StrokeAndClip => {
+            TextRenderingMode::Fill | TextRenderingMode::FillAndClip => {
+                device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
+            }
+            TextRenderingMode::Stroke | TextRenderingMode::StrokeAndClip => {
                 device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
             }
-            TextRenderingMode::FillAndStrokeAndClip => {
+            TextRenderingMode::FillStroke | TextRenderingMode::FillAndStrokeAndClip => {
                 device.draw_glyph_run(&run, fill_props, &DrawMode::Fill(FillRule::NonZero));
                 device.draw_glyph_run(&run, stroke_draw_props, &DrawMode::Stroke(stroke_props));
-            }
-            TextRenderingMode::Clip => {
-                // TODO: Pass clipping-only text with its own draw mode, so that devices
-                // can tell it apart from invisible text.
-                device.draw_glyph_run(&run, fill_props, &DrawMode::Invisible);
             }
         }
 

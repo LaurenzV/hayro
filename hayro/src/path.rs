@@ -14,7 +14,10 @@ impl Renderer<'_> {
         let mut line_width = stroke_props.line_width.max(0.01 / min_factor);
         let transformed_width = line_width * min_factor;
 
-        if transformed_width < threshold && !self.inside_pattern && !self.in_type3_glyph {
+        if transformed_width < threshold
+            && !self.inside_pattern
+            && (!self.in_type3_glyph || stroke_props.line_width == 0.0)
+        {
             line_width /= transformed_width;
             line_width *= threshold;
         }
