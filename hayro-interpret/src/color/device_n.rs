@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup};
+use super::{ColorSpace, ToRgb, U8Lookup, u8_to_f32};
 use crate::cache::Cache;
 use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
@@ -50,7 +50,7 @@ impl DeviceN {
         let values = &mut values[..self.tint_transform.num_outputs()];
         let mut evaluate_pixel = |pixel: &[u8]| {
             for (component, value) in components.iter_mut().zip(pixel) {
-                *component = *value as f32 * (1.0 / 255.0);
+                *component = u8_to_f32(*value);
             }
 
             if self.tint_transform.eval(components, values).is_some() {

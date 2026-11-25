@@ -54,6 +54,10 @@
     "file": "pdfs/custom/color_separation_3.pdf"
   },
   {
+    "id": "color_tint_u8_threshold",
+    "file": "pdfs/custom/color_tint_u8_threshold.pdf"
+  },
+  {
     "id": "color_space_icc_gray",
     "file": "pdfs/custom/color_space_icc_gray.pdf"
   },
