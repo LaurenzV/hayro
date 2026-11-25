@@ -108,10 +108,6 @@ fn fallback_xref_map_inner<'a>(
                 if probe.has_root || probe.has_type {
                     let mut dict_reader = Reader::new(probe.data);
                     if let Some(dict) = dict_reader.read_with_context::<Dict<'_>>(&dummy_ctx) {
-                        if probe.has_root && dict.contains_key(ROOT) {
-                            trailer_dicts.push(dict.clone());
-                        }
-
                         if dict
                             .get::<Name<'_>>(TYPE)
                             .is_some_and(|n| n.as_str() == "Catalog")
@@ -146,6 +142,10 @@ fn fallback_xref_map_inner<'a>(
                                 }
                             }
                         }
+
+                        if probe.has_root && dict.contains_key(ROOT) {
+                            trailer_dicts.push(dict);
+                        }
                     }
                 }
             } else {
@@ -162,60 +162,7 @@ fn fallback_xref_map_inner<'a>(
         }
     }
 
-    let mut trailer_dict = None;
-
-    for dict in trailer_dicts {
-        if let Some(root_id) = dict.get_raw::<Dict<'_>>(ROOT) {
-            let check = |dict: &Dict<'_>| -> bool { dict.contains_key(PAGES) };
-
-            match root_id {
-                MaybeRef::Ref(r) => match xref_map.get(&r.into()) {
-                    Some(EntryType::Normal(offset)) => {
-                        let mut reader = Reader::new(&data.as_ref()[*offset..]);
-
-                        if let Some(obj) =
-                            reader.read_with_context::<IndirectObject<Dict<'_>>>(&dummy_ctx)
-                            && {
-                                let obj = obj.get();
-                                check(&obj)
-                            }
-                        {
-                            trailer_dict = Some(dict);
-                        }
-                    }
-                    Some(EntryType::ObjStream(obj_num, idx)) => {
-                        if let Some(EntryType::Normal(offset)) =
-                            xref_map.get(&ObjectIdentifier::new(*obj_num, 0))
-                        {
-                            let mut reader = Reader::new(&data.as_ref()[*offset..]);
-
-                            if let Some(stream) =
-                                reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
-                                && {
-                                    if let Some(object_stream) = ObjectStream::new(&stream.get())
-                                        && let Some(obj) =
-                                            object_stream.get::<Dict<'_>>(*idx, &dummy_ctx)
-                                    {
-                                        check(&obj)
-                                    } else {
-                                        false
-                                    }
-                                }
-                            {
-                                trailer_dict = Some(dict);
-                            }
-                        }
-                    }
-                    _ => {}
-                },
-                MaybeRef::NotRef(d) => {
-                    if check(&d) {
-                        trailer_dict = Some(dict);
-                    }
-                }
-            }
-        }
-    }
+    let trailer_dict = find_rebuild_trailer(data, &dummy_ctx, &xref_map, trailer_dicts);
 
     let has_encryption = trailer_dict
         .as_ref()
@@ -246,6 +193,84 @@ fn fallback_xref_map_inner<'a>(
     } else {
         (xref_map, None)
     }
+}
+
+fn find_rebuild_trailer<'a>(
+    data: &'a PdfData,
+    ctx: &ReaderContext<'a>,
+    xref_map: &XrefMap,
+    mut trailers: Vec<Dict<'a>>,
+) -> Option<Dict<'a>> {
+    let mut checked = FxHashMap::default();
+    let mut groups = None;
+    let read_stream = |num| {
+        let EntryType::Normal(offset) = *xref_map.get(&ObjectIdentifier::new(num, 0))? else {
+            return None;
+        };
+        let stream = Reader::new(&data.as_ref()[offset..])
+            .read_with_context::<IndirectObject<Stream<'_>>>(ctx)?;
+        ObjectStream::new(&stream.get())
+    };
+
+    while let Some(trailer) = trailers.pop() {
+        let id = match trailer.get_raw::<Dict<'_>>(ROOT) {
+            Some(MaybeRef::NotRef(dict)) if dict.contains_key(PAGES) => return Some(trailer),
+            Some(MaybeRef::Ref(reference)) => ObjectIdentifier::from(reference),
+            _ => continue,
+        };
+        if let Some(&valid) = checked.get(&id) {
+            if valid {
+                return Some(trailer);
+            }
+            continue;
+        }
+
+        match xref_map.get(&id).copied() {
+            Some(EntryType::Normal(offset)) => {
+                if Reader::new(&data.as_ref()[offset..])
+                    .read_with_context::<IndirectObject<Dict<'_>>>(ctx)
+                    .is_some_and(|obj| obj.get().contains_key(PAGES))
+                {
+                    return Some(trailer);
+                }
+                checked.insert(id, false);
+            }
+            Some(EntryType::ObjStream(num, idx)) => {
+                let stream = read_stream(num);
+                let valid = |idx| {
+                    stream
+                        .as_ref()
+                        .and_then(|stream| stream.get::<Dict<'_>>(idx, ctx))
+                        .is_some_and(|dict| dict.contains_key(PAGES))
+                };
+                if valid(idx) {
+                    return Some(trailer);
+                }
+                checked.insert(id, false);
+
+                // Group remaining roots once so interleaved trailers can share a decode.
+                let groups = groups.get_or_insert_with(|| {
+                    let mut groups = FxHashMap::default();
+                    for trailer in &trailers {
+                        if let Some(reference) = trailer.get_ref(ROOT) {
+                            let id = ObjectIdentifier::from(reference);
+                            if let Some(&EntryType::ObjStream(num, idx)) = xref_map.get(&id) {
+                                groups.entry(num).or_insert_with(Vec::new).push((id, idx));
+                            }
+                        }
+                    }
+                    groups
+                });
+                if let Some(members) = groups.remove(&num) {
+                    for (id, idx) in members {
+                        checked.entry(id).or_insert_with(|| valid(idx));
+                    }
+                }
+            }
+            None => continue,
+        }
+    }
+    None
 }
 
 const DUMMY_XREF: XRef = XRef(Inner::Dummy);
@@ -1065,6 +1090,33 @@ fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rebuild_selects_last_trailer_with_valid_root() {
+        for catalog in [
+            &b"1 0 obj << /Pages 2 0 R >> endobj\n4 0 obj null endobj"[..],
+            b"5 0 obj << /Type /ObjStm /N 2 /First 9 /Length 32 >>\nstream\n1 0 4 19 << /Pages 2 0 R >> null\nendstream\nendobj",
+        ] {
+            let data: PdfData = [
+                catalog,
+                b"\n2 0 obj << /Type /Pages >> endobj\n",
+                b"trailer << /Root 1 0 R >>\n",
+                b"trailer << /Root 1 0 R /Size 6 >>\n",
+                b"trailer << /Root 4 0 R >>\n",
+                b"trailer << /Root 2 0 R >>\n",
+                b"trailer << /Root 4 0 R >>\n",
+                b"trailer << /Root 2 0 R >>\n",
+                b"1 1 obj null endobj\ntrailer << /Root 1 1 R >>",
+            ]
+            .concat()
+            .into();
+            let (_, Some(XRefInput::TrailerDictData(bytes))) = fallback_xref_map(&data, b"") else {
+                panic!("expected a trailer dictionary");
+            };
+            let trailer = Reader::new(bytes).read_without_context::<Dict<'_>>().unwrap();
+            assert_eq!(trailer.get::<u32>(SIZE), Some(6));
+        }
+    }
 
     #[test]
     fn circular_prev_chain() {
