@@ -5,9 +5,9 @@
 use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
-use crate::function::{Function, interpolate};
+use crate::function::Function;
 use crate::util::{Float32Ext, PointExt, RectExt};
-use hayro_syntax::bit_reader::BitReader;
+use hayro_syntax::bit_reader::{BitReader, bit_mask};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
@@ -418,8 +418,6 @@ fn read_free_form_triangles(
 struct InterpolationHelpers {
     bp_coord: u8,
     bp_comp: u8,
-    coord_max: f32,
-    comp_max: f32,
     x_min: f32,
     x_max: f32,
     y_min: f32,
@@ -428,13 +426,9 @@ struct InterpolationHelpers {
 
 impl InterpolationHelpers {
     fn new(bp_coord: u8, bp_comp: u8, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> Self {
-        let coord_max = 2.0_f32.powi(bp_coord as i32) - 1.0;
-        let comp_max = 2.0_f32.powi(bp_comp as i32) - 1.0;
         Self {
             bp_coord,
             bp_comp,
-            coord_max,
-            comp_max,
             x_min,
             x_max,
             y_min,
@@ -442,17 +436,9 @@ impl InterpolationHelpers {
         }
     }
 
-    fn interpolate_coord(&self, n: u32, d_min: f32, d_max: f32) -> f32 {
-        interpolate(n as f32, 0.0, self.coord_max, d_min, d_max)
-    }
-
-    fn interpolate_comp(&self, n: u32, d_min: f32, d_max: f32) -> f32 {
-        interpolate(n as f32, 0.0, self.comp_max, d_min, d_max)
-    }
-
     fn read_point(&self, reader: &mut BitReader<'_>) -> Option<Point> {
-        let x = self.interpolate_coord(reader.read(self.bp_coord)?, self.x_min, self.x_max);
-        let y = self.interpolate_coord(reader.read(self.bp_coord)?, self.y_min, self.y_max);
+        let x = read_sample(reader, self.bp_coord, self.x_min, self.x_max)?;
+        let y = read_sample(reader, self.bp_coord, self.y_min, self.y_max)?;
         Some(Point::new(x as f64, y as f64))
     }
 
@@ -464,19 +450,16 @@ impl InterpolationHelpers {
     ) -> Option<ColorComponents> {
         let mut colors = smallvec![];
         if has_function {
-            colors.push(self.interpolate_comp(
-                reader.read(self.bp_comp)?,
+            colors.push(read_sample(
+                reader,
+                self.bp_comp,
                 *decode.first()?,
                 *decode.get(1)?,
-            ));
+            )?);
         } else {
             let num_components = decode.len() / 2;
             for (_, decode) in (0..num_components).zip(decode.as_chunks::<2>().0) {
-                colors.push(self.interpolate_comp(
-                    reader.read(self.bp_comp)?,
-                    decode[0],
-                    decode[1],
-                ));
+                colors.push(read_sample(reader, self.bp_comp, decode[0], decode[1])?);
             }
         }
         Some(colors)
@@ -500,6 +483,12 @@ impl InterpolationHelpers {
             colors,
         })
     }
+}
+
+fn read_sample(reader: &mut BitReader<'_>, bits: u8, min: f32, max: f32) -> Option<f32> {
+    let sample = reader.read(bits)?;
+    let t = f64::from(sample) / f64::from(bit_mask(bits));
+    Some(((1.0 - t) * f64::from(min) + t * f64::from(max)) as f32)
 }
 
 fn split_decode(decode: &[f32]) -> Option<([f32; 4], &[f32])> {
