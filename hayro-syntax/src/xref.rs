@@ -502,6 +502,10 @@ impl XRef {
     where
         T: ObjectLike<'a>,
     {
+        if ctx.parent_chain_contains(&id) {
+            return None;
+        }
+
         let Inner::Some(repr) = &self.0 else {
             return None;
         };
@@ -539,7 +543,7 @@ impl XRef {
             EntryType::ObjStream(obj_stram_gen_num, index) => {
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num, 0);
 
-                if obj_stream_id == id || ctx.parent_chain_contains(&id) {
+                if obj_stream_id == id {
                     return None;
                 }
 

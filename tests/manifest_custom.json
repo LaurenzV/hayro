@@ -24,6 +24,10 @@
     "file": "pdfs/custom/annotation_bbox_offset.pdf"
   },
   {
+    "id": "annotation_after_dangling_ref",
+    "file": "pdfs/custom/annotation_after_dangling_ref.pdf"
+  },
+  {
     "id": "annotation_after_unmatched_restore",
     "file": "pdfs/custom/annotation_after_unmatched_restore.pdf"
   },

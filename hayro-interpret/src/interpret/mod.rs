@@ -109,7 +109,7 @@ pub fn interpret_page<'a>(
     if render_content.contains(RenderContent::ANNOTATIONS)
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
-        for annot in annot_arr.iter::<Dict<'_>>() {
+        for annot in annot_arr.dictionaries() {
             interpret_annotation(&annot, resources, context, device);
         }
     }

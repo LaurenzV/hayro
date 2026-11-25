@@ -418,3 +418,48 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
 
     peniko::BlendMode::new(mix, Compose::SrcOver)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{InterpreterSettings, Pdf, RenderSettings, render_pdf};
+    use crate::hayro_syntax::object::Array;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct CountingPdf(AtomicUsize);
+
+    impl AsRef<[u8]> for CountingPdf {
+        fn as_ref(&self) -> &[u8] {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            include_bytes!("../tests/data/annotation_entries.pdf")
+        }
+    }
+
+    #[test]
+    fn renders_direct_and_repaired_annotations_after_invalid_entries() {
+        let data = Arc::new(CountingPdf::default());
+        let pdf = Pdf::new(data.clone()).unwrap();
+        let annots = pdf.pages()[0].raw().get::<Array<'_>>(b"Annots").unwrap();
+        let reads = data.0.load(Ordering::Relaxed);
+        assert!(annots.dictionaries().next().is_some());
+        assert_eq!(
+            data.0.load(Ordering::Relaxed),
+            reads,
+            "reread the PDF before the direct annotation"
+        );
+        let pages = render_pdf(
+            &pdf,
+            1.0,
+            InterpreterSettings::default(),
+            &RenderSettings::default(),
+            None,
+        )
+        .unwrap();
+        let pixel = |x| pages[0].sample(x, 15).to_u8_array();
+
+        assert_eq!(pixel(15), [255; 4], "page self-reference");
+        assert_eq!(pixel(45), [0, 0, 255, 255], "repaired annotation");
+        assert_eq!(pixel(75), [0, 0, 255, 255], "direct annotation");
+    }
+}

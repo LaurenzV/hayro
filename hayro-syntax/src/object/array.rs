@@ -1,8 +1,8 @@
 //! Arrays.
 
 use crate::object::macros::object;
-use crate::object::r#ref::MaybeRef;
-use crate::object::{FromBytes, Object, ObjectLike};
+use crate::object::r#ref::{MaybeRef, ObjRef};
+use crate::object::{Dict, FromBytes, Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
@@ -28,6 +28,38 @@ impl<'a> Array<'a> {
     /// Returns an iterator over the objects of the array.
     pub fn raw_iter(&self) -> ArrayIter<'a> {
         ArrayIter::new(self.data, &self.ctx)
+    }
+
+    /// Iterates over the entries that can be read as dictionaries.
+    pub fn dictionaries(&self) -> impl Iterator<Item = Dict<'a>> + '_ {
+        let mut reader = Reader::new(self.data);
+        core::iter::from_fn(move || {
+            loop {
+                reader.skip_white_spaces_and_comments();
+                if !self.ctx.in_content_stream()
+                    && let Some(id) = reader.read_with_context::<ObjRef>(&self.ctx)
+                {
+                    if let Some(dict) = self.ctx.xref().get_with(id.into(), &self.ctx) {
+                        return Some(dict);
+                    }
+                    continue;
+                }
+                if reader.peek_bytes(2) == Some(b"<<")
+                    && let Some(dict) = reader.read_with_context::<Dict<'_>>(&self.ctx)
+                {
+                    return Some(dict);
+                }
+
+                let skipped = if self.ctx.in_content_stream() {
+                    reader.skip::<Object<'_>>(true)?
+                } else {
+                    reader.skip::<MaybeRef<Object<'_>>>(false)?
+                };
+                if skipped.is_empty() {
+                    return None;
+                }
+            }
+        })
     }
 
     /// Returns an iterator over the resolved objects of the array.
@@ -460,5 +492,28 @@ mod tests {
     #[test]
     fn array_with_unreadable_item() {
         let _ = array_ref_impl(b"[true <<>>stream false]");
+    }
+
+    #[test]
+    fn dictionaries_skips_non_dicts_and_unreadable_entries() {
+        let doc_array =
+            Array::from_bytes(b"[<4142> --1 << /A 1 >> <<>>stream << /B 2 >>]").unwrap();
+        let doc_keys: Vec<_> = doc_array
+            .dictionaries()
+            .map(|d| (d.get::<i32>(b"A"), d.get::<i32>(b"B")))
+            .collect();
+        assert_eq!(
+            doc_keys,
+            vec![(Some(1), None), (None, None), (None, Some(2))]
+        );
+
+        let content_array = Reader::new(b"[4 0 Rfoo <4142> --1 << /K 1 >>]")
+            .read_with_context::<Array<'_>>(ReaderContext::dummy_ref())
+            .unwrap();
+        let content_keys: Vec<_> = content_array
+            .dictionaries()
+            .filter_map(|d| d.get::<i32>(b"K"))
+            .collect();
+        assert_eq!(content_keys, vec![1]);
     }
 }
