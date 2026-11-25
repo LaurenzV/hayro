@@ -89,24 +89,7 @@ impl<'a> Name<'a> {
     /// Create a new name from bytes that may contain escape sequences.
     #[inline]
     pub fn new_escaped(data: &'a [u8]) -> Option<Self> {
-        let mut result = SmallVec::new();
-        let mut r = Reader::new(data);
-
-        while let Some(b) = r.read_byte() {
-            // Before PDF 1.2, `#` was a regular character in names.
-            if b == b'#'
-                && let Some(hex) = r.peek_bytes(2)
-                && let (Some(high), Some(low)) =
-                    (decode_hex_digit(hex[0]), decode_hex_digit(hex[1]))
-            {
-                r.skip_bytes(2)?;
-                result.push(high << 4 | low);
-            } else {
-                result.push(b);
-            }
-        }
-
-        Some(Self(NameInner::Owned(result)))
+        Some(Self(NameInner::Owned(decoded_bytes(data).collect())))
     }
 
     /// Return the name as a string, or a placeholder if it isn't UTF-8.
@@ -147,6 +130,22 @@ impl<'a> Readable<'a> for Name<'a> {
         let data = r.range(start + 1..end)?;
         Self::new(data)
     }
+}
+
+pub(crate) fn decoded_bytes(data: &[u8]) -> impl Iterator<Item = u8> + '_ {
+    let mut r = Reader::new(data);
+    core::iter::from_fn(move || {
+        let b = r.read_byte()?;
+        // Before PDF 1.2, `#` was a regular character in names.
+        if b == b'#'
+            && let Some(hex) = r.peek_bytes(2)
+            && let (Some(high), Some(low)) = (decode_hex_digit(hex[0]), decode_hex_digit(hex[1]))
+        {
+            r.skip_bytes(2)?;
+            return Some(high << 4 | low);
+        }
+        Some(b)
+    })
 }
 
 pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
