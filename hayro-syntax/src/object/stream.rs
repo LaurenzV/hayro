@@ -56,6 +56,20 @@ impl<'a> Stream<'a> {
         Self { dict, data }
     }
 
+    pub(crate) fn read_after_dict(r: &mut Reader<'a>, dict: Dict<'a>) -> Option<Self> {
+        forward_stream_opener(r)?;
+
+        let offset = r.offset();
+        let data = dict
+            .get::<u32>(LENGTH)
+            .and_then(|length| parse_proper(r, length))
+            .or_else(|| {
+                r.jump(offset);
+                parse_fallback(r)
+            })?;
+        Some(Self::new(data, dict))
+    }
+
     fn filters_and_params(&self) -> FiltersAndParams<'a> {
         let mut collected_filters = SmallVec::new();
         let mut collected_params = SmallVec::new();
@@ -252,13 +266,22 @@ impl<'a> Readable<'a> for Stream<'a> {
     }
 
     fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        let mut after_dict = r.clone();
+        after_dict.skip::<Dict<'_>>(ctx.in_content_stream())?;
+        forward_stream_opener(&mut after_dict)?;
+
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
-        let offset = r.offset();
-        parse_proper(r, &dict).or_else(|| {
-            r.jump(offset);
-            parse_fallback(r, &dict)
-        })
+        Self::read_after_dict(r, dict)
     }
+}
+
+fn forward_stream_opener(r: &mut Reader<'_>) -> Option<()> {
+    r.skip_white_spaces_and_comments();
+    r.forward_tag(b"stream")?;
+    r.forward_tag(b"\n")
+        .or_else(|| r.forward_tag(b"\r\n"))
+        .or_else(|| r.forward_tag(b"\r"))?;
+    Some(())
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -318,30 +341,15 @@ impl FilterResult<'_> {
     }
 }
 
-fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let length = dict.get::<u32>(LENGTH)?;
-
-    r.skip_white_spaces_and_comments();
-    r.forward_tag(b"stream")?;
-    r.forward_tag(b"\n")
-        .or_else(|| r.forward_tag(b"\r\n"))
-        .or_else(|| r.forward_tag(b"\r"))?;
+fn parse_proper<'a>(r: &mut Reader<'a>, length: u32) -> Option<&'a [u8]> {
     let data = r.read_bytes(length as usize)?;
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    Some(Stream::new(data, dict.clone()))
+    Some(data)
 }
 
-fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    r.skip_white_spaces_and_comments();
-    r.forward_tag(b"stream")?;
-
-    r.forward_tag(b"\n")
-        .or_else(|| r.forward_tag(b"\r\n"))
-        // Technically not allowed, but no reason to not try it.
-        .or_else(|| r.forward_tag(b"\r"))?;
-
+fn parse_fallback<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     // TODO: This search can take quadratic time in total when many streams with a wrong length
     // have no `endstream` after them, or only a distant one.
     let tail = r.tail()?;
@@ -353,7 +361,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    Some(Stream::new(data, dict.clone()))
+    Some(data)
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {

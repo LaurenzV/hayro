@@ -256,8 +256,8 @@ impl<'a> Page<'a> {
                     convert_single(stream)
                 } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
                     let streams = array
-                        .raw_iter()
-                        .filter_map(|item| item.resolve(&self.ctx)?.into_stream())
+                        .refs()
+                        .filter_map(|r| self.xref().get_with::<Stream<'_>>(r.into(), &self.ctx))
                         .flat_map(convert_single);
 
                     let mut collected = vec![];

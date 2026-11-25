@@ -84,8 +84,6 @@ fn fallback_xref_map_inner<'a>(
     loop {
         let cur_pos = r.offset();
 
-        let mut old_r = r.clone();
-
         if r.peek_byte().is_some_and(|b: u8| b.is_ascii_digit()) {
             if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
                 let mut cloned = r.clone();
@@ -120,12 +118,7 @@ fn fallback_xref_map_inner<'a>(
                         }
 
                         if dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
-                            && {
-                                let mut after_dict = r.clone();
-                                after_dict.skip_white_spaces_and_comments();
-                                after_dict.forward_tag(b"stream").is_some()
-                            }
-                            && let Some(stream) = old_r.read_indirect::<Stream<'_>>(&dummy_ctx)
+                            && let Some(stream) = Stream::read_after_dict(&mut r.clone(), dict)
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
@@ -527,9 +520,10 @@ impl XRef {
                     if object.id() == &id {
                         return Some(object.get());
                     }
-                } else {
+                } else if r.read_without_context::<ObjectIdentifier>() == Some(id) {
+                    r.skip_white_spaces_and_comments();
                     // A valid object of another type needs no repair.
-                    if r.skip::<IndirectObject<Object<'_>>>(false).is_some() {
+                    if r.skip::<Object<'_>>(false).is_some() {
                         return None;
                     }
                 };

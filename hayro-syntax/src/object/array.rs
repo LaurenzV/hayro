@@ -1,7 +1,7 @@
 //! Arrays.
 
 use crate::object::macros::object;
-use crate::object::r#ref::MaybeRef;
+use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{FromBytes, Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
@@ -50,6 +50,19 @@ impl<'a> Array<'a> {
     /// Return the raw data of the array.
     pub fn data(&self) -> &'a [u8] {
         self.data
+    }
+
+    pub(crate) fn refs(&self) -> impl Iterator<Item = ObjRef> {
+        let mut reader = Reader::new(self.data);
+        core::iter::from_fn(move || {
+            loop {
+                reader.skip_white_spaces_and_comments();
+                if let Some(reference) = reader.read_without_context::<ObjRef>() {
+                    return Some(reference);
+                }
+                reader.skip::<Object<'_>>(false)?;
+            }
+        })
     }
 }
 

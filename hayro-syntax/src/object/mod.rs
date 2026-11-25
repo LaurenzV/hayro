@@ -222,8 +222,9 @@ impl<'a> Readable<'a> for Object<'a> {
             let dict = Dict::read(&mut cloned, ctx)?;
             cloned.skip_white_spaces_and_comments();
 
-            if cloned.forward_tag(b"stream").is_some() {
-                return Some(Self::Stream(Stream::read_indirect(r, ctx)?));
+            if cloned.peek_tag(b"stream").is_some() {
+                *r = cloned;
+                return Some(Self::Stream(Stream::read_after_dict(r, dict)?));
             }
 
             r.jump(cloned.offset());
@@ -278,18 +279,6 @@ impl Readable<'_> for ObjectIdentifier {
             obj_number,
             gen_number,
         })
-    }
-}
-
-impl Skippable for ObjectIdentifier {
-    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<u32>(false)?;
-        r.skip_white_spaces_and_comments();
-        r.skip::<i32>(false)?;
-        r.skip_white_spaces_and_comments();
-        r.forward_tag(b"obj")?;
-
-        Some(())
     }
 }
 
