@@ -175,23 +175,18 @@ impl<'a> SvgRenderer<'a> {
                     }
                     Pattern::Tiling(t) => {
                         let inverse_transform = path_transform.inverse();
-                        let pattern = *t.clone();
-                        let cache_key = (pattern.clone(), inverse_transform).cache_key();
+                        let cache_key = (t.cache_key(), inverse_transform).cache_key();
 
                         if !self.tiling_patterns.contains(cache_key) {
                             self.with_dummy(|r| {
-                                t.interpret(
-                                    r,
-                                    Affine::translate((-pattern.bbox.x0, -pattern.bbox.y0)),
-                                    false,
-                                );
+                                t.interpret(r, Affine::translate((-t.bbox.x0, -t.bbox.y0)));
                             });
                         }
 
                         self.tiling_patterns
                             .insert_with(cache_key, || CachedTilingPattern {
                                 transform: inverse_transform,
-                                tiling_pattern: pattern,
+                                tiling_pattern: *t.clone(),
                             })
                     }
                 };
@@ -316,7 +311,6 @@ impl<'a> SvgRenderer<'a> {
                     -pattern.tiling_pattern.bbox.x0,
                     -pattern.tiling_pattern.bbox.y0,
                 )),
-                false,
             );
 
             self.xml.end_element();

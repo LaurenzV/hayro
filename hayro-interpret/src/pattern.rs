@@ -5,7 +5,7 @@ use crate::color::{Color, ColorSpace};
 use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
 use crate::font::GlyphRun;
-use crate::interpret::state::{ActiveTransferFunction, State};
+use crate::interpret::state::{ActiveTransferFunction, PaintState, State};
 use crate::shading::Shading;
 use crate::util::{Float32Ext, RectExt, hash128};
 use crate::x_object::soft_mask::SoftMask;
@@ -34,15 +34,19 @@ pub enum Pattern<'a> {
 }
 
 impl<'a> Pattern<'a> {
-    pub(crate) fn new(object: Object<'a>, ctx: &Context<'a>) -> Option<Self> {
+    pub(crate) fn new(
+        object: Object<'a>,
+        ctx: &Context<'a>,
+        paint: &PaintState<'a>,
+    ) -> Option<Self> {
         match object {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.interpreter_cache.object_cache,
             )?)),
-            Object::Stream(stream) => {
-                Some(Self::Tiling(Box::new(TilingPattern::new(stream, ctx)?)))
-            }
+            Object::Stream(stream) => Some(Self::Tiling(Box::new(TilingPattern::new(
+                stream, ctx, paint,
+            )?))),
             _ => None,
         }
     }
@@ -140,9 +144,7 @@ pub struct TilingPattern<'a> {
     /// An additional opacity to apply to the pattern cell as a whole.
     pub opacity: f32,
     stream: Stream<'a>,
-    is_color: bool,
-    pub(crate) stroke_paint: Color,
-    pub(crate) non_stroking_paint: Color,
+    stencil_color: Option<Color>,
     resources: Resources<'a>,
     pub(crate) cache: InterpreterCache<'a>,
     pub(crate) settings: InterpreterSettings,
@@ -157,7 +159,11 @@ impl Debug for TilingPattern<'_> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub(crate) fn new(stream: Stream<'a>, ctx: &Context<'a>) -> Option<Self> {
+    pub(crate) fn new(
+        stream: Stream<'a>,
+        ctx: &Context<'a>,
+        paint: &PaintState<'a>,
+    ) -> Option<Self> {
         let cache_key = stream.cache_key();
         let dict = stream.dict();
 
@@ -175,19 +181,13 @@ impl<'a> TilingPattern<'a> {
             .map(Affine::new)
             .unwrap_or_default();
 
-        let fill = ctx.fill_paint();
-        let fill_cs = fill
-            .color_space
-            .pattern_cs()
-            .unwrap_or(ColorSpace::device_gray());
-        let non_stroking_paint = Color::new(fill_cs, fill.color.clone(), 1.0);
-
-        let stroke = ctx.stroke_paint();
-        let stroke_cs = stroke
-            .color_space
-            .pattern_cs()
-            .unwrap_or(ColorSpace::device_gray());
-        let stroke_paint = Color::new(stroke_cs, stroke.color.clone(), 1.0);
+        let stencil_color = (!is_color).then(|| {
+            let cs = paint
+                .color_space
+                .pattern_cs()
+                .unwrap_or_else(ColorSpace::device_gray);
+            Color::new(cs, paint.color.clone(), 1.0)
+        });
         let nesting_depth = ctx.nesting_depth() + 1;
         let resources = Resources::new(dict.get(RESOURCES).unwrap_or_default());
 
@@ -198,10 +198,8 @@ impl<'a> TilingPattern<'a> {
             y_step,
             matrix,
             opacity: 1.0,
-            is_color,
+            stencil_color,
             stream,
-            stroke_paint,
-            non_stroking_paint,
             settings: ctx.settings.clone(),
             resources,
             cache: ctx.interpreter_cache.clone(),
@@ -211,12 +209,7 @@ impl<'a> TilingPattern<'a> {
     }
 
     /// Interpret the contents of the pattern into the given device.
-    pub fn interpret(
-        &self,
-        device: &mut impl Device<'a>,
-        initial_transform: Affine,
-        is_stroke: bool,
-    ) -> Option<()> {
+    pub fn interpret(&self, device: &mut impl Device<'a>, initial_transform: Affine) -> Option<()> {
         let state = State::new(initial_transform);
 
         let mut context = Context::new_with(
@@ -238,17 +231,12 @@ impl<'a> TilingPattern<'a> {
         };
         device.push_clip_path(&clip_path);
 
-        if self.is_color {
-            interpret(iter, &self.resources, &mut context, device);
-        } else {
-            let paint = if !is_stroke {
-                Paint::Color(self.non_stroking_paint.clone())
-            } else {
-                Paint::Color(self.stroke_paint.clone())
-            };
-
-            let mut device = StencilPatternDevice::new(device, paint.clone());
+        if let Some(color) = &self.stencil_color {
+            let paint = Paint::Color(color.clone());
+            let mut device = StencilPatternDevice::new(device, paint);
             interpret(iter, &self.resources, &mut context, &mut device);
+        } else {
+            interpret(iter, &self.resources, &mut context, device);
         }
 
         device.pop_clip();
@@ -259,18 +247,12 @@ impl<'a> TilingPattern<'a> {
 
 impl CacheKey for TilingPattern<'_> {
     fn cache_key(&self) -> u128 {
-        let colors = (!self.is_color).then(|| {
-            (
-                self.non_stroking_paint.to_rgba().to_rgba8(),
-                self.stroke_paint.to_rgba().to_rgba8(),
-            )
-        });
-
+        let color = self.stencil_color.as_ref().map(|c| c.to_rgba().to_rgba8());
         hash128(&(
             self.cache_key,
             self.matrix.cache_key(),
             self.opacity.to_bits(),
-            colors,
+            color,
         ))
     }
 }

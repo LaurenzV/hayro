@@ -411,7 +411,7 @@ pub fn interpret<'a>(
                 context.fill_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context))
+                        .and_then(|d| Pattern::new(d, context, context.fill_paint()))
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
@@ -419,7 +419,7 @@ pub fn interpret<'a>(
                 context.stroke_paint_mut().pattern = n.1.and_then(|name| {
                     resources
                         .get_pattern(name)
-                        .and_then(|d| Pattern::new(d, context))
+                        .and_then(|d| Pattern::new(d, context, context.stroke_paint()))
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
