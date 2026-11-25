@@ -244,12 +244,13 @@ fn encode_axial_shading(
 ) -> (EncodedShadingType, Affine) {
     let initial_transform;
 
+    let coords = coords.map(f64::from);
     let params = if is_axial {
         let [x_0, y_0, x_1, y_1, _, _] = coords;
 
         initial_transform = ts_from_line_to_line(
-            Point::new(x_0 as f64, y_0 as f64),
-            Point::new(x_1 as f64, y_1 as f64),
+            Point::new(x_0, y_0),
+            Point::new(x_1, y_1),
             Point::ZERO,
             Point::new(1.0, 0.0),
         );
@@ -258,12 +259,12 @@ fn encode_axial_shading(
     } else {
         let [x_0, y_0, r0, x_1, y_1, r_1] = coords;
 
-        initial_transform = Affine::translate((-x_0 as f64, -y_0 as f64));
+        initial_transform = Affine::translate((-x_0, -y_0));
         let new_x1 = x_1 - x_0;
         let new_y1 = y_1 - y_0;
 
-        let p1 = Point::new(new_x1 as f64, new_y1 as f64);
-        let r = Point::new(r0 as f64, r_1 as f64);
+        let p1 = Point::new(new_x1, new_y1);
+        let r = Point::new(r0, r_1);
 
         RadialAxialParams::Radial { p1, r }
     };
@@ -325,7 +326,7 @@ impl EncodedRadialAxialShading {
         let t = match self.params {
             RadialAxialParams::Axial => pos.x as f32,
             RadialAxialParams::Radial { p1, r } => {
-                radial_pos(&pos, &p1, r, self.extend[0], self.extend[1])?
+                return radial_pos(pos, p1, r, self.extend).map(|t| t.clamp(0.0, 1.0) as f32);
             }
         };
 
@@ -358,71 +359,265 @@ fn unit_to_line(p0: Point, p1: Point) -> Affine {
     ])
 }
 
-fn radial_pos(
-    pos: &Point,
-    p1: &Point,
-    r: Point,
-    min_extend: bool,
-    max_extend: bool,
-) -> Option<f32> {
-    let r0 = r.x as f32;
-    let dx = p1.x as f32;
-    let dy = p1.y as f32;
-    let dr = r.y as f32 - r0;
-
-    let px = pos.x as f32;
-    let py = pos.y as f32;
-
-    let a = dx * dx + dy * dy - dr * dr;
-    let b = -2.0 * (px * dx + py * dy + r0 * dr);
-    let c = px * px + py * py - r0 * r0;
-
-    let discriminant = b * b - 4.0 * a * c;
-
-    if discriminant < 0.0 {
+fn radial_pos(pos: Point, p1: Point, r: Point, extend: [bool; 2]) -> Option<f64> {
+    if r.x == 0.0 && r.y == 0.0 {
         return None;
     }
+    let dr = r.y - r.x;
+    let r0 = r.x;
+    let a = norm_squared_minus_square(p1, dr);
+    let bx = pos.x * p1.x;
+    let by = pos.y * p1.y;
+    let br = r0 * dr;
+    // Add the smallest product last so cancellation can expose it.
+    let b = if bx.abs() <= by.abs() && bx.abs() <= br.abs() {
+        (by + br) + bx
+    } else if by.abs() <= br.abs() {
+        (bx + br) + by
+    } else {
+        (bx + by) + br
+    };
+    let c = || norm_squared_minus_square(pos, r.x);
+    let valid = |t: f64| (extend[0] || t >= 0.0) && (extend[1] || t <= 1.0) && r.x + dr * t >= 0.0;
 
-    if a.abs() < 1e-6 {
-        if b.abs() < 1e-6 {
-            return None;
+    if a == 0.0 {
+        if b == 0.0 {
+            return [1.0, 0.0].into_iter().find(|&t| c() == 0.0 && valid(t));
         }
-
-        let t = -c / b;
-
-        if (!min_extend && t < 0.0) || (!max_extend && t > 1.0) {
-            return None;
-        }
-
-        let r_t = r0 + dr * t;
-        if r_t < 0.0 {
-            return None;
-        }
-
-        return Some(t);
+        let t = c() / (2.0 * b);
+        return valid(t).then_some(t);
     }
 
-    let sqrt_d = discriminant.sqrt();
-    let t1 = (-b - sqrt_d) / (2.0 * a);
-    let t2 = (-b + sqrt_d) / (2.0 * a);
+    let (dx, dy) = (p1.x, p1.y);
+    let (x, y) = (pos.x, pos.y);
+    let u = r0 * dx + dr * x;
+    let v = r0 * dy + dr * y;
+    // Factor u² + v² − (x*dy − y*dx)² before the cross product loses its smaller term.
+    let d = if u.abs() >= v.abs() {
+        (dx * (r0 - y) + x * (dr + dy)) * (dx * (r0 + y) + x * (dr - dy)) + v * v
+    } else {
+        (dy * (r0 + x) + y * (dr - dx)) * (dy * (r0 - x) + y * (dr + dx)) + u * u
+    };
+    if d < 0.0 {
+        return None;
+    }
+    let sqrt_d = d.sqrt();
 
-    let max = t1.max(t2);
-    let mut take_max = Some(max);
-    let min = t1.min(t2);
-    let mut take_min = Some(min);
+    // Add terms of the same sign, then recover the other root from their product c/a.
+    let q = b + sqrt_d.copysign(b);
 
-    if (!min_extend && min < 0.0) || r0 + dr * min < 0.0 {
-        take_min = None;
+    if q == 0.0 {
+        return (c() == 0.0 && valid(0.0)).then_some(0.0);
     }
 
-    if (!max_extend && max > 1.0) || r0 + dr * max < 0.0 {
-        take_max = None;
+    let (max, min) = if q.is_sign_negative() == a.is_sign_negative() {
+        (q / a, c() / q)
+    } else {
+        (c() / q, q / a)
+    };
+    if valid(max) {
+        Some(max)
+    } else {
+        valid(min).then_some(min)
+    }
+}
+
+fn norm_squared_minus_square(p: Point, r: f64) -> f64 {
+    let (major, minor) = if p.x.abs() >= p.y.abs() {
+        (p.x.abs(), p.y)
+    } else {
+        (p.y.abs(), p.x)
+    };
+    (major - r.abs()) * (major + r.abs()) + minor * minor
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::Cache;
+    use hayro_syntax::object::{Dict, FromBytes};
+
+    #[test]
+    fn zero_radius_pattern_and_shading_operator() {
+        use crate::font::GlyphRun;
+        use crate::pattern::Pattern;
+        use crate::{
+            BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+            InterpreterCache, Paint, SoftMask, interpret_page,
+        };
+        use hayro_syntax::Pdf;
+        use kurbo::BezPath;
+
+        struct Samples(Vec<Vec<u8>>);
+        impl Device<'_> for Samples {
+            fn draw_path(&mut self, _: &BezPath, props: DrawProps<'_>, _: &DrawMode) {
+                let Paint::Pattern(pattern) = props.paint else {
+                    panic!("expected pattern paint")
+                };
+                let Pattern::Shading(pattern) = *pattern else {
+                    panic!("expected shading pattern")
+                };
+                self.0.push(
+                    pattern
+                        .encode()
+                        .render_texture(Rect::new(0.0, 0.0, 1.0, 1.0), 1.0)
+                        .data,
+                );
+            }
+            fn push_clip_path(&mut self, _: &ClipPath) {}
+            fn push_transparency_group(
+                &mut self,
+                _: f32,
+                _: Option<SoftMask<'_>>,
+                _: BlendMode,
+                _: bool,
+                _: bool,
+            ) {
+            }
+            fn draw_glyph_run(&mut self, _: &GlyphRun<'_, '_>, _: DrawProps<'_>, _: &DrawMode) {}
+            fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
+            fn pop_clip(&mut self) {}
+            fn pop_transparency_group(&mut self) {}
+        }
+
+        let ops = "/Pattern cs /P scn 0 0 1 1 re f /S sh";
+        let pdf = format!("%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 1 1] /Contents 4 0 R
+/Resources << /Pattern << /P << /PatternType 2 /Shading 5 0 R >> >> /Shading << /S 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{ops}
+endstream endobj
+5 0 obj << /ShadingType 3 /ColorSpace /DeviceRGB /Background [1 0 0]
+/Coords [0 0.5 0 1 0.5 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >> >> endobj
+trailer << /Root 1 0 R >>
+%%EOF", ops.len());
+        let pdf = Pdf::new(pdf.into_bytes()).unwrap();
+        let mut context = Context::new(
+            Affine::IDENTITY,
+            Rect::new(0.0, 0.0, 1.0, 1.0),
+            &InterpreterCache::new(),
+            pdf.xref(),
+            crate::InterpreterSettings::default(),
+        );
+        let mut samples = Samples(Vec::new());
+        interpret_page(&pdf.pages()[0], &mut context, &mut samples);
+        assert_eq!(samples.0, [[255, 0, 0, 255], [0, 0, 0, 0]]);
+        assert_eq!(
+            radial_pos(
+                Point::new(0.5, 0.0),
+                Point::new(1.0, 0.0),
+                Point::ZERO,
+                [false; 2]
+            ),
+            None
+        );
     }
 
-    match (take_min, take_max) {
-        (Some(_), Some(max)) => Some(max),
-        (Some(min), None) => Some(min),
-        (None, Some(max)) => Some(max),
-        (None, None) => None,
+    #[test]
+    fn radial_precision() {
+        let sample = |coords: [f32; 6], pos: Point, extend: [bool; 2]| {
+            let [x0, y0, r0, x1, y1, r1] = coords;
+            let [start, end] = extend;
+            let data = format!(
+                "<< /Shading << /ShadingType 3 /ColorSpace /DeviceGray /Coords [{x0} {y0} {r0} {x1} {y1} {r1}] /Extend [{start} {end}] /Function << /FunctionType 2 /Domain [0 1] /N 1 >> >> >>"
+            );
+            let dict = Dict::from_bytes(data.as_bytes()).unwrap();
+            let pattern = ShadingPattern::new(&dict, &Cache::new()).unwrap().encode();
+            match pattern.shading_type {
+                EncodedShadingType::Dummy(_) => None,
+                EncodedShadingType::RadialAxial(shading) => {
+                    shading.position(pattern.base_transform * pos)
+                }
+                _ => unreachable!(),
+            }
+        };
+        for (coords, x, y, expected) in [
+            ([0.0, 0.5, 0.0, 8193.0, 0.5, 0.0], 0.5, 0.5, None),
+            (
+                [-1073741824.0, 0.0, 1.0, 1073741824.0, 0.0, 1.0],
+                0.5,
+                2.5,
+                None,
+            ),
+            ([0.0, 0.0, 4.0, 3.0, 4.0, 7.0], 4.0, -3.0, Some(0.75)),
+            (
+                [0.0, 0.0, 0.0, 134217728.0, 1.0, 134217728.0],
+                0.0,
+                0.75,
+                Some(0.75),
+            ),
+            (
+                [0.0, 0.0, 0.0, 134217728.0, 1.0, 134217728.0],
+                2_f64.powi(-31),
+                0.5,
+                Some(0.8201941),
+            ),
+            ([0.0, 0.0, 3.0, 1.0, 1.0, 3.0], -2.0, 1.0, Some(1.0)),
+            (
+                [0.0, 0.0, 3.0, 1.0, 1.0, 3.0],
+                -2.001,
+                1.0,
+                Some(0.99899983),
+            ),
+            ([0.0, 0.0, 3.0, 1.0, 1.0, 3.0], -1.999, 1.0, None),
+            (
+                [0.0, 0.0, 2.5, 64.1, 0.0, 2.5],
+                0.5,
+                2.5,
+                Some((0.5 / f64::from(64.1_f32)) as f32),
+            ),
+            ([0.0, 0.0, 2.5, 64.1, 0.0, 2.5], 0.5, 2.501, None),
+            ([0.0, 0.0, 1.0, 1.0, 0.0, 2.0], -1.0, 0.0, Some(1.0)),
+        ] {
+            let [x0, y0, r0, x1, y1, r1] = coords;
+            assert_eq!(sample(coords, Point::new(x, y), [false; 2]), expected);
+            assert_eq!(
+                sample([y0, x0, r0, y1, x1, r1], Point::new(y, x), [false; 2]),
+                expected
+            );
+        }
+        for extend in [[true, false], [false, true], [true; 2]] {
+            assert_eq!(
+                sample(
+                    [0.0, 0.0, 1.0, 1.0, 0.0, 2.0],
+                    Point::new(-1.0, 0.0),
+                    extend
+                ),
+                Some(1.0)
+            );
+        }
+        for extend in [[false; 2], [true, false], [false, true], [true; 2]] {
+            let l = 134217728.0;
+            for (y, expected) in [(0.5, Some(0.5)), (-0.5, extend[0].then_some(0.0))] {
+                assert_eq!(
+                    sample([0.0, 0.0, l, l, 1.0, 0.0], Point::new(l.into(), y), extend),
+                    expected
+                );
+                assert_eq!(
+                    sample([0.0, 0.0, l, 1.0, l, 0.0], Point::new(y, l.into()), extend),
+                    expected
+                );
+            }
+            let coords = [0.0, 0.0, 3.0, 0.0, 0.0, 1.0];
+            for (x, expected) in [
+                (4.0, extend[0].then_some(0.0)),
+                (0.5, extend[1].then_some(1.0)),
+                (2.0, Some(0.5)),
+            ] {
+                assert_eq!(sample(coords, Point::new(x, 0.0), extend), expected);
+            }
+        }
+        for scale in [1e-30, 1e30] {
+            let t = radial_pos(
+                Point::new(scale, 0.0),
+                Point::new(2.0 * scale, 0.0),
+                Point::new(scale / 2.0, scale / 2.0),
+                [false; 2],
+            )
+            .unwrap();
+            assert!((t - 0.75).abs() < 1e-14);
+        }
     }
 }

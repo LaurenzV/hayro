@@ -1472,5 +1472,9 @@
     "id": "pattern_tiling_clip_scaled",
     "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
     "svg": true
+  },
+  {
+    "id": "shading_radial_precision",
+    "file": "pdfs/custom/shading_radial_precision.pdf"
   }
 ]
