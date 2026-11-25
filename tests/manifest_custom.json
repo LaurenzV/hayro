@@ -761,6 +761,10 @@
     "file": "pdfs/custom/stream_jpx_6.pdf"
   },
   {
+    "id": "stream_jpx_indexed_bpc",
+    "file": "pdfs/custom/stream_jpx_indexed_bpc.pdf"
+  },
+  {
     "id": "stream_jpx_raw_device_n",
     "file": "pdfs/custom/stream_jpx_raw_device_n.pdf"
   },
