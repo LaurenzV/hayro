@@ -133,6 +133,10 @@
     "last_page": 0
   },
   {
+    "id": "font_standard_non_latin",
+    "file": "pdfs/custom/font_standard_non_latin.pdf"
+  },
+  {
     "id": "font_truetype_1",
     "file": "pdfs/custom/font_truetype_1.pdf"
   },
