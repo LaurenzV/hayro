@@ -125,6 +125,7 @@ fn fallback_xref_map_inner<'a>(
                                 after_dict.skip_white_spaces_and_comments();
                                 after_dict.forward_tag(b"stream").is_some()
                             }
+                            && has_usable_object_stream_header(&dict)
                             && let Some(stream) = old_r.read_indirect::<Stream<'_>>(&dummy_ctx)
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
@@ -189,8 +190,13 @@ fn fallback_xref_map_inner<'a>(
                         {
                             let mut reader = Reader::new(&data.as_ref()[*offset..]);
 
-                            if let Some(stream) =
-                                reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
+                            let mut dict_reader = Reader::new(&data.as_ref()[*offset..]);
+
+                            if let Some(dict_obj) = dict_reader
+                                .read_with_context::<IndirectObject<Dict<'_>>>(&dummy_ctx)
+                                && has_usable_object_stream_header(&dict_obj.get())
+                                && let Some(stream) = reader
+                                    .read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
                                 && {
                                     if let Some(object_stream) = ObjectStream::new(&stream.get())
                                         && let Some(obj) =
@@ -968,6 +974,10 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
     } else {
         Ok(Decryptor::None)
     }
+}
+
+fn has_usable_object_stream_header(dict: &Dict<'_>) -> bool {
+    dict.get::<usize>(N).is_some_and(|n| n > 0) && dict.get::<usize>(FIRST).is_some()
 }
 
 pub(crate) struct ObjectStream {
