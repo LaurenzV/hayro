@@ -120,14 +120,42 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn skip_white_spaces_and_comments(&mut self) {
-        while let Some(b) = self.peek_byte() {
-            if is_white_space_character(b) {
-                self.forward();
-            } else if b == b'%' {
-                Comment::skip(self, true);
-            } else {
-                return;
-            }
+        skip_white_spaces_and_comments_in(self, &Unknown);
+    }
+}
+
+pub(crate) trait Ends {
+    fn string_end(&self, start: usize) -> Option<Option<usize>>;
+    fn comment_end(&self, start: usize) -> Option<usize>;
+    fn read(&self, len: usize);
+}
+
+pub(crate) struct Unknown;
+
+impl Ends for Unknown {
+    #[inline(always)]
+    fn string_end(&self, _: usize) -> Option<Option<usize>> {
+        None
+    }
+
+    #[inline(always)]
+    fn comment_end(&self, _: usize) -> Option<usize> {
+        None
+    }
+
+    #[inline(always)]
+    fn read(&self, _: usize) {}
+}
+
+#[inline]
+pub(crate) fn skip_white_spaces_and_comments_in(r: &mut Reader<'_>, ends: &impl Ends) {
+    while let Some(b) = r.peek_byte() {
+        if is_white_space_character(b) {
+            r.forward();
+        } else if b == b'%' {
+            Comment::skip_in(r, ends);
+        } else {
+            return;
         }
     }
 }

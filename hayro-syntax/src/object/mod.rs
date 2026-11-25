@@ -12,10 +12,12 @@ pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
-use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::reader::{
+    Ends, Readable, ReaderContext, ReaderExt, Skippable, Unknown, skip_white_spaces_and_comments_in,
+};
 use core::fmt::{Debug, Display, Formatter};
 
-const MAX_OBJECT_NESTING_DEPTH: usize = 512;
+pub(crate) const MAX_OBJECT_NESTING_DEPTH: usize = 512;
 
 mod bool;
 mod date;
@@ -176,20 +178,44 @@ impl Skippable for Object<'_> {
     }
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
+        Self::skip_in(r, is_content_stream, depth, &Unknown)
+    }
+}
+
+impl Object<'_> {
+    #[inline]
+    pub(crate) fn skip_in(
+        r: &mut Reader<'_>,
+        is_content_stream: bool,
+        depth: usize,
+        ends: &impl Ends,
+    ) -> Option<()> {
         match r.peek_byte()? {
             b'n' => Null::skip(r, is_content_stream),
             b't' | b'f' => bool::skip(r, is_content_stream),
             b'/' => Name::skip(r, is_content_stream),
             b'<' => match r.peek_bytes(2)? {
-                b"<<" => Dict::skip_with_depth(r, is_content_stream, depth),
-                _ => String::skip(r, is_content_stream),
+                b"<<" => Dict::skip_in(r, is_content_stream, depth, ends),
+                _ => String::skip_in(r, ends),
             },
-            b'(' => String::skip(r, is_content_stream),
+            b'(' => String::skip_in(r, ends),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
-            b'[' => Array::skip_with_depth(r, is_content_stream, depth),
+            b'[' => Array::skip_in(r, is_content_stream, depth, ends),
             // Lenient: skip content operators inside arrays.
             _ => skip_name_like(r, false),
         }
+    }
+
+    #[inline]
+    pub(crate) fn skip_maybe_ref_in(
+        r: &mut Reader<'_>,
+        is_content_stream: bool,
+        depth: usize,
+        ends: &impl Ends,
+    ) -> Option<()> {
+        r.skip::<ObjRef>(is_content_stream)
+            .map(|_| {})
+            .or_else(|| Self::skip_in(r, is_content_stream, depth, ends))
     }
 }
 
@@ -268,10 +294,17 @@ impl ObjectIdentifier {
 
 impl Readable<'_> for ObjectIdentifier {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+        Self::read_in(r, &Unknown)
+    }
+}
+
+impl ObjectIdentifier {
+    #[inline]
+    pub(crate) fn read_in(r: &mut Reader<'_>, ends: &impl Ends) -> Option<Self> {
         let obj_number = r.read_without_context::<u32>()?;
-        r.skip_white_spaces_and_comments();
+        skip_white_spaces_and_comments_in(r, ends);
         let gen_number = r.read_without_context::<i32>()?;
-        r.skip_white_spaces_and_comments();
+        skip_white_spaces_and_comments_in(r, ends);
         r.forward_tag(b"obj")?;
 
         Some(Self {
