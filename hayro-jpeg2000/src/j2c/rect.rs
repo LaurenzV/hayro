@@ -15,8 +15,8 @@ impl IntRect {
         Self {
             x0: x,
             y0: y,
-            x1: x + w,
-            y1: y + h,
+            x1: x.saturating_add(w),
+            y1: y.saturating_add(h),
         }
     }
 
@@ -43,5 +43,19 @@ impl IntRect {
                 u32::min(self.y1, other.y1),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn padded_rect_at_grid_limit() {
+        let end = u32::MAX;
+        assert_eq!(
+            IntRect::from_xywh(end - 3, end - 7, 4, 8),
+            IntRect::from_ltrb(end - 3, end - 7, end, end),
+        );
     }
 }

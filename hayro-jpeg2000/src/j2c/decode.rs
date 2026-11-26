@@ -347,7 +347,8 @@ fn decode_sub_band_bitplanes(
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
             let base_store = &mut storage.coefficients[sub_band.coefficients.clone()];
-            let mut base_idx = (y_offset * sub_band.rect.width()) as usize + x_offset as usize;
+            let mut base_idx =
+                y_offset as usize * sub_band.rect.width() as usize + x_offset as usize;
 
             for (coefficients, coefficient_states) in
                 tile_ctx.bit_plane_decode_context.coefficient_rows()
@@ -455,8 +456,8 @@ fn store<'a>(
         let image_width = header.size_data.image_width();
         let image_height = header.size_data.image_height();
 
-        let x_shrink_factor = header.size_data.x_shrink_factor;
-        let y_shrink_factor = header.size_data.y_shrink_factor;
+        let scale_x = u32::from(scale_x) / header.size_data.x_shrink_factor;
+        let scale_y = u32::from(scale_y) / header.size_data.y_shrink_factor;
 
         let first_x = (tile.rect.x0 == header.size_data.image_area_x_offset)
             .then_some(resolution_tile.rect.x0);
@@ -470,18 +471,18 @@ fn store<'a>(
             let reference_grid_y = if first_y == Some(y) {
                 image_y_offset
             } else {
-                (scale_y as u32 * y) / y_shrink_factor
+                scale_y.saturating_mul(y)
             };
-            let y_end = (scale_y as u32 * (y + 1)) / y_shrink_factor;
+            let y_end = scale_y.saturating_mul(y + 1);
 
             for x in resolution_tile.rect.x0..resolution_tile.rect.x1 {
                 let relative_x = (x - idwt_output.rect.x0) as usize;
                 let reference_grid_x = if first_x == Some(x) {
                     image_x_offset
                 } else {
-                    (scale_x as u32 * x) / x_shrink_factor
+                    scale_x.saturating_mul(x)
                 };
-                let x_end = (scale_x as u32 * (x + 1)) / x_shrink_factor;
+                let x_end = scale_x.saturating_mul(x + 1);
 
                 let sample = idwt_output.coefficients
                     [relative_y * idwt_output.rect.width() as usize + relative_x];

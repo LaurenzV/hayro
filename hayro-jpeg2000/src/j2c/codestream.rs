@@ -534,16 +534,8 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
         bail!(crate::TileError::InvalidOffsets);
     }
 
-    if size_data
-        .tile_x_offset
-        .checked_add(size_data.tile_width)
-        .ok_or(crate::TileError::InvalidOffsets)?
-        <= size_data.image_area_x_offset
-        || size_data
-            .tile_y_offset
-            .checked_add(size_data.tile_height)
-            .ok_or(crate::TileError::InvalidOffsets)?
-            <= size_data.image_area_y_offset
+    if size_data.image_area_x_offset - size_data.tile_x_offset >= size_data.tile_width
+        || size_data.image_area_y_offset - size_data.tile_y_offset >= size_data.tile_height
     {
         bail!(crate::TileError::InvalidOffsets);
     }

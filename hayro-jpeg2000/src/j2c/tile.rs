@@ -551,50 +551,39 @@ impl<'a> ResolutionTile<'a> {
             .num_decomposition_levels()
             - self.resolution;
 
-        let x_stride =
-            1_u32.checked_shl(self.precinct_exponent_x().checked_add(nl_minus_r)? as u32)?;
-        let y_stride =
-            1_u32.checked_shl(self.precinct_exponent_y().checked_add(nl_minus_r)? as u32)?;
+        let x_stride = 1_u64 << (self.precinct_exponent_x() + nl_minus_r);
+        let y_stride = 1_u64 << (self.precinct_exponent_y() + nl_minus_r);
+        let size_info = &self.component_tile.component_info.size_info;
+        let precinct_x_step = u64::from(size_info.horizontal_resolution) * x_stride;
+        let precinct_y_step = u64::from(size_info.vertical_resolution) * y_stride;
 
-        let precinct_x_step = (self
-            .component_tile
-            .component_info
-            .size_info
-            .horizontal_resolution as u32)
-            .checked_mul(x_stride)?;
+        let mut r_x = u64::from(self.component_tile.tile.rect.x0);
+        let mut r_y = u64::from(self.component_tile.tile.rect.y0);
 
-        let precinct_y_step = (self
-            .component_tile
-            .component_info
-            .size_info
-            .vertical_resolution as u32)
-            .checked_mul(y_stride)?;
-
-        let mut r_x = self.component_tile.tile.rect.x0;
-        let mut r_y = self.component_tile.tile.rect.y0;
-
-        if !r_x.is_multiple_of(precinct_x_step)
-            && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(x_stride)
-        {
-            r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
+        if self.rect.x0.is_multiple_of(1 << self.precinct_exponent_x()) {
+            r_x = r_x.next_multiple_of(precinct_x_step);
         }
 
-        if !r_y.is_multiple_of(precinct_y_step)
-            && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(y_stride)
-        {
-            r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
+        if self.rect.y0.is_multiple_of(1 << self.precinct_exponent_y()) {
+            r_y = r_y.next_multiple_of(precinct_y_step);
         }
 
-        let iter = (0..num_precincts_y).flat_map(move |y| {
+        let rows = if num_precincts_x == 0 {
+            0
+        } else {
+            num_precincts_y
+        };
+        let iter = (0..rows).flat_map(move |y| {
             let y0 = y * ppy_pow2 + y_start;
             let mut r_x = r_x;
 
             let res = (0..num_precincts_x).map(move |x| {
                 let x0 = x * ppx_pow2 + x_start;
 
+                // Every emitted precinct intersects the tile, so its position fits in u32.
                 let data = PrecinctData {
-                    r_x,
-                    r_y,
+                    r_x: r_x as u32,
+                    r_y: r_y as u32,
                     rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
                     idx: num_precincts_x as u64 * y as u64 + x as u64,
                 };
@@ -690,6 +679,115 @@ mod tests {
         CodingStyleParameters, ComponentSizeInfo, QuantizationInfo, QuantizationStyle, SizeData,
         WaveletTransform,
     };
+
+    #[test]
+    fn blocks_at_grid_limit() {
+        use crate::cancel::Cancel;
+        use crate::j2c::{build, decode::DecompositionStorage};
+
+        let end = u32::MAX;
+        let rect = IntRect::from_ltrb(end - 1, end - 1, end, end);
+        for levels in 0..=2 {
+            let tile = Tile {
+                rect,
+                num_layers: 1,
+                tile_parts: vec![],
+                progression_order: ProgressionOrder::LayerResolutionComponentPosition,
+                progression_changes: vec![],
+                mct: false,
+                component_infos: vec![ComponentInfo {
+                    size_info: ComponentSizeInfo {
+                        precision: 8,
+                        horizontal_resolution: 1,
+                        vertical_resolution: 1,
+                    },
+                    coding_style: CodingStyleComponent {
+                        flags: CodingStyleFlags::default(),
+                        parameters: CodingStyleParameters {
+                            num_decomposition_levels: levels,
+                            num_resolution_levels: levels + 1,
+                            code_block_width: 2,
+                            code_block_height: 2,
+                            code_block_style: CodeBlockStyle::default(),
+                            transformation: WaveletTransform::Irreversible97,
+                            precinct_exponents: vec![(15, 15); usize::from(levels + 1)],
+                        },
+                    },
+                    quantization_info: QuantizationInfo {
+                        quantization_style: QuantizationStyle::NoQuantization,
+                        guard_bits: 0,
+                        step_sizes: vec![],
+                    },
+                    roi_shift: 0,
+                }],
+            };
+            let mut storage = DecompositionStorage::default();
+            build::build(&tile, &mut storage, 0, Cancel(None)).unwrap();
+            assert_eq!(storage.code_blocks.len(), 1);
+            assert_eq!(storage.code_blocks[0].rect.area(), 1);
+            if levels == 0 {
+                assert_eq!(storage.precincts.len(), 1);
+                assert_eq!(storage.code_blocks[0].rect, rect);
+            }
+        }
+    }
+
+    #[test]
+    fn empty_and_terminal_precincts_at_large_origins() {
+        let component = ComponentInfo {
+            size_info: ComponentSizeInfo {
+                precision: 8,
+                horizontal_resolution: 1,
+                vertical_resolution: 1,
+            },
+            coding_style: CodingStyleComponent {
+                flags: CodingStyleFlags::default(),
+                parameters: CodingStyleParameters {
+                    num_decomposition_levels: 4,
+                    num_resolution_levels: 5,
+                    code_block_width: 4,
+                    code_block_height: 4,
+                    code_block_style: CodeBlockStyle::default(),
+                    transformation: WaveletTransform::Reversible53,
+                    precinct_exponents: vec![(1, 1); 5],
+                },
+            },
+            quantization_info: QuantizationInfo {
+                quantization_style: QuantizationStyle::NoQuantization,
+                guard_bits: 0,
+                step_sizes: vec![],
+            },
+            roi_shift: 0,
+        };
+        let mut tile = Tile {
+            tile_parts: vec![],
+            component_infos: vec![component],
+            rect: IntRect::from_xywh(0, 0, 1, 1),
+            progression_order: ProgressionOrder::ResolutionPositionComponentLayer,
+            progression_changes: vec![],
+            num_layers: 1,
+            mct: false,
+        };
+        let max = u32::MAX;
+        for (x, y, width, height) in [(max - 7, 0, 1, max), (0, max - 7, max, 1)] {
+            tile.rect = IntRect::from_xywh(x, y, width, height);
+            let resolution =
+                ResolutionTile::new(ComponentTile::new(&tile, &tile.component_infos[0]), 0);
+            assert_eq!(resolution.num_precincts(), 0);
+            assert!(resolution.precincts().unwrap().next().is_none());
+        }
+        for (x, y) in [(max - 31, 0), (0, max - 31)] {
+            tile.rect = IntRect::from_xywh(x, y, 1, 1);
+            let resolution =
+                ResolutionTile::new(ComponentTile::new(&tile, &tile.component_infos[0]), 0);
+            let positions: Vec<_> = resolution
+                .precincts()
+                .unwrap()
+                .map(|p| (p.r_x, p.r_y))
+                .collect();
+            assert_eq!(positions, [(x, y)]);
+        }
+    }
 
     #[test]
     fn test_jpeg2000_standard_example_b4() {

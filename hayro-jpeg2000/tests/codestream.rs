@@ -355,3 +355,110 @@ fn coc_wavelet_per_component() {
         reference("main_rgb").tolerance(1),
     );
 }
+
+#[test]
+fn reference_grid_limit() {
+    let settings = DecodeSettings {
+        strict: true,
+        ..Default::default()
+    };
+    for (levels, sampling, grid_width, expected_width, expected) in [
+        (0, &[1][..], 1, 1, &[129][..]),
+        (1, &[1], 1, 1, &[129]),
+        (0, &[2], 1, 1, &[129]),
+        (0, &[1, 2], 1, 1, &[129, 127]),
+        (17, &[1], 1, 1, &[129]),
+        (10, &[128], 1, 1, &[129]),
+        (0, &[2], 3, 2, &[129, 127]),
+    ] {
+        for progression in [0, 2] {
+            let data = grid_limit_stream(levels, sampling, grid_width, progression);
+            let image = Image::new(&data, &settings).unwrap();
+            assert_eq!((image.width(), image.height()), (expected_width, 1));
+            let mut ctx = DecoderContext::default();
+            let decoded = image.decode(&mut ctx).unwrap();
+            assert_eq!(
+                decoded.data_u8().unwrap(),
+                expected,
+                "levels={levels} sampling={sampling:?} progression={progression}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rpcl_precinct_position_near_grid_limit() {
+    let settings = DecodeSettings {
+        strict: true,
+        ..Default::default()
+    };
+    let mut data = vec![0xff, 0x4f];
+    let mut marker = |code: u8, payload: &[u8]| {
+        data.extend([0xff, code]);
+        data.extend((2 + payload.len() as u16).to_be_bytes());
+        data.extend(payload);
+    };
+
+    let x = 65_536 * 65_535 - 1;
+    let y = u32::MAX - 1;
+    let mut siz = vec![0, 0];
+    for coord in [x + 2, y + 1, x, y, 16, 16, x, y] {
+        siz.extend(coord.to_be_bytes());
+    }
+    siz.extend(2_u16.to_be_bytes());
+    siz.extend([7, 2, 1, 7, 1, 1]);
+    marker(0x51, &siz);
+    marker(0x52, &[0, 2, 0, 1, 0, 0, 4, 4, 0, 1]);
+    marker(0x5c, &[0x40, 0x40]);
+
+    let packets = [0xc0, 0x21, 0x03, 0xc0, 0x21, 0x07, 0x00];
+    marker(0x90, &[0, 0, 0, 0, 0, 14 + packets.len() as u8, 0, 1]);
+    data.extend([0xff, 0x93]);
+    data.extend(packets);
+    data.extend([0xff, 0xd9]);
+
+    let image = Image::new(&data, &settings).unwrap();
+    assert_eq!((image.width(), image.height()), (2, 1));
+    let mut ctx = DecoderContext::default();
+    let decoded = image.decode(&mut ctx).unwrap();
+    assert_eq!(decoded.data_u8().unwrap(), [127, 129, 127, 128]);
+}
+
+fn grid_limit_stream(levels: u8, sampling: &[u8], grid_width: u32, progression: u8) -> Vec<u8> {
+    let mut data = vec![0xff, 0x4f];
+    let mut marker = |code: u8, payload: &[u8]| {
+        data.extend([0xff, code]);
+        data.extend((2 + payload.len() as u16).to_be_bytes());
+        data.extend(payload);
+    };
+
+    let alignment = u32::from(*sampling.iter().max().unwrap()) << levels;
+    let x = (u32::MAX - grid_width) / alignment * alignment;
+    let y = (u32::MAX - 1) / alignment * alignment;
+    let mut siz = vec![0, 0];
+    for coord in [x + grid_width, y + 1, x, y, 16, 16, x, y] {
+        siz.extend(coord.to_be_bytes());
+    }
+    siz.extend((sampling.len() as u16).to_be_bytes());
+    for &step in sampling {
+        siz.extend([7, step, step]);
+    }
+    marker(0x51, &siz);
+    marker(0x52, &[0, progression, 0, 1, 0, levels, 4, 4, 0, 1]);
+    let mut qcd = vec![0x40, 0x40];
+    for _ in 0..levels {
+        qcd.extend([0x48, 0x48, 0x50]);
+    }
+    marker(0x5c, &qcd);
+
+    let mut packets = vec![0xc0, 0x21, if grid_width == 1 { 0x03 } else { 0x00 }];
+    if sampling.len() == 2 {
+        packets.extend([0xc0, 0x21, 0x07]);
+    }
+    packets.extend(std::iter::repeat_n(0, usize::from(levels)));
+    marker(0x90, &[0, 0, 0, 0, 0, 14 + packets.len() as u8, 0, 1]);
+    data.extend([0xff, 0x93]);
+    data.extend(packets);
+    data.extend([0xff, 0xd9]);
+    data
+}
