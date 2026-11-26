@@ -32,6 +32,10 @@
     "file": "pdfs/custom/object_stream_wrong_index.pdf"
   },
   {
+    "id": "page_tree_with_invalid_numbers",
+    "file": "pdfs/custom/page_tree_with_invalid_numbers.pdf"
+  },
+  {
     "id": "dict_read_as_stream",
     "file": "pdfs/custom/dict_read_as_stream.pdf"
   },

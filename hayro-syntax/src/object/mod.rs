@@ -185,7 +185,9 @@ impl Skippable for Object<'_> {
                 _ => String::skip(r, is_content_stream),
             },
             b'(' => String::skip(r, is_content_stream),
-            b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
+            b'.' | b'+' | b'-' | b'0'..=b'9' => {
+                Number::skip(r, is_content_stream).or_else(|| skip_name_like(r, false))
+            }
             b'[' => Array::skip_with_depth(r, is_content_stream, depth),
             // Lenient: skip content operators inside arrays.
             _ => skip_name_like(r, false),
@@ -204,7 +206,13 @@ impl<'a> Readable<'a> for Object<'a> {
                 _ => Self::String(String::read(r, ctx)?),
             },
             b'(' => Self::String(String::read(r, ctx)?),
-            b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
+            b'.' | b'+' | b'-' | b'0'..=b'9' => match Number::read(r, ctx) {
+                Some(n) => Self::Number(n),
+                None => {
+                    skip_name_like(r, false)?;
+                    Self::Null(Null)
+                }
+            },
             b'[' => Self::Array(Array::read(r, ctx)?),
             // See the comment in `skip`.
             _ => {
@@ -343,6 +351,20 @@ mod tests {
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);
         r.read_indirect::<Object<'_>>(&ReaderContext::dummy())
+    }
+
+    #[test]
+    fn malformed_number_tokens() {
+        let ctx = ReaderContext::dummy();
+        for token in [".foo", ".e3", "-.foo", "1e3", "0R"] {
+            let input = format!("{token}/Next");
+            let mut r = Reader::new(input.as_bytes());
+            assert!(r.read::<Number>(&ctx).is_none());
+            assert_eq!(r.skip::<Object<'_>>(false), Some(token.as_bytes()));
+            r.jump(0);
+            assert_eq!(r.read::<Object<'_>>(&ctx), Some(Object::Null(Null)));
+            assert_eq!(r.offset(), token.len());
+        }
     }
 
     #[test]

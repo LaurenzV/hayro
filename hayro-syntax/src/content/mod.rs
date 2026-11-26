@@ -145,7 +145,7 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
         match first {
             b'.' | b'+' | b'-' | b'0'..=b'9' | b'/' | b'[' | b'<' | b'(' => {
                 *r = cur;
-                read_operand(r, stack)?;
+                read_operand(r, stack, first)?;
                 cur = r.clone();
             }
             _ => {
@@ -165,9 +165,13 @@ fn read_instruction<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<Ope
     }
 }
 
-fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>) -> Option<()> {
+fn read_operand<'a>(r: &mut Reader<'a>, stack: &mut Stack<'a>, first: u8) -> Option<()> {
+    let object = match first {
+        b'.' | b'+' | b'-' | b'0'..=b'9' => Number::read_fallback(r, true).map(Object::Number),
+        _ => r.read_without_context::<Object<'a>>(),
+    };
     // A number glued to regular characters acts as an unknown operator; skip it (issue 994).
-    if let Some(object) = r.read_without_context::<Object<'a>>() {
+    if let Some(object) = object {
         stack.push(object)
     } else if r.read_without_context::<Operator<'a>>().is_some() {
         stack.clear();

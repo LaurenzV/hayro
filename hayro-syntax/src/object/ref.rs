@@ -2,6 +2,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_regular_character;
 use core::fmt::{Debug, Display, Formatter};
 
 /// A reference to an object.
@@ -43,25 +44,19 @@ impl From<ObjectIdentifier> for ObjRef {
 
 impl Skippable for ObjRef {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip::<u32>(false)?;
-        r.skip_white_spaces();
-        r.skip::<i32>(false)?;
-        r.skip_white_spaces();
-        r.forward_tag(b"R")?;
-
-        Some(())
+        Self::read(r, ReaderContext::dummy_ref()).map(|_| ())
     }
 }
 
 impl Readable<'_> for ObjRef {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_ref = r.read_without_context::<u32>()?;
-        r.skip_white_spaces();
-        let gen_num = r.read_without_context::<i32>()?;
-        r.skip_white_spaces();
+        let obj_number = read_ref_integer(r)?.try_into().ok()?;
+        let gen_number = read_ref_integer(r)?.try_into().ok()?;
         r.forward_tag(b"R")?;
-
-        Some(Self::new(obj_ref, gen_num))
+        if r.peek_byte().is_some_and(is_regular_character) {
+            return None;
+        }
+        Some(Self::new(obj_number, gen_number))
     }
 }
 
@@ -138,9 +133,10 @@ where
     }
 
     fn skip_with_depth(r: &mut Reader<'_>, is_content_stream: bool, depth: usize) -> Option<()> {
-        r.skip::<ObjRef>(is_content_stream)
-            .or_else(|| r.skip_with_depth::<T>(is_content_stream, depth))
-            .map(|_| {})
+        if !is_content_stream && r.skip::<ObjRef>(false).is_some() {
+            return Some(());
+        }
+        r.skip_with_depth::<T>(is_content_stream, depth).map(|_| ())
     }
 }
 
@@ -149,7 +145,9 @@ where
     T: Readable<'a>,
 {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        if let Some(obj) = r.read::<ObjRef>(ctx) {
+        if !ctx.in_content_stream()
+            && let Some(obj) = r.read::<ObjRef>(ctx)
+        {
             Some(Self::Ref(obj))
         } else {
             Some(Self::NotRef(r.read::<T>(ctx)?))
@@ -157,11 +155,34 @@ where
     }
 }
 
+fn read_ref_integer(r: &mut Reader<'_>) -> Option<i64> {
+    let negative = r.eat(|b| matches!(b, b'+' | b'-')) == Some(b'-');
+    let start = r.offset();
+    let mut value = 0_i64;
+    while let Some(digit) = r.eat(|b| b.is_ascii_digit()) {
+        value = value
+            .checked_mul(10)?
+            .checked_add(i64::from(digit - b'0'))?;
+    }
+    let has_digits = r.offset() != start;
+    if r.forward_tag(b".").is_some() {
+        if !has_digits {
+            r.forward_tag(b"0")?;
+        }
+        r.forward_while(|b| b == b'0');
+    } else if !has_digits {
+        return None;
+    }
+    let end = r.offset();
+    r.skip_white_spaces_and_comments();
+    (r.offset() != end).then_some(if negative { -value } else { value })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::object::{MaybeRef, Number, ObjRef};
-    use crate::reader::Reader;
     use crate::reader::ReaderExt;
+    use crate::reader::{Reader, ReaderContext};
 
     #[test]
     fn display() {
@@ -205,6 +226,32 @@ mod tests {
                 .read_without_context::<ObjRef>()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn reference_number_boundaries() {
+        let ctx = ReaderContext::dummy_ref();
+        for (input, expected) in [
+            ("8 .R", None),
+            ("8 0R", None),
+            ("8 . R", None),
+            ("8 0.9 R", None),
+            ("8.9 0 R", None),
+            ("8.00000000000000001 0 R", None),
+            ("8 0.0 Rfalsehood", None),
+            ("3% note\n0 R", Some(ObjRef::new(3, 0))),
+            ("3 0.0 R", Some(ObjRef::new(3, 0))),
+            ("8 4294967296 R", None),
+        ] {
+            let mut r = Reader::new(input.as_bytes());
+            assert_eq!(
+                r.skip::<ObjRef>(ctx.in_content_stream()),
+                expected.map(|_| input.as_bytes())
+            );
+            r.jump(0);
+            assert_eq!(r.read::<ObjRef>(ctx), expected);
+            assert_eq!(r.offset(), expected.map_or(0, |_| input.len()));
+        }
     }
 
     #[test]

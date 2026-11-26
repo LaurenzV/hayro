@@ -15,7 +15,7 @@ use crate::x_object::{FormXObject, ImageXObject, XObject};
 use bitflags::bitflags;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, N, RECT};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -430,24 +430,14 @@ pub fn interpret<'a>(
                     .and_then(|name| resources.properties.get::<Dict<'_>>(name))
                     .or_else(|| dict_or_stream(bdc.1).map(|(props, _)| props.clone()));
 
-                let oc = bdc
-                    .1
-                    .clone()
-                    .into_name()
-                    .and_then(|name| {
-                        let r = resources.properties.get_ref(name.as_ref())?;
-                        let d = resources
-                            .properties
-                            .get::<Dict<'_>>(name)
-                            .unwrap_or_default();
-                        Some((d, r))
-                    })
-                    .or_else(|| {
-                        let (props, _) = dict_or_stream(bdc.1)?;
-                        let r = props.get_ref(OC)?;
-                        let d = props.get::<Dict<'_>>(OC).unwrap_or_default();
-                        Some((d, r))
-                    });
+                let oc = bdc.1.clone().into_name().and_then(|name| {
+                    let r = resources.properties.get_ref(name.as_ref())?;
+                    let d = resources
+                        .properties
+                        .get::<Dict<'_>>(name)
+                        .unwrap_or_default();
+                    Some((d, r))
+                });
 
                 if let Some((dict, oc_ref)) = oc {
                     context.ocg_state.begin_ocg(&dict, oc_ref.into());

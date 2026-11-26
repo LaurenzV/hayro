@@ -77,6 +77,9 @@ impl<'a> Dict<'a> {
 
     /// Get the object reference linked to a key.
     pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
+        if self.ctx().in_content_stream() {
+            return None;
+        }
         let offset = self.offset(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
@@ -199,11 +202,7 @@ impl Skippable for Dict<'_> {
 
                 r.skip_white_spaces_and_comments();
 
-                if is_content_stream {
-                    r.skip_with_depth::<Object<'_>>(is_content_stream, depth + 1)?;
-                } else {
-                    r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
-                }
+                r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
             }
         }
     }
@@ -330,11 +329,7 @@ where
             // Null entries are kept: checking for them would resolve references before decryption is set up.
             on_entry(name, offset, r)?;
 
-            if ctx.in_content_stream() {
-                r.skip_with_depth::<Object<'_>>(ctx.in_content_stream(), depth)?;
-            } else {
-                r.skip_with_depth::<MaybeRef<Object<'_>>>(ctx.in_content_stream(), depth)?;
-            }
+            r.skip_with_depth::<MaybeRef<Object<'_>>>(ctx.in_content_stream(), depth)?;
         }
     }
 }

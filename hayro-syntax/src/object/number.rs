@@ -70,52 +70,34 @@ impl Display for Number {
 
 impl Skippable for Number {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        let has_sign = r.forward_if(|b| b == b'+' || b == b'-').is_some();
-
-        // Some PDFs have weird trailing minuses, so try to accept those as well.
-        match r.peek_byte()? {
-            b'.' => {
-                r.read_byte()?;
-                // See PDFJS-9252 - treat a single . as 0.
-                r.forward_while(is_digit_or_minus);
-            }
-            b'0'..=b'9' | b'-' => {
-                r.forward_while_1(is_digit_or_minus)?;
-                if let Some(()) = r.forward_tag(b".") {
-                    r.forward_while(is_digit_or_minus);
-                }
-            }
-            // See PDFJS-bug1753983 and PDFJS-bug1953099 - accept just + or - as a zero.
-            _ if has_sign => {}
-            _ => return None,
-        }
-
-        // See issue 994. Don't accept numbers that are followed by a regular character.
-        if r.peek_byte().is_some_and(is_regular_character) {
-            return None;
-        }
-
-        Some(())
+        Self::read(r, ReaderContext::dummy_ref()).map(|_| ())
     }
 }
 
 impl Readable<'_> for Number {
     #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let old_offset = r.offset();
-        Self::read_simple(r)
-            .or_else(|| {
-                r.jump(old_offset);
-                read_inner(r)
-            })
-            .or_else(|| {
-                r.jump(old_offset);
-                None
-            })
+        let start = r.offset();
+        Self::read_simple(r).or_else(|| {
+            r.jump(start);
+            Self::read_fallback(r, false)
+        })
     }
 }
 
 impl Number {
+    #[inline]
+    pub(crate) fn read_fallback(
+        r: &mut Reader<'_>,
+        allow_operator_after_dot: bool,
+    ) -> Option<Self> {
+        let start = r.offset();
+        read_inner(r, allow_operator_after_dot).or_else(|| {
+            r.jump(start);
+            None
+        })
+    }
+
     #[inline(always)]
     pub(crate) fn read_simple(r: &mut Reader<'_>) -> Option<Self> {
         let negative = match r.peek_byte() {
@@ -188,7 +170,7 @@ impl Number {
 }
 
 #[inline(always)]
-fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
+fn read_inner(r: &mut Reader<'_>, allow_operator_after_dot: bool) -> Option<Number> {
     let start_offset = r.offset();
     let (has_sign, negative) = match r.peek_byte()? {
         b'-' => {
@@ -244,7 +226,9 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     }
 
     if !has_digits {
-        if has_dot || (has_sign && r.peek_byte().is_some_and(|b| !is_regular_character(b))) {
+        if (has_dot && allow_operator_after_dot)
+            || ((has_dot || has_sign) && !r.peek_byte().is_some_and(is_regular_character))
+        {
             // Treat numbers like just `-`, `+` or `-.` as zero.
             return Some(Number(InternalNumber::Integer(0)));
         }
@@ -557,8 +541,17 @@ mod tests {
     }
 
     #[test]
+    fn skip_number() {
+        let mut reader = Reader::new(b"--2");
+        assert!(reader.skip::<Number>(false).is_none());
+        assert_eq!(reader.offset(), 0);
+    }
+
+    #[test]
     fn lone_sign() {
-        for input in ["+ ", "+(", "+<", "+]", "+/", "- ", "-(", "-<", "-]", "-/"] {
+        for input in [
+            "+", "-", "+ ", "+(", "+<", "+]", "+/", "- ", "-(", "-<", "-]", "-/",
+        ] {
             assert_eq!(
                 Reader::new(input.as_bytes()).read_without_context::<i32>(),
                 Some(0),
@@ -566,7 +559,7 @@ mod tests {
             );
         }
 
-        for input in ["+", "-", "+abc", "-abc"] {
+        for input in ["+abc", "-abc"] {
             assert_eq!(
                 Reader::new(input.as_bytes()).read_without_context::<i32>(),
                 None,

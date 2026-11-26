@@ -97,10 +97,8 @@ impl Skippable for Array<'_> {
 
             if let Some(()) = r.forward_tag(b"]") {
                 return Some(());
-            } else if is_content_stream {
-                r.skip_with_depth::<Object<'_>>(true, depth + 1)?;
             } else {
-                r.skip_with_depth::<MaybeRef<Object<'_>>>(false, depth + 1)?;
+                r.skip_with_depth::<MaybeRef<Object<'_>>>(is_content_stream, depth + 1)?;
             }
         }
     }
@@ -407,8 +405,12 @@ mod tests {
     }
 
     #[test]
-    fn malformed_ref_is_not_valid_array() {
-        assert!(array_ref_impl(b"[8 0R]").is_none());
+    fn malformed_reference_in_array() {
+        let items = array_ref_impl(b"[8 0R]").unwrap();
+        assert!(matches!(items.as_slice(),
+            [MaybeRef::NotRef(Object::Number(n)), MaybeRef::NotRef(Object::Null(_))]
+                if n.as_i64() == 8
+        ));
     }
 
     #[test]

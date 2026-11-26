@@ -108,18 +108,95 @@ op_impl!(
 
 #[cfg(test)]
 mod tests {
-    use crate::content::TypedIter;
     use crate::content::ops::{
         BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, FillPathNonZero, LineTo,
         MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
         SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
+    use crate::content::{TypedIter, UntypedIter};
     use crate::object::Name;
     use crate::object::Number;
     use crate::object::Object;
     use crate::object::{Dict, FromBytes};
     fn n(num: i32) -> Number {
         Number::from_i32(num)
+    }
+
+    #[test]
+    fn malformed_numbers_in_content_containers() {
+        for prefix in [
+            "[(A) .foo (B)] TJ",
+            "[--2] 0 d",
+            "/Span << /Private --2 >> BDC",
+        ] {
+            let input = format!("{prefix} 0 0 10 10 re f");
+            let mut iter = TypedIter::new(input.as_bytes());
+            match iter.next().unwrap() {
+                TypedInstruction::ShowTexts(texts) => {
+                    let items: Vec<_> = texts.0.iter::<Object<'_>>().collect();
+                    assert!(
+                        matches!(items.as_slice(), [Object::String(a), Object::Null(_), Object::String(b)]
+                        if a.as_bytes() == b"A" && b.as_bytes() == b"B"),
+                        "{prefix}"
+                    );
+                }
+                TypedInstruction::DashPattern(dash) => {
+                    let items: Vec<_> = dash.0.iter::<Object<'_>>().collect();
+                    assert!(matches!(items.as_slice(), [Object::Null(_)]), "{prefix}");
+                }
+                TypedInstruction::BeginMarkedContentWithProperties(
+                    BeginMarkedContentWithProperties(_, Object::Dict(dict)),
+                ) => {
+                    assert!(
+                        matches!(dict.get::<Object<'_>>("Private"), Some(Object::Null(_))),
+                        "{prefix}"
+                    );
+                }
+                other => panic!("{prefix}: {other:?}"),
+            }
+            assert!(matches!(iter.next(), Some(TypedInstruction::RectPath(_))));
+            assert!(matches!(
+                iter.next(),
+                Some(TypedInstruction::FillPathNonZero(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn reference_tokens_in_text_array() {
+        let mut iter = TypedIter::new(b"[(A) 30% note\n0 R (B)] TJ");
+        let Some(TypedInstruction::ShowTexts(texts)) = iter.next() else {
+            panic!("expected TJ");
+        };
+        let items: Vec<_> = texts.0.iter::<Object<'_>>().collect();
+        assert!(matches!(items.as_slice(),
+            [Object::String(a), Object::Number(first), Object::Number(second), Object::Null(_), Object::String(b)]
+            if a.as_bytes() == b"A" && *first == n(30) && *second == n(0) && b.as_bytes() == b"B"
+        ));
+    }
+
+    #[test]
+    fn reference_tokens_in_marked_content_properties() {
+        let mut iter = TypedIter::new(b"/Span << /Private 30% note\n0 R >> BDC");
+        let Some(TypedInstruction::BeginMarkedContentWithProperties(
+            BeginMarkedContentWithProperties(_, Object::Dict(dict)),
+        )) = iter.next()
+        else {
+            panic!("expected BDC with a property dictionary");
+        };
+        assert_eq!(dict.get::<i32>("Private"), Some(30));
+        assert_eq!(dict.get_ref("Private"), None);
+    }
+
+    #[test]
+    fn numbers_before_content_operators() {
+        let mut iter = UntypedIter::new(b".q 42 0R 7 w");
+        let save = iter.next().unwrap();
+        assert_eq!(save.operator.as_ref(), b"q");
+        assert_eq!(save.operands.as_slice(), &[Object::Number(Number::ZERO)]);
+        let width = iter.next().unwrap();
+        assert_eq!(width.operator.as_ref(), b"w");
+        assert_eq!(width.operands.as_slice(), &[Object::Number(n(7))]);
     }
 
     #[test]
