@@ -1,11 +1,10 @@
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use super::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
 use super::codestream::{ComponentInfo, Header, QuantizationStyle, WaveletTransform};
 use super::idwt::IDWTOutput;
-use super::progression::{ProgressionData, progression_iterator};
+use super::progression::{PacketIterator, progression_iterator};
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
@@ -34,7 +33,7 @@ pub(crate) fn decode<'a>(
     for tile in &tiles {
         cancel.check()?;
 
-        let progression_iterator = progression_iterator(tile, header)?;
+        let progression_iterator = progression_iterator(tile, header, cancel)?;
 
         decode_tile(
             tile,
@@ -98,10 +97,10 @@ impl DecoderContext<'_> {
     }
 }
 
-fn decode_tile<'a, 'b>(
-    tile: &'b Tile<'a>,
+fn decode_tile<'a>(
+    tile: &Tile<'a>,
     header: &Header,
-    progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
+    progression_iterator: PacketIterator<'_>,
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut [ComponentData],
     storage: &mut DecompositionStorage<'a>,
