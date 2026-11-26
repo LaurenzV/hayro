@@ -70,8 +70,9 @@ fn parse_packet<'a>(
 ) -> Option<()> {
     let progression_data = progression_iterator.next()?;
     let resolution = progression_data.resolution;
-    let component_info = &component_infos[progression_data.component as usize];
-    let tile_decompositions = &mut storage.tile_decompositions[progression_data.component as usize];
+    let component_info = &component_infos[usize::from(progression_data.component)];
+    let tile_decompositions =
+        &mut storage.tile_decompositions[usize::from(progression_data.component)];
     let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
     let body_reader = tile_part.body();
