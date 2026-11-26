@@ -225,9 +225,9 @@ trailer << /Root 1 0 R >>
             space.convert_in_place(&mut in_place).unwrap();
             assert_eq!(in_place, expected);
 
-            let mut output = vec![0; expected.len()];
             for trailing in [None, Some(42), Some(7)] {
                 input.extend(trailing);
+                let mut output = vec![0xA5; expected.len()];
                 space.convert_inner(&input, &mut output).unwrap();
                 assert_eq!(output, expected);
             }
