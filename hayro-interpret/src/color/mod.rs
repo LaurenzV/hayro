@@ -303,7 +303,7 @@ impl ColorSpace {
 
     pub(crate) fn pattern_cs(&self) -> Option<Self> {
         match self.0.as_ref() {
-            ColorSpaceType::Pattern(pattern) => Some(pattern.color_space().clone()),
+            ColorSpaceType::Pattern(pattern) => Some(pattern.color_space()),
             _ => None,
         }
     }
