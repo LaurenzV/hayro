@@ -1,5 +1,5 @@
 use crate::SvgRenderer;
-use hayro_interpret::{DrawMode, DrawProps, FillRule};
+use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use std::io;
 use std::io::Write;
@@ -16,13 +16,18 @@ impl<'a> SvgRenderer<'a> {
                 if *f == FillRule::EvenOdd {
                     self.xml.write_attribute("fill-rule", "evenodd");
                 }
-                self.write_paint(&props.paint, || path.bounding_box(), props.transform, None);
+                self.write_paint(
+                    &props.paint,
+                    |stroke| path_paint_bounds(path, stroke),
+                    props.transform,
+                    None,
+                );
             }
             DrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
                 self.write_paint(
                     &props.paint,
-                    || path.bounding_box(),
+                    |stroke| path_paint_bounds(path, stroke),
                     props.transform,
                     Some(s),
                 );
@@ -34,7 +39,7 @@ impl<'a> SvgRenderer<'a> {
                 self.write_stroke_properties(s);
                 self.write_fill_and_stroke_paint(
                     &props.paint,
-                    || path.bounding_box(),
+                    |stroke| path_paint_bounds(path, stroke),
                     props.transform,
                     s,
                 );
@@ -58,15 +63,30 @@ impl<'a> SvgRenderer<'a> {
 
         match draw_mode {
             DrawMode::Fill(_) => {
-                self.write_paint(&props.paint, || *rect, props.transform, None);
+                self.write_paint(
+                    &props.paint,
+                    |stroke| rect_paint_bounds(*rect, stroke),
+                    props.transform,
+                    None,
+                );
             }
             DrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
-                self.write_paint(&props.paint, || *rect, props.transform, Some(s));
+                self.write_paint(
+                    &props.paint,
+                    |stroke| rect_paint_bounds(*rect, stroke),
+                    props.transform,
+                    Some(s),
+                );
             }
             DrawMode::FillAndStroke(_, s) => {
                 self.write_stroke_properties(s);
-                self.write_fill_and_stroke_paint(&props.paint, || *rect, props.transform, s);
+                self.write_fill_and_stroke_paint(
+                    &props.paint,
+                    |stroke| rect_paint_bounds(*rect, stroke),
+                    props.transform,
+                    s,
+                );
             }
             DrawMode::Invisible => {
                 self.xml.end_element();
@@ -77,6 +97,29 @@ impl<'a> SvgRenderer<'a> {
         self.write_transform(props.transform);
         self.xml.end_element();
     }
+}
+
+fn rect_paint_bounds(rect: Rect, stroke: Option<&StrokeProps>) -> Rect {
+    let pad = stroke.map_or(0., |s| f64::from(s.line_width));
+    rect.inflate(pad, pad)
+}
+
+pub(crate) fn path_paint_bounds(path: &BezPath, stroke: Option<&StrokeProps>) -> Rect {
+    let bounds = rect_paint_bounds(path.bounding_box(), stroke);
+    let Some(props) = stroke else { return bounds };
+    if props.line_join != kurbo::Join::Miter
+        || props.miter_limit <= 2.
+        || path.elements().len() <= 2
+    {
+        return bounds;
+    }
+    // Undashed joins cover all miter tips; the width padding already covers dash caps.
+    let style = kurbo::Stroke::new(f64::from(props.line_width))
+        .with_join(kurbo::Join::Miter)
+        .with_miter_limit(f64::from(props.miter_limit));
+    let tolerance = f64::from(props.line_width).abs().max(1.) / 256.;
+    let joins = kurbo::stroke(path, &style, &kurbo::StrokeOpts::default(), tolerance);
+    bounds.union(joins.bounding_box().inflate(tolerance, tolerance))
 }
 
 pub(crate) trait BezPathExt {
@@ -113,5 +156,26 @@ impl BezPathExt for BezPath {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn miter_limit_does_not_enlarge_a_single_segment() {
+        let mut path = BezPath::new();
+        path.move_to((0., 0.));
+        path.line_to((8., 0.));
+        let stroke = StrokeProps {
+            line_width: 2.,
+            miter_limit: 10000.,
+            ..Default::default()
+        };
+        assert_eq!(
+            path_paint_bounds(&path, Some(&stroke)),
+            Rect::new(-2., -2., 10., 2.)
+        );
     }
 }

@@ -1,13 +1,14 @@
-use crate::StrokeProps;
 use crate::color::{AlphaColor, ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::font::{Font, UNITS_PER_EM};
-use crate::function::{Function, TransferFunction};
+use crate::function::TransferFunction;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::types::BlendMode;
+use crate::util::hash128;
 use crate::x_object::soft_mask::SoftMask;
+use crate::{CacheKey, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
 use hayro_syntax::object::{Array, Dict, Name, Number, Object};
@@ -23,6 +24,16 @@ pub enum ActiveTransferFunction {
     Single(TransferFunction),
     /// Four transfer functions, one for each component.
     Four([TransferFunction; 4]),
+}
+
+impl CacheKey for ActiveTransferFunction {
+    fn cache_key(&self) -> u128 {
+        let channels = match self {
+            Self::Single(f) => [f.cache_key(); 3],
+            Self::Four([r, g, b, _]) => [r, g, b].map(CacheKey::cache_key),
+        };
+        hash128(&channels)
+    }
 }
 
 impl ActiveTransferFunction {
@@ -301,19 +312,17 @@ pub(crate) fn handle_gs_single<'a>(
                 Object::Array(array) => {
                     let mut iter = array.iter::<Object<'_>>();
                     let functions = [
-                        TransferFunction::new(Function::new(&iter.next()?)?),
-                        TransferFunction::new(Function::new(&iter.next()?)?),
-                        TransferFunction::new(Function::new(&iter.next()?)?),
-                        TransferFunction::new(Function::new(&iter.next()?)?),
+                        TransferFunction::new(&iter.next()?)?,
+                        TransferFunction::new(&iter.next()?)?,
+                        TransferFunction::new(&iter.next()?)?,
+                        TransferFunction::new(&iter.next()?)?,
                     ];
 
                     Some(ActiveTransferFunction::Four(functions))
                 }
                 // Only `Identity` and `Default` are valid, which both just reset it.
                 Object::Name(_) => None,
-                o => Some(ActiveTransferFunction::Single(TransferFunction::new(
-                    Function::new(&o)?,
-                ))),
+                o => Some(ActiveTransferFunction::Single(TransferFunction::new(&o)?)),
             };
 
             context.compositing_mut().transfer_function = function;

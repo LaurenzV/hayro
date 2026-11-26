@@ -39,7 +39,7 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_paint(
         &mut self,
         paint: &Paint<'a>,
-        path_bbox: impl Fn() -> Rect,
+        path_bbox: impl Fn(Option<&StrokeProps>) -> Rect,
         path_transform: Affine,
         stroke_props: Option<&StrokeProps>,
     ) {
@@ -63,7 +63,7 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_fill_and_stroke_paint(
         &mut self,
         paint: &Paint<'a>,
-        path_bbox: impl Fn() -> Rect,
+        path_bbox: impl Fn(Option<&StrokeProps>) -> Rect,
         path_transform: Affine,
         stroke_props: &StrokeProps,
     ) {
@@ -86,7 +86,7 @@ impl<'a> SvgRenderer<'a> {
     fn svg_paint(
         &mut self,
         paint: &Paint<'a>,
-        path_bbox: &impl Fn() -> Rect,
+        path_bbox: &impl Fn(Option<&StrokeProps>) -> Rect,
         path_transform: Affine,
         stroke_props: Option<&StrokeProps>,
     ) -> (String, f32) {
@@ -109,14 +109,33 @@ impl<'a> SvgRenderer<'a> {
                     Pattern::Shading(s) => {
                         const NATIVE_GRADIENT_TOLERANCE: f32 = 0.01;
 
-                        let mut basic_bbox = path_bbox();
-
-                        if let Some(stroke_width) = stroke_props.map(|s| s.line_width) {
-                            basic_bbox =
-                                basic_bbox.inflate(stroke_width as f64, stroke_width as f64);
-                        }
-
-                        let bbox = (path_transform * basic_bbox.to_path(0.0)).bounding_box();
+                        let bbox = path_transform.transform_rect_bbox(path_bbox(stroke_props));
+                        let encoded = s.encode();
+                        let native = match &encoded.shading_type {
+                            EncodedShadingType::RadialAxial(gradient) => {
+                                gradient.as_svg_gradient(&encoded, NATIVE_GRADIENT_TOLERANCE)
+                            }
+                            _ => None,
+                        };
+                        let bbox = if native.is_some() {
+                            bbox
+                        } else {
+                            let mut visible = bbox.intersect(self.visible_bounds());
+                            if let Some(clip) = &s.shading.clip_path {
+                                visible = visible.intersect(clip.bounding_box());
+                            }
+                            if visible.is_zero_area() {
+                                return ("none".into(), 1.0);
+                            }
+                            let visible = visible.inflate(1.0, 1.0).intersect(bbox);
+                            // Crop whole texels to preserve the sampling grid and its image transform.
+                            Rect::new(
+                                visible.x0 - (visible.x0 - bbox.x0).fract(),
+                                visible.y0 - (visible.y0 - bbox.y0).fract(),
+                                visible.x1 + (bbox.x1 - visible.x1).fract(),
+                                visible.y1 + (bbox.y1 - visible.y1).fract(),
+                            )
+                        };
                         let shading_key = hash128(&(
                             s.cache_key(),
                             bbox.x0.to_bits(),
@@ -125,33 +144,27 @@ impl<'a> SvgRenderer<'a> {
                             bbox.y1.to_bits(),
                         ));
 
-                        let encoded = s.encode();
-                        let shading_paint = if let EncodedShadingType::RadialAxial(gradient) =
-                            &encoded.shading_type
-                            && let Some(native) =
-                                gradient.as_svg_gradient(&encoded, NATIVE_GRADIENT_TOLERANCE)
-                        {
-                            let gradient_key = gradient_key(&native);
-                            let gradient_id =
-                                self.gradients
-                                    .insert_with(gradient_key, || CachedNativeGradient {
-                                        gradient: native,
-                                    });
-
-                            CachedShadingPaint::NativeGradient {
-                                gradient: gradient_id,
-                            }
-                        } else {
-                            let shading_id =
-                                self.shadings.insert_with(shading_key, || CachedShading {
-                                    pattern: s.clone(),
-                                    bbox,
+                        let shading_paint =
+                            if let Some(native) = native {
+                                let gradient_key = gradient_key(&native);
+                                let gradient_id = self.gradients.insert_with(gradient_key, || {
+                                    CachedNativeGradient { gradient: native }
                                 });
 
-                            CachedShadingPaint::Raster {
-                                shading: shading_id,
-                            }
-                        };
+                                CachedShadingPaint::NativeGradient {
+                                    gradient: gradient_id,
+                                }
+                            } else {
+                                let shading_id =
+                                    self.shadings.insert_with(shading_key, || CachedShading {
+                                        pattern: s.clone(),
+                                        bbox,
+                                    });
+
+                                CachedShadingPaint::Raster {
+                                    shading: shading_id,
+                                }
+                            };
 
                         let clip_path = s.shading.clip_path.clone().map(|path| {
                             self.clip_paths.insert(CachedClipPath::Path {
@@ -179,6 +192,8 @@ impl<'a> SvgRenderer<'a> {
                         let cache_key = (pattern.clone(), inverse_transform).cache_key();
 
                         if !self.tiling_patterns.contains(cache_key) {
+                            let (previous, clips) =
+                                self.swap_viewport(tile_viewport(t.bbox), Vec::new());
                             self.with_dummy(|r| {
                                 t.interpret(
                                     r,
@@ -186,6 +201,7 @@ impl<'a> SvgRenderer<'a> {
                                     false,
                                 );
                             });
+                            self.swap_viewport(previous, clips);
                         }
 
                         self.tiling_patterns
@@ -292,6 +308,8 @@ impl<'a> SvgRenderer<'a> {
 
         for (id, pattern) in patterns {
             let pattern = pattern.clone();
+            let (previous, clips) =
+                self.swap_viewport(tile_viewport(pattern.tiling_pattern.bbox), Vec::new());
             let bbox_origin = Affine::translate((
                 pattern.tiling_pattern.bbox.x0,
                 pattern.tiling_pattern.bbox.y0,
@@ -320,6 +338,7 @@ impl<'a> SvgRenderer<'a> {
             );
 
             self.xml.end_element();
+            self.swap_viewport(previous, clips);
         }
 
         self.xml.end_element();
@@ -337,15 +356,36 @@ impl<'a> SvgRenderer<'a> {
 
         for (id, shading) in shadings.iter() {
             let encoded = shading.pattern.encode();
-            let texture = encoded.render_texture(shading.bbox, 1.0);
+            let full = shading.bbox;
+            let bounds = match &encoded.shading_type {
+                EncodedShadingType::RadialAxial(g) => g.texture_bounds(full, &encoded),
+                _ => full,
+            };
+            let stretch = Affine::scale_non_uniform(
+                if bounds.x1 == full.x1 {
+                    1.
+                } else {
+                    full.width().ceil()
+                },
+                if bounds.y1 == full.y1 {
+                    1.
+                } else {
+                    full.height().ceil()
+                },
+            );
+            let texture = encoded.render_texture(bounds, 1.0);
             let image = DynamicImage::ImageRgba8(
                 ImageBuffer::from_raw(texture.width, texture.height, texture.data).unwrap(),
             );
-            self.write_image(&image, true, Some(id), texture.transform);
+            self.write_image(&image, true, Some(id), texture.transform * stretch);
         }
 
         self.xml.end_element();
     }
+}
+
+fn tile_viewport(bbox: Rect) -> Rect {
+    Rect::from_origin_size(kurbo::Point::ORIGIN, bbox.size())
 }
 
 fn rgba_to_hex(color: [f32; 4]) -> String {

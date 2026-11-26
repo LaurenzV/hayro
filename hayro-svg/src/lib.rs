@@ -30,7 +30,7 @@ use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
     InterpreterCache, InterpreterSettings, SoftMask, StrokeProps, interpret_page,
 };
-use kurbo::{Affine, BezPath, Cap, Join, Rect};
+use kurbo::{Affine, BezPath, Cap, Join, Rect, Shape};
 use rustc_hash::FxHashMap;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::fmt;
@@ -117,11 +117,29 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) gradients: Deduplicator<CachedNativeGradient>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
-    active_clips: Vec<Id>,
+    active_clips: Vec<(Id, Rect)>,
+    viewport: Rect,
     pub(crate) dimensions: (f32, f32),
 }
 
 impl<'a> SvgRenderer<'a> {
+    fn visible_bounds(&self) -> Rect {
+        self.active_clips.last().map_or(self.viewport, |c| c.1)
+    }
+
+    fn swap_viewport(&mut self, bounds: Rect, clips: Vec<(Id, Rect)>) -> (Rect, Vec<(Id, Rect)>) {
+        (
+            std::mem::replace(&mut self.viewport, bounds),
+            std::mem::replace(&mut self.active_clips, clips),
+        )
+    }
+
+    fn with_viewport(&mut self, viewport: Rect, f: impl FnOnce(&mut Self)) {
+        let (previous, clips) = self.swap_viewport(viewport, Vec::new());
+        f(self);
+        self.swap_viewport(previous, clips);
+    }
+
     pub(crate) fn write_transform(&mut self, transform: Affine) {
         let c = transform.as_coeffs();
         let has_scale = !(c[0] as f32).is_nearly_equal(1.0) || !(c[3] as f32).is_nearly_equal(1.0);
@@ -190,7 +208,7 @@ impl<'a> SvgRenderer<'a> {
             self.xml.write_attribute("opacity", &opacity.to_string());
         }
 
-        if let Some(clip_id) = self.active_clips.last() {
+        if let Some((clip_id, _)) = self.active_clips.last() {
             self.xml
                 .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
         }
@@ -247,7 +265,11 @@ impl<'a> SvgRenderer<'a> {
             mask.is_some() || blend_mode != BlendMode::Normal || !self.active_clips.is_empty();
 
         if push_group {
-            self.push_transparency_group_inner(1.0, mask.map(MaskKind::SoftMask), blend_mode);
+            self.push_transparency_group_inner(
+                1.0,
+                mask.map(|m| MaskKind::SoftMask(m, self.visible_bounds())),
+                blend_mode,
+            );
         }
 
         func(self);
@@ -272,7 +294,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        let parent = self.active_clips.last().copied();
+        let parent = self.active_clips.last().map(|c| c.0);
         let clip_id =
             self.clip_paths
                 .insert_with(hash128(&(clip_path.cache_key(), parent)), || {
@@ -283,11 +305,15 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                     }
                 });
 
-        self.active_clips.push(clip_id);
+        self.active_clips.push((
+            clip_id,
+            self.visible_bounds()
+                .intersect(clip_path.path.bounding_box()),
+        ));
     }
 
     fn push_clip_rect(&mut self, rect: &Rect) {
-        let parent = self.active_clips.last().copied();
+        let parent = self.active_clips.last().map(|c| c.0);
         let clip_id = self
             .clip_paths
             .insert_with(hash128(&(rect.cache_key(), parent)), || {
@@ -297,7 +323,8 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                 }
             });
 
-        self.active_clips.push(clip_id);
+        self.active_clips
+            .push((clip_id, self.visible_bounds().intersect(*rect)));
     }
 
     fn push_transparency_group(
@@ -308,7 +335,11 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         _: bool,
         _: bool,
     ) {
-        self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask), blend_mode);
+        self.push_transparency_group_inner(
+            opacity,
+            mask.map(|m| MaskKind::SoftMask(m, self.visible_bounds())),
+            blend_mode,
+        );
     }
 
     fn draw_glyph_run(
@@ -363,7 +394,9 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn new(page: &'a Page<'a>, render_settings: SvgRenderSettings) -> Self {
+        let (width, height) = page.render_dimensions();
         Self {
+            viewport: Rect::new(0.0, 0.0, width.into(), height.into()),
             render_settings,
             xml: XmlWriter::new(Options::default()),
             outline_glyphs: Deduplicator::new('g'),

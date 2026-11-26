@@ -15,24 +15,24 @@ pub(crate) struct ImageLuminanceMask {
 
 #[derive(Clone)]
 pub(crate) enum MaskKind<'a> {
-    SoftMask(SoftMask<'a>),
+    SoftMask(SoftMask<'a>, Rect),
     Image(Arc<ImageLuminanceMask>),
 }
 
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn get_mask_id(&mut self, mask: MaskKind<'a>) -> Id {
         match mask {
-            MaskKind::SoftMask(mask) => {
-                let cache_key = mask.cache_key();
+            MaskKind::SoftMask(mask, bounds) => {
+                let cache_key = hash128(&(mask.cache_key(), bounds.cache_key()));
 
                 if !self.masks.contains(cache_key) {
                     self.with_dummy(|r| {
-                        mask.interpret(r);
+                        r.with_viewport(bounds, |r| mask.interpret(r));
                     });
                 }
 
                 self.masks
-                    .insert_with(cache_key, || MaskKind::SoftMask(mask))
+                    .insert_with(cache_key, || MaskKind::SoftMask(mask, bounds))
             }
             MaskKind::Image(mask) => {
                 let cache_key = hash128(&(
@@ -57,7 +57,7 @@ impl<'a> SvgRenderer<'a> {
         let masks = self.masks.clone();
 
         for (id, mask) in masks.iter() {
-            if let MaskKind::SoftMask(mask) = mask
+            if let MaskKind::SoftMask(mask, _) = mask
                 && let Some(transfer_function) = mask.transfer_function()
             {
                 self.write_transfer_function_filter(
@@ -72,7 +72,7 @@ impl<'a> SvgRenderer<'a> {
             self.xml.write_attribute("maskUnits", "userSpaceOnUse");
 
             match mask {
-                MaskKind::SoftMask(mask) => {
+                MaskKind::SoftMask(mask, bounds) => {
                     let filter_id = mask.transfer_function().map(|_| format!("f{id}"));
 
                     if mask.mask_type() != MaskType::Luminosity || filter_id.is_some() {
@@ -110,7 +110,7 @@ impl<'a> SvgRenderer<'a> {
                         self.xml.write_attribute("style", "isolation:isolate");
                     }
 
-                    mask.interpret(self);
+                    self.with_viewport(*bounds, |r| mask.interpret(r));
 
                     if use_bg {
                         self.xml.end_element();

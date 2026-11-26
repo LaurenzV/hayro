@@ -3,6 +3,7 @@ mod type2;
 mod type3;
 mod type4;
 
+use crate::CacheKey;
 use crate::function::type0::Type0;
 use crate::function::type2::Type2;
 use crate::function::type3::Type3;
@@ -455,17 +456,28 @@ impl Function {
 
 /// A transfer function.
 #[derive(Clone, Debug)]
-pub struct TransferFunction {
+pub struct TransferFunction(Arc<TransferFunctionRepr>);
+
+#[derive(Debug)]
+struct TransferFunctionRepr {
+    cache_key: u128,
     function: Function,
-    samples: Arc<OnceLock<[u8; 256]>>,
+    samples: OnceLock<[u8; 256]>,
+}
+
+impl CacheKey for TransferFunction {
+    fn cache_key(&self) -> u128 {
+        self.0.cache_key
+    }
 }
 
 impl TransferFunction {
-    pub(crate) fn new(function: Function) -> Self {
-        Self {
-            function,
-            samples: Arc::new(OnceLock::new()),
-        }
+    pub(crate) fn new(obj: &Object<'_>) -> Option<Self> {
+        Some(Self(Arc::new(TransferFunctionRepr {
+            function: Function::new(obj)?,
+            cache_key: obj.cache_key(),
+            samples: OnceLock::new(),
+        })))
     }
 
     /// Apply the transfer function to a buffer of values.
@@ -486,12 +498,13 @@ impl TransferFunction {
     }
 
     fn samples(&self) -> &[u8; 256] {
-        self.samples.get_or_init(|| {
+        self.0.samples.get_or_init(|| {
+            let function = &self.0.function;
             let mut output = [0.0; MAX_COMPONENTS];
-            let output = &mut output[..self.function.num_outputs()];
+            let output = &mut output[..function.num_outputs()];
 
             std::array::from_fn(|sample| {
-                match self.function.eval(&[sample as f32 * (1.0 / 255.0)], output) {
+                match function.eval(&[sample as f32 * (1.0 / 255.0)], output) {
                     Some(()) => (output[0] * 255.0 + 0.5) as u8,
                     None => sample as u8,
                 }
