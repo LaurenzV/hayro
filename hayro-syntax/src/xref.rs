@@ -12,6 +12,7 @@ use crate::object::dict::keys::{
 };
 use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
+use crate::object::stream::NextEndstream;
 use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
@@ -79,6 +80,7 @@ fn fallback_xref_map_inner<'a>(
 
     let mut r = Reader::new(data.as_ref());
 
+    let mut next_endstream = NextEndstream::default();
     let mut last_obj_num = None;
 
     loop {
@@ -125,7 +127,11 @@ fn fallback_xref_map_inner<'a>(
                                 after_dict.skip_white_spaces_and_comments();
                                 after_dict.forward_tag(b"stream").is_some()
                             }
-                            && let Some(stream) = old_r.read_indirect::<Stream<'_>>(&dummy_ctx)
+                            && let Some((stream, _)) = Stream::read_with_extent(
+                                &mut old_r,
+                                &dummy_ctx,
+                                &mut next_endstream,
+                            )
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
@@ -745,7 +751,8 @@ fn populate_xref_impl_inner<'a>(
     let mut section = reader.clone();
     let stream = if section.read_without_context::<ObjectIdentifier>().is_some() {
         section.skip_white_spaces_and_comments();
-        let (stream, extent) = Stream::read_with_extent(&mut section, &ctx)?;
+        let (stream, extent) =
+            Stream::read_with_extent(&mut section, &ctx, &mut NextEndstream::default())?;
         section.skip_white_spaces_and_comments();
         let extent = if section.forward_tag(b"endobj").is_some() {
             extent.max(section.offset())
