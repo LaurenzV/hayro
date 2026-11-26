@@ -2,10 +2,11 @@ use crate::function::{Interval, MAX_COMPONENTS, read_intervals};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
+use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, ORDER, SIZE};
 
 #[derive(Debug)]
 pub(crate) struct Type0 {
+    order: u8,
     inputs: Vec<SampledInput>,
     decode: Vec<Interval>,
     sample_range: Interval,
@@ -97,6 +98,7 @@ impl Type0 {
             .collect::<Option<Vec<_>>>()?;
 
         Some(Self {
+            order: dict.get::<u8>(ORDER).unwrap_or(1),
             inputs,
             decode,
             sample_range: Interval {
@@ -139,6 +141,65 @@ impl Type0 {
                 .sample_range
                 .map_f64(a + (b - a) * pos.fract(), self.decode[i]) as f32;
         }
+    }
+
+    pub(super) fn linear_pieces(
+        &self,
+        domain: [f64; 2],
+        offsets: [f64; 2],
+        budget: &mut usize,
+        emit: &mut super::PieceEmitter<'_>,
+    ) -> Option<()> {
+        let [input] = self.inputs.as_slice() else {
+            return None;
+        };
+        if !(self.order == 1 || self.order == 3 && input.size <= 3) {
+            return None;
+        }
+        let [first, last] = domain.map(|x| input.domain.map_f64(x, input.encode));
+        if !first.is_finite() || !last.is_finite() {
+            return None;
+        }
+        let size = i64::from(input.size);
+        let low = ((first.min(last).floor() + 1.0) as i64).clamp(0, size);
+        let high = (first.max(last).ceil() as i64).clamp(low, size);
+        *budget = budget.checked_sub((high - low) as usize + 1)?;
+        let mut previous = [0.0; MAX_COMPONENTS];
+        self.eval_1d(domain[0], &mut previous[..input.stride]);
+        let mut start = offsets[0] as f32;
+        for k in low..high {
+            let index = if first < last {
+                k
+            } else {
+                high - 1 - (k - low)
+            };
+            let end = (offsets[0]
+                + (offsets[1] - offsets[0]) * ((index as f64 - first) / (last - first)))
+                as f32;
+            let mut color = [0.0; MAX_COMPONENTS];
+            for (i, &decode) in self.decode.iter().enumerate() {
+                color[i] = self
+                    .sample_range
+                    .map(self.samples[index as usize * input.stride + i], decode);
+            }
+            emit(
+                [start, end],
+                &previous[..input.stride],
+                &color[..input.stride],
+                budget,
+            )?;
+            previous = color;
+            start = end;
+        }
+        let mut color = [0.0; MAX_COMPONENTS];
+        self.eval_1d(domain[1], &mut color[..input.stride]);
+        emit(
+            [start, offsets[1] as f32],
+            &previous[..input.stride],
+            &color[..input.stride],
+            budget,
+        )?;
+        Some(())
     }
 
     pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) {
@@ -189,6 +250,84 @@ impl Type0 {
 mod tests {
     use super::SampledInput;
     use crate::function::Interval;
+
+    #[test]
+    fn large_sample_table_skips_stop_derivation() {
+        let unit = Interval { min: 0.0, max: 1.0 };
+        let size = 1_048_577;
+        let function = super::Type0 {
+            order: 1,
+            inputs: vec![SampledInput {
+                domain: unit,
+                encode: Interval {
+                    min: 0.0,
+                    max: (size - 1) as f32,
+                },
+                size,
+                stride: 1,
+            }],
+            decode: vec![unit],
+            sample_range: unit,
+            samples: vec![0.0; size as usize],
+        };
+        let mut budget = super::super::MAX_LINEAR_PIECES;
+        assert!(
+            function
+                .linear_pieces(
+                    [0.0, 1.0],
+                    [0.0, 1.0],
+                    &mut budget,
+                    &mut |_, _, _, _| panic!("unexpected native piece")
+                )
+                .is_none()
+        );
+        assert_eq!(budget, super::super::MAX_LINEAR_PIECES);
+        let mut color = [1.0];
+        function.eval(&[0.5], &mut color);
+        assert_eq!(color, [0.0]);
+    }
+
+    #[test]
+    fn sample_order_and_subset_encode() {
+        use crate::function::Function;
+        use hayro_syntax::{
+            Pdf,
+            object::{Object, ObjectIdentifier},
+        };
+        for (order, size, expected) in [
+            ("", 4, 3),
+            ("/Order 1", 4, 3),
+            ("/Order 3", 4, 0),
+            ("/Order 3", 3, 3),
+        ] {
+            let data = format!(
+                "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\n3 0 obj << /FunctionType 0 /Domain [0 2] /Range [0 1] /Encode [3 0] /Size [{size}] /BitsPerSample 8 /Length 4 {order} >>\nstream\nABCD\nendstream\nendobj\ntrailer << /Root 1 0 R >>\n%%EOF"
+            );
+            let pdf = Pdf::new(data.into_bytes()).unwrap();
+            let obj = pdf
+                .xref()
+                .get::<Object<'_>>(ObjectIdentifier::new(3, 0))
+                .unwrap();
+            let function = Function::new(&obj).unwrap();
+            let mut pieces = 0;
+            let result = function.linear_pieces(
+                [1.5, 0.5],
+                [0.0, 1.0],
+                &mut 3,
+                Some(0.01),
+                &mut |offsets, a, b| {
+                    for (offset, c) in offsets.into_iter().zip([a, b]) {
+                        let expected = function.eval_one(&[1.5 - offset]).unwrap();
+                        assert!((c[0] - expected[0]).abs() < 1e-6);
+                    }
+                    pieces += 1;
+                    Some(())
+                },
+            );
+            assert_eq!(result.is_some(), expected != 0);
+            assert_eq!(pieces, expected);
+        }
+    }
 
     #[test]
     fn sample_index_stays_below_size_when_size_rounds() {

@@ -14,7 +14,7 @@ use std::sync::{Arc, OnceLock};
 /// A shading pattern that was encoded so it can be sampled.
 #[derive(Clone, Debug)]
 pub struct EncodedShadingPattern {
-    colors: Arc<OnceLock<PreparedColors>>,
+    pub(crate) colors: Arc<OnceLock<PreparedColors>>,
     /// The base transform of the shading pattern.
     pub base_transform: Affine,
     pub(crate) color_space: ColorSpace,
@@ -93,6 +93,7 @@ pub(crate) struct PreparedColors {
     space: ColorSpace,
     opacity: f32,
     runs: OnceLock<Vec<ColorRun>>,
+    pub(crate) stops: OnceLock<(f32, Option<Vec<crate::gradient::SvgGradientStop>>)>,
 }
 
 #[derive(Debug)]
@@ -113,6 +114,7 @@ impl EncodedShadingPattern {
             space: self.color_space.clone(),
             opacity: self.opacity,
             runs: OnceLock::new(),
+            stops: OnceLock::new(),
         });
         (p.function.same(&g.function)
             && p.domain == g.domain

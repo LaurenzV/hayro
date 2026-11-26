@@ -60,6 +60,20 @@ impl Type4 {
         Some(a == b)
     }
 
+    pub(super) fn steps(&self) -> usize {
+        self.code
+            .iter()
+            .map(|op| match op {
+                PostScriptOp::Roll | PostScriptOp::Copy => MAX_STACK_DEPTH + 1,
+                _ => 1,
+            })
+            .fold(0, usize::saturating_add)
+    }
+
+    pub(super) fn is_square(&self) -> bool {
+        self.code == [PostScriptOp::Dup, PostScriptOp::Mul]
+    }
+
     pub(crate) fn evaluator(&self) -> impl FnMut(&[f32], &mut [f32]) -> Option<()> + '_ {
         let mut stack = Stack::new();
 
@@ -867,6 +881,7 @@ mod tests {
         let procedure = parse_procedure(b"{  }").unwrap();
 
         let type4 = Function(Arc::new(Repr {
+            eval_steps: 1,
             domain: vec![
                 Interval {
                     min: -5.0,

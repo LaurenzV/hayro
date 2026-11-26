@@ -96,6 +96,76 @@ impl ShadingFunction {
         }
     }
 
+    pub(crate) fn linear_pieces(
+        &self,
+        domain: [f64; 2],
+        tolerance: Option<f32>,
+        mut emit: impl FnMut([f32; 2], &[f32], &[f32]) -> Option<()>,
+    ) -> Option<()> {
+        let unit = [0.0, 1.0];
+        let mut budget = crate::function::MAX_LINEAR_PIECES;
+        match self {
+            Self::Single(f) => f.linear_pieces(domain, unit, &mut budget, tolerance, &mut emit),
+            Self::Multiple(functions) => {
+                if let [f] = functions.as_slice() {
+                    return f.linear_pieces(domain, unit, &mut budget, tolerance, &mut emit);
+                }
+                let mut channels = Vec::new();
+                for f in functions {
+                    let mut pieces = Vec::new();
+                    f.linear_pieces(
+                        domain,
+                        unit,
+                        &mut budget,
+                        tolerance,
+                        &mut |offsets, a, b| {
+                            if offsets[0] >= offsets[1] {
+                                return None;
+                            }
+                            pieces.push((offsets.map(f64::from), a[0], b[0]));
+                            Some(())
+                        },
+                    )?;
+                    channels.push(pieces.into_iter().peekable());
+                }
+                let [mut a, mut b] = [[0.0; crate::function::MAX_COMPONENTS]; 2];
+                let mut start = 0.0;
+                while start < 1.0 {
+                    let mut end = 1.0_f64;
+                    for ch in &mut channels {
+                        end = end.min(ch.peek()?.0[1]);
+                    }
+                    for (i, ch) in channels.iter_mut().enumerate() {
+                        let &([lo, hi], left, right) = ch.peek()?;
+                        let mut value = |t| {
+                            if tolerance.is_none() && t != lo && t != hi {
+                                let mut v = [0.];
+                                functions[i]
+                                    .eval_1d_f64(domain[0] + (domain[1] - domain[0]) * t, &mut v)?;
+                                budget = budget.checked_sub(1)?;
+                                return Some(v[0]);
+                            }
+                            let u = (t - lo) / (hi - lo);
+                            Some(((1.0 - u) * f64::from(left) + u * f64::from(right)) as f32)
+                        };
+                        a[i] = value(start)?;
+                        b[i] = value(end)?;
+                        if end == hi {
+                            ch.next();
+                        }
+                    }
+                    emit(
+                        [start as f32, end as f32],
+                        &a[..functions.len()],
+                        &b[..functions.len()],
+                    )?;
+                    start = end;
+                }
+                Some(())
+            }
+        }
+    }
+
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
         let mut bounds = vec![];
 
@@ -828,9 +898,43 @@ fn points_bbox(points: &[Point]) -> kurbo::Rect {
 
 #[cfg(test)]
 mod tests {
-    use super::read_lattice_triangles;
+    use super::{Function, ShadingFunction, read_lattice_triangles};
+    use hayro_syntax::object::{Dict, FromBytes, Object};
 
     const DECODE: [f32; 6] = [0.0, 100.0, 0.0, 100.0, 0.0, 1.0];
+
+    #[test]
+    fn channels_with_distinct_stitches_split_the_other_channels_ramp() {
+        let line = "<< /FunctionType 2 /Domain [0 1] /N 1 >>";
+        let parse = |s: &str| {
+            Function::new(&Object::Dict(Dict::from_bytes(s.as_bytes()).unwrap())).unwrap()
+        };
+        let step = |at| {
+            parse(&format!(
+                "<< /FunctionType 3 /Domain [0 1] /Functions [{line} {line}] /Bounds [{at}] /Encode [0 0 1 1] >>"
+            ))
+        };
+        let function = ShadingFunction::Multiple(vec![step(0.25), parse(line), step(0.75)]);
+        let mut pieces = Vec::new();
+        function
+            .linear_pieces([0.0, 1.0], Some(0.01), |offsets, a, b| {
+                pieces.push((
+                    offsets,
+                    <[f32; 3]>::try_from(a).unwrap(),
+                    <[f32; 3]>::try_from(b).unwrap(),
+                ));
+                Some(())
+            })
+            .unwrap();
+        assert_eq!(
+            pieces,
+            [
+                ([0.0, 0.25], [0.0; 3], [0.0, 0.25, 0.0]),
+                ([0.25, 0.75], [1.0, 0.25, 0.0], [1.0, 0.75, 0.0]),
+                ([0.75, 1.0], [1.0, 0.75, 1.0], [1.0; 3]),
+            ]
+        );
+    }
 
     #[test]
     fn lattice_rejects_rows_of_fewer_than_two_vertices() {

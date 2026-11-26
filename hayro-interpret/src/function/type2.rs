@@ -32,6 +32,96 @@ impl Type2 {
             && (lo >= 0. || hi <= 0. && self.n.fract() == 0.)
     }
 
+    pub(super) fn square() -> Self {
+        Self {
+            c0: vec![0.],
+            delta: vec![1.],
+            n: 2.,
+        }
+    }
+
+    pub(super) fn linear_pieces(
+        &self,
+        domain: [f64; 2],
+        offsets: [f64; 2],
+        budget: &mut usize,
+        tolerance: Option<f32>,
+        emit: &mut super::PieceEmitter<'_>,
+    ) -> Option<()> {
+        let [mut left, mut right] = [[0.0; super::MAX_COMPONENTS]; 2];
+        let left = &mut left[..self.num_outputs()];
+        let right = &mut right[..self.num_outputs()];
+        let [first, last] = domain.map(|x| self.factor(x));
+        self.apply(first, left);
+        self.apply(last, right);
+        if self.n == 1.0
+            || self.n == 0.0
+            || self.delta.iter().all(|&d| d == 0.)
+                && first.is_finite()
+                && last.is_finite()
+                && self.monotone(domain)
+        {
+            *budget = budget.checked_sub(1)?;
+            return emit(offsets.map(|t| t as f32), left, right, budget);
+        }
+        let min = domain[0].min(domain[1]);
+        let max = domain[0].max(domain[1]);
+        if min < 0.0 && max > 0.0 && self.n > 0.0 && self.n.fract() == 0.0 {
+            let split =
+                offsets[0] + (offsets[1] - offsets[0]) * (-domain[0] / (domain[1] - domain[0]));
+            self.linear_pieces(
+                [domain[0], 0.0],
+                [offsets[0], split],
+                budget,
+                tolerance,
+                emit,
+            )?;
+            return self.linear_pieces(
+                [0.0, domain[1]],
+                [split, offsets[1]],
+                budget,
+                tolerance,
+                emit,
+            );
+        }
+        let arc = (min >= 0.0 && self.n > 0.0)
+            || (min > 0.0 && self.n < 0.0)
+            || (max <= 0.0 && self.n.fract() == 0.0 && (self.n > 0.0 || max < 0.0));
+        if !self.n.is_finite() || !arc {
+            return None;
+        }
+        if tolerance.is_none() {
+            *budget = budget.checked_sub(1)?;
+            return emit(offsets.map(|t| t as f32), left, right, budget);
+        }
+        // On a convex or concave arc the maximum chord error is at most twice the midpoint error.
+        let midpoint_tolerance = f64::from(tolerance?) * 0.5;
+        let max_delta = self.delta.iter().copied().map(f32::abs).fold(0.0, f32::max);
+        let mut pending = smallvec::SmallVec::<[_; 8]>::new();
+        pending.push((domain, offsets, [first, last]));
+        while let Some(([a, b], [start, end], [fa, fb])) = pending.pop() {
+            let mid = a.midpoint(b);
+            let fm = self.factor(mid);
+            if (fm - fa.midpoint(fb)).abs() * f64::from(max_delta) > midpoint_tolerance {
+                let split = start.midpoint(end);
+                if pending.len() + 2 > *budget
+                    || split as f32 == start as f32
+                    || split as f32 == end as f32
+                {
+                    return None;
+                }
+                pending.push(([mid, b], [split, end], [fm, fb]));
+                pending.push(([a, mid], [start, split], [fa, fm]));
+            } else {
+                *budget = budget.checked_sub(1)?;
+                self.apply(fa, left);
+                self.apply(fb, right);
+                emit([start as f32, end as f32], left, right, budget)?;
+            }
+        }
+        Some(())
+    }
+
     pub(crate) fn num_outputs(&self) -> usize {
         self.c0.len()
     }
