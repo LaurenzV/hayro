@@ -318,12 +318,6 @@ impl FilterResult<'_> {
     }
 }
 
-fn skip_blanks_before_eol(r: &mut Reader<'_>) {
-    while matches!(r.peek_byte(), Some(b' ' | b'\t')) {
-        r.read_byte();
-    }
-}
-
 fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     let length = dict.get::<u32>(LENGTH)?;
 
@@ -396,6 +390,12 @@ impl<'a> ObjectRefLike<'a> for Stream<'a> {
             Object::Stream(stream) => Some(stream),
             _ => None,
         }
+    }
+}
+
+fn skip_blanks_before_eol(r: &mut Reader<'_>) {
+    while matches!(r.peek_byte(), Some(b' ' | b'\t')) {
+        r.read_byte();
     }
 }
 
