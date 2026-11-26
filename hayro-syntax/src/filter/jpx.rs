@@ -36,7 +36,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     let width = image.width();
     let height = image.height();
     let bpc = if params.is_indexed {
-        params.bpc.unwrap_or(image.original_bit_depth())
+        image.original_bit_depth()
     } else {
         8
     };
