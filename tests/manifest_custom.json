@@ -736,6 +736,10 @@
     "file": "pdfs/custom/shading_operator_2.pdf"
   },
   {
+    "id": "stream_blanks_before_eol",
+    "file": "pdfs/custom/stream_blanks_before_eol.pdf"
+  },
+  {
     "id": "stream_ccit_not_enough_data",
     "file": "pdfs/custom/stream_ccit_not_enough_data.pdf"
   },

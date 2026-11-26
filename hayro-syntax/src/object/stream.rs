@@ -323,6 +323,7 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 
     r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
+    skip_blanks_before_eol(r);
     r.forward_tag(b"\n")
         .or_else(|| r.forward_tag(b"\r\n"))
         .or_else(|| r.forward_tag(b"\r"))?;
@@ -336,6 +337,7 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
+    skip_blanks_before_eol(r);
 
     r.forward_tag(b"\n")
         .or_else(|| r.forward_tag(b"\r\n"))
@@ -388,6 +390,12 @@ impl<'a> ObjectRefLike<'a> for Stream<'a> {
             Object::Stream(stream) => Some(stream),
             _ => None,
         }
+    }
+}
+
+fn skip_blanks_before_eol(r: &mut Reader<'_>) {
+    while matches!(r.peek_byte(), Some(b' ' | b'\t')) {
+        r.read_byte();
     }
 }
 
