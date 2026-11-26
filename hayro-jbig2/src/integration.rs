@@ -3,6 +3,7 @@
 use std::{
     ffi::OsStr,
     io::{BufRead, Seek},
+    sync::Once,
 };
 
 use crate::{DecodeSettings, File, FormatError, Page};
@@ -121,17 +122,25 @@ const JBIG2_MAGIC: &[u8] = &[0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// Register the JBIG2 decoding hook with `image`; returns `false` if it is already registered.
 pub fn register_decoding_hook() -> bool {
-    if decoding_hook_registered(OsStr::new("jbig2")) {
-        return false;
-    }
+    static REGISTERED: Once = Once::new();
 
-    for extension in ["jbig2", "jb2"] {
-        image::hooks::register_decoding_hook(
-            extension.into(),
-            Box::new(|r| Ok(Box::new(Jbig2Decoder::new(r)?))),
-        );
-        register_format_detection_hook(extension.into(), JBIG2_MAGIC, None);
-    }
+    let mut registered = false;
+    REGISTERED.call_once(|| {
+        if decoding_hook_registered(OsStr::new("jbig2")) {
+            return;
+        }
 
-    true
+        for extension in ["jbig2", "jb2"] {
+            let inserted = image::hooks::register_decoding_hook(
+                extension.into(),
+                Box::new(|r| Ok(Box::new(Jbig2Decoder::new(r)?))),
+            );
+            if extension == "jbig2" && !inserted {
+                return;
+            }
+            register_format_detection_hook(extension.into(), JBIG2_MAGIC, None);
+        }
+        registered = true;
+    });
+    registered
 }
