@@ -87,7 +87,11 @@ impl EncodedRadialAxialShading {
             let nested = growth.abs() - p1.to_vec2().hypot() > RADIAL_EPSILON;
 
             // Unless nested, circles past the end outrank earlier ones and some points need the background.
-            if r.x < 0.0 || r.y < 0.0 || !nested && (has_background || !self.extend[1]) {
+            if r.x < 0.0
+                || r.y < 0.0
+                || r == Point::ZERO
+                || !nested && (has_background || !self.extend[1])
+            {
                 return None;
             }
 

@@ -410,10 +410,19 @@ fn radial_pos(pos: Point, p1: Point, r: Point, extend: [bool; 2]) -> Option<f64>
         return (c() == 0.0 && valid(0.0)).then_some(0.0);
     }
 
+    let t = q / a;
+    let other = c() / q;
+    let scale = dx.abs().max(dy.abs()).max(dr.abs());
+    // PDF generators round focal-on-circle coordinates to ~6 significant digits
+    // (a / scale² ≤ 2e-6), turning a single-root tangent cone into a distant bogus root.
+    if a > 0.0 && dr > 0.0 && extend[1] && (a / scale) / scale <= 2e-6 && valid(other) {
+        return Some(other);
+    }
+
     let (max, min) = if q.is_sign_negative() == a.is_sign_negative() {
-        (q / a, c() / q)
+        (t, other)
     } else {
-        (c() / q, q / a)
+        (other, t)
     };
     if valid(max) {
         Some(max)
@@ -457,9 +466,13 @@ mod tests {
                 let Pattern::Shading(pattern) = *pattern else {
                     panic!("expected shading pattern")
                 };
+                let encoded = pattern.encode();
+                let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type else {
+                    panic!("expected radial shading");
+                };
+                assert!(gradient.as_svg_gradient(&encoded, 0.01).is_none());
                 self.0.push(
-                    pattern
-                        .encode()
+                    encoded
                         .render_texture(Rect::new(0.0, 0.0, 1.0, 1.0), 1.0)
                         .data,
                 );
@@ -490,7 +503,7 @@ mod tests {
 {ops}
 endstream endobj
 5 0 obj << /ShadingType 3 /ColorSpace /DeviceRGB /Background [1 0 0]
-/Coords [0 0.5 0 1 0.5 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >> >> endobj
+/Coords [0 0.5 0 1 0.5 0] /Extend [true true] /Function << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >> >> endobj
 trailer << /Root 1 0 R >>
 %%EOF", ops.len());
         let pdf = Pdf::new(pdf.into_bytes()).unwrap();
@@ -513,6 +526,74 @@ trailer << /Root 1 0 R >>
             ),
             None
         );
+    }
+
+    #[test]
+    fn rounded_radial_focal_points() {
+        for (x, y) in [
+            (0.223151, 0.974784),
+            (0.28201, 0.959412),
+            (0.999999, 0.00148365),
+        ] {
+            for scale in [0.001, 1.0, 1000.0] {
+                let axis = Point::new(x * scale, y * scale);
+                for t in [0.5, 1.5] {
+                    let pos = Point::new((x + 1.0) * scale * t, y * scale * t);
+                    let forward = radial_pos(pos, axis, Point::new(0.0, scale), [true; 2]);
+                    let backward = radial_pos(
+                        Point::new(pos.x - axis.x, pos.y - axis.y),
+                        Point::new(-axis.x, -axis.y),
+                        Point::new(scale, 0.0),
+                        [true, false],
+                    );
+                    assert!((forward.unwrap() - t).abs() < 1e-12);
+                    assert!((backward.unwrap() - (1.0 - t)).abs() < 1e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nearly_tangent_radial_extensions() {
+        for (dx, r0, r1, x, extend, expected) in [
+            (
+                10000.05_f32,
+                0.0,
+                10000.0,
+                0.0605,
+                [false, true],
+                1.214745098,
+            ),
+            (131073.0, 0.0, 131072.0, 32768.0, [false, true], 32768.0),
+            (131073.0, 0.0, 131072.0, 32769.0, [false, true], 32769.0),
+            (1048577.0, 1.0, 1048577.0, 0.5, [false, true], 1.5),
+            (99.0005, 100.0, 1.0, 98.75, [true, false], -2482.424242),
+            (100.0005, 0.0, 100.0, 5.75, [false, true], 11419.151515),
+        ] {
+            let t = radial_pos(
+                Point::new(x, 0.0),
+                Point::new(f64::from(dx), 0.0),
+                Point::new(r0, r1),
+                extend,
+            )
+            .unwrap();
+            assert!((t - expected).abs() < 1e-6, "{t} != {expected}");
+        }
+    }
+
+    #[test]
+    fn later_extended_radial_root() {
+        for (x, dx, r0, expected) in [(0.75, 1.25, 0.0, 3.0), (1.5, 1.0, 1.0, 2.5)] {
+            assert_eq!(
+                radial_pos(
+                    Point::new(x, 0.0),
+                    Point::new(dx, 0.0),
+                    Point::new(r0, 1.0),
+                    [false, true]
+                ),
+                Some(expected)
+            );
+        }
     }
 
     #[test]
