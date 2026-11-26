@@ -110,7 +110,9 @@ fn ignored_content_dictionary_skips_keys_and_indirect_length() {
 
 #[test]
 fn wrong_stream_offset_repairs_xref() {
-    let pdf = Pdf::new(document(CONTENTS, "<ab>", Some("8 0"))).unwrap();
+    let bytes = document(CONTENTS, "<ab>", Some("8 0"));
+
+    let pdf = Pdf::new(bytes.clone()).unwrap();
     assert_eq!(
         pdf.xref()
             .get::<Stream<'_>>(ObjectIdentifier::new(4, 0))
@@ -119,6 +121,9 @@ fn wrong_stream_offset_repairs_xref() {
             .as_ref(),
         b"q"
     );
+    assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), Some(1));
+
+    let pdf = Pdf::new(bytes).unwrap();
     assert_eq!(pdf.pages()[0].page_stream().unwrap(), b"q Q ");
     assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), Some(1));
 }
