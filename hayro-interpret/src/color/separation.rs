@@ -1,4 +1,4 @@
-use super::{ColorSpace, ToRgb, U8Lookup};
+use super::{ColorSpace, ToRgb, U8Lookup, u8_to_f32};
 use crate::cache::Cache;
 use crate::function::{Function, MAX_COMPONENTS};
 use hayro_syntax::object::{Array, Name, Object};
@@ -35,11 +35,7 @@ impl Separation {
         let mut evaluated = Vec::with_capacity(input.len() * values.len());
 
         for n in input {
-            if self
-                .tint_transform
-                .eval(&[*n as f32 * (1.0 / 255.0)], values)
-                .is_some()
-            {
+            if self.tint_transform.eval(&[u8_to_f32(*n)], values).is_some() {
                 evaluated.extend(self.alternate_space.encode_values(values));
             } else {
                 evaluated.extend(

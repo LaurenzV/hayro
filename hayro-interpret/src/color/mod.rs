@@ -140,7 +140,7 @@ impl AlphaColor {
 }
 
 const fn u8_to_f32(x: u8) -> f32 {
-    x as f32 * (1.0 / 255.0)
+    x as f32 / 255.0
 }
 
 #[derive(Debug, Clone)]

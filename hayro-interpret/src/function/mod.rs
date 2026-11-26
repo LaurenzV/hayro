@@ -242,7 +242,7 @@ impl TransferFunction {
             let output = &mut output[..self.function.num_outputs()];
 
             std::array::from_fn(|sample| {
-                match self.function.eval(&[sample as f32 * (1.0 / 255.0)], output) {
+                match self.function.eval(&[sample as f32 / 255.0], output) {
                     Some(()) => (output[0] * 255.0 + 0.5) as u8,
                     None => sample as u8,
                 }
