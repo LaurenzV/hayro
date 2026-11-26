@@ -50,6 +50,28 @@ impl Renderer<'_> {
         self.ctx.set_stroke(stroke);
     }
 
+    fn stroke_bounds(&self, bounds: Rect) -> Rect {
+        let stroke = self.ctx.stroke();
+        let factor = match stroke.join {
+            kurbo::Join::Miter => stroke.miter_limit.abs().max(SQRT_2),
+            kurbo::Join::Bevel | kurbo::Join::Round => {
+                if matches!(stroke.start_cap, kurbo::Cap::Square)
+                    || matches!(stroke.end_cap, kurbo::Cap::Square)
+                {
+                    SQRT_2
+                } else {
+                    1.0
+                }
+            }
+        };
+        let extent = stroke.width / 2.0 * factor;
+        if extent.is_finite() {
+            bounds.inflate(extent, extent)
+        } else {
+            bounds
+        }
+    }
+
     pub(super) fn stroke_path(
         &mut self,
         path: &BezPath,
@@ -60,14 +82,13 @@ impl Renderer<'_> {
         self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
 
-        let stroke = self.ctx.stroke();
-        let extent = stroke.width / 2.0 * stroke.miter_limit.max(SQRT_2);
-        let bbox = path.control_box().inflate(extent, extent);
+        let bbox = self.stroke_bounds(path.control_box());
         if self.misses_target(props.transform.transform_rect_bbox(bbox)) {
             return;
         }
 
-        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
+        let clip_path =
+            self.set_paint(&props.paint, |stroke| stroke_paint_bbox(path, stroke), true);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -86,7 +107,7 @@ impl Renderer<'_> {
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.apply_draw_props(&props);
 
-        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), false);
+        let clip_path = self.set_paint(&props.paint, |_| path.bounding_box(), false);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
@@ -130,7 +151,7 @@ impl Renderer<'_> {
                 self.ctx.set_fill_rule(convert_fill_rule(*fill_rule));
                 self.apply_draw_props(&props);
 
-                let clip_path = self.set_paint(&props.paint, || *rect, false);
+                let clip_path = self.set_paint(&props.paint, |_| *rect, false);
                 if let Some(clip_path) = clip_path.as_ref() {
                     self.push_clip_path_inner(clip_path, *fill_rule);
                 }
@@ -168,6 +189,79 @@ pub(crate) fn max_factor(transform: &Affine) -> f32 {
         .to_vec2()
         .length()
         .max(y_advance.to_vec2().length()) as f32
+}
+
+pub(super) fn stroke_paint_bbox(path: &BezPath, stroke: &kurbo::Stroke) -> Rect {
+    use kurbo::{PathEl, Vec2};
+
+    let mut bbox = path.bounding_box();
+    if stroke.join != kurbo::Join::Miter
+        || !stroke.miter_limit.is_finite()
+        || stroke.miter_limit.abs() <= 1.0
+    {
+        return bbox;
+    }
+    let mut join = |vertex: Point, incoming: Vec2, outgoing: Vec2| {
+        let in_len = incoming.hypot();
+        let out_len = outgoing.hypot();
+        if !in_len.is_finite() || !out_len.is_finite() || in_len == 0. || out_len == 0. {
+            return;
+        }
+        let u = incoming / in_len;
+        let v = outgoing / out_len;
+        let cross = u.cross(v);
+        let sum = 1. + u.dot(v);
+        if cross != 0. && sum > 0. && 2. < sum * stroke.miter_limit.powi(2) {
+            let normal = Vec2::new(-(u.y + v.y), u.x + v.x);
+            let tip = vertex + normal * (-cross.signum() * 0.5 * stroke.width / sum);
+            if tip.is_finite() {
+                bbox = bbox.union_pt(tip);
+            }
+        }
+    };
+    // Kurbo's PathSeg::tangents treats near-coincident controls as coincident.
+    let tangent = |a: Point, b: Point, c: Point, d: Point| {
+        const MIN_TANGENT_SQUARED: f64 = 1e-12;
+        [b - a, c - a]
+            .into_iter()
+            .find(|v| v.hypot2() > MIN_TANGENT_SQUARED)
+            .unwrap_or(d - a)
+    };
+    let mut point = Point::ORIGIN;
+    let mut start = point;
+    let mut first = None;
+    let mut last = None;
+    for el in path.iter() {
+        let (end, outgoing, incoming) = match el {
+            PathEl::MoveTo(p) => {
+                start = p;
+                point = p;
+                first = None;
+                last = None;
+                continue;
+            }
+            PathEl::LineTo(p) => (p, p - point, p - point),
+            PathEl::QuadTo(b, p) => (p, tangent(point, b, p, p), -tangent(p, b, point, point)),
+            PathEl::CurveTo(b, c, p) => (p, tangent(point, b, c, p), -tangent(p, c, b, point)),
+            PathEl::ClosePath => (start, start - point, start - point),
+        };
+        if outgoing != Vec2::ZERO && incoming != Vec2::ZERO {
+            if let Some(prev) = last {
+                join(point, prev, outgoing);
+            }
+            first.get_or_insert(outgoing);
+            last = Some(incoming);
+        }
+        point = end;
+        if el == PathEl::ClosePath {
+            if let (Some(prev), Some(next)) = (last, first) {
+                join(start, prev, next);
+            }
+            first = None;
+            last = None;
+        }
+    }
+    bbox
 }
 
 fn single_segment_outline(path: &BezPath, stroke: &kurbo::Stroke) -> Option<BezPath> {

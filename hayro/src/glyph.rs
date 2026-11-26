@@ -174,7 +174,7 @@ impl Renderer<'_> {
         self.ctx.set_fill_rule(convert_fill_rule(FillRule::NonZero));
         self.apply_draw_props(props);
 
-        let clip_path = self.set_paint(&props.paint, || bbox, false);
+        let clip_path = self.set_paint(&props.paint, |_| bbox, false);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -186,12 +186,12 @@ impl Renderer<'_> {
         &mut self,
         props: &DrawProps<'_>,
         stroke_props: &StrokeProps,
-        bbox: Rect,
+        bbox: impl FnOnce(&kurbo::Stroke) -> Rect,
     ) -> Option<BezPath> {
         self.apply_draw_props(props);
         self.set_stroke_properties(stroke_props, true);
 
-        let clip_path = self.set_paint(&props.paint, || bbox, true);
+        let clip_path = self.set_paint(&props.paint, bbox, true);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -251,7 +251,7 @@ impl Renderer<'_> {
     ) {
         match &props.paint {
             Paint::Color(_) => {
-                let clip_path = self.begin_stroke_run(props, stroke_props, Rect::ZERO);
+                let clip_path = self.begin_stroke_run(props, stroke_props, |_| Rect::ZERO);
                 for glyph in glyph_run.glyphs() {
                     let Glyph::Outline(outline) = &**glyph else {
                         continue;
@@ -265,8 +265,14 @@ impl Renderer<'_> {
             }
             Paint::Pattern(_) => {
                 let outlines = self.transformed_outlines(glyph_run);
-                let clip_path =
-                    self.begin_stroke_run(props, stroke_props, Self::outline_bbox(&outlines));
+                let clip_path = self.begin_stroke_run(props, stroke_props, |stroke| {
+                    outlines
+                        .iter()
+                        .filter(|outline| !outline.elements().is_empty())
+                        .map(|outline| crate::path::stroke_paint_bbox(outline, stroke))
+                        .reduce(|a, b| a.union(b))
+                        .unwrap_or(Rect::ZERO)
+                });
                 for outline in &outlines {
                     self.ctx.stroke_path(outline);
                 }

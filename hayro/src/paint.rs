@@ -15,7 +15,7 @@ impl Renderer<'_> {
     pub(super) fn set_paint(
         &mut self,
         paint: &Paint<'_>,
-        path_bbox: impl Fn() -> Rect,
+        path_bbox: impl FnOnce(&kurbo::Stroke) -> Rect,
         is_stroke: bool,
     ) -> Option<BezPath> {
         let mut paint_transform = Affine::IDENTITY;
@@ -29,7 +29,7 @@ impl Renderer<'_> {
             Paint::Pattern(p) => {
                 let path_transform = self.ctx.transform();
                 let bbox = {
-                    let mut bbox = path_transform.transform_rect_bbox(path_bbox());
+                    let mut bbox = path_transform.transform_rect_bbox(path_bbox(self.ctx.stroke()));
 
                     if is_stroke {
                         let (a1, a2) = x_y_advances(path_transform);
