@@ -1067,6 +1067,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn damaged_ascii_hex_object_stream() {
+        let mut reader = Reader::new(
+            b"<< /Type /ObjStm /N 1 /First 4 /Length 13 /Filter /ASCIIHexDecode >>\n\
+              stream\n3520302031.2>\nendstream",
+        );
+        let stream = reader
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        assert!(ObjectStream::new(&stream).is_none());
+    }
+
+    #[test]
+    fn damaged_ascii_hex_xref_triggers_repair() {
+        let mut pdf = b"%PDF-1.5\n".to_vec();
+        let catalog = pdf.len();
+        pdf.extend_from_slice(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n");
+        let pages = pdf.len();
+        pdf.extend_from_slice(b"2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\n");
+        pdf.extend_from_slice(b"3 0 obj 42 endobj\n");
+        let xref = pdf.len();
+        pdf.extend_from_slice(
+            format!(
+                "4 0 obj << /Type /XRef /Size 5 /Root 1 0 R /Index [1 2] /W [0 1 0] \
+             /Length 6 /Filter /ASCIIHexDecode >>\nstream\n{catalog:02X}{pages:02X}.>\n\
+             endstream\nendobj\nstartxref\n{xref}\n%%EOF"
+            )
+            .as_bytes(),
+        );
+
+        let pdf = crate::Pdf::new(pdf).unwrap();
+        assert_eq!(pdf.xref().get::<i32>(ObjectIdentifier::new(3, 0)), Some(42));
+    }
+
+    #[test]
     fn circular_prev_chain() {
         let mut pdf = b"%PDF-1.0\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".to_vec();
         let expected_xref_pos = pdf.len();

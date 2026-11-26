@@ -1472,5 +1472,9 @@
     "id": "pattern_tiling_clip_scaled",
     "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
     "svg": true
+  },
+  {
+    "id": "ascii_hex_invalid_digit",
+    "file": "pdfs/custom/ascii_hex_invalid_digit.pdf"
   }
 ]

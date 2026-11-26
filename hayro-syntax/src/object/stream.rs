@@ -158,6 +158,25 @@ impl<'a> Stream<'a> {
 
     /// Return the decoded data of a stream that doesn't use an image filter.
     pub fn decoded_data(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.reject_image_filters()?;
+        self.decoded()
+    }
+
+    /// Return the decoded data of the stream, with image metadata if available.
+    pub fn decoded_image(
+        &self,
+        image_params: &ImageDecodeParams,
+    ) -> Result<FilterResult<'a>, DecodeFailure> {
+        self.decode_with(image_params, false)
+    }
+
+    pub(crate) fn decoded_page_content(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
+        self.reject_image_filters()?;
+        self.decode_with(&ImageDecodeParams::default(), true)
+            .map(|r| r.data)
+    }
+
+    fn reject_image_filters(&self) -> Result<(), DecodeFailure> {
         if self.filters().iter().any(|filter| {
             matches!(
                 filter,
@@ -170,13 +189,13 @@ impl<'a> Stream<'a> {
             return Err(DecodeFailure::ImageDecode);
         }
 
-        self.decoded()
+        Ok(())
     }
 
-    /// Return the decoded data of the stream, with image metadata if available.
-    pub fn decoded_image(
+    fn decode_with(
         &self,
         image_params: &ImageDecodeParams,
+        page_content: bool,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
         if matches!(
             self.dict.get::<Object<'_>>(F),
@@ -188,6 +207,7 @@ impl<'a> Stream<'a> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
 
+        let mut truncated = false;
         let mut current: Option<FilterResult<'a>> = None;
 
         for (i, (filter, params)) in filters_and_params
@@ -200,12 +220,14 @@ impl<'a> Stream<'a> {
                 continue;
             }
 
-            let new = filter.apply(
-                current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
-                params,
-                image_params,
-            )?;
-            current = Some(new);
+            let input = current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data);
+            current = Some(if page_content && *filter == Filter::AsciiHexDecode {
+                crate::filter::ascii_hex::decode_prefix(input, Some(&mut truncated))
+                    .map(FilterResult::from_data)
+                    .ok_or(DecodeFailure::StreamDecode)?
+            } else {
+                filter.apply(input, params, image_params)?
+            });
         }
 
         Ok(current.unwrap_or(FilterResult {
@@ -440,6 +462,50 @@ mod tests {
         assert_eq!(stream.data, b"abc");
         assert!(stream.dict().contains_key(crate::object::dict::keys::F));
         assert!(stream.decoded().is_err());
+    }
+
+    #[test]
+    fn ascii_hex_page_content() {
+        for (filter, input, expected, strict) in [
+            ("/AHx", "AB 3 .45>", &[0xab][..], false),
+            ("/AHx", "AB3>", &[0xab, 0x30][..], true),
+            ("[/AHx /AHx]", "34312E3E>", &b"A"[..], false),
+            ("[/AHx /AHx]", "363637.>", &b"f"[..], false),
+            ("[/AHx /AHx]", "363637>", &b"fp"[..], true),
+            ("[/AHx /AHx]", "3636373E.>", &b"fp"[..], false),
+        ] {
+            let bytes = format!(
+                "<< /Filter {filter} /Length {} >> stream\n{input}\nendstream",
+                input.len()
+            );
+            let stream = Reader::new(bytes.as_bytes())
+                .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
+                .unwrap();
+            assert_eq!(stream.decoded_page_content().unwrap().as_ref(), expected);
+            if strict {
+                assert_eq!(stream.decoded_data().unwrap().as_ref(), expected);
+            } else {
+                assert!(matches!(
+                    stream.decoded_data(),
+                    Err(super::DecodeFailure::StreamDecode)
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn damaged_ascii_hex_image() {
+        let mut reader = Reader::new(
+            b"<< /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 1 /ColorSpace /DeviceGray \
+              /Filter /ASCIIHexDecode /Length 2 >> stream\n.>\nendstream",
+        );
+        let stream = reader
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        assert!(matches!(
+            stream.decoded_image(&super::ImageDecodeParams::default()),
+            Err(super::DecodeFailure::StreamDecode)
+        ));
     }
 
     #[test]
