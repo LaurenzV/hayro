@@ -8,8 +8,8 @@ impl Pattern {
         Self(color_space)
     }
 
-    pub(super) fn color_space(&self) -> ColorSpace {
-        self.0.clone()
+    pub(super) fn color_space(&self) -> &ColorSpace {
+        &self.0
     }
 
     pub(super) fn initial_color(&self) -> ColorComponents {
