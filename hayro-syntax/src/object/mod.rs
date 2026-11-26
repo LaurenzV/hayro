@@ -269,9 +269,15 @@ impl ObjectIdentifier {
 
 impl Readable<'_> for ObjectIdentifier {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_number = r.read_without_context::<u32>()?;
+        let obj_number = core::str::from_utf8(r.skip::<u32>(false)?)
+            .ok()?
+            .parse()
+            .ok()?;
         r.skip_white_spaces_and_comments();
-        let gen_number = r.read_without_context::<i32>()?;
+        let gen_number = core::str::from_utf8(r.skip::<i32>(false)?)
+            .ok()?
+            .parse()
+            .ok()?;
         r.skip_white_spaces_and_comments();
         r.forward_tag(b"obj")?;
 

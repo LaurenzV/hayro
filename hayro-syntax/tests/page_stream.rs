@@ -1,7 +1,7 @@
 //! Allocation behavior of page content arrays.
 
 use hayro_syntax::Pdf;
-use hayro_syntax::object::ObjectIdentifier;
+use hayro_syntax::object::{ObjectIdentifier, Stream};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::fmt::Write;
@@ -33,7 +33,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
 
 const CONTENTS: &str = "[4 0 R 5 0 R 7 0 R 6 0 R]";
 
-fn document(contents: &str, ignored: &str, wrong_stream_offset: bool) -> Vec<u8> {
+fn document(contents: &str, ignored: &str, wrong_header: Option<&str>) -> Vec<u8> {
     let page = format!("<< /Type /Page /Parent 2 0 R /Contents {contents} >>");
     let objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
@@ -47,10 +47,12 @@ fn document(contents: &str, ignored: &str, wrong_stream_offset: bool) -> Vec<u8>
     let mut offsets = Vec::new();
     for (i, body) in objects.iter().enumerate() {
         offsets.push(pdf.len());
+        if i == 3
+            && let Some(header) = wrong_header
+        {
+            writeln!(pdf, "{header} obj\n<ab>\nendobj").unwrap();
+        }
         writeln!(pdf, "{} 0 obj\n{body}\nendobj", i + 1).unwrap();
-    }
-    if wrong_stream_offset {
-        offsets[3] = offsets[4];
     }
     // Only a repaired xref can find object 7. Entry 8 points at its header.
     let unindexed = pdf.len();
@@ -72,7 +74,7 @@ fn document(contents: &str, ignored: &str, wrong_stream_offset: bool) -> Vec<u8>
 }
 
 fn read_ignoring(contents: &str, ignored: &str) -> (usize, usize) {
-    let pdf = Pdf::new(document(contents, ignored, false)).unwrap();
+    let pdf = Pdf::new(document(contents, ignored, None)).unwrap();
     let page = &pdf.pages()[0];
     ALLOCATED.set(0);
     FREED.set(0);
@@ -108,22 +110,48 @@ fn ignored_content_dictionary_skips_keys_and_indirect_length() {
 
 #[test]
 fn wrong_stream_offset_repairs_xref() {
-    let pdf = Pdf::new(document(CONTENTS, "<ab>", true)).unwrap();
+    let pdf = Pdf::new(document(CONTENTS, "<ab>", Some("8 0"))).unwrap();
+    assert_eq!(
+        pdf.xref()
+            .get::<Stream<'_>>(ObjectIdentifier::new(4, 0))
+            .unwrap()
+            .raw_data()
+            .as_ref(),
+        b"q"
+    );
     assert_eq!(pdf.pages()[0].page_stream().unwrap(), b"q Q ");
     assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), Some(1));
 }
 
 #[test]
+fn fractional_header_repairs_xref() {
+    for header in ["4.5 0", "4 0.5"] {
+        let bytes = document("4 0 R", "<ab>", Some(header));
+        let pdf = Pdf::new(bytes.clone()).unwrap();
+        assert_eq!(
+            pdf.xref()
+                .get::<Stream<'_>>(ObjectIdentifier::new(4, 0))
+                .unwrap()
+                .raw_data()
+                .as_ref(),
+            b"q"
+        );
+        let pdf = Pdf::new(bytes).unwrap();
+        assert_eq!(pdf.pages()[0].page_stream(), Some(&b"q"[..]));
+    }
+}
+
+#[test]
 fn content_stream_honors_indirect_length_before_searching_for_endstream() {
     let stream = "<< /Length 9 0 R >> % comment\nstream\r\nxendstreamy\r\nendstream";
-    let pdf = Pdf::new(document(CONTENTS, stream, false)).unwrap();
+    let pdf = Pdf::new(document(CONTENTS, stream, None)).unwrap();
     assert_eq!(pdf.pages()[0].page_stream().unwrap(), b"q xendstreamy Q ");
 }
 
 #[test]
 fn direct_content_string_cost_is_independent_of_length() {
     let read = |length| {
-        let contents = format!("[4 0 R ({}) 6 0 R]", "a".repeat(length));
+        let contents = format!("[4 0 R <{}> 6 0 R]", "41".repeat(length));
         read_ignoring(&contents, "<ab>")
     };
     assert_eq!(read(16), read(1 << 20));
@@ -136,7 +164,7 @@ fn single_content_reference() {
         ("[4 0 R 6 0 R]", Some(&b"q Q "[..])),
         ("<< /Length 8 0 R >> streaming", None),
     ] {
-        let pdf = Pdf::new(document("5 0 R", body, false)).unwrap();
+        let pdf = Pdf::new(document("5 0 R", body, None)).unwrap();
         assert_eq!(pdf.pages()[0].page_stream(), expected);
         assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), None);
     }
