@@ -14,6 +14,7 @@ use crate::sync::{FxHashSet, OnceLock};
 use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
+use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -184,7 +185,7 @@ pub struct Page<'a> {
     media_box: Rect,
     crop_box: Rect,
     rotation: Rotation,
-    page_streams: OnceLock<Option<Vec<u8>>>,
+    page_streams: OnceLock<Option<Box<[u8]>>>,
     resources: Resources<'a>,
     ctx: ReaderContext<'a>,
 }
@@ -272,9 +273,9 @@ impl<'a> Page<'a> {
                 } else {
                     None
                 }
+                .map(Vec::into_boxed_slice)
             })
-            .as_ref()
-            .map(|d| d.as_slice())
+            .as_deref()
     }
 
     /// Get the resources of the page.
