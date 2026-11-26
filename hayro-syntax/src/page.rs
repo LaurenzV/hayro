@@ -4,12 +4,14 @@ use crate::content::{TypedIter, UntypedIter};
 use crate::object::Array;
 use crate::object::Dict;
 use crate::object::Name;
+use crate::object::ObjectLike;
 use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::array::ArrayIter;
 use crate::object::dict::keys::*;
+use crate::object::stream::forward_stream_opener;
 use crate::object::{MaybeRef, Object};
-use crate::reader::ReaderContext;
+use crate::reader::{Readable, Reader, ReaderContext, ReaderExt};
 use crate::sync::{FxHashSet, OnceLock};
 use crate::transform::Transform;
 use crate::util::FloatExt;
@@ -17,6 +19,51 @@ use crate::xref::XRef;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
+
+#[derive(Debug, Clone)]
+enum PageContent<'a> {
+    Stream(Stream<'a>),
+    Array(Array<'a>),
+    Ignored,
+}
+
+impl<'a> From<Object<'a>> for PageContent<'a> {
+    fn from(object: Object<'a>) -> Self {
+        match object {
+            Object::Stream(stream) => Self::Stream(stream),
+            Object::Array(array) => Self::Array(array),
+            _ => Self::Ignored,
+        }
+    }
+}
+
+impl<'a> ObjectLike<'a> for PageContent<'a> {}
+
+impl<'a> Readable<'a> for PageContent<'a> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        if r.peek_byte() == Some(b'[') {
+            return Some(Self::Array(Array::read(r, ctx)?));
+        }
+        r.skip::<Object<'_>>(ctx.in_content_stream())?;
+        Some(Self::Ignored)
+    }
+
+    fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        if r.peek_tag(b"<<").is_none() {
+            return Self::read(r, ctx);
+        }
+
+        let mut start = r.clone();
+        r.skip::<Dict<'_>>(ctx.in_content_stream())?;
+        let mut body = r.clone();
+        if forward_stream_opener(&mut body).is_none() {
+            return Some(Self::Ignored);
+        }
+        let dict = Dict::read(&mut start, ctx)?;
+        *r = body;
+        Some(Self::Stream(Stream::read_body(r, dict)?))
+    }
+}
 
 #[derive(Debug, Clone)]
 struct PagesContext<'a> {
@@ -252,25 +299,28 @@ impl<'a> Page<'a> {
 
         self.page_streams
             .get_or_init(|| {
-                if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
-                    convert_single(stream)
-                } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
-                    let streams = array
-                        .refs()
-                        .filter_map(|r| self.xref().get_with::<Stream<'_>>(r.into(), &self.ctx))
-                        .flat_map(convert_single);
+                match self.inner.get::<PageContent<'_>>(CONTENTS)? {
+                    PageContent::Stream(stream) => convert_single(stream),
+                    PageContent::Array(array) => {
+                        let streams = array
+                            .refs()
+                            .filter_map(|r| match self.xref().get_with(r.into(), &self.ctx)? {
+                                PageContent::Stream(s) => Some(s),
+                                _ => None,
+                            })
+                            .flat_map(convert_single);
 
-                    let mut collected = vec![];
+                        let mut collected = vec![];
 
-                    for stream in streams {
-                        collected.extend(stream);
-                        // Streams must have at least one whitespace in-between.
-                        collected.push(b' ');
+                        for stream in streams {
+                            collected.extend(stream);
+                            // Streams must have at least one whitespace in-between.
+                            collected.push(b' ');
+                        }
+
+                        Some(collected)
                     }
-
-                    Some(collected)
-                } else {
-                    None
+                    PageContent::Ignored => None,
                 }
             })
             .as_ref()

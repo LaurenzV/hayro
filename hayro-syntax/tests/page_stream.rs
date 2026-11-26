@@ -31,11 +31,14 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 }
 
-fn document(ignored: &str, wrong_stream_offset: bool) -> Vec<u8> {
+const CONTENTS: &str = "[4 0 R 5 0 R 7 0 R 6 0 R]";
+
+fn document(contents: &str, ignored: &str, wrong_stream_offset: bool) -> Vec<u8> {
+    let page = format!("<< /Type /Page /Parent 2 0 R /Contents {contents} >>");
     let objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        "<< /Type /Page /Parent 2 0 R /Contents [4 0 R 5 0 R 7 0 R 6 0 R] >>",
+        &page,
         "<< /Length 1 >>\nstream\nq\nendstream",
         ignored,
         "<< /Length 99 >>\nstream\nQ\nendstream",
@@ -68,8 +71,8 @@ fn document(ignored: &str, wrong_stream_offset: bool) -> Vec<u8> {
     pdf.into_bytes()
 }
 
-fn read_ignoring(ignored: &str) -> (usize, usize) {
-    let pdf = Pdf::new(document(ignored, false)).unwrap();
+fn read_ignoring(contents: &str, ignored: &str) -> (usize, usize) {
+    let pdf = Pdf::new(document(contents, ignored, false)).unwrap();
     let page = &pdf.pages()[0];
     ALLOCATED.set(0);
     FREED.set(0);
@@ -83,13 +86,13 @@ fn read_ignoring(ignored: &str) -> (usize, usize) {
 
 #[test]
 fn ignored_content_string_cost_is_independent_of_length() {
-    let read = |length| read_ignoring(&format!("<{}>", "ab".repeat(length)));
+    let read = |length| read_ignoring(CONTENTS, &format!("<{}>", "ab".repeat(length)));
     assert_eq!(read(16), read(1 << 20));
 }
 
 #[test]
 fn ignored_content_dictionary_skips_keys_and_indirect_length() {
-    let baseline = read_ignoring("<ab>");
+    let baseline = read_ignoring(CONTENTS, "<ab>");
     for suffix in ["", " streaming"] {
         for keys in [0, 1024] {
             let mut dict = String::from("<< /Length 8 0 R");
@@ -98,14 +101,14 @@ fn ignored_content_dictionary_skips_keys_and_indirect_length() {
             }
             dict.push_str(" >>");
             dict.push_str(suffix);
-            assert_eq!(read_ignoring(&dict), baseline);
+            assert_eq!(read_ignoring(CONTENTS, &dict), baseline);
         }
     }
 }
 
 #[test]
 fn wrong_stream_offset_repairs_xref() {
-    let pdf = Pdf::new(document("<ab>", true)).unwrap();
+    let pdf = Pdf::new(document(CONTENTS, "<ab>", true)).unwrap();
     assert_eq!(pdf.pages()[0].page_stream().unwrap(), b"q Q ");
     assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), Some(1));
 }
@@ -113,6 +116,28 @@ fn wrong_stream_offset_repairs_xref() {
 #[test]
 fn content_stream_honors_indirect_length_before_searching_for_endstream() {
     let stream = "<< /Length 9 0 R >> % comment\nstream\r\nxendstreamy\r\nendstream";
-    let pdf = Pdf::new(document(stream, false)).unwrap();
+    let pdf = Pdf::new(document(CONTENTS, stream, false)).unwrap();
     assert_eq!(pdf.pages()[0].page_stream().unwrap(), b"q xendstreamy Q ");
+}
+
+#[test]
+fn direct_content_string_cost_is_independent_of_length() {
+    let read = |length| {
+        let contents = format!("[4 0 R ({}) 6 0 R]", "a".repeat(length));
+        read_ignoring(&contents, "<ab>")
+    };
+    assert_eq!(read(16), read(1 << 20));
+}
+
+#[test]
+fn single_content_reference() {
+    for (body, expected) in [
+        ("<< /Length 1 >> stream\nQ\nendstream", Some(&b"Q"[..])),
+        ("[4 0 R 6 0 R]", Some(&b"q Q "[..])),
+        ("<< /Length 8 0 R >> streaming", None),
+    ] {
+        let pdf = Pdf::new(document("5 0 R", body, false)).unwrap();
+        assert_eq!(pdf.pages()[0].page_stream(), expected);
+        assert_eq!(pdf.xref().get::<u32>(ObjectIdentifier::new(7, 0)), None);
+    }
 }

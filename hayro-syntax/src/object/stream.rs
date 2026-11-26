@@ -58,7 +58,10 @@ impl<'a> Stream<'a> {
 
     pub(crate) fn read_after_dict(r: &mut Reader<'a>, dict: Dict<'a>) -> Option<Self> {
         forward_stream_opener(r)?;
+        Self::read_body(r, dict)
+    }
 
+    pub(crate) fn read_body(r: &mut Reader<'a>, dict: Dict<'a>) -> Option<Self> {
         let offset = r.offset();
         let data = dict
             .get::<u32>(LENGTH)
@@ -266,16 +269,12 @@ impl<'a> Readable<'a> for Stream<'a> {
     }
 
     fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let mut after_dict = r.clone();
-        after_dict.skip::<Dict<'_>>(ctx.in_content_stream())?;
-        forward_stream_opener(&mut after_dict)?;
-
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
         Self::read_after_dict(r, dict)
     }
 }
 
-fn forward_stream_opener(r: &mut Reader<'_>) -> Option<()> {
+pub(crate) fn forward_stream_opener(r: &mut Reader<'_>) -> Option<()> {
     r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
     r.forward_tag(b"\n")
@@ -424,6 +423,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn typed_stream_reads_dictionary_and_exact_body() {
+        let mut r = Reader::new(b"<< /Len#67th 11 /Count 2 >> stream\r\nxendstreamy\nendstream!");
+        let stream = r
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        assert_eq!(stream.dict().get::<u32>(b"Count"), Some(2));
+        assert_eq!(stream.data, b"xendstreamy");
+        assert_eq!(r.peek_byte(), Some(b'!'));
     }
 
     #[test]
