@@ -314,7 +314,7 @@ raster/custom/issue51_p1.png 74d29ed059217a2d6580bea379aab73b
 raster/custom/issue53.png ecea961bdf082436ca5bfda651f11e4c
 raster/custom/issue629.png 8528b1f465dbf7802b583b31e78f22fe
 raster/custom/issue892.png 385c37e17381cc7840c2eb38b8f87944
-raster/custom/issue968.png 12e46f2d6815c5f97bbbdfd7ad983bf4
+raster/custom/issue968.png b5c895d5c67afc2c302ad7c4d72b1bef
 raster/custom/issue994.png bcc9ab4f06c8c0be2f2f7de16a4dbe6e
 raster/custom/issue_clipping_panic.png f0c28a95a5cb230342272cb44ff48b07
 raster/custom/issue_cmap_lookup.png 14bbd9ff73e73c2b4a9e352387bd2a9d
@@ -2249,7 +2249,7 @@ svg/custom/image_mask_alpha.png 3226f3983bb7e66ee0d65145924d62e7
 svg/custom/image_rgb8.png c5d8edb418a0b6bcf62894936fae7282
 svg/custom/image_rgba8.png fd379e1f6946b458bd71a49653ab71a2
 svg/custom/integration_coat_of_arms.png f314e3e62ff36f56157e85ce60b05473
-svg/custom/issue968.png abad35b56513a767a1867531759effdb
+svg/custom/issue968.png 3fbcec7a6aefc1b608a80c80a28c534a
 svg/custom/issue_isolate_shading_transform.png d2343a26805e2a0398dc5d4da58a11a6
 svg/custom/issue_typst_7269.png de865e2e1060f9b32cc3d1e115daf167
 svg/custom/literal_string_raw_eol.png d41751338d5ad429f7de70ddc2b1abb6

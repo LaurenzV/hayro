@@ -53,24 +53,24 @@ impl Type3 {
         self.functions[0].num_outputs()
     }
 
-    pub(crate) fn eval(&self, input: f32, output: &mut [f32]) -> Option<()> {
-        let index = self.find_interval(input);
-        let interval = Interval {
+    pub(crate) fn eval(
+        &self,
+        input: f32,
+        output: &mut [f32],
+        interval: Option<[f32; 2]>,
+    ) -> Option<()> {
+        let index = self.find_interval(input, interval);
+        let domain = Interval {
             min: self.bounds[index],
             max: self.bounds[index + 1],
         };
 
-        self.functions[index].eval(&[interval.map(input, self.encode[index])], output)
-    }
-
-    fn find_interval(&self, x: f32) -> usize {
-        let inner = &self.bounds[1..self.bounds.len() - 1];
-
-        if inner.first() == Some(&self.bounds[0]) && x == self.bounds[0] {
-            return 0;
-        }
-
-        inner.partition_point(|bound| *bound <= x)
+        let map = |x| domain.map(domain.clamp(x), self.encode[index]);
+        self.functions[index].eval_in_interval(
+            &[map(input)],
+            output,
+            interval.map(|ends| ends.map(map)),
+        )
     }
 
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
@@ -83,7 +83,7 @@ impl Type3 {
                 max: encode_max,
             } = self.encode[index];
 
-            if (encode_max - encode_min).abs() <= f32::EPSILON {
+            if encode_max == encode_min {
                 continue;
             }
 
@@ -104,9 +104,27 @@ impl Type3 {
         }
 
         stitching_bounds.sort_by(f32::total_cmp);
-        stitching_bounds.dedup_by(|a, b| (*a - *b).abs() <= f32::EPSILON);
+        stitching_bounds.dedup();
 
         stitching_bounds
+    }
+
+    fn find_interval(&self, x: f32, interval: Option<[f32; 2]>) -> usize {
+        let inner = &self.bounds[1..self.bounds.len() - 1];
+
+        if let Some([a, b]) = interval
+            && a != b
+        {
+            // The midpoint of adjacent floats can round to the upper bound.
+            let mid = a.midpoint(b);
+            return inner.partition_point(|bound| *bound <= mid && *bound < a.max(b));
+        }
+
+        if inner.first() == Some(&self.bounds[0]) && x == self.bounds[0] {
+            return 0;
+        }
+
+        inner.partition_point(|bound| *bound <= x)
     }
 }
 

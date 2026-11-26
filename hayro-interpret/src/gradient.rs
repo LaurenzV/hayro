@@ -67,11 +67,7 @@ impl EncodedRadialAxialShading {
             kind: self.gradient_kind(range),
             transform: pattern.base_transform.inverse(),
             stops: pad_stops(
-                approximate_gradient_stops(
-                    |t| sample_function(&self.function, self.domain, pattern, t),
-                    &normalized_stitching_bounds(&self.function, self.domain),
-                    tolerance,
-                ),
+                approximate_gradient_stops(&self.function, self.domain, pattern, tolerance),
                 range,
                 background,
             ),
@@ -121,39 +117,11 @@ pub(crate) fn function_lut(
     pattern: &EncodedShadingPattern,
 ) -> ColorLut {
     ColorLut::new(&approximate_gradient_stops(
-        |t| sample_function(function, range, pattern, t),
-        &normalized_stitching_bounds(function, range),
+        function,
+        range,
+        pattern,
         LUT_TOLERANCE,
     ))
-}
-
-fn sample_function(
-    function: &ShadingFunction,
-    [t0, t1]: [f32; 2],
-    pattern: &EncodedShadingPattern,
-    t: f32,
-) -> [f32; 4] {
-    pattern.eval(function, &[t0 + (t1 - t0) * t])
-}
-
-fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
-    let dt = t1 - t0;
-    if dt.abs() <= f32::EPSILON {
-        return vec![];
-    }
-
-    let mut bounds = function
-        .stitching_bounds()
-        .into_iter()
-        .map(|bound| (bound - t0) / dt)
-        .filter(|bound| *bound > 0.0 && *bound < 1.0)
-        .collect::<Vec<_>>();
-
-    if dt < 0.0 {
-        bounds.reverse();
-    }
-
-    bounds
 }
 
 pub(crate) struct ColorLut {
@@ -161,6 +129,12 @@ pub(crate) struct ColorLut {
 }
 
 impl ColorLut {
+    #[inline]
+    pub(crate) fn get(&self, t: f32) -> [f32; 4] {
+        let last = self.colors.len() - 1;
+        self.colors[((t * last as f32 + 0.5) as usize).min(last)]
+    }
+
     fn new(stops: &[SvgGradientStop]) -> Self {
         let min_gap = stops
             .windows(2)
@@ -168,8 +142,8 @@ impl ColorLut {
             .filter(|gap| *gap > 0.0)
             .fold(1.0, f32::min);
         let size = ((1.0 / min_gap).ceil() as usize)
-            .next_power_of_two()
-            .clamp(MIN_LUT_SIZE, MAX_LUT_SIZE);
+            .clamp(MIN_LUT_SIZE, MAX_LUT_SIZE)
+            .next_power_of_two();
 
         let mut segment = 0;
         let colors = (0..size)
@@ -193,12 +167,6 @@ impl ColorLut {
             .collect();
 
         Self { colors }
-    }
-
-    #[inline]
-    pub(crate) fn get(&self, t: f32) -> [f32; 4] {
-        let last = self.colors.len() - 1;
-        self.colors[((t * last as f32 + 0.5) as usize).min(last)]
     }
 }
 
@@ -231,30 +199,35 @@ fn pad_stops(
 }
 
 fn approximate_gradient_stops(
-    mut sample: impl FnMut(f32) -> [f32; 4],
-    breakpoints: &[f32],
+    function: &ShadingFunction,
+    [t0, t1]: [f32; 2],
+    pattern: &EncodedShadingPattern,
     tolerance: f32,
 ) -> Vec<SvgGradientStop> {
-    let mut interval_bounds = Vec::with_capacity(breakpoints.len() + 2);
-    interval_bounds.push(0.0);
-    interval_bounds.extend(breakpoints.iter().copied());
-    interval_bounds.push(1.0);
-
+    let dt = t1 - t0;
+    let mut bounds = function.stitching_bounds();
+    if t1 < t0 {
+        bounds.reverse();
+    }
+    let ends = bounds
+        .into_iter()
+        .filter_map(|bound| stitching_offset(bound, t0, t1).map(|offset| (bound, offset)));
+    let mut start = t0;
+    let mut start_offset = 0.0;
     let mut stops = Vec::new();
-    for interval in interval_bounds.windows(2) {
-        let start_offset = interval[0];
-        let end_offset = interval[1];
-
-        let start_color = sample(start_offset);
+    for (end, end_offset) in ends.chain([(t1, 1.0)]) {
+        let interval = (start != t0 || end != t1).then_some([start, end]);
+        let sample = |t, interval| pattern.eval(function, &[t], interval);
+        let start_color = sample(start, if start == t0 { None } else { interval });
         stops.push(SvgGradientStop {
             offset: start_offset,
             color: start_color,
         });
 
-        let end_color = sample(end_offset);
+        let end_color = sample(end, if end == t1 { None } else { interval });
 
         approximate_gradient_interval(
-            &mut sample,
+            &mut |offset| sample(t0 + dt * offset, interval),
             &mut stops,
             GradientSample {
                 offset: start_offset,
@@ -267,9 +240,17 @@ fn approximate_gradient_stops(
             tolerance.max(0.0),
             0,
         );
+        start = end;
+        start_offset = end_offset;
     }
 
     stops
+}
+
+fn stitching_offset(bound: f32, start: f32, end: f32) -> Option<f32> {
+    let offset =
+        ((f64::from(bound) - f64::from(start)) / (f64::from(end) - f64::from(start))) as f32;
+    (0.0 < offset && offset < 1.0).then_some(offset)
 }
 
 #[derive(Clone, Copy)]
@@ -318,4 +299,77 @@ fn approximate_gradient_interval(
 
     approximate_gradient_interval(sample, stops, start, mid, tolerance, depth + 1);
     approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::{AlphaColor, ColorSpace};
+    use crate::encode::{EncodedDummyShading, EncodedShadingType};
+    use crate::function::Function;
+    use hayro_syntax::object::{FromBytes, Object};
+
+    #[test]
+    fn stitching_offset_extremes() {
+        assert_eq!(stitching_offset(0.0, -f32::MAX, f32::MAX), Some(0.5));
+        assert_eq!(stitching_offset(0.0, -f32::MAX, f32::INFINITY), None);
+        assert_eq!(stitching_offset(f32::NAN, 0.0, 1.0), None);
+    }
+
+    #[test]
+    fn stitching_hard_stops() {
+        let black = "<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [0] /N 1 >>";
+        let white = "<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [1] /N 1 >>";
+        let step = format!(
+            "<< /FunctionType 3 /Domain [0 1] /Bounds [.25 .25]
+            /Functions [{black} {black} {white}] /Encode [0 1 0 1 0 1] >>"
+        );
+        let child = step.replace("[.25 .25]", "[.75 .75]");
+        let reversed = format!(
+            "<< /FunctionType 3 /Domain [0 1] /Bounds []
+            /Functions [{child}] /Encode [1 0] >>"
+        );
+        let adjacent = step.replace(
+            "/Domain [0 1] /Bounds [.25 .25]",
+            "/Domain [16777216 16777220] /Bounds [16777218 16777218]",
+        );
+        let pattern = EncodedShadingPattern {
+            base_transform: Affine::IDENTITY,
+            color_space: ColorSpace::device_gray(),
+            background_color: AlphaColor::BLACK,
+            shading_type: EncodedShadingType::Dummy(EncodedDummyShading),
+            opacity: 1.0,
+            transfer_function: None,
+        };
+        for (pdf, domain, offset, left, right) in [
+            (&step, [0.0, 1.0], 0.25, 0.0, 1.0),
+            (&step, [1.0, 0.0], 0.75, 1.0, 0.0),
+            (&reversed, [0.0, 1.0], 0.25, 1.0, 0.0),
+            (&reversed, [1.0, 0.0], 0.75, 0.0, 1.0),
+            (&adjacent, [16777216.0, 16777220.0], 0.5, 0.0, 1.0),
+        ] {
+            let object = Object::from_bytes(pdf.as_bytes()).unwrap();
+            let function = ShadingFunction::Single(Function::new(&object).unwrap());
+            let stops = approximate_gradient_stops(&function, domain, &pattern, 0.01);
+            let actual: Vec<_> = stops.iter().map(|s| (s.offset, s.color[0])).collect();
+            assert_eq!(
+                actual,
+                [(0.0, left), (offset, left), (offset, right), (1.0, right)]
+            );
+        }
+
+        let narrow = format!(
+            "<< /FunctionType 3 /Domain [0 1]
+            /Bounds [0.00000000000000000001 0.00000000000000000002]
+            /Functions [{black} {white} {black}] /Encode [0 1 0 1 0 1] >>"
+        );
+        let object = Object::from_bytes(narrow.as_bytes()).unwrap();
+        let function = ShadingFunction::Single(Function::new(&object).unwrap());
+        let stops = approximate_gradient_stops(&function, [0.0, 1.0], &pattern, 0.01);
+        assert_eq!(
+            stops.iter().map(|s| s.color[0]).collect::<Vec<_>>(),
+            [0.0, 0.0, 1.0, 1.0, 0.0, 0.0]
+        );
+        assert_eq!(ColorLut::new(&stops).colors.len(), MAX_LUT_SIZE);
+    }
 }

@@ -73,6 +73,63 @@ impl Function {
         Self::new_nested(obj, 0)
     }
 
+    /// The number of input values of each sample.
+    pub fn num_inputs(&self) -> usize {
+        self.0.domain.len()
+    }
+
+    /// The number of output values of each sample.
+    pub fn num_outputs(&self) -> usize {
+        self.0.num_outputs
+    }
+
+    /// Evaluate the function on consecutive samples of `input`, writing them to `output`.
+    pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
+        self.eval_in_interval(input, output, None)
+    }
+
+    pub(crate) fn eval_in_interval(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        interval: Option<[f32; 2]>,
+    ) -> Option<()> {
+        let repr = &self.0;
+        let (num_inputs, num_outputs) = (self.num_inputs(), self.num_outputs());
+
+        if !input.len().is_multiple_of(num_inputs)
+            || input.len() / num_inputs * num_outputs != output.len()
+        {
+            return None;
+        }
+
+        match &repr.function_type {
+            FunctionType::Type0(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(input, output);
+                Some(())
+            }),
+            FunctionType::Type2(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(input[0], output);
+                Some(())
+            }),
+            FunctionType::Type3(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(
+                    input[0],
+                    output,
+                    interval.map(|ends| ends.map(|x| repr.domain[0].clamp(x))),
+                )
+            }),
+            FunctionType::Type4(f) => self.eval_samples(input, output, f.evaluator()),
+        }
+    }
+
+    pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
+        match &self.0.function_type {
+            FunctionType::Type3(t3) => t3.stitching_bounds(),
+            _ => vec![],
+        }
+    }
+
     fn new_nested(obj: &Object<'_>, depth: u8) -> Option<Self> {
         if depth >= MAX_FUNCTION_DEPTH {
             return None;
@@ -129,43 +186,6 @@ impl Function {
         })))
     }
 
-    /// The number of input values of each sample.
-    pub fn num_inputs(&self) -> usize {
-        self.0.domain.len()
-    }
-
-    /// The number of output values of each sample.
-    pub fn num_outputs(&self) -> usize {
-        self.0.num_outputs
-    }
-
-    /// Evaluate the function on consecutive samples of `input`, writing them to `output`.
-    pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
-        let repr = &self.0;
-        let (num_inputs, num_outputs) = (self.num_inputs(), self.num_outputs());
-
-        if !input.len().is_multiple_of(num_inputs)
-            || input.len() / num_inputs * num_outputs != output.len()
-        {
-            return None;
-        }
-
-        match &repr.function_type {
-            FunctionType::Type0(f) => self.eval_samples(input, output, |input, output| {
-                f.eval(input, output);
-                Some(())
-            }),
-            FunctionType::Type2(f) => self.eval_samples(input, output, |input, output| {
-                f.eval(input[0], output);
-                Some(())
-            }),
-            FunctionType::Type3(f) => {
-                self.eval_samples(input, output, |input, output| f.eval(input[0], output))
-            }
-            FunctionType::Type4(f) => self.eval_samples(input, output, f.evaluator()),
-        }
-    }
-
     fn eval_samples(
         &self,
         input: &[f32],
@@ -194,13 +214,6 @@ impl Function {
         }
 
         Some(())
-    }
-
-    pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
-        match &self.0.function_type {
-            FunctionType::Type3(t3) => t3.stitching_bounds(),
-            _ => vec![],
-        }
     }
 }
 

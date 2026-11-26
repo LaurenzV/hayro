@@ -41,15 +41,24 @@ impl ShadingFunction {
 
     /// Evaluate the shading function for a single sample.
     pub fn eval(&self, input: &[f32], output: &mut [f32]) -> Option<()> {
+        self.eval_in_interval(input, output, None)
+    }
+
+    pub(crate) fn eval_in_interval(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        interval: Option<[f32; 2]>,
+    ) -> Option<()> {
         match self {
-            Self::Single(function) => function.eval(input, output),
+            Self::Single(function) => function.eval_in_interval(input, output, interval),
             Self::Multiple(functions) => {
                 if functions.len() != output.len() {
                     return None;
                 }
 
                 for (function, output) in functions.iter().zip(output.iter_mut()) {
-                    function.eval(input, std::slice::from_mut(output))?;
+                    function.eval_in_interval(input, std::slice::from_mut(output), interval)?;
                 }
 
                 Some(())
@@ -58,20 +67,18 @@ impl ShadingFunction {
     }
 
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
-        let mut bounds = vec![];
-
         match self {
-            Self::Single(function) => bounds.extend(function.stitching_bounds()),
+            Self::Single(function) => function.stitching_bounds(),
             Self::Multiple(functions) => {
-                for function in functions {
-                    bounds.extend(function.stitching_bounds());
-                }
+                let mut bounds: Vec<_> = functions
+                    .iter()
+                    .flat_map(Function::stitching_bounds)
+                    .collect();
+                bounds.sort_by(f32::total_cmp);
+                bounds.dedup();
+                bounds
             }
         }
-
-        bounds.sort_by(f32::total_cmp);
-        bounds.dedup_by(|a, b| (*a - *b).abs() <= f32::EPSILON);
-        bounds
     }
 }
 
