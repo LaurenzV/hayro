@@ -312,6 +312,10 @@ impl ColorSpace {
         matches!(self.0.as_ref(), ColorSpaceType::Pattern(_))
     }
 
+    pub(crate) fn is_lab(&self) -> bool {
+        matches!(self.0.as_ref(), ColorSpaceType::Lab(_))
+    }
+
     pub(crate) fn is_indexed(&self) -> bool {
         matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
     }
@@ -480,9 +484,13 @@ impl ColorSpace {
         }
     }
 
-    fn to_alpha_color(&self, input: &[f32], mut opacity: f32) -> Option<AlphaColor> {
+    pub(crate) fn encoded_to_alpha_color(
+        &self,
+        input: &[u8],
+        mut opacity: f32,
+    ) -> Option<AlphaColor> {
         let mut output = [0; 3];
-        self.convert_values(input, &mut output)?;
+        self.convert(input, &mut output)?;
 
         if self.is_none() {
             opacity = 0.0;
@@ -494,6 +502,10 @@ impl ColorSpace {
             output[2],
             (opacity * 255.0 + 0.5) as u8,
         ))
+    }
+
+    fn to_alpha_color(&self, input: &[f32], opacity: f32) -> Option<AlphaColor> {
+        self.encoded_to_alpha_color(&self.encode_values(input), opacity)
     }
 }
 

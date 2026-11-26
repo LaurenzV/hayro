@@ -39,6 +39,17 @@ impl Canvas {
             return;
         }
 
+        let mut sorted = points;
+        sorted.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)));
+        let [top, middle, bottom] = sorted;
+
+        let first_row = pixel_index(top.y, self.height);
+        let end_row = pixel_index(bottom.y, self.height);
+
+        if first_row >= end_row {
+            return;
+        }
+
         let mut dx = [0.0; N];
         let mut dy = [0.0; N];
 
@@ -48,13 +59,6 @@ impl Canvas {
             dx[c] = ((d1 * e2.y - d2 * e1.y) / det) as f32;
             dy[c] = ((d2 * e1.x - d1 * e2.x) / det) as f32;
         }
-
-        let mut sorted = points;
-        sorted.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)));
-        let [top, middle, bottom] = sorted;
-
-        let first_row = pixel_index(top.y, self.height);
-        let end_row = pixel_index(bottom.y, self.height);
 
         for y in first_row..end_row {
             let center_y = y as f64 + 0.5;

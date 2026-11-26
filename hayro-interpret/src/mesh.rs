@@ -53,9 +53,32 @@ pub(crate) fn draw_mesh(
             if let Some(function) = function {
                 let corner_colors = patches.iter().flat_map(|p| p.colors.as_flattened());
                 let colors = Parameter::new(function, corner_colors, pattern);
-                draw_patches(canvas, &patches, depth, &colors);
+                draw_patches(canvas, &patches, depth, &colors, |_, c| colors.values(c));
             } else {
-                draw_patches(canvas, &patches, depth, &Direct { pattern });
+                let colors = Direct { pattern };
+                if pattern.color_space.is_lab() && depth > 1 {
+                    let slots = ((1 << depth) + 1)
+                        .min(canvas.width.saturating_add(canvas.height).saturating_add(1));
+                    let mut columns = vec![None; slots];
+                    draw_patches(canvas, &patches, depth, &colors, |i, c| {
+                        let key = pattern.color_space.encode_values(c);
+                        let slot = &mut columns[i % slots];
+                        if let Some((old, rgba)) = slot
+                            && *old == key
+                        {
+                            return *rgba;
+                        }
+                        let Some(color) = pattern.color_space.encoded_to_alpha_color(&key, 1.)
+                        else {
+                            return pattern.finish(crate::color::AlphaColor::BLACK.components());
+                        };
+                        let rgba = pattern.finish(color.components());
+                        *slot = Some((key, rgba));
+                        rgba
+                    });
+                } else {
+                    draw_patches(canvas, &patches, depth, &colors, |_, c| colors.values(c));
+                }
             }
         }
         _ => {}
@@ -289,71 +312,104 @@ fn draw_patches<const N: usize>(
     patches: &[CanvasPatch<'_>],
     depth: u32,
     colors: &impl MeshColors<N>,
+    mut values: impl FnMut(usize, &[f32]) -> [f32; N],
 ) {
     for patch in patches {
-        let ranges = [[0.0, 1.0]; 2];
-        draw_patch_piece(canvas, patch, patch.points, ranges, [depth; 2], colors);
+        draw_patch_rows(
+            canvas,
+            patch,
+            patch.points,
+            [0., 1.],
+            depth,
+            depth,
+            colors,
+            &mut values,
+        );
     }
 }
 
-fn draw_patch_piece<const N: usize>(
+fn draw_patch_rows<const N: usize>(
     canvas: &mut Canvas,
     patch: &CanvasPatch<'_>,
     points: [[Point; 4]; 4],
-    [u_range, v_range]: [[f32; 2]; 2],
-    [u_depth, v_depth]: [u32; 2],
+    [v0, v1]: [f32; 2],
+    remaining: u32,
+    depth: u32,
     colors: &impl MeshColors<N>,
+    values: &mut impl FnMut(usize, &[f32]) -> [f32; N],
 ) {
     if !canvas.is_visible(points.as_flattened()) {
         return;
     }
-
-    let halves = |[a, b]: [f32; 2]| [[a, 0.5 * (a + b)], [0.5 * (a + b), b]];
-
-    if v_depth > 0 {
-        let (low, high) = split_rows(points);
-
-        for (points, v_range) in [low, high].into_iter().zip(halves(v_range)) {
-            let ranges = [u_range, v_range];
-            draw_patch_piece(
+    if remaining > 0 {
+        let (lo, hi) = split_rows(points);
+        let mid = (v0 + v1) * 0.5;
+        for (points, range) in [(lo, [v0, mid]), (hi, [mid, v1])] {
+            draw_patch_rows(
                 canvas,
                 patch,
                 points,
-                ranges,
-                [u_depth, v_depth - 1],
+                range,
+                remaining - 1,
+                depth,
                 colors,
+                values,
             );
         }
-    } else if u_depth > 0 {
-        let (low, high) = split_columns(points);
-
-        for (points, u_range) in [low, high].into_iter().zip(halves(u_range)) {
-            let ranges = [u_range, v_range];
-            draw_patch_piece(
-                canvas,
-                patch,
-                points,
-                ranges,
-                [u_depth - 1, v_depth],
-                colors,
-            );
-        }
-    } else {
-        let ([u0, u1], [v0, v1]) = (u_range, v_range);
-        let mut buffer = [0.0; MAX_COMPONENTS];
-        let mut values = |u, v| colors.values(patch.components(u, v, &mut buffer));
-        let (c00, c10, c01, c11) = (
-            values(u0, v0),
-            values(u1, v0),
-            values(u0, v1),
-            values(u1, v1),
-        );
-        let (p00, p10, p01, p11) = (points[0][0], points[3][0], points[0][3], points[3][3]);
-        let shade = |v: &[f32; N]| colors.shade(v);
-
-        canvas.fill_triangle([p00, p10, p01], [c00, c10, c01], &shade);
-        canvas.fill_triangle([p10, p11, p01], [c10, c11, c01], &shade);
+        return;
     }
+    let segments = 1_usize << depth;
+    let mut previous = None;
+    let mut buffer = [0.; MAX_COMPONENTS];
+    let mut column = |i: usize| -> [[f32; N]; 2] {
+        let u = i as f32 / segments as f32;
+        [v0, v1].map(|v| values(i, patch.components(u, v, &mut buffer)))
+    };
+    draw_patch_strip(
+        canvas,
+        points.map(|c| c[0]),
+        points.map(|c| c[3]),
+        0,
+        segments,
+        &mut |canvas, i, p, q| {
+            let [c00, c01] = match previous {
+                Some((last, values)) if last == i => values,
+                _ => column(i),
+            };
+            let right = column(i + 1);
+            let [c10, c11] = right;
+            previous = Some((i + 1, right));
+            let shade = |v: &[f32; N]| colors.shade(v);
+            canvas.fill_triangle([p[0], p[1], q[0]], [c00, c10, c01], &shade);
+            canvas.fill_triangle([p[1], q[1], q[0]], [c10, c11, c01], &shade);
+        },
+    );
+}
+
+fn draw_patch_strip(
+    canvas: &mut Canvas,
+    top: [Point; 4],
+    bottom: [Point; 4],
+    start: usize,
+    width: usize,
+    leaf: &mut impl FnMut(&mut Canvas, usize, [Point; 2], [Point; 2]),
+) {
+    let area = if width == 1 {
+        bounds(&[top[0], top[3], bottom[0], bottom[3]])
+    } else {
+        bounds(&top).union(bounds(&bottom))
+    };
+    if !area.overlaps(canvas.bounds()) || (area.y0 - 0.5).ceil() >= (area.y1 - 0.5).ceil() {
+        return;
+    }
+    if width == 1 {
+        return leaf(canvas, start, [top[0], top[3]], [bottom[0], bottom[3]]);
+    }
+    let (a, b) = split_cubic(top);
+    let (c, d) = split_cubic(bottom);
+    let half = width / 2;
+    draw_patch_strip(canvas, a, c, start, half, leaf);
+    draw_patch_strip(canvas, b, d, start + half, half, leaf);
 }
 
 fn split_rows(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
@@ -362,26 +418,105 @@ fn split_rows(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
     (split.map(|(low, _)| low), split.map(|(_, high)| high))
 }
 
-fn split_columns(points: [[Point; 4]; 4]) -> ([[Point; 4]; 4], [[Point; 4]; 4]) {
-    let mut low = points;
-    let mut high = points;
-
-    for j in 0..4 {
-        let (l, h) = split_cubic(points.map(|column| column[j]));
-
-        for i in 0..4 {
-            low[i][j] = l[i];
-            high[i][j] = h[i];
-        }
-    }
-
-    (low, high)
-}
-
 fn split_cubic([p0, p1, p2, p3]: [Point; 4]) -> ([Point; 4], [Point; 4]) {
     let (p01, p12, p23) = (p0.midpoint(p1), p1.midpoint(p2), p2.midpoint(p3));
     let (p012, p123) = (p01.midpoint(p12), p12.midpoint(p23));
     let p0123 = p012.midpoint(p123);
 
     ([p0, p01, p012, p0123], [p0123, p123, p23, p3])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::{AlphaColor, ColorSpace};
+    use crate::encode::{EncodedMeshShading, EncodedShadingType};
+
+    #[test]
+    fn device_gray_half_byte_patch() {
+        let patch = Patch {
+            control_points: std::array::from_fn(|i| {
+                std::array::from_fn(|j| Point::new(0.5 + 8.0 * i as f64, 0.5 + 8.0 * j as f64))
+            }),
+            colors: std::array::from_fn(|_| {
+                std::array::from_fn(|_| smallvec::smallvec![59.0 / 510.0])
+            }),
+        };
+        let pattern = EncodedShadingPattern {
+            base_transform: Affine::IDENTITY,
+            color_space: ColorSpace::device_gray(),
+            background_color: AlphaColor::BLACK,
+            shading_type: EncodedShadingType::Mesh(EncodedMeshShading {
+                shading_type: ShadingType::PatchMesh {
+                    patches: vec![patch],
+                    function: None,
+                }
+                .into(),
+            }),
+            opacity: 1.,
+            transfer_function: None,
+        };
+        let texture = pattern.render_texture(Rect::new(0., 0., 24., 24.), 1.);
+        let mut expected = [[30, 30, 30, 255]; 24 * 24];
+        for (y, columns) in [
+            (4, 18..21),
+            (5, 17..21),
+            (6, 16..21),
+            (7, 16..20),
+            (8, 16..19),
+        ] {
+            expected[y * 24 + columns.start..y * 24 + columns.end].fill([29, 29, 29, 255]);
+        }
+        assert_eq!(texture.data, expected.as_flattened());
+    }
+
+    #[test]
+    fn shared_patch_edge_is_not_culled_at_pixel_center() {
+        let patch = |p00: Point, p10: Point, p01: Point, p11: Point| Patch {
+            control_points: [
+                [p00, p00, p10, p10],
+                [p00, p00, p10, p10],
+                [p01, p01, p11, p11],
+                [p01, p01, p11, p11],
+            ],
+            colors: std::array::from_fn(|_| std::array::from_fn(|_| smallvec::smallvec![1.0])),
+        };
+        let left = patch(
+            Point::new(-1.0 / 32.0, 0.0),
+            Point::new(0.0, 0.0),
+            Point::new(-1.0 / 32.0, 1.0),
+            Point::new(0.0, 1.0),
+        );
+        let right = patch(
+            Point::new(0.0, 0.0),
+            Point::new(7.0 / 16.0, 2.0),
+            Point::new(0.0, 1.0),
+            Point::new(7.0 / 16.0, 3.0),
+        );
+        let shading_type = std::sync::Arc::new(ShadingType::PatchMesh {
+            patches: vec![left, right],
+            function: None,
+        });
+        let pattern = EncodedShadingPattern {
+            base_transform: Affine::IDENTITY,
+            color_space: ColorSpace::device_gray(),
+            background_color: AlphaColor::TRANSPARENT,
+            shading_type: EncodedShadingType::Mesh(EncodedMeshShading {
+                shading_type: shading_type.clone(),
+            }),
+            opacity: 1.,
+            transfer_function: None,
+        };
+        let transform = Affine::new([
+            1.0,
+            0.0,
+            0.775_396_347_045_898_4,
+            1.394_090_960_019_853_7,
+            -0.275_396_347_045_898_44,
+            -0.894_090_960_019_853_6,
+        ]);
+        let mut canvas = Canvas::new(1, 1, [0.0; 4]);
+        draw_mesh(&mut canvas, &shading_type, transform, &pattern);
+        assert_eq!(canvas.pixels, [[1.0, 1.0, 1.0, 1.0]]);
+    }
 }
