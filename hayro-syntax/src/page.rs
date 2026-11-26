@@ -8,9 +8,9 @@ use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::array::ArrayIter;
 use crate::object::dict::keys::*;
-use crate::object::{MaybeRef, Object};
+use crate::object::{MaybeRef, Object, ObjectIdentifier};
 use crate::reader::ReaderContext;
-use crate::sync::{FxHashSet, OnceLock};
+use crate::sync::{FxHashMap, FxHashSet, OnceLock};
 use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
@@ -24,17 +24,79 @@ struct PagesContext<'a> {
     media_box: Option<Rect>,
     crop_box: Option<Rect>,
     rotate: Option<i32>,
-    resources: Dict<'a>,
+    resources: Resources<'a>,
 }
 
-impl PagesContext<'_> {
+impl<'a> PagesContext<'a> {
     fn new() -> Self {
         Self {
             media_box: None,
             crop_box: None,
             rotate: None,
-            resources: Dict::empty(),
+            resources: Resources::new(Dict::empty()),
         }
+    }
+
+    fn apply(&mut self, dict: &Dict<'a>) {
+        self.media_box = dict.get::<Rect>(MEDIA_BOX).or(self.media_box);
+        self.crop_box = dict.get::<Rect>(CROP_BOX).or(self.crop_box);
+        self.rotate = dict.get::<i32>(ROTATE).or(self.rotate);
+        if let Some(resources) = dict.get::<Dict<'a>>(RESOURCES) {
+            self.resources = Resources::new(resources);
+        }
+    }
+
+    fn from_parents(
+        leaf: &Dict<'a>,
+        xref: &'a XRef,
+        cache: &mut FxHashMap<ObjectIdentifier, Self>,
+    ) -> Self {
+        let mut ctx = Self::new();
+        let mut ancestors: Vec<(ObjectIdentifier, Dict<'a>)> = Vec::new();
+        let mut visited = FxHashSet::default();
+        let leaf_id = leaf.obj_id();
+
+        let mut parent = leaf.get_ref(PARENT);
+        while let Some(id) = parent.map(ObjectIdentifier::from) {
+            if let Some(inherited) = cache.get(&id) {
+                ctx = inherited.clone();
+                break;
+            }
+            let at_leaf = Some(id) == leaf_id;
+            if at_leaf || !visited.insert(id) {
+                if at_leaf && leaf.get::<Name<'_>>(TYPE).as_deref() == Some(PAGE) {
+                    break;
+                }
+                // Seed the reverse fold with a full lap so every cached cycle entry sees every attribute.
+                for (ancestor, dict) in ancestors.iter().rev() {
+                    ctx.apply(dict);
+                    if *ancestor == id {
+                        break;
+                    }
+                }
+                if at_leaf {
+                    ctx.apply(leaf);
+                }
+                break;
+            }
+
+            let Some(dict) = xref.get::<Object<'_>>(id).and_then(Object::into_dict) else {
+                cache.insert(id, Self::new());
+                break;
+            };
+            if dict.get::<Name<'_>>(TYPE).as_deref() == Some(PAGE) {
+                cache.insert(id, Self::new());
+                break;
+            }
+            parent = dict.get_ref(PARENT);
+            ancestors.push((id, dict));
+        }
+
+        for (id, dict) in ancestors.into_iter().rev() {
+            ctx.apply(&dict);
+            cache.insert(id, ctx.clone());
+        }
+        ctx
     }
 }
 
@@ -59,12 +121,14 @@ impl<'a> Pages<'a> {
 
     pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Self> {
         let mut pages = vec![];
+        let mut cache = FxHashMap::default();
 
         for object in xref.objects() {
             if let Some(dict) = object.into_dict()
-                && let Some(page) = Page::new(&dict, &PagesContext::new(), ctx, true)
+                && dict.contains_key(CONTENTS)
             {
-                pages.push(page);
+                let inherited = PagesContext::from_parents(&dict, xref, &mut cache);
+                pages.push(Page::new(&dict, inherited, ctx));
             }
         }
 
@@ -96,12 +160,7 @@ struct PageTreeFrame<'a> {
 
 impl<'a> PageTreeFrame<'a> {
     fn new(dict: &Dict<'a>, mut ctx: PagesContext<'a>) -> Option<Self> {
-        ctx.media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box);
-        ctx.crop_box = dict.get::<Rect>(CROP_BOX).or(ctx.crop_box);
-        ctx.rotate = dict.get::<i32>(ROTATE).or(ctx.rotate);
-        if let Some(resources) = dict.get::<Dict<'a>>(RESOURCES) {
-            ctx.resources = resources;
-        }
+        ctx.apply(dict);
 
         Some(Self {
             kids: dict.get::<Array<'a>>(KIDS)?.raw_iter(),
@@ -156,9 +215,7 @@ fn resolve_pages<'a>(
             }
             // Lenient: treat a missing or unknown `Type` as a page (corpus 0083781).
             _ => {
-                if let Some(page) = Page::new(&dict, &frame.ctx, reader_ctx, false) {
-                    entries.push(page);
-                }
+                entries.push(Page::new(&dict, frame.ctx.clone(), reader_ctx));
             }
         }
     }
@@ -191,29 +248,11 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    fn new(
-        dict: &Dict<'a>,
-        ctx: &PagesContext<'a>,
-        reader_ctx: &ReaderContext<'a>,
-        brute_force: bool,
-    ) -> Option<Self> {
-        if brute_force && !dict.contains_key(CONTENTS) {
-            return None;
-        }
-
-        let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
-
-        let crop_box = dict
-            .get::<Rect>(CROP_BOX)
-            .or(ctx.crop_box)
-            .unwrap_or(media_box);
-
-        let rotation = match dict
-            .get::<i32>(ROTATE)
-            .or(ctx.rotate)
-            .unwrap_or(0)
-            .rem_euclid(360)
-        {
+    fn new(dict: &Dict<'a>, mut ctx: PagesContext<'a>, reader_ctx: &ReaderContext<'a>) -> Self {
+        ctx.apply(dict);
+        let media_box = ctx.media_box.unwrap_or(A4);
+        let crop_box = ctx.crop_box.unwrap_or(media_box);
+        let rotation = match ctx.rotate.unwrap_or(0).rem_euclid(360) {
             0 => Rotation::None,
             90 => Rotation::Horizontal,
             180 => Rotation::Flipped,
@@ -221,20 +260,15 @@ impl<'a> Page<'a> {
             _ => Rotation::None,
         };
 
-        let resources = Resources::new(
-            dict.get::<Dict<'a>>(RESOURCES)
-                .unwrap_or_else(|| ctx.resources.clone()),
-        );
-
-        Some(Self {
+        Self {
             inner: dict.clone(),
             media_box,
             crop_box,
             rotation,
             page_streams: OnceLock::new(),
-            resources,
+            resources: ctx.resources,
             ctx: reader_ctx.clone(),
-        })
+        }
     }
 
     fn operations_impl(&self) -> Option<UntypedIter<'_>> {
@@ -520,5 +554,105 @@ pub(crate) mod cached {
         pub(crate) fn get(&self) -> &Pages<'_> {
             &self.pages
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Pdf;
+    use alloc::{format, string::String};
+    use core::fmt::Write;
+
+    fn damaged_pdf(objects: impl IntoIterator<Item = impl AsRef<str>>) -> Pdf {
+        let mut data =
+            String::from("%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        for (i, dict) in objects.into_iter().enumerate() {
+            writeln!(data, "{} 0 obj\n{}\nendobj", i + 2, dict.as_ref()).unwrap();
+        }
+        data.push_str("trailer\n<< /Root 1 0 R >>\n%%EOF");
+        Pdf::new(data.into_bytes()).unwrap()
+    }
+
+    #[test]
+    fn recovered_pages_inherit_nearest_attributes() {
+        let pdf = damaged_pdf([
+            "<< /Type /Pages /MediaBox [0 0 32 18] /CropBox [0 0 30 16] /Rotate 90 /Resources << /Font << /A << >> >> >> >>",
+            "<< /Parent 2 0 R /Rotate 180 /Resources << >> >>",
+            "<< /Contents [] /Parent 2 0 R >>",
+            "<< /Contents [] /Parent 3 0 R >>",
+        ]);
+        let pages = pdf.pages();
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0].render_dimensions(), (16.0, 30.0));
+        assert!(pages[0].resources().fonts.contains_key(b"A"));
+        assert_eq!(pages[1].media_box().width(), 32.0);
+        assert_eq!(pages[1].render_dimensions(), (30.0, 16.0));
+        assert!(matches!(pages[1].rotation(), Rotation::Flipped));
+        assert!(pages[1].resources().fonts.is_empty());
+    }
+
+    #[test]
+    fn recovered_pages_enter_a_cycle_at_different_parents() {
+        let pdf = damaged_pdf([
+            "<< /Contents [] /Parent 3 0 R /Rotate 90 /MediaBox [0 0 32 18] >>",
+            "<< /Parent 2 0 R /MediaBox [0 0 16 10] >>",
+            "<< /Contents [] /Parent 3 0 R >>",
+            "<< /Contents [] /Parent 2 0 R >>",
+            "<< /Type /Page /Contents [] /Parent 6 0 R >>",
+        ]);
+        let sizes: Vec<_> = pdf.pages().iter().map(Page::render_dimensions).collect();
+        assert_eq!(
+            sizes,
+            [
+                (18., 32.),
+                (10., 16.),
+                (18., 32.),
+                (A4.width() as f32, A4.height() as f32)
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_parent_ends_inheritance() {
+        for target in ["<< /Type /Page /Rotate 90 >>", "null"] {
+            let pdf = damaged_pdf([
+                "<< /Parent 3 0 R /MediaBox [0 0 32 18] >>",
+                target,
+                "<< /Contents [] /Parent 2 0 R >>",
+            ]);
+            assert_eq!(pdf.pages()[0].render_dimensions(), (32., 18.));
+        }
+    }
+
+    #[test]
+    fn rejected_page_parent_still_inherits_as_a_leaf() {
+        let pdf = damaged_pdf([
+            "<< /Type /Pages /MediaBox [0 0 32 18] >>",
+            "<< /Contents [] /Parent 5 0 R >>",
+            "<< /Contents [] /Parent 5 0 R >>",
+            "<< /Type /Page /Contents [] /Parent 2 0 R >>",
+        ]);
+        let sizes: Vec<_> = pdf.pages().iter().map(Page::render_dimensions).collect();
+        let default_size = (A4.width() as f32, A4.height() as f32);
+        assert_eq!(sizes, [default_size, default_size, (32., 18.)]);
+    }
+
+    #[test]
+    fn recovered_pages_share_a_deep_parent_chain() {
+        let depth = 1024;
+        let mut objects = vec![String::from("<< /MediaBox [0 0 32 18] >>")];
+        objects.extend((2..depth + 2).map(|id| format!("<< /Parent {id} 0 R >>")));
+        objects.extend(core::iter::repeat_n(
+            format!("<< /Contents [] /Parent {} 0 R >>", depth + 2),
+            depth,
+        ));
+        let pdf = damaged_pdf(objects);
+        assert_eq!(pdf.pages().len(), depth);
+        assert!(
+            pdf.pages()
+                .iter()
+                .all(|page| page.render_dimensions() == (32., 18.))
+        );
     }
 }
