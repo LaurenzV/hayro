@@ -66,7 +66,7 @@ impl Type0Font {
                         if let Some((standard, _)) = select_standard_font(dict, &font_descriptor) {
                             (FontQuery::Standard(standard), true)
                         } else {
-                            let mut query = FallbackFontQuery::new(dict);
+                            let mut query = FallbackFontQuery::new(dict, &font_descriptor);
                             query.character_collection = character_collection.clone();
 
                             (FontQuery::Fallback(query), false)

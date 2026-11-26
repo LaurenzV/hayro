@@ -21,7 +21,8 @@ impl Type1Font {
 
         let fallback = || {
             // TODO: Actually use fallback fonts
-            let fallback_query = FallbackFontQuery::new(dict);
+            let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
+            let fallback_query = FallbackFontQuery::new(dict, &descriptor);
             let standard_font = fallback_query.pick_standard_font();
 
             Some(Self(
