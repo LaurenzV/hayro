@@ -2,7 +2,7 @@ use super::form::FormXObject;
 use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
-use crate::function::{Function, TransferFunction};
+use crate::function::TransferFunction;
 use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::{CacheKey, InterpreterSettings};
@@ -50,6 +50,7 @@ impl Hash for Repr<'_> {
         self.parent_resources_key.hash(state);
         self.root_transform.cache_key().hash(state);
         self.bbox.cache_key().hash(state);
+        self.nesting_depth.hash(state);
     }
 }
 
@@ -87,8 +88,7 @@ impl<'a> SoftMask<'a> {
         let group = FormXObject::new(&group_stream)?;
         let transfer_function = dict
             .get::<Object<'_>>(TR)
-            .and_then(|o| Function::new(&o))
-            .map(TransferFunction::new);
+            .and_then(|o| TransferFunction::new(&o));
         let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
                 let cs = ColorSpace::new(

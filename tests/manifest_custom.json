@@ -1484,5 +1484,20 @@
     "id": "pattern_tiling_clip_scaled",
     "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
     "svg": true
+  },
+  {
+    "id": "pattern_cache_transfer",
+    "file": "pdfs/custom/pattern_cache_transfer.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_cache_background",
+    "file": "pdfs/custom/pattern_cache_background.pdf",
+    "svg": true
+  },
+  {
+    "id": "pattern_cache_depth",
+    "file": "pdfs/custom/pattern_cache_depth.pdf",
+    "svg": true
   }
 ]
