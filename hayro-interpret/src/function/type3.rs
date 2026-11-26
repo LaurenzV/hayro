@@ -1,4 +1,4 @@
-use crate::function::{Function, Interval, interpolate, read_intervals};
+use crate::function::{Function, Interval, read_intervals};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
@@ -53,24 +53,47 @@ impl Type3 {
         self.functions[0].num_outputs()
     }
 
-    pub(crate) fn eval(&self, input: f32, output: &mut [f32]) -> Option<()> {
+    pub(crate) fn eval(&self, input: f64, output: &mut [f32]) -> Option<()> {
         let index = self.find_interval(input);
         let interval = Interval {
             min: self.bounds[index],
             max: self.bounds[index + 1],
         };
 
-        self.functions[index].eval(&[interval.map(input, self.encode[index])], output)
+        self.functions[index].eval_1d_f64(interval.map_f64(input, self.encode[index]), output)
     }
 
-    fn find_interval(&self, x: f32) -> usize {
+    pub(super) fn ops_per_eval(&self) -> usize {
+        self.functions
+            .iter()
+            .map(Function::ops_per_eval)
+            .max()
+            .unwrap_or(1)
+    }
+
+    pub(super) fn monotone(&self, range: [f64; 2]) -> Option<bool> {
+        let [i, j] = range.map(|x| self.find_interval(x));
+        if i != j {
+            return Some(false);
+        }
+        let domain = Interval {
+            min: self.bounds[i],
+            max: self.bounds[i + 1],
+        };
+        if !domain.monotone_map(self.encode[i]) {
+            return None;
+        }
+        self.functions[i].monotone(range.map(|x| domain.map_f64(x, self.encode[i])))
+    }
+
+    fn find_interval(&self, x: f64) -> usize {
         let inner = &self.bounds[1..self.bounds.len() - 1];
 
-        if inner.first() == Some(&self.bounds[0]) && x == self.bounds[0] {
+        if inner.first() == Some(&self.bounds[0]) && x == f64::from(self.bounds[0]) {
             return 0;
         }
 
-        inner.partition_point(|bound| *bound <= x)
+        inner.partition_point(|bound| f64::from(*bound) <= x)
     }
 
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
@@ -88,12 +111,12 @@ impl Type3 {
             }
 
             for child_bound in function.stitching_bounds() {
-                let bound = interpolate(
+                let bound = self.encode[index].map(
                     child_bound,
-                    encode_min,
-                    encode_max,
-                    bounds_i_minus_1,
-                    bounds_i,
+                    Interval {
+                        min: bounds_i_minus_1,
+                        max: bounds_i,
+                    },
                 );
                 let min_bound = bounds_i_minus_1.min(bounds_i);
                 let max_bound = bounds_i_minus_1.max(bounds_i);

@@ -101,7 +101,7 @@ impl EncodedRadialAxialShading {
 
     fn gradient_kind(&self, [t0, t1]: [f64; 2]) -> SvgGradientKind {
         match &self.params {
-            RadialAxialParams::Axial => SvgGradientKind::Linear {
+            RadialAxialParams::Axial { .. } => SvgGradientKind::Linear {
                 start: Point::new(t0, 0.0),
                 end: Point::new(t1, 0.0),
             },
@@ -133,7 +133,7 @@ fn sample_function(
     pattern: &EncodedShadingPattern,
     t: f32,
 ) -> [f32; 4] {
-    pattern.eval(function, &[t0 + (t1 - t0) * t])
+    pattern.eval_color(function, |out| function.eval(&[t0 + (t1 - t0) * t], out))
 }
 
 fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {

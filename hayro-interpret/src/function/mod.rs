@@ -28,11 +28,22 @@ impl Interval {
     }
 
     pub(crate) fn map(self, x: f32, to: Self) -> f32 {
+        self.map_f64(f64::from(x), to) as f32
+    }
+
+    fn monotone_map(self, to: Self) -> bool {
+        // The two rounded products in map_f64 must move in the same direction.
+        self.min == self.max || to.min.min(to.max) <= 0. && to.min.max(to.max) >= 0.
+    }
+
+    fn map_f64(self, x: f64, to: Self) -> f64 {
         if self.min == self.max {
-            return to.min;
+            return f64::from(to.min);
         }
 
-        interpolate(x, self.min, self.max, to.min, to.max)
+        let [x_min, x_max, y_min, y_max] = [self.min, self.max, to.min, to.max].map(f64::from);
+        let t = (x - x_min) / (x_max - x_min);
+        (1.0 - t) * y_min + t * y_max
     }
 }
 
@@ -68,6 +79,10 @@ struct Repr {
 pub struct Function(Arc<Repr>);
 
 impl Function {
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Create a new function.
     pub fn new(obj: &Object<'_>) -> Option<Self> {
         Self::new_nested(obj, 0)
@@ -110,10 +125,13 @@ impl Function {
 
                 (FunctionType::Type3(function), num_outputs)
             }
-            4 => (
-                FunctionType::Type4(Type4::new(stream?)?),
-                range.as_ref()?.len(),
-            ),
+            4 => {
+                let outputs = range.as_ref()?.len();
+                (
+                    FunctionType::Type4(Type4::new(stream?, domain.len(), outputs)?),
+                    outputs,
+                )
+            }
             _ => return None,
         };
 
@@ -156,13 +174,62 @@ impl Function {
                 Some(())
             }),
             FunctionType::Type2(f) => self.eval_samples(input, output, |input, output| {
-                f.eval(input[0], output);
+                f.eval(f64::from(input[0]), output);
                 Some(())
             }),
-            FunctionType::Type3(f) => {
-                self.eval_samples(input, output, |input, output| f.eval(input[0], output))
-            }
+            FunctionType::Type3(f) => self.eval_samples(input, output, |input, output| {
+                f.eval(f64::from(input[0]), output)
+            }),
             FunctionType::Type4(f) => self.eval_samples(input, output, f.evaluator()),
+        }
+    }
+
+    pub(crate) fn eval_1d_f64(&self, x: f64, output: &mut [f32]) -> Option<()> {
+        let repr = &self.0;
+        let [domain] = repr.domain.as_slice() else {
+            return None;
+        };
+        if output.len() != repr.num_outputs {
+            return None;
+        }
+        let x = x.min(f64::from(domain.max)).max(f64::from(domain.min));
+        match &repr.function_type {
+            FunctionType::Type0(f) => f.eval_1d(x, output),
+            FunctionType::Type2(f) => f.eval(x, output),
+            FunctionType::Type3(f) => f.eval(x, output)?,
+            FunctionType::Type4(f) => f.evaluator()(&[x as f32], output)?,
+        }
+        self.clamp_output(output);
+        Some(())
+    }
+
+    pub(crate) fn ops_per_eval(&self) -> usize {
+        match &self.0.function_type {
+            FunctionType::Type0(_) => 1_usize << self.num_inputs().min(20),
+            FunctionType::Type4(f) => f.ops_per_eval(),
+            FunctionType::Type3(f) => f.ops_per_eval(),
+            _ => 1,
+        }
+    }
+
+    pub(crate) fn monotone(&self, range: [f64; 2]) -> Option<bool> {
+        let [domain] = self.0.domain.as_slice() else {
+            return None;
+        };
+        let range = range.map(|x| x.min(f64::from(domain.max)).max(f64::from(domain.min)));
+        match &self.0.function_type {
+            FunctionType::Type0(f) => Some(f.same_cell(range)),
+            FunctionType::Type2(f) => Some(f.monotone(range)),
+            FunctionType::Type3(f) => f.monotone(range),
+            FunctionType::Type4(f) => f.monotone(range),
+        }
+    }
+
+    fn clamp_output(&self, output: &mut [f32]) {
+        if let Some(range) = &self.0.range {
+            for (value, range) in output.iter_mut().zip(range) {
+                *value = range.clamp(*value);
+            }
         }
     }
 
@@ -186,11 +253,7 @@ impl Function {
 
             eval(clamped, output)?;
 
-            if let Some(range) = &repr.range {
-                for (value, range) in output.iter_mut().zip(range) {
-                    *value = range.clamp(*value);
-                }
-            }
+            self.clamp_output(output);
         }
 
         Some(())

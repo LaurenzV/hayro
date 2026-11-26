@@ -23,19 +23,34 @@ impl Type2 {
         Some(Self { c0, delta, n })
     }
 
+    pub(super) fn monotone(&self, [a, b]: [f64; 2]) -> bool {
+        let lo = a.min(b);
+        let hi = a.max(b);
+        self.n.is_finite()
+            && self.factor(a).is_finite()
+            && self.factor(b).is_finite()
+            && (lo >= 0. || hi <= 0. && self.n.fract() == 0.)
+    }
+
     pub(crate) fn num_outputs(&self) -> usize {
         self.c0.len()
     }
 
-    pub(crate) fn eval(&self, input: f32, output: &mut [f32]) {
-        let factor = if self.n == 1.0 {
+    pub(crate) fn eval(&self, input: f64, output: &mut [f32]) {
+        self.apply(self.factor(input), output);
+    }
+
+    fn factor(&self, input: f64) -> f64 {
+        if self.n == 1.0 {
             input
         } else {
-            input.powf(self.n)
-        };
+            input.powf(f64::from(self.n))
+        }
+    }
 
+    fn apply(&self, factor: f64, output: &mut [f32]) {
         for ((output, c0), delta) in output.iter_mut().zip(&self.c0).zip(&self.delta) {
-            *output = *c0 + factor * *delta;
+            *output = (f64::from(*c0) + factor * f64::from(*delta)) as f32;
         }
     }
 }

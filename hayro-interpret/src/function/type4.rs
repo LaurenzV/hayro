@@ -7,13 +7,57 @@ const MAX_STACK_DEPTH: usize = 100;
 #[derive(Debug)]
 pub(crate) struct Type4 {
     code: Vec<PostScriptOp>,
+    thresholds: Option<Box<[f32]>>,
 }
 
 impl Type4 {
-    pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
-        Some(Self {
-            code: parse_procedure(&stream.decoded_data().ok()?)?,
-        })
+    pub(crate) fn new(stream: &Stream<'_>, inputs: usize, outputs: usize) -> Option<Self> {
+        Some(Self::from_code(
+            parse_procedure(&stream.decoded_data().ok()?)?,
+            inputs,
+            outputs,
+        ))
+    }
+
+    fn from_code(mut code: Vec<PostScriptOp>, inputs: usize, outputs: usize) -> Self {
+        use PostScriptOp::*;
+        let discards_inputs = code.iter().take(inputs).all(|op| *op == Pop);
+        // NaN marks a dependency on an input for straight-line, NaN-propagating arithmetic.
+        if code.len() > inputs.saturating_add(outputs)
+            && (discards_inputs
+                || code.iter().all(|op| {
+                    matches!(
+                        op,
+                        Number(_) | Pop | Dup | Exch | Add | Sub | Mul | Div | Neg | Abs
+                    )
+                }))
+        {
+            let mut stack = Stack::new();
+            stack.len = inputs;
+            stack.values[..inputs].fill(f32::NAN);
+            if execute(&code, &mut stack).is_some()
+                && let Some(start) = stack.len.checked_sub(outputs)
+                && stack.values[start..stack.len].iter().all(|v| !v.is_nan())
+            {
+                code = std::iter::repeat_n(Pop, inputs)
+                    .chain(stack.values[start..stack.len].iter().copied().map(Number))
+                    .collect();
+            }
+        }
+        let thresholds = (inputs == 1)
+            .then(|| affine_thresholds(&code, outputs))
+            .flatten();
+        Self { code, thresholds }
+    }
+
+    pub(super) fn ops_per_eval(&self) -> usize {
+        self.code.len().max(1)
+    }
+
+    pub(super) fn monotone(&self, range: [f64; 2]) -> Option<bool> {
+        let thresholds = self.thresholds.as_ref()?;
+        let [a, b] = range.map(|x| thresholds.partition_point(|&t| x as f32 > t));
+        Some(a == b)
     }
 
     pub(crate) fn evaluator(&self) -> impl FnMut(&[f32], &mut [f32]) -> Option<()> + '_ {
@@ -33,6 +77,53 @@ impl Type4 {
             Some(())
         }
     }
+}
+
+fn affine_thresholds(mut code: &[PostScriptOp], outputs: usize) -> Option<Box<[f32]>> {
+    use PostScriptOp::*;
+    for _ in 0..outputs {
+        let [Number(c), Exch, rest @ ..] = code else {
+            return None;
+        };
+        if !c.is_finite() {
+            return None;
+        }
+        code = rest;
+    }
+    let mut thresholds = Vec::new();
+    while let [Dup, Number(t), Gt, SkipUnless(n), rest @ ..] = code {
+        if !t.is_finite() {
+            return None;
+        }
+        thresholds.push(*t);
+        let (mut body, tail) = rest.split_at_checked(*n as usize)?;
+        for _ in 0..outputs {
+            body = body.strip_prefix(&[Exch, Pop])?;
+        }
+        for _ in 0..outputs {
+            body = match body {
+                [Number(c), Exch, rest @ ..] if c.is_finite() => rest,
+                [
+                    Dup,
+                    Number(x),
+                    Sub,
+                    Number(m),
+                    Mul,
+                    Number(c),
+                    Add,
+                    Exch,
+                    rest @ ..,
+                ] if x.is_finite() && m.is_finite() && c.is_finite() => rest,
+                _ => return None,
+            };
+        }
+        if !body.is_empty() {
+            return None;
+        }
+        code = tail;
+    }
+    thresholds.sort_by(f32::total_cmp);
+    (code == [Pop]).then(|| thresholds.into_boxed_slice())
 }
 
 struct Stack {
@@ -460,6 +551,23 @@ mod tests {
     }
 
     #[test]
+    fn input_independent_program_has_bounded_sample_cost() {
+        let adds = "0 add ".repeat(2048);
+        for body in [
+            format!("pop 0.5 {adds}"),
+            format!("{adds} pop 0.5"),
+            format!("0.5 {adds}"),
+        ] {
+            let source = format!("{{ {body} }}");
+            let function = Type4::from_code(parse_procedure(source.as_bytes()).unwrap(), 1, 1);
+            assert_eq!(
+                function.code,
+                [PostScriptOp::Pop, PostScriptOp::Number(0.5)]
+            );
+        }
+    }
+
+    #[test]
     fn radix_numbers() {
         op_impl("16#FF 2#101", &[255.0, 5.0]);
     }
@@ -768,7 +876,10 @@ mod tests {
             ],
             range: None,
             num_outputs: 3,
-            function_type: FunctionType::Type4(Type4 { code: procedure }),
+            function_type: FunctionType::Type4(Type4 {
+                code: procedure,
+                thresholds: None,
+            }),
         }));
 
         let res = type4.eval_one(&[-10.0, -2.0, 6.0]).unwrap();

@@ -107,6 +107,40 @@ impl Type0 {
         })
     }
 
+    pub(super) fn same_cell(&self, range: [f64; 2]) -> bool {
+        let i = &self.inputs[0];
+        let [a, b] = range.map(|x| {
+            i.domain
+                .map_f64(x, i.encode)
+                .clamp(0., f64::from(i.size - 1))
+        });
+        i.domain.monotone_map(i.encode)
+            && self
+                .decode
+                .iter()
+                .all(|&d| self.sample_range.monotone_map(d))
+            && (a.floor() == b.floor() || a.min(b).floor() + 1. >= a.max(b))
+    }
+
+    pub(super) fn eval_1d(&self, x: f64, output: &mut [f32]) {
+        let input = &self.inputs[0];
+        let last = input.size as usize - 1;
+        let pos = input
+            .domain
+            .map_f64(x, input.encode)
+            .clamp(0.0, last as f64);
+        let index = pos as usize;
+        let first = index * input.stride;
+        let next = (index + 1).min(last) * input.stride;
+        for (i, value) in output.iter_mut().enumerate() {
+            let a = f64::from(self.samples[first + i]);
+            let b = f64::from(self.samples[next + i]);
+            *value = self
+                .sample_range
+                .map_f64(a + (b - a) * pos.fract(), self.decode[i]) as f32;
+        }
+    }
+
     pub(crate) fn eval(&self, input: &[f32], output: &mut [f32]) {
         let mut offset = 0;
         let mut fractions = [(0, 0.0); MAX_COMPONENTS];

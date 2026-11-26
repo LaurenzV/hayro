@@ -271,6 +271,18 @@ impl ColorSpaceType {
 pub struct ColorSpace(Arc<ColorSpaceType>);
 
 impl ColorSpace {
+    pub(crate) fn eval_ops(&self) -> usize {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceN(space) => space.eval_ops(),
+            ColorSpaceType::Separation(space) => space.eval_ops(),
+            _ => 1,
+        }
+    }
+
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
     pub(crate) fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
         Self::new_nested(object, cache, 0)
     }

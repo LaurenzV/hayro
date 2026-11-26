@@ -12,6 +12,12 @@ pub(crate) struct Separation {
 }
 
 impl Separation {
+    pub(super) fn eval_ops(&self) -> usize {
+        self.tint_transform
+            .ops_per_eval()
+            .saturating_add(self.alternate_space.eval_ops())
+    }
+
     pub(super) fn new(array: &Array<'_>, cache: &Cache, depth: u8) -> Option<Self> {
         let mut iter = array.flex_iter();
         let _ = iter.next::<Name<'_>>()?;

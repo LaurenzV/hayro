@@ -6,7 +6,7 @@ use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::function::{Function, interpolate};
-use crate::util::{Float32Ext, PointExt, RectExt};
+use crate::util::{PointExt, RectExt};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -31,6 +31,16 @@ pub enum ShadingFunction {
 }
 
 impl ShadingFunction {
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Single(a), Self::Single(b)) => a.same(b),
+            (Self::Multiple(a), Self::Multiple(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.same(b))
+            }
+            _ => false,
+        }
+    }
+
     /// The number of output values of the shading function.
     pub fn num_outputs(&self) -> usize {
         match self {
@@ -57,6 +67,35 @@ impl ShadingFunction {
         }
     }
 
+    pub(crate) fn ops_per_eval(&self) -> usize {
+        match self {
+            Self::Single(f) => f.ops_per_eval(),
+            Self::Multiple(fs) => fs.iter().map(Function::ops_per_eval).sum::<usize>().max(1),
+        }
+    }
+
+    pub(crate) fn monotone(&self, range: [f64; 2]) -> Option<bool> {
+        match self {
+            Self::Single(f) => f.monotone(range),
+            Self::Multiple(fs) => fs
+                .iter()
+                .try_fold(true, |ok, f| Some(f.monotone(range)? && ok)),
+        }
+    }
+
+    pub(crate) fn eval_1d_f64(&self, x: f64, output: &mut [f32]) -> Option<()> {
+        match self {
+            Self::Single(f) => f.eval_1d_f64(x, output),
+            Self::Multiple(fs) if fs.len() == output.len() => {
+                for (f, value) in fs.iter().zip(output) {
+                    f.eval_1d_f64(x, std::slice::from_mut(value))?;
+                }
+                Some(())
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn stitching_bounds(&self) -> Vec<f32> {
         let mut bounds = vec![];
 
@@ -76,7 +115,7 @@ impl ShadingFunction {
 }
 
 /// A type of shading.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ShadingType {
     /// A function-based shading.
     FunctionBased {
@@ -121,6 +160,8 @@ pub enum ShadingType {
 /// A PDF shading.
 #[derive(Clone, Debug)]
 pub struct Shading {
+    pub(crate) colors: Arc<std::sync::OnceLock<crate::encode::PreparedColors>>,
+    precise_coords: Option<Box<[f64; 6]>>,
     cache_key: u128,
     /// The type of shading.
     pub shading_type: Arc<ShadingType>,
@@ -134,6 +175,16 @@ pub struct Shading {
 }
 
 impl Shading {
+    pub(crate) fn coordinates(&self, coords: [f32; 6]) -> [f64; 6] {
+        // Callers can replace the public shading type after parsing.
+        if let Some(parsed) = &self.precise_coords
+            && parsed.map(|v| v as f32) == coords
+        {
+            return **parsed;
+        }
+        coords.map(f64::from)
+    }
+
     pub(crate) fn new(dict: &Dict<'_>, stream: Option<&Stream<'_>>, cache: &Cache) -> Option<Self> {
         let cache_key = stream.map_or_else(|| dict.cache_key(), |s| s.cache_key());
 
@@ -151,6 +202,7 @@ impl Shading {
         let color_space = ColorSpace::new(dict.get(COLORSPACE)?, cache)?;
 
         let mut mesh_bounds = None;
+        let mut precise_coords = None;
         let shading_type = match shading_num {
             1 => {
                 let domain = dict.get::<[f32; 4]>(DOMAIN).unwrap_or([0.0, 1.0, 0.0, 1.0]);
@@ -171,15 +223,12 @@ impl Shading {
                 let function = read_function(dict, &color_space)?;
                 let extend = dict.get::<[bool; 2]>(EXTEND).unwrap_or([false, false]);
                 let (coords, invalid) = if shading_num == 2 {
-                    let read = dict.get::<[f32; 4]>(COORDS)?;
-                    let invalid = (read[0] - read[2]).is_nearly_zero()
-                        && (read[1] - read[3]).is_nearly_zero();
+                    let read = dict.get::<[f64; 4]>(COORDS)?;
+                    let invalid = read[0] == read[2] && read[1] == read[3];
                     ([read[0], read[1], read[2], read[3], 0.0, 0.0], invalid)
                 } else {
-                    let read = dict.get::<[f32; 6]>(COORDS)?;
-                    let invalid = (read[0] - read[3]).is_nearly_zero()
-                        && (read[1] - read[4]).is_nearly_zero()
-                        && (read[2] - read[5]).is_nearly_zero();
+                    let read = dict.get::<[f64; 6]>(COORDS)?;
+                    let invalid = read[0] == read[3] && read[1] == read[4] && read[2] == read[5];
                     (read, invalid)
                 };
 
@@ -188,11 +237,15 @@ impl Shading {
                 if invalid {
                     ShadingType::Dummy
                 } else {
+                    let rounded = coords.map(|x| x as f32);
+                    if rounded.map(f64::from) != coords {
+                        precise_coords = Some(coords);
+                    }
                     ShadingType::RadialAxial {
                         domain,
                         function,
                         extend,
-                        coords,
+                        coords: rounded,
                         axial,
                     }
                 }
@@ -309,9 +362,12 @@ impl Shading {
             .get::<Array<'_>>(BACKGROUND)
             .map(|a| a.iter::<f32>().collect::<SmallVec<_>>());
 
+        let shading_type = Arc::new(shading_type);
         Some(Self {
+            colors: Arc::default(),
+            precise_coords: precise_coords.map(Box::new),
             cache_key,
-            shading_type: Arc::new(shading_type),
+            shading_type,
             color_space,
             clip_path: bbox.map(|r| r.to_path(0.1)),
             background,
