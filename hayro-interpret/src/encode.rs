@@ -387,6 +387,30 @@ pub(crate) enum RadialAxialParams {
 pub(crate) const MAX_PREP_OPS: usize = 2_000_000;
 
 impl EncodedRadialAxialShading {
+    /// Extend axial ends that lie outside this device-space placement.
+    pub fn cover_placement(&mut self, bbox: Rect, transform: Affine) {
+        if self.extend == [true; 2] || !matches!(self.params, RadialAxialParams::Axial { .. }) {
+            return;
+        }
+        let bbox = bbox.expand().inset(-0.5);
+        let [a, _, c, _, e, _] = transform.as_coeffs();
+        let error = 8.
+            * f64::from(f32::EPSILON)
+            * (a.abs() * bbox.x0.abs().max(bbox.x1.abs())
+                + c.abs() * bbox.y0.abs().max(bbox.y1.abs())
+                + e.abs()
+                + 1.);
+        let ts = [
+            (bbox.x0, bbox.y0),
+            (bbox.x1, bbox.y0),
+            (bbox.x0, bbox.y1),
+            (bbox.x1, bbox.y1),
+        ]
+        .map(|(x, y)| a * x + c * y + e);
+        self.extend[0] |= ts.iter().all(|&t| t >= error);
+        self.extend[1] |= ts.iter().all(|&t| t <= 1. - error);
+    }
+
     /// Return a single device row or column when the axial parameter is invariant on that axis.
     pub fn texture_bounds(&self, bbox: Rect, pattern: &EncodedShadingPattern) -> Rect {
         let RadialAxialParams::Axial {

@@ -44,6 +44,64 @@ pub enum SvgGradientKind {
     },
 }
 
+impl SvgGradientKind {
+    fn raster_geometry(self, transform: Affine) -> Option<(Self, Affine)> {
+        const NEAR_ZERO: f32 = 1.0 / 4096.0;
+
+        let Self::Radial {
+            start_center,
+            start_radius,
+            end_center,
+            end_radius,
+        } = self
+        else {
+            return Some((self, transform));
+        };
+        let axis = end_center - start_center;
+        let concentric = start_center == end_center;
+        let scale = if concentric {
+            f64::from(start_radius.max(end_radius))
+        } else {
+            axis.hypot()
+        };
+        if !scale.is_finite() || scale <= 0.0 {
+            return None;
+        }
+
+        let r0 = (f64::from(start_radius) / scale) as f32;
+        let r1 = (f64::from(end_radius) / scale) as f32;
+        let delta = r0 - r1;
+        if !delta.is_finite() || delta.abs() <= NEAR_ZERO {
+            return None;
+        }
+        if !concentric {
+            let focus = r0 / delta;
+            let end = (1.0 - focus).abs();
+            // Vello snaps near-endpoint foci and approximates cones near tangency.
+            if (start_radius != 0.0 && focus.abs() <= NEAR_ZERO)
+                || (end_radius != 0.0 && end <= NEAR_ZERO)
+            {
+                return None;
+            }
+            let fr1 = if end_radius == 0.0 { r0 } else { r1 / end };
+            if delta.abs() <= 1.0 + NEAR_ZERO || fr1 <= 1.0 + NEAR_ZERO || !(fr1 * fr1).is_finite()
+            {
+                return None;
+            }
+        }
+
+        Some((
+            Self::Radial {
+                start_center: Point::ORIGIN,
+                start_radius: r0,
+                end_center: (axis / scale).to_point(),
+                end_radius: r1,
+            },
+            transform * Affine::translate(start_center.to_vec2()) * Affine::scale(scale),
+        ))
+    }
+}
+
 /// A color stop for an SVG-like gradient.
 #[derive(Clone, Debug)]
 pub struct SvgGradientStop {
@@ -113,6 +171,26 @@ impl EncodedRadialAxialShading {
             kind,
             transform,
             stops,
+        })
+    }
+
+    /// Return a native raster gradient for a placement covered at both ends.
+    pub fn as_raster_gradient(
+        &self,
+        pattern: &EncodedShadingPattern,
+        tolerance: f32,
+    ) -> Option<SvgGradient> {
+        if self.extend != [true; 2] {
+            return None;
+        }
+        let range = self.padded_range(pattern.background_color.components()[3] > 0.)?;
+        let (kind, transform) = self
+            .gradient_kind(range, tolerance)?
+            .raster_geometry(pattern.base_transform.inverse())?;
+        Some(SvgGradient {
+            kind,
+            transform,
+            stops: self.native_stops(pattern, tolerance)?,
         })
     }
 
@@ -599,6 +677,7 @@ mod tests {
             panic!()
         };
         assert!(g.as_svg_gradient(&pattern, 0.01).is_none());
+        assert!(g.as_raster_gradient(&pattern, 0.01).is_none());
         let texture = pattern.render_texture(kurbo::Rect::new(0., 0., 3., 1.), 1.);
         assert_eq!(texture.data, [0; 12]);
     }

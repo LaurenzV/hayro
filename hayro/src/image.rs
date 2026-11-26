@@ -518,7 +518,8 @@ impl Renderer<'_> {
                                 );
                                 self.ctx.set_transform(transform);
 
-                                let clip_path = self.set_paint(paint, || stencil_rect, false);
+                                let clip_path =
+                                    self.set_paint(paint, || (stencil_rect, false), false);
                                 if let Some(clip_path) = clip_path.as_ref() {
                                     self.push_clip_path_inner(clip_path, FillRule::NonZero);
                                 }

@@ -67,7 +67,11 @@ impl Renderer<'_> {
             return;
         }
 
-        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
+        let clip_path = self.set_paint(
+            &props.paint,
+            || (path.bounding_box(), path_has_joins(path)),
+            true,
+        );
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -86,7 +90,7 @@ impl Renderer<'_> {
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.apply_draw_props(&props);
 
-        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), false);
+        let clip_path = self.set_paint(&props.paint, || (path.bounding_box(), false), false);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
@@ -130,7 +134,7 @@ impl Renderer<'_> {
                 self.ctx.set_fill_rule(convert_fill_rule(*fill_rule));
                 self.apply_draw_props(&props);
 
-                let clip_path = self.set_paint(&props.paint, || *rect, false);
+                let clip_path = self.set_paint(&props.paint, || (*rect, false), false);
                 if let Some(clip_path) = clip_path.as_ref() {
                     self.push_clip_path_inner(clip_path, *fill_rule);
                 }
@@ -204,4 +208,11 @@ fn single_segment_outline(path: &BezPath, stroke: &kurbo::Stroke) -> Option<BezP
         PathEl::LineTo(a - n),
         PathEl::ClosePath,
     ]))
+}
+
+pub(super) fn path_has_joins(path: &BezPath) -> bool {
+    path.elements().windows(2).any(|pair| {
+        pair.iter()
+            .all(|el| !matches!(el, kurbo::PathEl::MoveTo(_)))
+    })
 }
