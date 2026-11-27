@@ -681,6 +681,12 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
     }
 }
 
+/// Return the part of a glyph name before its first period, like `h` for `h.smcp`.
+pub(crate) fn glyph_name_base(name: &str) -> Option<&str> {
+    let (base, _) = name.split_once('.')?;
+    (!base.is_empty()).then_some(base)
+}
+
 pub(crate) fn glyph_name_to_unicode(name: &str, is_zapf_dingbats: bool) -> Option<BfString> {
     let base = name.split('.').next().unwrap_or_default();
     let mut out = String::new();
