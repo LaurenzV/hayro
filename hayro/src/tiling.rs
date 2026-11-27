@@ -8,12 +8,7 @@ use vello_cpu::peniko::{ImageQuality, ImageSampler};
 use vello_cpu::{Image, ImageSource, Pixmap, peniko};
 
 impl Renderer<'_> {
-    pub(crate) fn tiling_paint(
-        &self,
-        t: &TilingPattern<'_>,
-        area: Rect,
-        is_stroke: bool,
-    ) -> (Image, Affine) {
+    pub(crate) fn tiling_paint(&self, t: &TilingPattern<'_>, area: Rect) -> (Image, Affine) {
         let area = t.matrix.inverse().transform_rect_bbox(area);
         let (x_advance, y_advance) = x_y_advances(&t.matrix);
         let x = TileAxis::new(
@@ -30,7 +25,7 @@ impl Renderer<'_> {
         );
 
         let image = Image {
-            image: ImageSource::Pixmap(Arc::new(self.render_tiling(t, &x, &y, is_stroke))),
+            image: ImageSource::Pixmap(Arc::new(self.render_tiling(t, &x, &y))),
             sampler: ImageSampler {
                 x_extend: x.extend,
                 y_extend: y.extend,
@@ -49,13 +44,7 @@ impl Renderer<'_> {
         (image, transform)
     }
 
-    fn render_tiling(
-        &self,
-        t: &TilingPattern<'_>,
-        x: &TileAxis,
-        y: &TileAxis,
-        is_stroke: bool,
-    ) -> Pixmap {
+    fn render_tiling(&self, t: &TilingPattern<'_>, x: &TileAxis, y: &TileAxis) -> Pixmap {
         let to_texture =
             Affine::scale_non_uniform(x.scale, y.scale) * Affine::translate((-x.start, -y.start));
         let mut ctx = self.child_context(x.size, y.size);
@@ -65,7 +54,7 @@ impl Renderer<'_> {
         for j in y.copies.clone() {
             for i in x.copies.clone() {
                 let offset = Affine::translate((f64::from(i) * x.step, f64::from(j) * y.step));
-                t.interpret(&mut renderer, to_texture * offset, is_stroke);
+                t.interpret(&mut renderer, to_texture * offset);
             }
         }
 

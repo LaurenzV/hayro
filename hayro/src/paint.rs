@@ -127,7 +127,7 @@ impl Renderer<'_> {
                         }
                     }
                     Pattern::Tiling(t) => {
-                        let (image, transform) = self.tiling_paint(&t, bbox, is_stroke);
+                        let (image, transform) = self.tiling_paint(&t, bbox);
                         paint_transform = path_transform.inverse() * transform;
 
                         PaintType::Image(image)
