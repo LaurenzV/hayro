@@ -128,7 +128,16 @@ impl<'a> Type3Glyph<'a> {
 
 impl CacheKey for Type3Glyph<'_> {
     fn cache_key(&self) -> u128 {
-        hash128(&(self.glyph.cache_key(), self.bbox.cache_key()))
+        hash128(&(
+            self.glyph.cache_key(),
+            self.bbox.cache_key(),
+            self.nesting_depth,
+            self.state
+                .compositing
+                .transfer_function
+                .as_ref()
+                .map(CacheKey::cache_key),
+        ))
     }
 }
 
