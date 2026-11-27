@@ -81,7 +81,7 @@ impl FunctionSampler<'_> {
     fn sample_at(&self, point: Point) -> [f32; 4] {
         let point = self.inverse * point;
         self.pattern
-            .eval(self.function, &[point.x as f32, point.y as f32])
+            .eval(self.function, &[point.x as f32, point.y as f32], None)
     }
 
     fn contains(&self, point: Point) -> bool {

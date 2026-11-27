@@ -101,11 +101,16 @@ impl EncodedShadingPattern {
         self.finish(self.color_space.to_rgba(components, 1.0).components())
     }
 
-    pub(crate) fn eval(&self, function: &ShadingFunction, input: &[f32]) -> [f32; 4] {
+    pub(crate) fn eval(
+        &self,
+        function: &ShadingFunction,
+        input: &[f32],
+        interval: Option<[f32; 2]>,
+    ) -> [f32; 4] {
         let mut out = [0.0; MAX_COMPONENTS];
         let out = &mut out[..function.num_outputs()];
 
-        match function.eval(input, out) {
+        match function.eval_in_interval(input, out, interval) {
             Some(()) => self.convert(out),
             None => [0.0; 4],
         }
