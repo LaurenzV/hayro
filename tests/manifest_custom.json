@@ -1388,6 +1388,14 @@
     "password": "owner"
   },
   {
+    "id": "encrypted_no_stmf",
+    "file": "pdfs/custom/encrypted_no_stmf.pdf"
+  },
+  {
+    "id": "encrypted_no_strf",
+    "file": "pdfs/custom/encrypted_no_strf.pdf"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"
