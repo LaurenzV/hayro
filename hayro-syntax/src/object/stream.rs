@@ -16,11 +16,6 @@ use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter};
 use smallvec::SmallVec;
 
-struct FiltersAndParams<'a> {
-    filters: SmallVec<[Filter; 2]>,
-    params: SmallVec<[Dict<'a>; 2]>,
-}
-
 /// A stream of arbitrary data.
 #[derive(Clone)]
 pub struct Stream<'a> {
@@ -52,60 +47,6 @@ pub struct ImageDecodeParams {
 }
 
 impl<'a> Stream<'a> {
-    pub(crate) fn new(data: &'a [u8], dict: Dict<'a>) -> Self {
-        Self { dict, data }
-    }
-
-    fn filters_and_params(&self) -> FiltersAndParams<'a> {
-        let mut collected_filters = SmallVec::new();
-        let mut collected_params = SmallVec::new();
-
-        if let Some(filter) = self
-            .dict
-            .get::<Name<'_>>(F)
-            .or_else(|| self.dict.get::<Name<'_>>(FILTER))
-            .and_then(Filter::from_name)
-        {
-            let params = self
-                .dict
-                .get::<Dict<'_>>(DP)
-                .or_else(|| self.dict.get::<Dict<'_>>(DECODE_PARMS))
-                .unwrap_or_default();
-
-            collected_filters.push(filter);
-            collected_params.push(params);
-        } else if let Some(filters) = self
-            .dict
-            .get::<Array<'_>>(F)
-            .or_else(|| self.dict.get::<Array<'_>>(FILTER))
-        {
-            let filters = filters.iter::<Name<'_>>().map(Filter::from_name);
-            let mut params = self
-                .dict
-                .get::<Array<'_>>(DP)
-                .or_else(|| self.dict.get::<Array<'_>>(DECODE_PARMS))
-                .map(|a| a.iter::<Object<'_>>());
-
-            for filter in filters {
-                let params = params
-                    .as_mut()
-                    .and_then(|p| p.next())
-                    .and_then(|p| p.into_dict())
-                    .unwrap_or_default();
-
-                if let Some(filter) = filter {
-                    collected_filters.push(filter);
-                    collected_params.push(params);
-                }
-            }
-        }
-
-        FiltersAndParams {
-            filters: collected_filters,
-            params: collected_params,
-        }
-    }
-
     /// Return the decrypted but undecoded data of the stream.
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
         let ctx = self.dict.ctx();
@@ -214,6 +155,94 @@ impl<'a> Stream<'a> {
         }))
     }
 
+    pub(crate) fn new(data: &'a [u8], dict: Dict<'a>) -> Self {
+        Self { dict, data }
+    }
+
+    pub(crate) fn read_with_extent(
+        r: &mut Reader<'a>,
+        ctx: &ReaderContext<'a>,
+        next: &mut NextEndstream,
+    ) -> Option<(Self, usize)> {
+        let dict = r.read_with_context::<Dict<'_>>(ctx)?;
+        r.skip_white_spaces_and_comments();
+        r.forward_tag(b"stream")?;
+        skip_blanks_before_eol(r);
+        r.read_eol()?;
+        let start = r.offset();
+        let length = dict
+            .get::<i64>(LENGTH)
+            .filter(|&n| n >= 0)
+            .map(|n| usize::try_from(n).unwrap_or(usize::MAX));
+        let data = length
+            .and_then(|length| {
+                let data = r.read_bytes(length)?;
+                r.skip_white_spaces();
+                r.forward_tag(b"endstream")?;
+                Some(data)
+            })
+            .or_else(|| {
+                r.jump(start);
+                next.read(r)
+            })?;
+        // A recovered terminator can precede the declared end of the payload.
+        let payload_end = start.saturating_add(length.unwrap_or(0));
+        let end = r
+            .offset()
+            .max(payload_end.saturating_add(b"endstream".len()));
+        Some((Self::new(data, dict), end))
+    }
+
+    fn filters_and_params(&self) -> FiltersAndParams<'a> {
+        let mut collected_filters = SmallVec::new();
+        let mut collected_params = SmallVec::new();
+
+        if let Some(filter) = self
+            .dict
+            .get::<Name<'_>>(F)
+            .or_else(|| self.dict.get::<Name<'_>>(FILTER))
+            .and_then(Filter::from_name)
+        {
+            let params = self
+                .dict
+                .get::<Dict<'_>>(DP)
+                .or_else(|| self.dict.get::<Dict<'_>>(DECODE_PARMS))
+                .unwrap_or_default();
+
+            collected_filters.push(filter);
+            collected_params.push(params);
+        } else if let Some(filters) = self
+            .dict
+            .get::<Array<'_>>(F)
+            .or_else(|| self.dict.get::<Array<'_>>(FILTER))
+        {
+            let filters = filters.iter::<Name<'_>>().map(Filter::from_name);
+            let mut params = self
+                .dict
+                .get::<Array<'_>>(DP)
+                .or_else(|| self.dict.get::<Array<'_>>(DECODE_PARMS))
+                .map(|a| a.iter::<Object<'_>>());
+
+            for filter in filters {
+                let params = params
+                    .as_mut()
+                    .and_then(|p| p.next())
+                    .and_then(|p| p.into_dict())
+                    .unwrap_or_default();
+
+                if let Some(filter) = filter {
+                    collected_filters.push(filter);
+                    collected_params.push(params);
+                }
+            }
+        }
+
+        FiltersAndParams {
+            filters: collected_filters,
+            params: collected_params,
+        }
+    }
+
     fn crypt_filter(&self) -> Option<Name<'a>> {
         let FiltersAndParams { filters, params } = self.filters_and_params();
 
@@ -252,12 +281,8 @@ impl<'a> Readable<'a> for Stream<'a> {
     }
 
     fn read_indirect(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let dict = r.read_with_context::<Dict<'_>>(ctx)?;
-        let offset = r.offset();
-        parse_proper(r, &dict).or_else(|| {
-            r.jump(offset);
-            parse_fallback(r, &dict)
-        })
+        // TODO: Independent indirect reads can still search overlapping stream data.
+        Self::read_with_extent(r, ctx, &mut NextEndstream::default()).map(|(stream, _)| stream)
     }
 }
 
@@ -318,60 +343,6 @@ impl FilterResult<'_> {
     }
 }
 
-fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let length = dict.get::<u32>(LENGTH)?;
-
-    r.skip_white_spaces_and_comments();
-    r.forward_tag(b"stream")?;
-    skip_blanks_before_eol(r);
-    r.forward_tag(b"\n")
-        .or_else(|| r.forward_tag(b"\r\n"))
-        .or_else(|| r.forward_tag(b"\r"))?;
-    let data = r.read_bytes(length as usize)?;
-    r.skip_white_spaces();
-    r.forward_tag(b"endstream")?;
-
-    Some(Stream::new(data, dict.clone()))
-}
-
-fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    r.skip_white_spaces_and_comments();
-    r.forward_tag(b"stream")?;
-    skip_blanks_before_eol(r);
-
-    r.forward_tag(b"\n")
-        .or_else(|| r.forward_tag(b"\r\n"))
-        // Technically not allowed, but no reason to not try it.
-        .or_else(|| r.forward_tag(b"\r"))?;
-
-    // TODO: This search can take quadratic time in total when many streams with a wrong length
-    // have no `endstream` after them, or only a distant one.
-    let tail = r.tail()?;
-    let endstream_offset = find_needle(tail, b"endstream")?;
-    let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
-    let data = tail.get(..data_end)?;
-
-    r.read_bytes(endstream_offset)?;
-    r.skip_white_spaces();
-    r.forward_tag(b"endstream")?;
-
-    Some(Stream::new(data, dict.clone()))
-}
-
-fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
-    let mut end = data.len();
-
-    while data
-        .get(end.wrapping_sub(1))
-        .copied()
-        .is_some_and(is_white_space_character)
-    {
-        end -= 1;
-    }
-
-    end
-}
-
 impl<'a> TryFrom<Object<'a>> for Stream<'a> {
     type Error = ();
 
@@ -391,6 +362,64 @@ impl<'a> ObjectRefLike<'a> for Stream<'a> {
             _ => None,
         }
     }
+}
+
+pub(crate) struct NextEndstream {
+    slice: (*const u8, usize),
+    searched_from: Option<usize>,
+    marker: Option<(usize, usize)>,
+}
+
+impl Default for NextEndstream {
+    fn default() -> Self {
+        Self {
+            slice: (core::ptr::null(), 0),
+            searched_from: None,
+            marker: None,
+        }
+    }
+}
+
+impl NextEndstream {
+    fn read<'a>(&mut self, r: &mut Reader<'a>) -> Option<&'a [u8]> {
+        let slice = (r.data.as_ptr(), r.data.len());
+        let start = r.offset();
+        if self.slice != slice
+            || self.searched_from.is_none_or(|from| start < from)
+            || self.marker.is_some_and(|(_, marker)| start > marker)
+        {
+            let tail = r.tail()?;
+            self.slice = slice;
+            self.searched_from = Some(start);
+            self.marker = find_needle(tail, b"endstream").map(|offset| {
+                let whitespace = trim_trailing_ascii_whitespace(&tail[..offset]);
+                (start + whitespace, start + offset)
+            });
+        }
+
+        let (whitespace, marker) = self.marker?;
+        r.jump(marker + b"endstream".len());
+        r.range(start..whitespace.max(start))
+    }
+}
+
+struct FiltersAndParams<'a> {
+    filters: SmallVec<[Filter; 2]>,
+    params: SmallVec<[Dict<'a>; 2]>,
+}
+
+fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
+    let mut end = data.len();
+
+    while data
+        .get(end.wrapping_sub(1))
+        .copied()
+        .is_some_and(is_white_space_character)
+    {
+        end -= 1;
+    }
+
+    end
 }
 
 fn skip_blanks_before_eol(r: &mut Reader<'_>) {
@@ -435,6 +464,28 @@ mod tests {
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn endstream_cursor_matches_fresh_reads() {
+        let input = b"abc  endstream def\nendstream";
+        let mut cursor = super::NextEndstream::default();
+        for start in (0..=input.len()).chain((0..=input.len()).rev()) {
+            let mut reader = Reader::new_with(input, start);
+            let mut fresh_reader = reader.clone();
+            let fresh = super::NextEndstream::default().read(&mut fresh_reader);
+            assert_eq!(cursor.read(&mut reader), fresh);
+            assert_eq!(reader.offset(), fresh_reader.offset());
+        }
+        for slice in [&input[..], &input[..10], &input[..]] {
+            let mut reader = Reader::new(slice);
+            let mut fresh_reader = reader.clone();
+            assert_eq!(
+                cursor.read(&mut reader),
+                super::NextEndstream::default().read(&mut fresh_reader)
+            );
+            assert_eq!(reader.offset(), fresh_reader.offset());
+        }
     }
 
     #[test]

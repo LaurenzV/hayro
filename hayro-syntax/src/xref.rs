@@ -12,6 +12,7 @@ use crate::object::dict::keys::{
 };
 use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
+use crate::object::stream::NextEndstream;
 use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
@@ -23,7 +24,7 @@ use crate::trivia::is_white_space_character;
 use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
+use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
@@ -79,6 +80,7 @@ fn fallback_xref_map_inner<'a>(
 
     let mut r = Reader::new(data.as_ref());
 
+    let mut next_endstream = NextEndstream::default();
     let mut last_obj_num = None;
 
     loop {
@@ -125,7 +127,11 @@ fn fallback_xref_map_inner<'a>(
                                 after_dict.skip_white_spaces_and_comments();
                                 after_dict.forward_tag(b"stream").is_some()
                             }
-                            && let Some(stream) = old_r.read_indirect::<Stream<'_>>(&dummy_ctx)
+                            && let Some((stream, _)) = Stream::read_with_extent(
+                                &mut old_r,
+                                &dummy_ctx,
+                                &mut next_endstream,
+                            )
                             && let Some(last_obj_num) = last_obj_num
                             && let Some(obj_stream) = ObjectStream::new(&stream)
                         {
@@ -684,44 +690,6 @@ impl XRefEntry {
     }
 }
 
-fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
-    let mut visited = BTreeSet::new();
-    populate_xref_impl_inner(data, pos, xref_map, &mut visited)
-}
-
-const MAX_XREF_CHAIN_DEPTH: usize = 256;
-
-fn populate_xref_impl_inner<'a>(
-    data: &'a [u8],
-    pos: usize,
-    xref_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
-) -> Option<&'a [u8]> {
-    if !visited.insert(pos) {
-        return None;
-    }
-
-    if visited.len() > MAX_XREF_CHAIN_DEPTH {
-        return None;
-    }
-
-    let mut reader = Reader::new(data);
-    reader.jump(pos);
-    // In case the position points to before the object number of a xref stream.
-    reader.skip_white_spaces_and_comments();
-
-    let mut r2 = reader.clone();
-    if reader
-        .clone()
-        .read_without_context::<ObjectIdentifier>()
-        .is_some()
-    {
-        populate_from_xref_stream(data, &mut r2, xref_map, visited)
-    } else {
-        populate_from_xref_table(data, &mut r2, xref_map, visited)
-    }
-}
-
 pub(super) struct SubsectionHeader {
     pub(super) start: u32,
     pub(super) num_entries: u32,
@@ -739,31 +707,99 @@ impl Readable<'_> for SubsectionHeader {
     }
 }
 
-fn populate_from_xref_table<'a>(
+fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
+    let mut visited = BTreeMap::new();
+    populate_xref_impl_inner(data, pos, xref_map, &mut visited)
+}
+
+const MAX_XREF_SECTIONS: usize = 256;
+
+enum SectionState<'a> {
+    Active,
+    Complete(&'a [u8]),
+}
+
+fn populate_xref_impl_inner<'a>(
     data: &'a [u8],
-    reader: &mut Reader<'a>,
-    insert_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
+    pos: usize,
+    xref_map: &mut XrefMap,
+    visited: &mut BTreeMap<usize, (usize, SectionState<'a>)>,
 ) -> Option<&'a [u8]> {
-    let trailer = {
-        let mut reader = reader.clone();
-        read_xref_table_trailer(&mut reader, &ReaderContext::dummy())?
+    if let Some((&start, (end, state))) = visited.range(..=pos).next_back() {
+        if start == pos {
+            return match state {
+                SectionState::Active => None,
+                SectionState::Complete(trailer) => Some(trailer),
+            };
+        }
+        if pos < *end {
+            return None;
+        }
+    }
+    if visited.len() >= MAX_XREF_SECTIONS {
+        return None;
+    }
+
+    let limit = visited
+        .range(pos..)
+        .next()
+        .map_or(data.len(), |(&start, _)| start);
+    let mut reader = Reader::new_with(&data[..limit], pos);
+    reader.skip_white_spaces_and_comments();
+
+    let ctx = ReaderContext::dummy();
+    let mut section = reader.clone();
+    let stream = if section.read_without_context::<ObjectIdentifier>().is_some() {
+        section.skip_white_spaces_and_comments();
+        let (stream, extent) =
+            Stream::read_with_extent(&mut section, &ctx, &mut NextEndstream::default())?;
+        section.skip_white_spaces_and_comments();
+        let extent = if section.forward_tag(b"endobj").is_some() {
+            extent.max(section.offset())
+        } else {
+            extent
+        };
+        if limit < data.len() && extent > limit {
+            return None;
+        }
+        Some((stream, extent))
+    } else {
+        None
+    };
+    let table_trailer;
+    let (trailer, end) = if let Some((stream, end)) = &stream {
+        (stream.dict(), *end)
+    } else {
+        table_trailer = read_xref_table_trailer(&mut section, &ctx)?;
+        (&table_trailer, section.offset())
     };
 
+    visited.insert(pos, (end, SectionState::Active));
+    if let Some(prev) = trailer.get::<i32>(PREV) {
+        populate_xref_impl_inner(data, prev as usize, xref_map, visited)?;
+    }
+
+    if let Some((stream, _)) = &stream {
+        populate_from_xref_stream(stream, xref_map)?;
+    } else {
+        // In hybrid files, `XRefStm` entries override `Prev` ones.
+        if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
+            populate_xref_impl_inner(data, xref_stm as usize, xref_map, visited)?;
+        }
+        populate_from_xref_table(&mut reader, xref_map)?;
+    }
+
+    let trailer = trailer.data();
+    visited.insert(pos, (end, SectionState::Complete(trailer)));
+    Some(trailer)
+}
+
+fn populate_from_xref_table(reader: &mut Reader<'_>, insert_map: &mut XrefMap) -> Option<()> {
     reader.skip_white_spaces();
     reader.forward_tag(b"xref")?;
     reader.skip_white_spaces();
 
     let mut max_obj = 0;
-
-    if let Some(prev) = trailer.get::<i32>(PREV) {
-        populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
-    }
-
-    // In hybrid files, `XRefStm` entries override `Prev` ones.
-    if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
-        populate_xref_impl_inner(data, xref_stm as usize, insert_map, visited)?;
-    }
 
     while let Some(header) = reader.read_without_context::<SubsectionHeader>() {
         reader.skip_white_spaces();
@@ -786,23 +822,10 @@ fn populate_from_xref_table<'a>(
         }
     }
 
-    Some(trailer.data())
+    Some(())
 }
 
-fn populate_from_xref_stream<'a>(
-    data: &'a [u8],
-    reader: &mut Reader<'a>,
-    insert_map: &mut XrefMap,
-    visited: &mut BTreeSet<usize>,
-) -> Option<&'a [u8]> {
-    let stream = reader
-        .read_with_context::<IndirectObject<Stream<'_>>>(&ReaderContext::dummy())?
-        .get();
-
-    if let Some(prev) = stream.dict().get::<i32>(PREV) {
-        let _ = populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
-    }
-
+fn populate_from_xref_stream(stream: &Stream<'_>, insert_map: &mut XrefMap) -> Option<()> {
     let size = stream.dict().get::<u32>(SIZE)?;
 
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
@@ -840,7 +863,7 @@ fn populate_from_xref_stream<'a>(
         )?;
     }
 
-    Some(stream.dict().data())
+    Some(())
 }
 
 fn xref_stream_num(data: &[u8]) -> Option<u32> {
@@ -1083,7 +1106,101 @@ mod tests {
 
         let mut xref_map = FxHashMap::default();
         let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
-        let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+        assert_eq!(
+            populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map),
+            None
+        );
+    }
+
+    #[test]
+    fn overlapping_xref_ranges() {
+        let table = b" xref\ntrailer\n<<>>";
+        let data = table.repeat(3);
+        let middle = table.len();
+        for (first, second) in [(middle, middle + 1), (middle + 1, middle)] {
+            let mut sections = BTreeMap::new();
+            let mut map = XrefMap::default();
+            for pos in [0, 2 * middle, first] {
+                populate_xref_impl_inner(&data, pos, &mut map, &mut sections).unwrap();
+            }
+            assert!(populate_xref_impl_inner(&data, second, &mut map, &mut sections).is_none());
+        }
+    }
+
+    #[test]
+    fn prev_inside_active_range() {
+        let active = b" xref\ntrailer\n<<>>";
+        let data = [&active[..], b"xref\ntrailer\n<< /Prev 1 >>"].concat();
+        let mut sections = BTreeMap::from([(0, (active.len(), SectionState::Active))]);
+        let mut map = XrefMap::default();
+        assert!(populate_xref_impl_inner(&data, active.len(), &mut map, &mut sections).is_none());
+    }
+
+    #[test]
+    fn completed_xref_at_section_limit() {
+        let first = b"xref\n1 1\n0000000010 00000 n \ntrailer\n<< /Size 2 >>\n";
+        let second = b"xref\n1 1\n0000000020 00000 n \ntrailer\n<< /Size 3 >>\n";
+        let empty = b"xref\ntrailer\n<<>>\n";
+        let mut data = [first.as_slice(), second.as_slice()].concat();
+        let start = data.len();
+        data.extend(empty.repeat(MAX_XREF_SECTIONS - 1));
+        let mut visited = BTreeMap::new();
+        let mut map = XrefMap::default();
+        populate_xref_impl_inner(&data, 0, &mut map, &mut visited).unwrap();
+        populate_xref_impl_inner(&data, first.len(), &mut map, &mut visited).unwrap();
+        for i in 0..MAX_XREF_SECTIONS - 2 {
+            populate_xref_impl_inner(&data, start + i * empty.len(), &mut map, &mut visited)
+                .unwrap();
+        }
+        assert_eq!(
+            populate_xref_impl_inner(&data, 0, &mut map, &mut visited),
+            Some(b"<< /Size 2 >>".as_slice())
+        );
+        assert_eq!(map[&ObjectIdentifier::new(1, 0)], EntryType::Normal(20));
+        assert!(
+            populate_xref_impl_inner(&data, data.len() - empty.len(), &mut map, &mut visited)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn xref_stream_length_crosses_table_start() {
+        let payload_and_tail = b"\x01\x05\nendstream\nendobj\n";
+        for length in [payload_and_tail.len(), payload_and_tail.len() + 1] {
+            let mut data = format!("1 0 obj\n<< /Size 1 /W [1 1 0] /Length {length} >>\nstream\n")
+                .into_bytes();
+            data.extend_from_slice(payload_and_tail);
+            let table = data.len();
+            data.extend_from_slice(b"xref\ntrailer\n<< /XRefStm 0 >>");
+            assert!(populate_xref_impl(&data, table, &mut XrefMap::default()).is_none());
+        }
+    }
+
+    #[test]
+    fn xref_stream_endobj_bounds_prev() {
+        let stream = "1 0 obj\n<< /Size 0 /W [1 1 0] /Length 0 /Prev ";
+        let body = " >>\nstream\n\nendstream\n% ";
+        let closing = "xref trailer <<>>\nendobj";
+        let inside = stream.len() + 4 + body.len();
+        for (prev, valid) in [(inside, false), (inside + closing.len(), true)] {
+            let data = format!("{stream}{prev:04}{body}{closing}\nxref trailer <<>>");
+            assert_eq!(
+                populate_xref_impl(data.as_bytes(), 0, &mut XrefMap::default()).is_some(),
+                valid
+            );
+        }
+    }
+
+    #[test]
+    fn adjacent_xref_sections() {
+        let stream = b"1 0 obj\n<< /Size 0 /W [1 1 0] /Length 0 >>\nstream\n\nendstream";
+        let data = [&stream[..], b" % next section\nxref\ntrailer\n<<>>"].concat();
+        for (first, second) in [(0, stream.len()), (stream.len(), 0)] {
+            let mut sections = BTreeMap::new();
+            let mut map = XrefMap::default();
+            assert!(populate_xref_impl_inner(&data, first, &mut map, &mut sections).is_some());
+            assert!(populate_xref_impl_inner(&data, second, &mut map, &mut sections).is_some());
+        }
     }
 
     #[test]
