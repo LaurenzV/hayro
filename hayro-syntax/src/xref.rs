@@ -19,7 +19,7 @@ use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
-use crate::trivia::is_white_space_character;
+use crate::trivia::{is_regular_character, is_white_space_character};
 use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::boxed::Box;
@@ -28,7 +28,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -972,8 +972,10 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
 
 pub(crate) struct ObjectStream {
     data: Vec<u8>,
-    offsets: Vec<(u32, Option<usize>)>,
+    offsets: Vec<MemberOffset>,
 }
+
+type MemberOffset = (u32, Option<Range<usize>>);
 
 impl ObjectStream {
     pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
@@ -983,31 +985,54 @@ impl ObjectStream {
         Some(Self { data, offsets })
     }
 
-    fn read_offsets(stream: &Stream<'_>, data: &[u8]) -> Option<Vec<(u32, Option<usize>)>> {
+    fn read_offsets(stream: &Stream<'_>, data: &[u8]) -> Option<Vec<MemberOffset>> {
         let num_objects = stream.dict().get::<usize>(N)?;
         let first_offset = stream.dict().get::<usize>(FIRST)?;
 
-        let mut r = Reader::new(data);
-
+        let mut r = Reader::new(data.get(..first_offset)?);
         let mut offsets = vec![];
-        let mut last_offset = None;
+        let mut ranges: Vec<(usize, Range<usize>)> = vec![];
 
-        for _ in 0..num_objects {
+        for index in 0..num_objects {
             r.skip_white_spaces_and_comments();
             let obj_num = r.read_without_context::<u32>()?;
             r.skip_white_spaces_and_comments();
             let relative_offset = r.read_without_context::<usize>()?;
-            let offset = first_offset + relative_offset;
+            if r.at_end()
+                && data
+                    .get(first_offset)
+                    .is_some_and(|&b| is_regular_character(b))
+            {
+                return None;
+            }
 
-            // Offsets must strictly increase, or members could overlap.
-            if offset >= data.len() || last_offset.is_some_and(|last| offset <= last) {
-                offsets.push((obj_num, None));
+            offsets.push((obj_num, None));
+            let Some(start) = first_offset
+                .checked_add(relative_offset)
+                .filter(|&s| s < data.len())
+            else {
+                continue;
+            };
+            let increasing = ranges.last().is_none_or(|(_, range)| range.start < start);
+            let preceding = if increasing {
+                ranges.as_mut_slice()
             } else {
-                let mut member = Reader::new(data);
-                member.jump(offset);
-                member.skip_white_spaces_and_comments();
-                last_offset = Some(member.offset());
-                offsets.push((obj_num, Some(member.offset())));
+                let pos = ranges.partition_point(|(_, range)| range.start < start);
+                &mut ranges[..pos]
+            };
+            if let Some((_, range)) = preceding.last_mut() {
+                range.end = range.end.min(start);
+            }
+            if increasing {
+                ranges.push((index, start..data.len()));
+            }
+        }
+
+        for (index, range) in ranges {
+            let mut member = Reader::new(&data[range.clone()]);
+            member.skip_white_spaces_and_comments();
+            if !member.at_end() {
+                offsets[index].1 = Some(range.start + member.offset()..range.end);
             }
         }
 
@@ -1022,9 +1047,8 @@ impl ObjectStream {
     where
         T: ObjectLike<'a>,
     {
-        let offset = self.offsets.get(index as usize)?.1?;
-        let mut r = Reader::new(&self.data);
-        r.jump(offset);
+        let range = self.offsets.get(index as usize)?.1.clone()?;
+        let mut r = Reader::new(&self.data[range]);
 
         let mut ctx = ctx.clone();
         ctx.set_in_object_stream(true);
@@ -1065,6 +1089,47 @@ fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
+
+    fn object_stream(count: usize, header: &str, body: &str) -> ObjectStream {
+        let first = header.len();
+        let len = first + body.len();
+        let data = format!(
+            "<< /N {count} /First {first} /Length {len} >> stream\n{header}{body}\nendstream"
+        );
+        let stream = Reader::new(data.as_bytes())
+            .read_indirect::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+        ObjectStream::new(&stream).unwrap()
+    }
+
+    #[test]
+    fn object_stream_header_ends_at_first() {
+        let objects = object_stream(2, "1 0 ", "2 4 42");
+        assert!(objects.obj_number(1).is_none());
+
+        let cut_token = object_stream(1, "1 0", "42");
+        assert!(cut_token.obj_number(0).is_none());
+    }
+
+    #[test]
+    fn object_stream_member_ends_at_next_physical_start() {
+        let objects = object_stream(3, "1 0 2 5 3 2 ", "( 22)42");
+        let ctx = ReaderContext::dummy();
+        assert!(objects.get::<object::String<'_>>(0, &ctx).is_none());
+        assert_eq!(objects.get::<u32>(1, &ctx), Some(42));
+        assert!(objects.get::<u32>(2, &ctx).is_none());
+    }
+
+    #[test]
+    fn object_stream_duplicate_and_empty_slots() {
+        let objects = object_stream(4, "1 0 2 0 3 2 4 4 ", "11  42");
+        let ctx = ReaderContext::dummy();
+        assert_eq!(objects.get::<u32>(0, &ctx), Some(11));
+        assert!(objects.get::<Object<'_>>(1, &ctx).is_none());
+        assert!(objects.get::<Object<'_>>(2, &ctx).is_none());
+        assert_eq!(objects.get::<u32>(3, &ctx), Some(42));
+    }
 
     #[test]
     fn circular_prev_chain() {
