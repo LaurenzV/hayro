@@ -1,5 +1,19 @@
 # AGENTS.md
 
+## Contribution guidelines
+- Bug fixes and improvements are always welcome. For larger changes that involve design decisions, please open an
+  issue first.
+- hayro aims to be free of bugs, but keeping the code clean and easy to understand matters just as much. Before
+  opening a PR, please check:
+  - **Spec violations:** if hayro clearly violates the spec and at least one other viewer (ideally two or more)
+    handles the case correctly, it's a good candidate for a fix.
+  - **Leniency for broken files:** at least two other implementations must handle the file correctly, and the fix
+    must come from a **real-world PDF** you encountered. Don't open PRs for leniency fixes found only with
+    hand-crafted PDFs.
+  - **Edge cases:** avoid fixes that add significant complexity for little real benefit, such as floating-point
+    precision issues or places where hayro deliberately approximates (e.g. gradient conversion). Like leniency
+    fixes, they should be motivated by real-world PDFs that hayro renders incorrectly.
+
 ## Implementation
 - hayro implements specifications (ISO 32000-2, JPEG 2000, JBIG2/T.88, CCITT T.4/T.6,
   CFF/Type 1/CMap, the PostScript Language Reference). Every behavior must come from what the
