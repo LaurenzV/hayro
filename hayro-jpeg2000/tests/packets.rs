@@ -227,3 +227,69 @@ fn invalid_stuff_bit() {
         reference("packets_invalid_stuff_bit"),
     );
 }
+
+fn many_components(count: u16, poc_start: Option<u16>) -> Vec<Vec<u8>> {
+    let tiny = include_bytes!("streams/codestream_tiny.j2k");
+    let position = |marker| {
+        tiny.windows(2)
+            .position(|bytes| bytes == [0xff, marker])
+            .unwrap()
+    };
+    let cod = position(0x52);
+    let sot = position(0x90);
+    let body = &tiny[position(0x93) + 2..position(0xd9)];
+    let mut stream = tiny[..cod - 5].to_vec();
+    stream[4..6].copy_from_slice(&(38 + 3 * count).to_be_bytes());
+    stream.extend(count.to_be_bytes());
+    for _ in 0..count {
+        stream.extend_from_slice(&tiny[cod - 3..cod]);
+    }
+    let new_cod = stream.len();
+    stream.extend_from_slice(&tiny[cod..sot]);
+    stream[new_cod + 5] = 4;
+    if let Some(start) = poc_start {
+        stream.extend([0xff, 0x5f, 0, 11, 0]);
+        stream.extend(start.to_be_bytes());
+        stream.extend([0, 1, 4]);
+        stream.extend(count.to_be_bytes());
+        stream.push(4);
+    }
+    let packets = body.repeat(usize::from(count - poc_start.unwrap_or(0)));
+    stream.extend_from_slice(&tiny[sot..sot + 6]);
+    stream.extend(u32::try_from(14 + packets.len()).unwrap().to_be_bytes());
+    stream.extend([0, 1, 0xff, 0x93]);
+    stream.extend(packets);
+    stream.extend([0xff, 0xd9]);
+
+    let settings = DecodeSettings {
+        strict: true,
+        ..DecodeSettings::default()
+    };
+    let image = Image::from_codestream(&stream, 1, &settings).unwrap();
+    image
+        .decode(&mut DecoderContext::default())
+        .unwrap()
+        .components()
+        .iter()
+        .map(|component| component.samples().iter().map(|&v| v as u8).collect())
+        .collect()
+}
+
+#[test]
+fn default_order_visits_all_256_components() {
+    let expected = many_components(1, None).pop().unwrap();
+    assert!(expected.windows(2).any(|pair| pair[0] != pair[1]));
+    assert_eq!(many_components(256, None), vec![expected; 256]);
+}
+
+#[test]
+fn poc_can_start_at_component_256() {
+    let expected = many_components(1, None).pop().unwrap();
+    let components = many_components(257, Some(256));
+    assert_eq!(components[256], expected);
+    assert!(
+        components[..256]
+            .iter()
+            .all(|component| component.iter().all(|&value| value == 128))
+    );
+}

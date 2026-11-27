@@ -13,7 +13,7 @@ use core::iter;
 pub(crate) struct ProgressionData {
     pub(crate) layer_num: u8,
     pub(crate) resolution: u8,
-    pub(crate) component: u8,
+    pub(crate) component: u16,
     pub(crate) precinct: u64,
 }
 
@@ -21,19 +21,19 @@ pub(crate) struct IteratorInput<'a> {
     layers: (u8, u8),
     tile: &'a Tile<'a>,
     resolutions: (u8, u8),
-    components: (u8, u8),
+    components: (u16, u16),
 }
 
 impl<'a> IteratorInput<'a> {
     pub(crate) fn new(tile: &'a Tile<'a>) -> Self {
-        Self::new_with_custom_bounds(tile, (0, u8::MAX), (0, u8::MAX), (0, u8::MAX))
+        Self::new_with_custom_bounds(tile, (0, u8::MAX), (0, u8::MAX), (0, u16::MAX))
     }
 
     pub(crate) fn new_with_custom_bounds(
         tile: &'a Tile<'a>,
         mut resolutions: (u8, u8),
         mut layers: (u8, u8),
-        mut components: (u8, u8),
+        mut components: (u16, u16),
     ) -> Self {
         let max_resolution = tile
             .component_infos
@@ -42,7 +42,7 @@ impl<'a> IteratorInput<'a> {
             .max()
             .unwrap_or(0);
         let max_layer = tile.num_layers;
-        let max_component = tile.component_infos.len() as u8;
+        let max_component = tile.component_infos.len() as u16;
 
         resolutions.1 = resolutions.1.min(max_resolution);
         layers.1 = layers.1.min(max_layer);
@@ -72,17 +72,17 @@ impl<'a> IteratorInput<'a> {
         self.resolutions.1
     }
 
-    fn max_resolution(&self, component_idx: u8) -> u8 {
+    fn max_resolution(&self, component_idx: u16) -> u8 {
         self.total_max_resolution()
             // `resolutions.1` is the maximum over all components.
             .min(self.tile.component_infos[component_idx as usize].num_resolution_levels())
     }
 
-    fn min_comp(&self) -> u8 {
+    fn min_comp(&self) -> u16 {
         self.components.0
     }
 
-    fn max_comp(&self) -> u8 {
+    fn max_comp(&self) -> u16 {
         self.components.1
     }
 
@@ -103,7 +103,7 @@ impl<'a> IteratorInput<'a> {
     fn num_precincts(
         &self,
         component_tiles: &[ComponentTile<'a>],
-        component_idx: u8,
+        component_idx: u16,
         resolution: u8,
     ) -> u64 {
         if component_idx >= self.max_comp() || resolution >= self.max_resolution(component_idx) {
@@ -137,7 +137,7 @@ pub(crate) fn progression_iterator<'a>(
                 tile,
                 (change.resolution_start, change.resolution_end),
                 (0, clamp(change.layer_end)),
-                (clamp(change.component_start), clamp(change.component_end)),
+                (change.component_start, change.component_end),
             );
 
             progression_order_iterator(input, change.progression_order)
@@ -285,7 +285,7 @@ struct PrecinctStore {
     resolution: u8,
     precinct_y: u32,
     precinct_x: u32,
-    component_idx: u8,
+    component_idx: u16,
     precinct_idx: u64,
 }
 
