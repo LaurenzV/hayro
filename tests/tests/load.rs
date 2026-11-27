@@ -72,8 +72,12 @@ pub(crate) fn tests() -> Vec<Test> {
         ))
     });
 
-    let units: [(&str, fn()); 5] = [
+    let units: [(&str, fn()); 6] = [
         ("load::metadata_in_object_stream", metadata_in_object_stream),
+        (
+            "load::explicit_legacy_crypt_filter",
+            explicit_legacy_crypt_filter,
+        ),
         (
             "load::concurrent_object_stream_resolution",
             concurrent_object_stream_resolution,
@@ -250,4 +254,27 @@ fn jbig2_globals_chain() {
         .get::<Stream<'_>>(ObjectIdentifier::new(3, 0))
         .unwrap();
     let _ = stream.decoded();
+}
+
+fn explicit_legacy_crypt_filter() {
+    for file in [
+        "pdfs/other/explicit_crypt_aesv2.pdf",
+        "pdfs/other/explicit_crypt_v2.pdf",
+    ] {
+        let mut bytes = read(file);
+        let pdf = Pdf::new_with_password(bytes.clone(), "user").unwrap();
+        assert_eq!(pdf.pages().len(), 3);
+        for page in pdf.pages().iter() {
+            assert_eq!(page.page_stream(), Some(b"0 g 4 5 14 19 re f\n".as_slice()));
+        }
+        let name = b"/Name /StdCF";
+        let start = bytes.windows(name.len()).position(|s| s == name).unwrap();
+        bytes[start..start + name.len()].copy_from_slice(b"/Name /Wrong");
+        let missing = Pdf::new_with_password(bytes, "user").unwrap();
+        assert!(
+            missing.pages()[2]
+                .page_stream()
+                .is_none_or(|s| s.is_empty())
+        );
+    }
 }
