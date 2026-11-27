@@ -20,6 +20,7 @@ use crate::generated::{
     glyph_names, mac_expert, mac_os_roman, mac_roman, standard, tex_glyph_names, win_ansi,
     zapf_dings,
 };
+use crate::standard_font::style_from_name_and_descriptor;
 use crate::true_type::TrueTypeFont;
 use crate::type1::Type1Font;
 use crate::util::{CacheKey, hash128};
@@ -436,50 +437,36 @@ pub struct FallbackFontQuery {
 }
 
 impl FallbackFontQuery {
-    pub(crate) fn new(dict: &Dict<'_>) -> Self {
+    pub(crate) fn new(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Self {
         let post_script_name = dict
             .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
+        let flags = descriptor
+            .get::<u32>(FLAGS)
+            .map(FontFlags::from_bits_truncate)
+            .unwrap_or(FontFlags::empty());
+        let (is_bold, is_italic) =
+            style_from_name_and_descriptor(post_script_name.as_deref().unwrap_or(""), descriptor);
 
-        let mut data = Self {
-            post_script_name,
-            ..Default::default()
-        };
-
-        if let Some(descriptor) = dict.get::<Dict<'_>>(FONT_DESC) {
-            data.font_name = dict
+        Self {
+            font_name: descriptor
                 .get::<Name<'_>>(FONT_NAME)
-                .map(|n| strip_subset_prefix(n.as_str()).to_string());
-            data.font_family = descriptor
+                .map(|n| strip_subset_prefix(n.as_str()).to_string()),
+            font_family: descriptor
                 .get::<Name<'_>>(FONT_FAMILY)
-                .map(|n| n.as_str().to_string());
-            data.font_stretch = descriptor
+                .map(|n| n.as_str().to_string()),
+            font_stretch: descriptor
                 .get::<Name<'_>>(FONT_STRETCH)
                 .map(|n| FontStretch::from_string(n.as_str()))
-                .unwrap_or(FontStretch::Normal);
-            data.font_weight = descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400);
-
-            if let Some(flags) = descriptor
-                .get::<u32>(FLAGS)
-                .map(FontFlags::from_bits_truncate)
-            {
-                data.is_serif = flags.contains(FontFlags::SERIF);
-                data.is_italic = flags.contains(FontFlags::ITALIC);
-                data.is_small_cap = flags.contains(FontFlags::SMALL_CAP);
-            }
+                .unwrap_or(FontStretch::Normal),
+            font_weight: descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400),
+            is_serif: flags.contains(FontFlags::SERIF),
+            is_italic: is_italic || flags.contains(FontFlags::ITALIC),
+            is_bold,
+            is_small_cap: flags.contains(FontFlags::SMALL_CAP),
+            post_script_name,
+            ..Default::default()
         }
-
-        data.is_italic |= data
-            .post_script_name
-            .as_ref()
-            .is_some_and(|s| s.contains("Italic"));
-
-        data.is_bold |= data
-            .post_script_name
-            .as_ref()
-            .is_some_and(|s| s.contains("Bold"));
-
-        data
     }
 
     /// Return the standard font that best matches the query.

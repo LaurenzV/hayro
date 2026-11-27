@@ -188,6 +188,7 @@ raster/custom/font_cid_4.png d481f05878e4482209d39290c6de576d
 raster/custom/font_cid_5.png d34110663c8588a15f321a20ad276e63
 raster/custom/font_cid_6.png cbefcac84e4610b3f303d020ca9b89dc
 raster/custom/font_cid_7.png 2b9acafe7de1aa238c7af72eb195dca8
+raster/custom/font_fallback_query.png 97da953a7e1563dc70c7ca3566740860
 raster/custom/font_mmtype_1.png 19c4b81aa4e77f328a383c9d017ae02c
 raster/custom/font_standard_1_p0.png 2876d66204aed97f8ddf64e7582c04a5
 raster/custom/font_standard_1_p1.png 9f663eb5611a9b936c90e76e46796c4f
@@ -1049,8 +1050,8 @@ raster/pdfbox/5447_p0.png 71111943046af5fd0857ed578eeca485
 raster/pdfbox/5447_p1.png ff678e56b1fcacd73434464b266fd5da
 raster/pdfbox/5461_p0.png bfd7dcfb431774a35f8af9c0b6a3d2b4
 raster/pdfbox/5461_p1.png 81135fb00c0fde1c66679ee92a30ec53
-raster/pdfbox/5463_p0.png 1c2dfcf481c45060da991ed5fb83bd7c
-raster/pdfbox/5463_p1.png 42e3a5f43d087afff628008ad4f408f8
+raster/pdfbox/5463_p0.png 436a78ba92e9f0b7403e278edfd1e5f6
+raster/pdfbox/5463_p1.png cefd90f85a822c5d5ef17a64dcdeef58
 raster/pdfbox/5463_p2.png 4461c2d7d00c499a889363ea09c5469e
 raster/pdfbox/5463_p3.png ed6b9f0946216b0fa410f81a8f9b11a2
 raster/pdfbox/5464_p0.png 37f2f769cfd71596c2c0d539d35db536

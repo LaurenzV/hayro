@@ -128,6 +128,10 @@
     "file": "pdfs/custom/font_cid_7.pdf"
   },
   {
+    "id": "font_fallback_query",
+    "file": "pdfs/custom/font_fallback_query.pdf"
+  },
+  {
     "id": "font_standard_1",
     "file": "pdfs/custom/font_standard_1.pdf"
   },

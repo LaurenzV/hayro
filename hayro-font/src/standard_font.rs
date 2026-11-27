@@ -335,15 +335,7 @@ pub(crate) fn select_standard_font(
     }
 
     let lower = name.to_ascii_lowercase();
-
-    let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
-        || lower.contains("bold")
-        || lower.contains("demi");
-    let is_italic = descriptor
-        .get::<f32>(ITALIC_ANGLE)
-        .is_some_and(|a| a != 0.0)
-        || lower.contains("italic")
-        || lower.contains("oblique");
+    let (is_bold, is_italic) = style_from_name_and_descriptor(name, descriptor);
 
     let (family, exact) = if lower.contains("helvetica") {
         (Some(StandardFontFamily::Helvetica), true)
@@ -379,6 +371,20 @@ pub(crate) fn select_standard_font(
     };
 
     Some((font, exact))
+}
+
+pub(crate) fn style_from_name_and_descriptor(name: &str, descriptor: &Dict<'_>) -> (bool, bool) {
+    let lower = name.to_ascii_lowercase();
+    let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
+        || lower.contains("bold")
+        || lower.contains("demi");
+    let is_italic = descriptor
+        .get::<f32>(ITALIC_ANGLE)
+        .is_some_and(|a| a != 0.0)
+        || lower.contains("italic")
+        || lower.contains("oblique");
+
+    (is_bold, is_italic)
 }
 
 enum StandardFontFamily {
