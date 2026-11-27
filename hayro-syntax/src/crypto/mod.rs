@@ -126,6 +126,13 @@ pub(crate) fn get(
     id: &[u8],
     password: &[u8],
 ) -> Result<Decryptor, DecryptionError> {
+    match decryptor(dict, id, password) {
+        Err(DecryptionError::PasswordProtected) if !password.is_empty() => decryptor(dict, id, b""),
+        result => result,
+    }
+}
+
+fn decryptor(dict: &Dict<'_>, id: &[u8], password: &[u8]) -> Result<Decryptor, DecryptionError> {
     let filter = dict.get::<Name<'_>>(FILTER).ok_or(InvalidEncryption)?;
 
     if filter.deref() != b"Standard" {
