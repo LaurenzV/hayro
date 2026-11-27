@@ -5,6 +5,7 @@ use hayro::{RenderSettings, render_pdf};
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
+use hayro_syntax::object::stream::{ImageColorSpace, ImageDecodeParams};
 use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier, Stream};
 use std::sync::Barrier;
 
@@ -72,7 +73,11 @@ pub(crate) fn tests() -> Vec<Test> {
         ))
     });
 
-    let units: [(&str, fn()); 5] = [
+    let units: [(&str, fn()); 6] = [
+        (
+            "load::progressive_jpeg_wider_chroma",
+            progressive_jpeg_wider_chroma,
+        ),
         ("load::metadata_in_object_stream", metadata_in_object_stream),
         (
             "load::concurrent_object_stream_resolution",
@@ -96,6 +101,41 @@ pub(crate) fn tests() -> Vec<Test> {
 
 fn read(path: &str) -> Vec<u8> {
     std::fs::read(WORKSPACE_PATH.join(path)).unwrap()
+}
+
+fn progressive_jpeg_wider_chroma() {
+    let pdf = Pdf::new(read("pdfs/other/progressive_jpeg_wider_chroma.pdf")).unwrap();
+    let stream = pdf
+        .xref()
+        .get::<Stream<'_>>(ObjectIdentifier::new(5, 0))
+        .unwrap();
+    let result = stream
+        .decoded_image(&ImageDecodeParams {
+            width: 48,
+            height: 40,
+            bpc: Some(8),
+            num_components: Some(3),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let image = result.image_data.unwrap();
+    assert_eq!((image.width, image.height), (48, 40));
+    assert!(matches!(image.color_space, Some(ImageColorSpace::Rgb)));
+    assert_eq!(result.data.len(), 48 * 40 * 3);
+
+    for (pixel, expected) in [
+        (&result.data[..3], [58, 92, 8]),
+        (&result.data[result.data.len() - 3..], [54, 247, 58]),
+    ] {
+        assert!(
+            pixel
+                .iter()
+                .zip(expected)
+                .all(|(&actual, expected)| actual.abs_diff(expected) <= 3),
+            "unexpected pixel {pixel:?}, expected {expected:?}"
+        );
+    }
 }
 
 fn metadata_in_object_stream() {
