@@ -1,7 +1,10 @@
 //! SVG-like gradient approximations of encoded shadings.
 
-use crate::color::{color_error, lerp_color};
-use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
+use crate::color::{CmykProfile, color_error, lerp_color};
+use crate::encode::{
+    CmykOutput, EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams, RgbaOutput,
+    ShadingOutput,
+};
 use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point};
 
@@ -13,13 +16,16 @@ const MIN_LUT_SIZE: usize = 256;
 const MAX_LUT_SIZE: usize = 4096;
 
 /// An SVG-like gradient.
-pub struct SvgGradient {
+///
+/// The colors of its stops are RGBA in sRGB, or cyan, magenta, yellow, black and alpha for
+/// [`EncodedRadialAxialShading::as_svg_gradient_cmyk`].
+pub struct SvgGradient<C = [f32; 4]> {
     /// The kind of the gradient.
     pub kind: SvgGradientKind,
     /// The transform from encoded shading coordinates into the renderer's coordinate space.
     pub transform: Affine,
-    /// The stops of the gradient in the sRGB color space.
-    pub stops: Vec<SvgGradientStop>,
+    /// The stops of the gradient.
+    pub stops: Vec<SvgGradientStop<C>>,
 }
 
 /// The kind of the SVG gradient.
@@ -45,11 +51,11 @@ pub enum SvgGradientKind {
 }
 
 /// A color stop for an SVG-like gradient.
-pub struct SvgGradientStop {
+pub struct SvgGradientStop<C = [f32; 4]> {
     /// Normalized offset.
     pub offset: f32,
-    /// RGBA color components in sRGB.
-    pub color: [f32; 4],
+    /// The color components, see [`SvgGradient`].
+    pub color: C,
 }
 
 impl EncodedRadialAxialShading {
@@ -59,8 +65,28 @@ impl EncodedRadialAxialShading {
         pattern: &EncodedShadingPattern,
         tolerance: f32,
     ) -> Option<SvgGradient> {
-        let background = pattern.background_color.components();
-        let background = (background[3] > 0.0).then(|| pattern.finish(background));
+        self.as_gradient(pattern, tolerance, &RgbaOutput(pattern))
+    }
+
+    /// Like [`as_svg_gradient`](Self::as_svg_gradient), with the colors of the stops as
+    /// cyan, magenta, yellow, black and alpha, converted as by
+    /// [`EncodedShadingPattern::sample_texture_cmyk`].
+    pub fn as_svg_gradient_cmyk(
+        &self,
+        pattern: &EncodedShadingPattern,
+        tolerance: f32,
+        profile: Option<&CmykProfile>,
+    ) -> Option<SvgGradient<[f32; 5]>> {
+        self.as_gradient(pattern, tolerance, &CmykOutput { pattern, profile })
+    }
+
+    fn as_gradient<const C: usize>(
+        &self,
+        pattern: &EncodedShadingPattern,
+        tolerance: f32,
+        output: &impl ShadingOutput<C>,
+    ) -> Option<SvgGradient<[f32; C]>> {
+        let background = output.gradient_background();
         let range = self.padded_range(background.is_some())?;
 
         Some(SvgGradient {
@@ -68,7 +94,7 @@ impl EncodedRadialAxialShading {
             transform: pattern.base_transform.inverse(),
             stops: pad_stops(
                 approximate_gradient_stops(
-                    |t| sample_function(&self.function, self.domain, pattern, t),
+                    |t| sample_function(&self.function, self.domain, output, t),
                     &normalized_stitching_bounds(&self.function, self.domain),
                     tolerance,
                 ),
@@ -115,25 +141,25 @@ impl EncodedRadialAxialShading {
     }
 }
 
-pub(crate) fn function_lut(
+pub(crate) fn function_lut<const C: usize>(
     function: &ShadingFunction,
     range: [f32; 2],
-    pattern: &EncodedShadingPattern,
-) -> ColorLut {
+    output: &impl ShadingOutput<C>,
+) -> ColorLut<C> {
     ColorLut::new(&approximate_gradient_stops(
-        |t| sample_function(function, range, pattern, t),
+        |t| sample_function(function, range, output, t),
         &normalized_stitching_bounds(function, range),
         LUT_TOLERANCE,
     ))
 }
 
-fn sample_function(
+fn sample_function<const C: usize>(
     function: &ShadingFunction,
     [t0, t1]: [f32; 2],
-    pattern: &EncodedShadingPattern,
+    output: &impl ShadingOutput<C>,
     t: f32,
-) -> [f32; 4] {
-    pattern.eval(function, &[t0 + (t1 - t0) * t])
+) -> [f32; C] {
+    output.eval(function, &[t0 + (t1 - t0) * t])
 }
 
 fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -> Vec<f32> {
@@ -156,12 +182,12 @@ fn normalized_stitching_bounds(function: &ShadingFunction, [t0, t1]: [f32; 2]) -
     bounds
 }
 
-pub(crate) struct ColorLut {
-    colors: Vec<[f32; 4]>,
+pub(crate) struct ColorLut<const C: usize> {
+    colors: Vec<[f32; C]>,
 }
 
-impl ColorLut {
-    fn new(stops: &[SvgGradientStop]) -> Self {
+impl<const C: usize> ColorLut<C> {
+    fn new(stops: &[SvgGradientStop<[f32; C]>]) -> Self {
         let min_gap = stops
             .windows(2)
             .map(|w| w[1].offset - w[0].offset)
@@ -196,21 +222,21 @@ impl ColorLut {
     }
 
     #[inline]
-    pub(crate) fn get(&self, t: f32) -> [f32; 4] {
+    pub(crate) fn get(&self, t: f32) -> [f32; C] {
         let last = self.colors.len() - 1;
         self.colors[((t * last as f32 + 0.5) as usize).min(last)]
     }
 }
 
-fn pad_stops(
-    mut stops: Vec<SvgGradientStop>,
+fn pad_stops<const C: usize>(
+    mut stops: Vec<SvgGradientStop<[f32; C]>>,
     [t0, t1]: [f64; 2],
-    background: Option<[f32; 4]>,
-) -> Vec<SvgGradientStop> {
+    background: Option<[f32; C]>,
+) -> Vec<SvgGradientStop<[f32; C]>> {
     let (t0, t1) = (t0 as f32, t1 as f32);
     let padding = |offset| SvgGradientStop {
         offset,
-        color: background.unwrap_or([0.0; 4]),
+        color: background.unwrap_or([0.0; C]),
     };
 
     for stop in &mut stops {
@@ -230,11 +256,11 @@ fn pad_stops(
     stops
 }
 
-fn approximate_gradient_stops(
-    mut sample: impl FnMut(f32) -> [f32; 4],
+fn approximate_gradient_stops<const N: usize>(
+    mut sample: impl FnMut(f32) -> [f32; N],
     breakpoints: &[f32],
     tolerance: f32,
-) -> Vec<SvgGradientStop> {
+) -> Vec<SvgGradientStop<[f32; N]>> {
     let mut interval_bounds = Vec::with_capacity(breakpoints.len() + 2);
     interval_bounds.push(0.0);
     interval_bounds.extend(breakpoints.iter().copied());
@@ -273,16 +299,16 @@ fn approximate_gradient_stops(
 }
 
 #[derive(Clone, Copy)]
-struct GradientSample {
+struct GradientSample<const N: usize> {
     offset: f32,
-    color: [f32; 4],
+    color: [f32; N],
 }
 
-fn approximate_gradient_interval(
-    sample: &mut impl FnMut(f32) -> [f32; 4],
-    stops: &mut Vec<SvgGradientStop>,
-    start: GradientSample,
-    end: GradientSample,
+fn approximate_gradient_interval<const N: usize>(
+    sample: &mut impl FnMut(f32) -> [f32; N],
+    stops: &mut Vec<SvgGradientStop<[f32; N]>>,
+    start: GradientSample<N>,
+    end: GradientSample<N>,
     tolerance: f32,
     depth: u8,
 ) {

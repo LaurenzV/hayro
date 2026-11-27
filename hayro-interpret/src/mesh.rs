@@ -1,6 +1,6 @@
 use crate::canvas::{Canvas, bounds};
 use crate::color::ColorComponents;
-use crate::encode::EncodedShadingPattern;
+use crate::encode::ShadingOutput;
 use crate::function::MAX_COMPONENTS;
 use crate::gradient::{ColorLut, function_lut};
 use crate::shading::{Patch, ShadingFunction, ShadingType, Triangle};
@@ -10,11 +10,11 @@ const MESH_SEGMENT: f64 = 8.0;
 const MAX_DEPTH: u32 = 10;
 const MAX_PIECES: f64 = (1 << 20) as f64;
 
-pub(crate) fn draw_mesh(
-    canvas: &mut Canvas,
+pub(crate) fn draw_mesh<const C: usize>(
+    canvas: &mut Canvas<C>,
     shading_type: &ShadingType,
     transform: Affine,
-    pattern: &EncodedShadingPattern,
+    output: &impl ShadingOutput<C>,
 ) {
     match shading_type {
         ShadingType::TriangleMesh {
@@ -28,11 +28,11 @@ pub(crate) fn draw_mesh(
 
             if let Some(function) = function {
                 let corner_colors = triangles.iter().flat_map(|t| t.colors);
-                let colors = Parameter::new(function, corner_colors, pattern);
+                let colors = Parameter::new(function, corner_colors, output);
                 draw_triangles(canvas, &triangles, 0, &colors);
             } else {
-                let colors = Direct { pattern };
-                let depth = if colors.is_linear() {
+                let colors = Direct { output };
+                let depth = if output.is_linear() {
                     0
                 } else {
                     let pieces = triangles.iter().map(|t| (t.extent(), t.bounds()));
@@ -52,10 +52,10 @@ pub(crate) fn draw_mesh(
 
             if let Some(function) = function {
                 let corner_colors = patches.iter().flat_map(|p| p.colors.as_flattened());
-                let colors = Parameter::new(function, corner_colors, pattern);
+                let colors = Parameter::new(function, corner_colors, output);
                 draw_patches(canvas, &patches, depth, &colors);
             } else {
-                draw_patches(canvas, &patches, depth, &Direct { pattern });
+                draw_patches(canvas, &patches, depth, &Direct { output });
             }
         }
         _ => {}
@@ -92,22 +92,22 @@ fn mesh_depth(canvas: Rect, pieces: impl Iterator<Item = (f64, Rect)>) -> u32 {
     depth
 }
 
-trait MeshColors<const N: usize> {
+trait MeshColors<const N: usize, const C: usize> {
     fn values(&self, components: &[f32]) -> [f32; N];
-    fn shade(&self, values: &[f32; N]) -> [f32; 4];
+    fn shade(&self, values: &[f32; N]) -> [f32; C];
 }
 
-struct Parameter {
-    lut: ColorLut,
+struct Parameter<const C: usize> {
+    lut: ColorLut<C>,
     t0: f32,
     scale: f32,
 }
 
-impl Parameter {
+impl<const C: usize> Parameter<C> {
     fn new<'a>(
         function: &ShadingFunction,
         colors: impl Iterator<Item = &'a ColorComponents>,
-        pattern: &EncodedShadingPattern,
+        output: &impl ShadingOutput<C>,
     ) -> Self {
         let (t0, t1) = colors
             .filter_map(|c| c.first().copied())
@@ -117,39 +117,33 @@ impl Parameter {
         let (t0, t1) = if t0 <= t1 { (t0, t1) } else { (0.0, 0.0) };
 
         Self {
-            lut: function_lut(function, [t0, t1], pattern),
+            lut: function_lut(function, [t0, t1], output),
             t0,
             scale: if t1 > t0 { 1.0 / (t1 - t0) } else { 0.0 },
         }
     }
 }
 
-impl MeshColors<1> for Parameter {
+impl<const C: usize> MeshColors<1, C> for Parameter<C> {
     fn values(&self, components: &[f32]) -> [f32; 1] {
         [(components.first().copied().unwrap_or(0.0) - self.t0) * self.scale]
     }
 
-    fn shade(&self, values: &[f32; 1]) -> [f32; 4] {
+    fn shade(&self, values: &[f32; 1]) -> [f32; C] {
         self.lut.get(values[0])
     }
 }
 
-struct Direct<'a> {
-    pattern: &'a EncodedShadingPattern,
+struct Direct<'a, O> {
+    output: &'a O,
 }
 
-impl Direct<'_> {
-    fn is_linear(&self) -> bool {
-        self.pattern.color_space.is_device_gray_or_rgb() && self.pattern.transfer_function.is_none()
-    }
-}
-
-impl MeshColors<4> for Direct<'_> {
-    fn values(&self, components: &[f32]) -> [f32; 4] {
-        self.pattern.convert(components)
+impl<const C: usize, O: ShadingOutput<C>> MeshColors<C, C> for Direct<'_, O> {
+    fn values(&self, components: &[f32]) -> [f32; C] {
+        self.output.convert(components)
     }
 
-    fn shade(&self, values: &[f32; 4]) -> [f32; 4] {
+    fn shade(&self, values: &[f32; C]) -> [f32; C] {
         *values
     }
 }
@@ -200,11 +194,11 @@ impl<'a> CanvasTriangle<'a> {
     }
 }
 
-fn draw_triangles<const N: usize>(
-    canvas: &mut Canvas,
+fn draw_triangles<const N: usize, const C: usize>(
+    canvas: &mut Canvas<C>,
     triangles: &[CanvasTriangle<'_>],
     depth: u32,
-    colors: &impl MeshColors<N>,
+    colors: &impl MeshColors<N, C>,
 ) {
     const CORNERS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
@@ -213,13 +207,13 @@ fn draw_triangles<const N: usize>(
     }
 }
 
-fn draw_triangle_piece<const N: usize>(
-    canvas: &mut Canvas,
+fn draw_triangle_piece<const N: usize, const C: usize>(
+    canvas: &mut Canvas<C>,
     triangle: &CanvasTriangle<'_>,
     points: [Point; 3],
     weights: [[f32; 3]; 3],
     depth: u32,
-    colors: &impl MeshColors<N>,
+    colors: &impl MeshColors<N, C>,
 ) {
     if !canvas.is_visible(&points) {
         return;
@@ -284,11 +278,11 @@ impl<'a> CanvasPatch<'a> {
     }
 }
 
-fn draw_patches<const N: usize>(
-    canvas: &mut Canvas,
+fn draw_patches<const N: usize, const C: usize>(
+    canvas: &mut Canvas<C>,
     patches: &[CanvasPatch<'_>],
     depth: u32,
-    colors: &impl MeshColors<N>,
+    colors: &impl MeshColors<N, C>,
 ) {
     for patch in patches {
         let ranges = [[0.0, 1.0]; 2];
@@ -296,13 +290,13 @@ fn draw_patches<const N: usize>(
     }
 }
 
-fn draw_patch_piece<const N: usize>(
-    canvas: &mut Canvas,
+fn draw_patch_piece<const N: usize, const C: usize>(
+    canvas: &mut Canvas<C>,
     patch: &CanvasPatch<'_>,
     points: [[Point; 4]; 4],
     [u_range, v_range]: [[f32; 2]; 2],
     [u_depth, v_depth]: [u32; 2],
-    colors: &impl MeshColors<N>,
+    colors: &impl MeshColors<N, C>,
 ) {
     if !canvas.is_visible(points.as_flattened()) {
         return;

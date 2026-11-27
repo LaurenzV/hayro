@@ -1,6 +1,6 @@
 use crate::canvas::{Canvas, bounds};
 use crate::color::{color_error, lerp_color};
-use crate::encode::EncodedShadingPattern;
+use crate::encode::ShadingOutput;
 use crate::shading::ShadingFunction;
 use kurbo::{Affine, Point, Rect};
 
@@ -8,12 +8,12 @@ const FUNCTION_CELL: usize = 16;
 const FUNCTION_TOLERANCE: f32 = 0.01;
 const FUNCTION_PIXEL_CELL: usize = 4;
 
-pub(crate) fn draw_function(
-    canvas: &mut Canvas,
+pub(crate) fn draw_function<const C: usize>(
+    canvas: &mut Canvas<C>,
     domain: Rect,
     function: &ShadingFunction,
     transform: Affine,
-    pattern: &EncodedShadingPattern,
+    output: &impl ShadingOutput<C>,
 ) {
     let area = transform
         .transform_rect_bbox(domain)
@@ -27,7 +27,7 @@ pub(crate) fn draw_function(
         function,
         inverse: transform.inverse(),
         domain,
-        pattern,
+        output,
     };
     let (x0, y0) = (area.x0.floor() as usize, area.y0.floor() as usize);
     let columns = (area.x1.ceil() as usize - x0).div_ceil(FUNCTION_CELL);
@@ -66,21 +66,27 @@ pub(crate) fn draw_function(
     }
 }
 
-struct FunctionSampler<'a> {
+struct FunctionSampler<'a, O> {
     function: &'a ShadingFunction,
     inverse: Affine,
     domain: Rect,
-    pattern: &'a EncodedShadingPattern,
+    output: &'a O,
 }
 
-impl FunctionSampler<'_> {
-    fn sample(&self, [x, y]: [usize; 2]) -> [f32; 4] {
+impl<O> FunctionSampler<'_, O> {
+    fn sample<const C: usize>(&self, [x, y]: [usize; 2]) -> [f32; C]
+    where
+        O: ShadingOutput<C>,
+    {
         self.sample_at(Point::new(x as f64, y as f64))
     }
 
-    fn sample_at(&self, point: Point) -> [f32; 4] {
+    fn sample_at<const C: usize>(&self, point: Point) -> [f32; C]
+    where
+        O: ShadingOutput<C>,
+    {
         let point = self.inverse * point;
-        self.pattern
+        self.output
             .eval(self.function, &[point.x as f32, point.y as f32])
     }
 
@@ -89,12 +95,12 @@ impl FunctionSampler<'_> {
     }
 }
 
-fn draw_function_cell(
-    canvas: &mut Canvas,
-    sampler: &FunctionSampler<'_>,
+fn draw_function_cell<const C: usize, O: ShadingOutput<C>>(
+    canvas: &mut Canvas<C>,
+    sampler: &FunctionSampler<'_, O>,
     [x, y]: [usize; 2],
     size: usize,
-    corners: [[f32; 4]; 4],
+    corners: [[f32; C]; 4],
 ) {
     let corners_in_domain = [[0, 0], [size, 0], [0, size], [size, size]]
         .map(|[dx, dy]| sampler.inverse * Point::new((x + dx) as f64, (y + dy) as f64));
@@ -158,13 +164,13 @@ fn draw_function_cell(
     }
 }
 
-fn fill_cell(
-    canvas: &mut Canvas,
-    sampler: &FunctionSampler<'_>,
+fn fill_cell<const C: usize, O>(
+    canvas: &mut Canvas<C>,
+    sampler: &FunctionSampler<'_, O>,
     [x, y]: [usize; 2],
     size: usize,
     inside: bool,
-    color: impl Fn(Point, [f32; 2]) -> [f32; 4],
+    color: impl Fn(Point, [f32; 2]) -> [f32; C],
 ) {
     for row in y..(y + size).min(canvas.height) {
         for column in x..(x + size).min(canvas.width) {

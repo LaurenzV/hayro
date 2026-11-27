@@ -1,13 +1,13 @@
 use kurbo::{Point, Rect};
 
-pub(crate) struct Canvas {
+pub(crate) struct Canvas<const C: usize> {
     pub(crate) width: usize,
     pub(crate) height: usize,
-    pub(crate) pixels: Vec<[f32; 4]>,
+    pub(crate) pixels: Vec<[f32; C]>,
 }
 
-impl Canvas {
-    pub(crate) fn new(width: u32, height: u32, background: [f32; 4]) -> Self {
+impl<const C: usize> Canvas<C> {
+    pub(crate) fn new(width: u32, height: u32, background: [f32; C]) -> Self {
         let (width, height) = (width as usize, height as usize);
 
         Self {
@@ -29,7 +29,7 @@ impl Canvas {
         &mut self,
         points: [Point; 3],
         values: [[f32; N]; 3],
-        shade: &impl Fn(&[f32; N]) -> [f32; 4],
+        shade: &impl Fn(&[f32; N]) -> [f32; C],
     ) {
         let [p0, p1, p2] = points;
         let (e1, e2) = (p1 - p0, p2 - p0);

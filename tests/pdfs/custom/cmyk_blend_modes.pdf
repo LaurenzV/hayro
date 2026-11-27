@@ -1,0 +1,43 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 310 70] /Contents 4 0 R /Resources << /ExtGState << /Hue << /BM /Hue >> /Saturation << /BM /Saturation >> /Color << /BM /Color >> /Luminosity << /BM /Luminosity >> /Normal << /BM /Normal >> /Multiply << /BM /Multiply >> /Screen << /BM /Screen >> >> >> >>
+endobj
+4 0 obj
+<<  /Length 1168 >>
+stream
+q 20 0 0 20 10 40 cm 0 0 0 1 k 0 0 1 1 re f /Hue gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 40 40 cm 0 0 0 1 k 0 0 1 1 re f /Saturation gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 70 40 cm 0 0 0 1 k 0 0 1 1 re f /Color gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 100 40 cm 0 0 0 1 k 0 0 1 1 re f /Luminosity gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 130 40 cm 0 0 0 1 k 0 0 1 1 re f /Normal gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 160 40 cm 0 0 0 1 k 0 0 1 1 re f /Multiply gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 190 40 cm 0 0 0 1 k 0 0 1 1 re f /Screen gs 0 0 0 0 k 0 0 1 1 re f Q
+q 20 0 0 20 220 40 cm 0 0 0 0.5 k 0 0 1 1 re f /Hue gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 250 40 cm 0 0 0 0.5 k 0 0 1 1 re f /Saturation gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 280 40 cm 0 0 0 0.5 k 0 0 1 1 re f /Color gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 10 10 cm 0 0 0 0.5 k 0 0 1 1 re f /Luminosity gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 40 10 cm 0 0 0 0.5 k 0 0 1 1 re f /Normal gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 70 10 cm 0 0 0 0.5 k 0 0 1 1 re f /Multiply gs 0 0 0 0.5 k 0 0 1 1 re f Q
+q 20 0 0 20 100 10 cm 0 0 0 0.5 k 0 0 1 1 re f /Screen gs 0 0 0 0.5 k 0 0 1 1 re f Q
+
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000435 00000 n 
+trailer
+<< /Size 5 /Root 1 0 R >>
+startxref
+1656
+%%EOF
