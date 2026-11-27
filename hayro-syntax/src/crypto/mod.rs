@@ -184,6 +184,8 @@ fn decryptor(dict: &Dict<'_>, id: &[u8], password: &[u8]) -> Result<Decryptor, D
     };
 
     let mut decryption_key = if revision <= 4 {
+        let password = &pdf_doc_encode(password).ok_or(DecryptionError::PasswordProtected)?;
+
         let user_password_key = |password: &[u8]| {
             let key = decryption_key_rev1234(
                 password,
@@ -518,7 +520,6 @@ fn user_password_from_owner_password_rev234(
     Ok(user_password)
 }
 
-// TODO: Convert to PDFDocEncoding.
 fn pad_password(password: &[u8]) -> [u8; 32] {
     let mut padded_password = [0_u8; 32];
     let copy_len = password.len().min(32);
@@ -526,6 +527,38 @@ fn pad_password(password: &[u8]) -> [u8; 32] {
     padded_password[copy_len..].copy_from_slice(&PASSWORD_PADDING[..(32 - copy_len)]);
 
     padded_password
+}
+
+fn pdf_doc_encode(password: &[u8]) -> Option<Vec<u8>> {
+    core::str::from_utf8(password)
+        .ok()?
+        .chars()
+        .map(pdf_doc_byte)
+        .collect()
+}
+
+fn pdf_doc_byte(c: char) -> Option<u8> {
+    const AT_0X18: [char; 8] = [
+        '\u{02D8}', '\u{02C7}', '\u{02C6}', '\u{02D9}', '\u{02DD}', '\u{02DB}', '\u{02DA}',
+        '\u{02DC}',
+    ];
+    const AT_0X80: [char; 31] = [
+        '\u{2022}', '\u{2020}', '\u{2021}', '\u{2026}', '\u{2014}', '\u{2013}', '\u{0192}',
+        '\u{2044}', '\u{2039}', '\u{203A}', '\u{2212}', '\u{2030}', '\u{201E}', '\u{201C}',
+        '\u{201D}', '\u{2018}', '\u{2019}', '\u{201A}', '\u{2122}', '\u{FB01}', '\u{FB02}',
+        '\u{0141}', '\u{0152}', '\u{0160}', '\u{0178}', '\u{017D}', '\u{0131}', '\u{0142}',
+        '\u{0153}', '\u{0161}', '\u{017E}',
+    ];
+
+    match c {
+        '\t' | '\n' | '\r' | ' '..='~' | '\u{A1}'..='\u{AC}' | '\u{AE}'..='\u{FF}' => Some(c as u8),
+        '\u{20AC}' => Some(0xA0),
+        _ => AT_0X18
+            .iter()
+            .position(|&b| b == c)
+            .map(|i| 0x18 + i as u8)
+            .or_else(|| AT_0X80.iter().position(|&b| b == c).map(|i| 0x80 + i as u8)),
+    }
 }
 
 fn authenticate_user_password_rev234(
