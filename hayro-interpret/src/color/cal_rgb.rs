@@ -158,14 +158,13 @@ impl CalRgb {
         let xyz_flat = self.normalize_white_point_to_flat(&self.white_point, &xyz);
         let xyz_black = Self::compensate_black_point(&self.black_point, &xyz_flat);
         let xyz_d65 = self.normalize_white_point_to_d65(&Self::FLAT_WHITEPOINT, &xyz_black);
-        let srgb_xyz = Self::matrix_product(&Self::SRGB_D65_XYZ_TO_RGB_MATRIX, &xyz_d65);
-
-        [
-            (Self::srgb_transfer_function(srgb_xyz[0]) * 255.0 + 0.5) as u8,
-            (Self::srgb_transfer_function(srgb_xyz[1]) * 255.0 + 0.5) as u8,
-            (Self::srgb_transfer_function(srgb_xyz[2]) * 255.0 + 0.5) as u8,
-        ]
+        d65_xyz_to_srgb(xyz_d65)
     }
+}
+
+pub(super) fn d65_xyz_to_srgb(xyz: [f32; 3]) -> [u8; 3] {
+    CalRgb::matrix_product(&CalRgb::SRGB_D65_XYZ_TO_RGB_MATRIX, &xyz)
+        .map(|channel| (CalRgb::srgb_transfer_function(channel) * 255.0 + 0.5) as u8)
 }
 
 impl ToRgb for CalRgb {
