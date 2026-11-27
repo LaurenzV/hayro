@@ -1410,6 +1410,10 @@
     "password": "\u00e9t\u00e9\u20ac"
   },
   {
+    "id": "encrypted_no_metadata_encryption",
+    "file": "pdfs/custom/encrypted_no_metadata_encryption.pdf"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"

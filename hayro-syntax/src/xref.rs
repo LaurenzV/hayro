@@ -7,8 +7,8 @@ use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::object::dict::keys::{
-    AUTHOR, CREATION_DATE, CREATOR, ENCRYPT, FIRST, ID, INDEX, INFO, KEYWORDS, MOD_DATE, N,
-    OCPROPERTIES, PAGES, PREV, PRODUCER, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
+    AUTHOR, CREATION_DATE, CREATOR, ENCRYPT, FIRST, ID, INDEX, INFO, KEYWORDS, METADATA, MOD_DATE,
+    N, OCPROPERTIES, PAGES, PREV, PRODUCER, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
@@ -277,7 +277,7 @@ impl XRef {
 
         // Read the trailer twice so the catalog can be in an encrypted object stream.
 
-        let decryptor = {
+        let mut decryptor = {
             match input {
                 XRefInput::TrailerDictData(trailer_dict_data) => {
                     let mut r = Reader::new(trailer_dict_data);
@@ -318,6 +318,11 @@ impl XRef {
                     .unwrap_or_default();
                 let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
                 let has_ocgs = root.get::<Dict<'_>>(OCPROPERTIES).is_some();
+
+                if let Some(metadata_ref) = root.get_ref(METADATA) {
+                    decryptor.set_metadata_id(metadata_ref.into());
+                }
+
                 let version = root
                     .get::<Name<'_>>(VERSION)
                     .and_then(|v| PdfVersion::from_bytes(v.deref()));

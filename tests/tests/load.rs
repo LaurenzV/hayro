@@ -72,7 +72,7 @@ pub(crate) fn tests() -> Vec<Test> {
         ))
     });
 
-    let units: [(&str, fn()); 6] = [
+    let units: [(&str, fn()); 7] = [
         ("load::metadata_in_object_stream", metadata_in_object_stream),
         (
             "load::concurrent_object_stream_resolution",
@@ -88,6 +88,10 @@ pub(crate) fn tests() -> Vec<Test> {
         ),
         ("load::jbig2_globals_chain", jbig2_globals_chain),
         ("load::encrypted_unknown_cfm", encrypted_unknown_cfm),
+        (
+            "load::encrypted_no_metadata_encryption",
+            encrypted_no_metadata_encryption,
+        ),
     ];
 
     files
@@ -262,4 +266,14 @@ fn encrypted_unknown_cfm() {
             DecryptionError::UnsupportedAlgorithm
         ))
     ));
+}
+
+fn encrypted_no_metadata_encryption() {
+    let pdf = Pdf::new(read("pdfs/custom/encrypted_no_metadata_encryption.pdf")).unwrap();
+    let stream = pdf
+        .xref()
+        .get::<Stream<'_>>(ObjectIdentifier::new(6, 0))
+        .unwrap();
+
+    assert!(stream.decoded().unwrap().starts_with(b"<?xpacket begin="));
 }
