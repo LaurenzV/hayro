@@ -182,7 +182,17 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
     }
 
     fn decode_alpha(&mut self, image: &mut ImageData) -> Option<LumaData> {
-        if let Some((alpha, matte_rgb)) = self.resolve_matte()
+        let dict = self.obj.stream.dict();
+        let s_mask = dict.get::<Stream<'_>>(SMASK);
+        if let Some(mask) = &s_mask
+            && !mask.dict().contains_key(MATTE)
+            && mask.dict().get_ref(LENGTH).is_none()
+            && !dict.contains_key(SMASK_IN_DATA)
+        {
+            return self.decode_mask(mask);
+        }
+
+        if let Some((alpha, matte_rgb)) = s_mask.as_ref().and_then(|mask| self.resolve_matte(mask))
             && alpha.width == self.ctx.width
             && alpha.height == self.ctx.height
         {
@@ -192,8 +202,6 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         }
 
         // Drop an invalid alpha channel so the image itself still renders (PDFJS-19611).
-        let dict = self.obj.stream.dict();
-
         if let Some(1) = dict.get::<u8>(SMASK_IN_DATA) {
             let mut data = self
                 .ctx
@@ -215,9 +223,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
             .get::<Stream<'_>>(SMASK)
             .or_else(|| dict.get::<Stream<'_>>(MASK))
         {
-            let obj = ImageXObject::new_mask(&s_mask, &self.obj.warning_sink, &self.obj.cache)?;
-
-            decode_mask(&obj, self.target_dimension).map(|decoded| decoded.luma)
+            self.decode_mask(&s_mask)
         } else if self.color_key_mask.is_some() {
             self.decoded_color_key_mask
                 .take()
@@ -227,8 +233,12 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         }
     }
 
-    fn resolve_matte(&self) -> Option<(LumaData, [u8; 3])> {
-        let s_mask = self.obj.stream.dict().get::<Stream<'_>>(SMASK)?;
+    fn decode_mask(&self, mask: &Stream<'_>) -> Option<LumaData> {
+        let obj = ImageXObject::new_mask(mask, &self.obj.warning_sink, &self.obj.cache)?;
+        Some(decode_mask(&obj, self.target_dimension)?.luma)
+    }
+
+    fn resolve_matte(&self, s_mask: &Stream<'_>) -> Option<(LumaData, [u8; 3])> {
         let matte = s_mask.dict().get::<ColorComponents>(MATTE)?;
 
         if matte.len() != self.ctx.color_space.num_components() as usize {
@@ -239,10 +249,7 @@ impl<'a, 'b> ImageDecoder<'a, 'b> {
         let mut matte_rgb = [0_u8; 3];
         self.ctx.color_space.convert_values(&matte, &mut matte_rgb);
 
-        let mask_obj = ImageXObject::new_mask(&s_mask, &self.obj.warning_sink, &self.obj.cache)?;
-        let alpha = decode_mask(&mask_obj, self.target_dimension)?.luma;
-
-        Some((alpha, matte_rgb))
+        Some((self.decode_mask(s_mask)?, matte_rgb))
     }
 
     fn decode_color_key_mask(&self) -> Option<LumaData> {
