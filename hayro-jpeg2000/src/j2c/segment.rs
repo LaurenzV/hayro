@@ -1,10 +1,8 @@
-use alloc::boxed::Box;
-
 use super::build::Segment;
 use super::codestream::markers::{EPH, SOP};
 use super::codestream::{ComponentInfo, Header};
 use super::decode::DecompositionStorage;
-use super::progression::ProgressionData;
+use super::progression::{PacketIterator, ProgressionData};
 use super::tile::{Tile, TilePart};
 use crate::cancel::Cancel;
 use crate::error::{Result, TileError, bail};
@@ -12,9 +10,9 @@ use crate::reader::BitReader;
 
 pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 
-pub(crate) fn parse<'a, 'b>(
-    tile: &'b Tile<'a>,
-    mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
+pub(crate) fn parse<'a>(
+    tile: &Tile<'a>,
+    mut progression_iterator: PacketIterator<'_>,
     header: &Header,
     storage: &mut DecompositionStorage<'a>,
     cancel: Cancel<'_>,
@@ -39,7 +37,7 @@ pub(crate) fn parse<'a, 'b>(
 
 fn parse_inner<'a>(
     mut tile_part: TilePart<'a>,
-    progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
+    progression_iterator: &mut PacketIterator<'_>,
     component_infos: &[ComponentInfo],
     storage: &mut DecompositionStorage<'a>,
     cancel: Cancel<'_>,
@@ -47,14 +45,10 @@ fn parse_inner<'a>(
     while !tile_part.header().at_end() {
         cancel.check()?;
 
-        if parse_packet(
-            &mut tile_part,
-            progression_iterator,
-            component_infos,
-            storage,
-        )
-        .is_none()
-        {
+        let Some(packet) = progression_iterator.next().transpose()? else {
+            return Ok(None);
+        };
+        if parse_packet(&mut tile_part, packet, component_infos, storage).is_none() {
             return Ok(None);
         }
     }
@@ -64,11 +58,10 @@ fn parse_inner<'a>(
 
 fn parse_packet<'a>(
     tile_part: &mut TilePart<'a>,
-    progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
+    progression_data: ProgressionData,
     component_infos: &[ComponentInfo],
     storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {
-    let progression_data = progression_iterator.next()?;
     let resolution = progression_data.resolution;
     let component_info = &component_infos[progression_data.component as usize];
     let tile_decompositions = &mut storage.tile_decompositions[progression_data.component as usize];
