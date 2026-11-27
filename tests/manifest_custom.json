@@ -1,5 +1,9 @@
 [
   {
+    "id": "alternate_images",
+    "file": "pdfs/custom/alternate_images.pdf"
+  },
+  {
     "id": "InlineAbbreviations",
     "file": "pdfs/custom/InlineAbbreviations.pdf"
   },
