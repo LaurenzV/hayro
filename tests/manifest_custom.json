@@ -898,6 +898,10 @@
     "file": "pdfs/custom/font_type3_stroked_glyphs.pdf"
   },
   {
+    "id": "font_type3_shape_paints",
+    "file": "pdfs/custom/font_type3_shape_paints.pdf"
+  },
+  {
     "id": "font_type3_shape_glyphs",
     "svg": true,
     "file": "pdfs/custom/font_type3_shape_glyphs.pdf"

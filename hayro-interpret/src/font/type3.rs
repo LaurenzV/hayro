@@ -71,7 +71,8 @@ pub(crate) fn render_glyph<'a>(
     let resources = resources.as_ref().unwrap_or(&glyph.parent_resources);
 
     if is_shape_glyph {
-        let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
+        context.shape_paints = Some((paint.clone(), glyph.stroke_paint.clone()));
+        let mut device = Type3ShapeGlyphDevice(device);
         interpret(iter, resources, &mut context, &mut device);
     } else {
         interpret(iter, resources, &mut context, device);
@@ -80,32 +81,16 @@ pub(crate) fn render_glyph<'a>(
     Some(())
 }
 
-struct Type3ShapeGlyphDevice<'a, 'b, T: Device<'a>> {
-    inner: &'b mut T,
-    paint: Paint<'a>,
-}
-
-impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
-    pub(crate) fn new(device: &'b mut T, paint: Paint<'a>) -> Self {
-        Self {
-            inner: device,
-            paint,
-        }
-    }
-}
+struct Type3ShapeGlyphDevice<'b, T>(&'b mut T);
 
 // Only filling, stroking of paths and stencil masks are allowed.
-impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
+impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'_, T> {
     fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
-        let props = DrawProps {
-            paint: self.paint.clone(),
-            ..props
-        };
-        self.inner.draw_path(path, props, draw_mode);
+        self.0.draw_path(path, props, draw_mode);
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        self.inner.push_clip_path(clip_path);
+        self.0.push_clip_path(clip_path);
     }
 
     fn push_transparency_group(
@@ -124,19 +109,18 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
         props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        self.inner.draw_glyph_run(glyph_run, props, draw_mode);
+        self.0.draw_glyph_run(glyph_run, props, draw_mode);
     }
 
     fn pop_clip(&mut self) {
-        self.inner.pop_clip();
+        self.0.pop_clip();
     }
 
     fn pop_transparency_group(&mut self) {}
 
     fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
-        if let Image::Stencil(mut s) = image {
-            s.paint = self.paint.clone();
-            self.inner.draw_image(Image::Stencil(s), props);
+        if matches!(image, Image::Stencil(_)) {
+            self.0.draw_image(image, props);
         }
     }
 }
