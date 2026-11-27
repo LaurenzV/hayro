@@ -1396,6 +1396,10 @@
     "file": "pdfs/custom/encrypted_no_strf.pdf"
   },
   {
+    "id": "encrypted_cf_identity_ignored",
+    "file": "pdfs/custom/encrypted_cf_identity_ignored.pdf"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"
