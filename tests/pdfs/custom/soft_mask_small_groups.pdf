@@ -1,0 +1,96 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 240 120] /Contents 4 0 R /Resources << /ExtGState << /M0 11 0 R /M1 12 0 R /M2 13 0 R /M3 15 0 R /M4 17 0 R /M5 19 0 R >> >> >>
+endobj
+4 0 obj
+<<  /Length 511 >>
+stream
+1 0 0 rg 0 0 240 120 re f
+0 0 1 rg
+q 1 0 0 1 5 80 cm /M0 gs -10 -10 40 40 re f Q
+q 1 0 0 1 35 80 cm /M0 gs -10 -10 40 40 re f Q
+q 1 0 0 1 65.5 80.25 cm /M0 gs -10 -10 40 40 re f Q
+q 1 0 0 1 100 80 cm /M1 gs -10 -10 40 40 re f Q
+q 1 0 0 1 130 80 cm /M2 gs -10 -10 40 40 re f Q
+q 1 0 0 1 165 80 cm /M3 gs -10 -10 40 40 re f Q
+q 1 0 0 1 5 30 cm /M4 gs -10 -10 40 40 re f Q
+q 1 0 0 1 50 30 cm /M5 gs -10 -10 40 40 re f Q
+q 1 0 0 1 -8 -8 cm /M0 gs -10 -10 40 40 re f Q
+q 1 0 0 1 228 50 cm /M2 gs -10 -10 40 40 re f Q
+endstream
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Group << /S /Transparency /CS /DeviceGray >> /Length 61 >>
+stream
+0.2 g 0 0 20 20 re f 0.9 g 4 4 12 12 re f 0.5 g 8 2 4 16 re f
+endstream
+endobj
+11 0 obj
+<< /SMask << /S /Luminosity /G 10 0 R >> >>
+endobj
+12 0 obj
+<< /SMask << /S /Luminosity /G 10 0 R /BC [1] >> >>
+endobj
+13 0 obj
+<< /SMask << /S /Luminosity /G 10 0 R /TR << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >> >> >>
+endobj
+14 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Matrix [0.7 0.7 -0.7 0.7 10 0] /Group << /S /Transparency >> /Length 18 >>
+stream
+0 g 0 0 20 20 re f
+endstream
+endobj
+15 0 obj
+<< /SMask << /S /Alpha /G 14 0 R >> >>
+endobj
+16 0 obj
+<< /Type /XObject /Subtype /Form /BBox [-5 -5 25 25] /Group << /S /Transparency /CS /DeviceGray >> /Resources << /ExtGState << /M 11 0 R >> >> /Length 53 >>
+stream
+0.6 g -5 -5 30 30 re f q /M gs 1 g -5 -5 30 30 re f Q
+endstream
+endobj
+17 0 obj
+<< /SMask << /S /Luminosity /G 16 0 R >> >>
+endobj
+18 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0.3 0.6 10.7 9.2] /Group << /S /Transparency /CS /DeviceGray >> /Length 18 >>
+stream
+1 g 0 0 20 20 re f
+endstream
+endobj
+19 0 obj
+<< /SMask << /S /Luminosity /G 18 0 R >> >>
+endobj
+xref
+0 20
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000302 00000 n 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000865 00000 n 
+0000001071 00000 n 
+0000001131 00000 n 
+0000001199 00000 n 
+0000001320 00000 n 
+0000001499 00000 n 
+0000001554 00000 n 
+0000001798 00000 n 
+0000001858 00000 n 
+0000002028 00000 n 
+trailer
+<< /Size 20 /Root 1 0 R >>
+startxref
+2088
+%%EOF

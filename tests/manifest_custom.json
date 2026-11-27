@@ -1488,5 +1488,9 @@
     "id": "pattern_tiling_clip_scaled",
     "file": "pdfs/custom/pattern_tiling_clip_scaled.pdf",
     "svg": true
+  },
+  {
+    "id": "soft_mask_small_groups",
+    "file": "pdfs/custom/soft_mask_small_groups.pdf"
   }
 ]
