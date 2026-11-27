@@ -10,6 +10,9 @@
   - **Leniency for broken files:** at least two other implementations must handle the file correctly, and the fix
     must come from a **real-world PDF** you encountered. Don't open PRs for leniency fixes found only with
     hand-crafted PDFs.
+  - **Malicious input:** hand-crafted PDFs are fine for showing that input can make hayro panic, hang, or use
+    excessive time or memory (e.g. quadratic behavior). Though keep in mind that some might simply be unavoidable. 
+    Fixes for these are welcome, as long as the added complexity is reasonable.
   - **Edge cases:** avoid fixes that add significant complexity for little real benefit, such as floating-point
     precision issues or places where hayro deliberately approximates (e.g. gradient conversion). Like leniency
     fixes, they should be motivated by real-world PDFs that hayro renders incorrectly.
