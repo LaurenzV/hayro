@@ -282,7 +282,14 @@ impl StandardKind {
             Some(Width::Missing) => Some(self.missing_width),
             None => self
                 .code_to_ps_name(code)
-                .and_then(|c| self.base_font.get_width(c)),
+                .and_then(|c| self.base_font.get_width(c))
+                .or_else(|| {
+                    let glyph = self.map_code(code);
+                    if glyph == GlyphId::NOTDEF {
+                        return None;
+                    }
+                    self.program.substitute_advance_width(glyph)
+                }),
         }
     }
 
@@ -391,4 +398,34 @@ enum StandardFontFamily {
     Helvetica,
     Courier,
     Times,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{FontCache, FontResolverFn};
+    use hayro_syntax::object::FromBytes;
+    use std::sync::Arc;
+
+    fn alpha_width(data: &'static [u8]) -> f32 {
+        let dict = Dict::from_bytes(
+            b"<< /BaseFont /Helvetica /Encoding << /Differences [65 /Alpha] >> >>",
+        )
+        .unwrap();
+        let resolver: FontResolverFn = Arc::new(move |_| Some((Arc::new(data), 0)));
+        let cache = FontCache::new();
+        let font = StandardKind::new(&dict, &cache.program_loader(&resolver)).unwrap();
+
+        font.glyph_width(65).unwrap()
+    }
+
+    #[test]
+    fn standalone_substitute_advance() {
+        assert_eq!(
+            alpha_width(include_bytes!("../assets/FoxitSymbol.pfb")),
+            722.0
+        );
+        let width = alpha_width(include_bytes!("../tests/data/large-em.cff"));
+        assert!((width - 36.1).abs() < 0.01, "{width}");
+    }
 }

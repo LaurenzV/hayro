@@ -6,6 +6,7 @@ use siphasher::sip128::{Hasher128, SipHasher13};
 use skrifa::font::Kind;
 use skrifa::raw::model::attribute::Style;
 use skrifa::raw::model::charmap::Encoding;
+use skrifa::raw::model::glyph::outline::OutlineGlyph;
 use skrifa::raw::ps::cff::CffFontRef;
 use skrifa::raw::{FontRef, TableProvider};
 use skrifa::{
@@ -146,6 +147,24 @@ impl FontProgram {
         let advance = font.glyph_metrics().h_advance(glyph.to_skrifa());
 
         Some(advance * UNITS_PER_EM / f32::from(font.units_per_em()))
+    }
+
+    pub(crate) fn substitute_advance_width(&self, glyph: GlyphId) -> Option<f32> {
+        if let Some(width) = self.advance_width(glyph) {
+            return Some(width);
+        }
+
+        let gid = glyph.to_skrifa();
+        let size = Some(UNITS_PER_EM);
+        match self.font().outline_glyphs().get(gid)? {
+            OutlineGlyph::Cff(g) => {
+                g.cff_font()
+                    .advance(g.subfont(), gid, g.normalized_coords(), size)
+            }
+            OutlineGlyph::Type1(g) => g.type1_font().advance(gid, size),
+            _ => return None,
+        }
+        .ok()?
     }
 
     pub(crate) fn weight(&self) -> Option<u32> {
