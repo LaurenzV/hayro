@@ -2,6 +2,7 @@
 use std::{
     ffi::OsStr,
     io::{BufRead, Seek},
+    sync::Once,
 };
 
 use crate::jp2::icc::{ICCColorSpace, ICCMetadata};
@@ -284,25 +285,33 @@ fn unsupported_color_error(color: ExtendedColorType) -> ImageError {
 
 /// Register the decoder with `image`, returning `false` if it was already registered.
 pub fn register_decoding_hook() -> bool {
-    if decoding_hook_registered(OsStr::new("jp2")) {
-        return false;
-    }
+    static REGISTERED: Once = Once::new();
 
-    for extension in ["jp2", "jpg2", "j2k", "jpf"] {
-        image::hooks::register_decoding_hook(
-            extension.into(),
-            Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
-        );
-        register_format_detection_hook(extension.into(), crate::JP2_MAGIC, None);
-    }
+    let mut registered = false;
+    REGISTERED.call_once(|| {
+        if decoding_hook_registered(OsStr::new("jp2")) {
+            return;
+        }
 
-    for extension in ["j2c", "jpc"] {
-        image::hooks::register_decoding_hook(
-            extension.into(),
-            Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
-        );
-        register_format_detection_hook(extension.into(), crate::CODESTREAM_MAGIC, None);
-    }
+        for extension in ["jp2", "jpg2", "j2k", "jpf"] {
+            let inserted = image::hooks::register_decoding_hook(
+                extension.into(),
+                Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
+            );
+            if extension == "jp2" && !inserted {
+                return;
+            }
+            register_format_detection_hook(extension.into(), crate::JP2_MAGIC, None);
+        }
 
-    true
+        for extension in ["j2c", "jpc"] {
+            image::hooks::register_decoding_hook(
+                extension.into(),
+                Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
+            );
+            register_format_detection_hook(extension.into(), crate::CODESTREAM_MAGIC, None);
+        }
+        registered = true;
+    });
+    registered
 }
