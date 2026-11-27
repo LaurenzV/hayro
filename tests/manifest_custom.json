@@ -1373,6 +1373,21 @@
     "password": "testpw"
   },
   {
+    "id": "owner_password_rc4_40",
+    "file": "pdfs/custom/owner_password_rc4_40.pdf",
+    "password": "owner"
+  },
+  {
+    "id": "owner_password_rc4_128",
+    "file": "pdfs/custom/owner_password_rc4_128.pdf",
+    "password": "owner"
+  },
+  {
+    "id": "owner_password_aes_128",
+    "file": "pdfs/custom/owner_password_aes_128.pdf",
+    "password": "owner"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"

@@ -177,18 +177,32 @@ pub(crate) fn get(
     };
 
     let mut decryption_key = if revision <= 4 {
-        let key = decryption_key_rev1234(
-            password,
-            encrypt_metadata,
-            revision,
-            byte_length,
-            &owner_string,
-            permissions,
-            id,
-        )?;
-        authenticate_user_password_rev234(revision, &key, id, &user_string)?;
+        let user_password_key = |password: &[u8]| {
+            let key = decryption_key_rev1234(
+                password,
+                encrypt_metadata,
+                revision,
+                byte_length,
+                &owner_string,
+                permissions,
+                id,
+            )?;
+            authenticate_user_password_rev234(revision, &key, id, &user_string)?;
 
-        key
+            Ok(key)
+        };
+
+        match user_password_key(password) {
+            Err(DecryptionError::PasswordProtected) => {
+                user_password_key(&user_password_from_owner_password_rev234(
+                    password,
+                    revision,
+                    byte_length,
+                    &owner_string,
+                )?)?
+            }
+            result => result?,
+        }
     } else {
         decryption_key_rev56(dict, revision, password, &owner_string, &user_string)?
     };
@@ -414,15 +428,7 @@ fn decryption_key_rev1234(
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut md5_input = vec![];
 
-    // TODO: Convert to PDFDocEncoding.
-    let mut padded_password = [0_u8; 32];
-    let copy_len = password.len().min(32);
-    padded_password[..copy_len].copy_from_slice(&password[..copy_len]);
-    if copy_len < 32 {
-        padded_password[copy_len..].copy_from_slice(&PASSWORD_PADDING[..(32 - copy_len)]);
-    }
-
-    md5_input.extend(&padded_password);
+    md5_input.extend(&pad_password(password));
 
     md5_input.extend(owner_string.as_ref());
 
@@ -448,6 +454,51 @@ fn decryption_key_rev1234(
 
     let decryption_key = hash[..byte_length as usize].to_vec();
     Ok(decryption_key)
+}
+
+fn user_password_from_owner_password_rev234(
+    owner_password: &[u8],
+    revision: u8,
+    byte_length: u16,
+    owner_string: &object::String<'_>,
+) -> Result<Vec<u8>, DecryptionError> {
+    let mut hash = md5::calculate(&pad_password(owner_password));
+
+    if revision >= 3 {
+        for _ in 0..50 {
+            hash = md5::calculate(&hash);
+        }
+    }
+
+    let key_length = if revision == 2 {
+        5
+    } else {
+        byte_length as usize
+    };
+    let key = hash.get(..key_length).ok_or(InvalidEncryption)?;
+
+    if revision == 2 {
+        return Ok(Rc4::new(key).decrypt(owner_string.as_ref()));
+    }
+
+    let mut user_password = owner_string.as_ref().to_vec();
+
+    for i in (0..=19).rev() {
+        let key = key.iter().map(|byte| byte ^ i).collect::<Vec<_>>();
+        user_password = Rc4::new(&key).decrypt(&user_password);
+    }
+
+    Ok(user_password)
+}
+
+// TODO: Convert to PDFDocEncoding.
+fn pad_password(password: &[u8]) -> [u8; 32] {
+    let mut padded_password = [0_u8; 32];
+    let copy_len = password.len().min(32);
+    padded_password[..copy_len].copy_from_slice(&password[..copy_len]);
+    padded_password[copy_len..].copy_from_slice(&PASSWORD_PADDING[..(32 - copy_len)]);
+
+    padded_password
 }
 
 fn authenticate_user_password_rev234(
