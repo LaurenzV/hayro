@@ -1,5 +1,4 @@
 use super::decode::{DecodedImage, DecodedMask, decode_image, decode_mask};
-use super::xobject_oc;
 use crate::WarningSinkFn;
 use crate::cache::Cache;
 use crate::color::ColorSpace;
@@ -126,15 +125,11 @@ impl<'a> ImageXObject<'a> {
     }
 
     pub(crate) fn draw<'b>(&self, context: &mut Context<'b>, device: &mut impl Device<'b>) {
-        if !context.ocg_state.is_visible() {
-            return;
-        }
-
-        let has_oc = xobject_oc(self.stream.dict(), context);
-        if !context.ocg_state.is_visible() {
-            if has_oc {
-                context.ocg_state.end_marked_content();
-            }
+        if !context.ocg_state.is_visible()
+            || !context
+                .ocg_state
+                .is_oc_active(self.stream.dict(), context.xref)
+        {
             return;
         }
 
@@ -192,10 +187,6 @@ impl<'a> ImageXObject<'a> {
         device.pop_transparency_group();
 
         context.restore_state(device);
-
-        if has_oc {
-            context.ocg_state.end_marked_content();
-        }
     }
 
     pub(crate) fn decoded_mask(&self, target_dimension: Option<(u32, u32)>) -> Option<DecodedMask> {

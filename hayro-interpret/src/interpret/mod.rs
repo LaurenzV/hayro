@@ -127,6 +127,10 @@ fn interpret_annotation<'a>(
         return;
     }
 
+    if !context.ocg_state.is_oc_active(annot, context.xref) {
+        return;
+    }
+
     if let Some(apx) = appearance_stream(annot).and_then(|o| FormXObject::new(&o)) {
         let Some(rect) = annot.get::<Rect>(RECT) else {
             return;
@@ -185,6 +189,7 @@ pub fn interpret<'a>(
     device: &mut impl Device<'a>,
 ) {
     let num_states = context.num_states();
+    let num_ocg_states = context.ocg_state.depth();
     let mut font_dict_cache = FxHashMap::<Name<'a>, Dict<'a>>::default();
 
     context.save_state();
@@ -430,27 +435,33 @@ pub fn interpret<'a>(
                     .and_then(|name| resources.properties.get::<Dict<'_>>(name))
                     .or_else(|| dict_or_stream(bdc.1).map(|(props, _)| props.clone()));
 
-                let oc = bdc
-                    .1
-                    .clone()
-                    .into_name()
-                    .and_then(|name| {
-                        let r = resources.properties.get_ref(name.as_ref())?;
-                        let d = resources
-                            .properties
-                            .get::<Dict<'_>>(name)
-                            .unwrap_or_default();
-                        Some((d, r))
-                    })
-                    .or_else(|| {
-                        let (props, _) = dict_or_stream(bdc.1)?;
-                        let r = props.get_ref(OC)?;
-                        let d = props.get::<Dict<'_>>(OC).unwrap_or_default();
-                        Some((d, r))
-                    });
+                if context.ocg_state.is_enabled() {
+                    let oc = bdc
+                        .1
+                        .clone()
+                        .into_name()
+                        .and_then(|name| {
+                            let r = resources.properties.get_ref(name.as_ref())?;
+                            let d = resources
+                                .properties
+                                .get::<Dict<'_>>(name)
+                                .unwrap_or_default();
+                            Some((d, r))
+                        })
+                        .or_else(|| {
+                            let (props, _) = dict_or_stream(bdc.1)?;
+                            let r = props.get_ref(OC)?;
+                            let d = props.get::<Dict<'_>>(OC).unwrap_or_default();
+                            Some((d, r))
+                        });
 
-                if let Some((dict, oc_ref)) = oc {
-                    context.ocg_state.begin_ocg(&dict, oc_ref.into());
+                    if let Some((dict, oc_ref)) = oc {
+                        context
+                            .ocg_state
+                            .begin_ocg(&dict, oc_ref.into(), context.xref);
+                    } else {
+                        context.ocg_state.begin_marked_content();
+                    }
                 } else {
                     context.ocg_state.begin_marked_content();
                 }
@@ -459,7 +470,10 @@ pub fn interpret<'a>(
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
-                context.ocg_state.end_marked_content();
+                // An unmatched `EMC` must not pop marked content opened before this stream.
+                if context.ocg_state.depth() > num_ocg_states {
+                    context.ocg_state.end_marked_content();
+                }
                 device.end_marked_content();
             }
             TypedInstruction::MarkedContentPoint(_) => {}
@@ -667,6 +681,8 @@ pub fn interpret<'a>(
     // A pending path, including `W`/`W*`, can't continue past its content stream.
     context.path_mut().truncate(0);
     *(context.clip_mut()) = None;
+
+    context.ocg_state.truncate(num_ocg_states);
 
     while context.num_states() > num_states {
         context.restore_state(device);
