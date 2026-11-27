@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 mod harness;
+mod interpret;
 mod load;
 mod raster;
 mod svg;
@@ -113,6 +114,7 @@ fn collect(args: &Args) -> (Vec<Test>, usize) {
         .chain(write::tests())
         .chain(load::tests())
         .chain(text::tests())
+        .chain(interpret::tests())
         .chain([Test::unit("visibility", visibility)])
         .filter(|test| args.matches(&test.name))
         .collect();
