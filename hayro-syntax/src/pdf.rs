@@ -51,13 +51,20 @@ impl Pdf {
         Self::new_with_password(data, "")
     }
 
-    /// Try to read the given PDF file with a password.
+    /// Try to read the given PDF file with the UTF-8 bytes of a password.
     pub fn new_with_password(
         data: impl Into<PdfData>,
         password: &str,
     ) -> Result<Self, LoadPdfError> {
+        Self::new_with_password_bytes(data, password.as_bytes())
+    }
+
+    /// Try to read a PDF with password bytes in the encoding used by its security handler.
+    pub fn new_with_password_bytes(
+        data: impl Into<PdfData>,
+        password: &[u8],
+    ) -> Result<Self, LoadPdfError> {
         let data = data.into();
-        let password = password.as_bytes();
         let version = find_version(data.as_ref()).unwrap_or(PdfVersion::Pdf10);
         let xref = match root_xref(data.clone(), password) {
             Ok(x) => x,
@@ -172,8 +179,9 @@ impl PdfVersion {
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::DecryptionError;
     use crate::object::{ObjectIdentifier, Stream};
-    use crate::pdf::{Pdf, PdfVersion};
+    use crate::pdf::{LoadPdfError, Pdf, PdfVersion};
 
     #[test]
     fn issue_49() {
@@ -194,6 +202,43 @@ mod tests {
         let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf17);
+    }
+
+    #[test]
+    fn legacy_password_bytes_open_and_read_the_page() {
+        const CONTENT: &[u8] =
+            b"BT /F1 24 Tf 72 720 Td (Encrypted page one) Tj ET\n0 .5 1 rg 20 30 70 20 re f";
+        for revision in [2, 3, 4] {
+            let file = format!("../tests/pdfs/other/password_bytes_r{revision}.pdf");
+            let data = std::fs::read(file).unwrap();
+            let pdf = Pdf::new_with_password_bytes(data.clone(), &[0xe9]).unwrap();
+            assert_eq!(pdf.pages()[0].page_stream(), Some(CONTENT));
+            assert!(matches!(
+                Pdf::new_with_password(data.clone(), "é"),
+                Err(LoadPdfError::Decryption(DecryptionError::PasswordProtected))
+            ));
+            assert!(matches!(
+                Pdf::new_with_password_bytes(data, b"wrong"),
+                Err(LoadPdfError::Decryption(DecryptionError::PasswordProtected))
+            ));
+        }
+    }
+
+    #[test]
+    fn password_strings_keep_their_utf8_bytes() {
+        let file = std::fs::read("../tests/pdfs/other/password_bytes_r6.pdf").unwrap();
+        let text = Pdf::new_with_password(file.clone(), "é").unwrap();
+        let bytes = Pdf::new_with_password_bytes(file.clone(), "é".as_bytes()).unwrap();
+        assert_eq!(
+            text.pages()[0].page_stream(),
+            bytes.pages()[0].page_stream()
+        );
+        assert!(matches!(
+            Pdf::new_with_password_bytes(file, &[0xe9]),
+            Err(LoadPdfError::Decryption(DecryptionError::PasswordProtected))
+        ));
+        let ascii = std::fs::read("../tests/pdfs/custom/password_encrypted_aes_128.pdf").unwrap();
+        assert!(Pdf::new_with_password(ascii, "testpw").is_ok());
     }
 
     #[test]
