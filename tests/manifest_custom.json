@@ -128,6 +128,10 @@
     "file": "pdfs/custom/font_cid_7.pdf"
   },
   {
+    "id": "font_cid_ucs2_sequences",
+    "file": "pdfs/custom/font_cid_ucs2_sequences.pdf"
+  },
+  {
     "id": "font_fallback_query",
     "file": "pdfs/custom/font_fallback_query.pdf"
   },

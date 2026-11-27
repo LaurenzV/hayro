@@ -170,28 +170,45 @@ impl Type0Font {
     fn map_via_unicode(&self, key: u32) -> Option<GlyphId> {
         let to_unicode = self.to_unicode.as_ref()?;
 
-        let character = to_unicode
-            .lookup_bf_string(key)
-            .or_else(|| {
-                for len in 0..4 {
-                    if let Some(code) = to_unicode.lookup_cid_code(key, len)
-                        && let Some(code) = char::from_u32(code)
-                    {
-                        return Some(BfString::Char(code));
-                    }
+        let unicode = to_unicode.lookup_bf_string(key).or_else(|| {
+            for len in 0..4 {
+                if let Some(code) = to_unicode.lookup_cid_code(key, len)
+                    && let Some(code) = char::from_u32(code)
+                {
+                    return Some(BfString::Char(code));
                 }
+            }
 
-                None
-            })
-            .and_then(|bf| match bf {
-                BfString::Char(c) => Some(c),
-                BfString::String(_) => None,
-            })?;
+            None
+        })?;
 
+        let string = match unicode {
+            BfString::Char(c) => return self.char_glyph(c),
+            BfString::String(s) => s,
+        };
+
+        if !self.to_unicode_is_cid_indexed || self.program.kind() != ProgramKind::Sfnt {
+            return None;
+        }
+
+        let mut chars = string.chars();
+        let glyph = match (chars.next(), chars.next(), chars.next()) {
+            (Some(c), Some(selector), None) if is_variation_selector(selector) => self
+                .program
+                .cmap_variant_glyph(c, selector)
+                .or_else(|| self.program.cmap_glyph(c)),
+            _ => None,
+        };
+
+        Some(glyph.unwrap_or(GlyphId::NOTDEF))
+    }
+
+    fn char_glyph(&self, c: char) -> Option<GlyphId> {
         match self.program.kind() {
-            ProgramKind::Sfnt => self.program.cmap_glyph(character),
-            ProgramKind::Cff | ProgramKind::Type1 => glyph_names::get_reverse(character)
-                .and_then(|name| self.program.glyph_by_name(name)),
+            ProgramKind::Sfnt => self.program.cmap_glyph(c),
+            ProgramKind::Cff | ProgramKind::Type1 => {
+                glyph_names::get_reverse(c).and_then(|name| self.program.glyph_by_name(name))
+            }
         }
     }
 
@@ -515,4 +532,8 @@ fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<
         }
         _ => None,
     }
+}
+
+fn is_variation_selector(c: char) -> bool {
+    matches!(u32::from(c), 0xFE00..=0xFE0F | 0xE0100..=0xE01EF)
 }

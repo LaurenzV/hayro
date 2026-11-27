@@ -120,6 +120,13 @@ impl FontProgram {
             .map(GlyphId::from_skrifa)
     }
 
+    pub(crate) fn cmap_variant_glyph(&self, c: char, selector: char) -> Option<GlyphId> {
+        self.font()
+            .charmap()
+            .map_unicode_variant(c, selector)
+            .map(GlyphId::from_skrifa)
+    }
+
     pub(crate) fn cmap_subtables(&self) -> Vec<CmapSubtable<'_>> {
         let charmap = self.font().charmap();
         charmap
