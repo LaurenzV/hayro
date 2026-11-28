@@ -1405,6 +1405,11 @@
     "password": "wrong"
   },
   {
+    "id": "password_pdfdoc_encoding",
+    "file": "pdfs/custom/password_pdfdoc_encoding.pdf",
+    "password": "\u00e9t\u00e9\u20ac"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"
