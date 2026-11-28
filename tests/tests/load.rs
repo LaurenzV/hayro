@@ -3,9 +3,9 @@ use crate::harness::runner::{Outcome, Test};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::{RenderSettings, render_pdf};
 use hayro_jpeg2000::{DecodeSettings, Image};
-use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier, Stream};
+use hayro_syntax::{DecryptionError, LoadPdfError, Pdf};
 use std::sync::Barrier;
 
 fn load_pdf(file: &[u8]) {
@@ -72,7 +72,7 @@ pub(crate) fn tests() -> Vec<Test> {
         ))
     });
 
-    let units: [(&str, fn()); 5] = [
+    let units: [(&str, fn()); 6] = [
         ("load::metadata_in_object_stream", metadata_in_object_stream),
         (
             "load::concurrent_object_stream_resolution",
@@ -87,6 +87,7 @@ pub(crate) fn tests() -> Vec<Test> {
             concurrent_xref_repair_retries_original_entries,
         ),
         ("load::jbig2_globals_chain", jbig2_globals_chain),
+        ("load::encrypted_unknown_cfm", encrypted_unknown_cfm),
     ];
 
     files
@@ -250,4 +251,15 @@ fn jbig2_globals_chain() {
         .get::<Stream<'_>>(ObjectIdentifier::new(3, 0))
         .unwrap();
     let _ = stream.decoded();
+}
+
+fn encrypted_unknown_cfm() {
+    let file = read("pdfs/custom/encrypted_unknown_cfm.pdf");
+
+    assert!(matches!(
+        Pdf::new(file),
+        Err(LoadPdfError::Decryption(
+            DecryptionError::UnsupportedAlgorithm
+        ))
+    ));
 }

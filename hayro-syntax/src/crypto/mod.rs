@@ -148,11 +148,11 @@ pub(crate) fn get(
         2 => (DecryptorTag::Rc4, None),
         4 => (
             DecryptorTag::Aes128,
-            Some(DecryptorData::from_dict(dict, length).ok_or(InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict, length)?),
         ),
         5 | 6 => (
             DecryptorTag::Aes256,
-            Some(DecryptorData::from_dict(dict, length).ok_or(InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict, length)?),
         ),
         _ => {
             return Err(DecryptionError::UnsupportedAlgorithm);
@@ -283,29 +283,46 @@ pub(crate) struct DecryptorData {
 }
 
 impl DecryptorData {
-    fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
+    fn from_dict(dict: &Dict<'_>, default_length: u16) -> Result<Self, DecryptionError> {
         let mut mappings = HashMap::new();
+        let mut unsupported = vec![];
 
         if let Some(dict) = dict.get::<Dict<'_>>(CF) {
             for key in dict.keys() {
-                if key.as_ref() != IDENTITY
-                    && let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
-                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
-                {
-                    mappings.insert(key.to_vec(), crypt_dict);
+                if key.as_ref() == IDENTITY {
+                    continue;
+                }
+
+                let Some(dict) = dict.get::<Dict<'_>>(key.as_ref()) else {
+                    continue;
+                };
+
+                match CryptDictionary::from_dict(&dict, default_length) {
+                    Some(crypt_dict) => {
+                        mappings.insert(key.to_vec(), crypt_dict);
+                    }
+                    None => unsupported.push(key.to_vec()),
                 }
             }
         }
 
-        let default_filter = |key| {
-            dict.get::<Name<'_>>(key)
-                .and_then(|name| mappings.get(name.deref()).copied())
-                .unwrap_or(CryptDictionary::identity(default_length))
+        let default_filter = |key| match dict.get::<Name<'_>>(key) {
+            Some(name) if unsupported.iter().any(|n| n.as_slice() == name.deref()) => {
+                Err(DecryptionError::UnsupportedAlgorithm)
+            }
+            Some(name) => Ok(mappings
+                .get(name.deref())
+                .copied()
+                .unwrap_or(CryptDictionary::identity(default_length))),
+            None => Ok(CryptDictionary::identity(default_length)),
         };
 
-        Some(Self {
-            stream_filter: default_filter(STM_F),
-            string_filter: default_filter(STR_F),
+        let stream_filter = default_filter(STM_F)?;
+        let string_filter = default_filter(STR_F)?;
+
+        Ok(Self {
+            stream_filter,
+            string_filter,
             crypt_filters: mappings,
         })
     }
@@ -319,7 +336,10 @@ struct CryptDictionary {
 
 impl CryptDictionary {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
-        let cfm = DecryptorTag::from_name(&dict.get::<Name<'_>>(CFM)?)?;
+        let cfm = match dict.get::<Name<'_>>(CFM) {
+            Some(name) => DecryptorTag::from_name(&name)?,
+            None => DecryptorTag::None,
+        };
         // `Length` is in bytes for the standard security handler.
         let mut length = dict.get::<u16>(LENGTH).unwrap_or(default_length / 8);
 
