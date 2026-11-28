@@ -1400,6 +1400,11 @@
     "file": "pdfs/custom/encrypted_cf_identity_ignored.pdf"
   },
   {
+    "id": "password_wrong_empty_user",
+    "file": "pdfs/custom/password_wrong_empty_user.pdf",
+    "password": "wrong"
+  },
+  {
     "id": "password_1",
     "file": "pdfs/custom/password_1.pdf",
     "password": "supersecret"
