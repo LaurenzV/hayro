@@ -288,7 +288,8 @@ impl DecryptorData {
 
         if let Some(dict) = dict.get::<Dict<'_>>(CF) {
             for key in dict.keys() {
-                if let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
+                if key.as_ref() != IDENTITY
+                    && let Some(dict) = dict.get::<Dict<'_>>(key.as_ref())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
                     mappings.insert(key.to_vec(), crypt_dict);
