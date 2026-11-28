@@ -376,8 +376,9 @@ pub(crate) fn select_standard_font(
 pub(crate) fn style_from_name_and_descriptor(name: &str, descriptor: &Dict<'_>) -> (bool, bool) {
     let lower = name.to_ascii_lowercase();
     let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
-        || lower.contains("bold")
-        || lower.contains("demi");
+        || ["bold", "demi", "black", "heavy"]
+            .iter()
+            .any(|weight| lower.contains(weight));
     let is_italic = descriptor
         .get::<f32>(ITALIC_ANGLE)
         .is_some_and(|a| a != 0.0)

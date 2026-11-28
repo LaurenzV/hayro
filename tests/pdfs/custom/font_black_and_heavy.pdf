@@ -1,0 +1,44 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 180 70] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 78 >>
+stream
+BT /F1 20 Tf 10 40 Td (Arial Black) Tj /F2 20 Tf 0 -28 Td (Bodoni Heavy) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /TrueType /BaseFont /Arial-Black /FirstChar 32 /LastChar 122 /Widths [278 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 722 722 0 0 0 0 0 722 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 556 0 556 611 556 0 0 0 278 0 556 278 0 611 611 0 0 389 0 0 0 556 0 0 556 0] /FontDescriptor 6 0 R >>
+endobj
+6 0 obj
+<< /Type /FontDescriptor /FontName /Arial-Black /Flags 32 /FontBBox [-194 -307 1688 1083] /ItalicAngle 0 /Ascent 1100 /Descent -310 /CapHeight 716 /StemV 196 >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Bodoni-Heavy /FirstChar 32 /LastChar 122 /Widths [250 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 722 667 0 0 0 0 0 778 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 500 0 444 556 444 0 0 0 278 0 556 278 0 556 500 0 0 444 0 0 0 500 0 0 500 0] /FontDescriptor 8 0 R >>
+endobj
+8 0 obj
+<< /Type /FontDescriptor /FontName /Bodoni-Heavy /Flags 34 /FontBBox [-150 -250 1150 950] /ItalicAngle 0 /Ascent 950 /Descent -250 /CapHeight 680 /StemV 180 >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000250 00000 n 
+0000000378 00000 n 
+0000000727 00000 n 
+0000000903 00000 n 
+0000001250 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1425
+%%EOF
