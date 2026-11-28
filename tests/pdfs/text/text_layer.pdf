@@ -1,0 +1,119 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 8 0 R /F4 11 0 R >> /Pattern << /P1 13 0 R >> /ExtGState << /GS1 << /SMask << /Type /Mask /S /Luminosity /G 14 0 R >> >> >> >> >>
+endobj
+4 0 obj
+<< /Length 314 >>
+stream
+BT /F1 12 Tf 10 80 Td (Fish & <Chips>) Tj ET
+BT /F2 12 Tf 10 60 Td <01> Tj ET
+BT /F1 12 Tf 2 Tr 30 60 Td (outlined) Tj 0 Tr ET
+q 0 1 -1 0 120 10 cm BT /F1 12 Tf 0 0 Td (up) Tj ET Q
+BT /F3 12 Tf 140 90 Td <00010002> Tj ET
+BT /F4 12 Tf 10 40 Td (a) Tj ET
+/Pattern cs /P1 scn 40 10 30 30 re f
+/GS1 gs 80 10 30 30 re f
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /Differences [1 /fi] >> /ToUnicode 7 0 R >>
+endobj
+7 0 obj
+<< /Length 252 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CMapName /Ligature def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+1 beginbfchar
+<01> <00660069>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+endstream
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /Vertical /Encoding /Identity-V /DescendantFonts [9 0 R] /ToUnicode 10 0 R >>
+endobj
+9 0 obj
+<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Vertical /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor << /Type /FontDescriptor /FontName /Vertical /Flags 4 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >> /DW 1000 /CIDToGIDMap /Identity >>
+endobj
+10 0 obj
+<< /Length 268 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CMapName /Vertical def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+2 beginbfchar
+<0001> <7E26>
+<0002> <66F8>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+endstream
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 12 0 R >> /Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+12 0 obj
+<< /Length 41 >>
+stream
+1000 0 d0 BT /F1 1000 Tf 0 0 Td (X) Tj ET
+endstream
+endobj
+13 0 obj
+<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 15 15] /XStep 15 /YStep 15 /Resources << /Font << /F1 5 0 R >> >> /Length 29 >>
+stream
+BT /F1 10 Tf 2 3 Td (P) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group << /S /Transparency /CS /DeviceGray >> /Resources << /Font << /F1 5 0 R >> >> /Length 35 >>
+stream
+BT /F1 30 Tf 1 g 82 15 Td (M) Tj ET
+endstream
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000376 00000 n 
+0000000741 00000 n 
+0000000811 00000 n 
+0000000951 00000 n 
+0000001254 00000 n 
+0000001388 00000 n 
+0000001737 00000 n 
+0000002057 00000 n 
+0000002328 00000 n 
+0000002420 00000 n 
+0000002634 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+2855
+%%EOF
