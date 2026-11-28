@@ -148,7 +148,7 @@ pub(crate) fn get_glyph<'a>(
     match font.glyph(glyph, char_code) {
         FontGlyph::Outline(outline) => Glyph::Outline(outline),
         FontGlyph::Type3(glyph) => {
-            let nesting_depth = ctx.nesting_depth() + 1;
+            let nesting_depth = ctx.nesting_depth().saturating_add(1);
 
             Glyph::Type3(Box::new(Type3Glyph {
                 glyph,

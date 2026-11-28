@@ -19,6 +19,10 @@ pub(crate) fn render_glyph<'a>(
     paint: &Paint<'a>,
     device: &mut impl Device<'a>,
 ) -> Option<()> {
+    if glyph.nesting_depth > crate::context::MAX_NESTED_INTERPRETATION_DEPTH {
+        return None;
+    }
+
     let mut state = glyph.state.clone();
     let root_transform = transform
         * glyph_transform

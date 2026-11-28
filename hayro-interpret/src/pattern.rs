@@ -188,7 +188,7 @@ impl<'a> TilingPattern<'a> {
                 .unwrap_or_else(ColorSpace::device_gray);
             Color::new(cs, paint.color.clone(), 1.0)
         });
-        let nesting_depth = ctx.nesting_depth() + 1;
+        let nesting_depth = ctx.nesting_depth().saturating_add(1);
         let resources = Resources::new(dict.get(RESOURCES).unwrap_or_default());
 
         Some(Self {
@@ -210,6 +210,10 @@ impl<'a> TilingPattern<'a> {
 
     /// Interpret the contents of the pattern into the given device.
     pub fn interpret(&self, device: &mut impl Device<'a>, initial_transform: Affine) -> Option<()> {
+        if self.nesting_depth > crate::context::MAX_NESTED_INTERPRETATION_DEPTH {
+            return None;
+        }
+
         let state = State::new(initial_transform);
 
         let mut context = Context::new_with(

@@ -109,7 +109,7 @@ impl<'a> SoftMask<'a> {
             ),
             _ => return None,
         };
-        let nesting_depth = context.nesting_depth() + 1;
+        let nesting_depth = context.nesting_depth().saturating_add(1);
         let parent_resources_key = group
             .resources
             .is_none()
