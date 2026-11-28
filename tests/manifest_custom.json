@@ -99,6 +99,10 @@
     "file": "pdfs/custom/filter_tiff_predictor_gray.pdf"
   },
   {
+    "id": "font_black_and_heavy",
+    "file": "pdfs/custom/font_black_and_heavy.pdf"
+  },
+  {
     "id": "font_cid_1",
     "file": "pdfs/custom/font_cid_1.pdf"
   },

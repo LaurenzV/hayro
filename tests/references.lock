@@ -181,6 +181,7 @@ raster/custom/filter_tiff_predictor_gray.png da10eec1a96673fc7cfec4393e1582ec
 raster/custom/fireworks.png fe68141a454ae8b10d80d2cee9fa7ea4
 raster/custom/flate_predictor_bpc_1.png bb1138d878a0ed1eee929cae80d4f766
 raster/custom/flate_predictor_invalid.png fbefc353081bdb17a02259138beac7d6
+raster/custom/font_black_and_heavy.png 41927b11ca078111118076d9dd4bd2d1
 raster/custom/font_cid_1.png 5e1cccc7f324608dfd53cdcc4a954749
 raster/custom/font_cid_2.png e251fe80a782bafcc200b450a3d0c953
 raster/custom/font_cid_3.png 9e3b4126ce5128c11408f196fc0c8265
@@ -552,7 +553,7 @@ raster/pdfbox/1325.png 4d157261bb25490b6a2c8f2a4dadc9d8
 raster/pdfbox/1348.png 2c7375f9b7ba6cc13520f5e4830b33db
 raster/pdfbox/1416_p0.png 789f9871b54cbc79581a513aae97435c
 raster/pdfbox/1416_p1.png 516c2831a5107e3d76603e6007cde568
-raster/pdfbox/142.png 7fe0f1f7760bd301a43db0f3a0895515
+raster/pdfbox/142.png 2718baabff5af34008fb49935fef4e9b
 raster/pdfbox/1442.png 3acf96bb1c5834756bfb18abba896202
 raster/pdfbox/1451.png 575f2781cb103fa9bf36ab8f1da01720
 raster/pdfbox/1570_p0.png 0a604fb65795270b03898cd5bd9be527
@@ -687,11 +688,11 @@ raster/pdfbox/2217.png c3cdd9221ff144149efd4c5a436e8bd3
 raster/pdfbox/2228.png f7a446cd86c2f18f2f4a5fc4737a16af
 raster/pdfbox/2241.png b937e3d3904cafb29da41dfc8f353478
 raster/pdfbox/2243.png dd2a403755c2239c4ab5e25682eb06ad
-raster/pdfbox/2244.png 9cfa2b2e3d43941df6374fdcb11cecec
-raster/pdfbox/2296_p0.png d869f3b4dc1f814c802fb2a584d7d21e
-raster/pdfbox/2296_p1.png 2769e8d3f2de65d8c81489c7e234332e
-raster/pdfbox/2296_p2.png 52af3d12ef3ec9926bbd8a9ffe48883d
-raster/pdfbox/2296_p3.png ebe5ebb3915e8ed1917e02c416ad0a41
+raster/pdfbox/2244.png 37d77dbe6ed6b17449e6d005a231c7d7
+raster/pdfbox/2296_p0.png c01d5380c0dc0984645dfe1f8fdffae9
+raster/pdfbox/2296_p1.png ef73a3063a27528f7f1efbc9adf82f81
+raster/pdfbox/2296_p2.png 2484c11a87a983d3e50ce0d96ea19abc
+raster/pdfbox/2296_p3.png eaa6beb7c77356f1771a940c7ef71a02
 raster/pdfbox/2315.png 9d01e008edea4759115005da574bf8ea
 raster/pdfbox/2339.png 92ea658efcd4a92e637f821068bab88f
 raster/pdfbox/2344.png 7d19ea90390a6264cc6999a972960fe9
@@ -1997,7 +1998,7 @@ raster/pdfjs/issue4881.png 649da0114d95e2791ac776a63610c65b
 raster/pdfjs/issue4883.png 01915cccf8de646e41ff4517fcf69a01
 raster/pdfjs/issue4890.png e4a00c8b51cdae777d3b12f8b417e41d
 raster/pdfjs/issue4909.png 335fdeb6ae843db088d4c909fbc0e460
-raster/pdfjs/issue4926_p0.png e2caafb4d0de0300b977a6e984c39ab6
+raster/pdfjs/issue4926_p0.png 584e4bfbeb7b618f23cbee69972ca63a
 raster/pdfjs/issue4926_p1.png bcbbb88b4055e765bcdcee25359e47ba
 raster/pdfjs/issue4926_p2.png bdda4c07a65f90dfc4fa264df04dac84
 raster/pdfjs/issue4934.png 8935aa96f01d0ae45cd2138ae16148c6
@@ -2058,7 +2059,7 @@ raster/pdfjs/issue6071.png c54ea07b138fd34e3bbf5b8d8a1cce4a
 raster/pdfjs/issue6081.png 686a558dc1b05eb1d15bbe44a7aeed74
 raster/pdfjs/issue6099.png d3616ababd30579a47fbe1e47d2ca9aa
 raster/pdfjs/issue6113.png 87f40a55cfc46c84e4bf13c7749095e7
-raster/pdfjs/issue6117.png 56eb477b1ee9485328154240cb79a4f6
+raster/pdfjs/issue6117.png 36350a425bbdc14116bddf61bf4165e1
 raster/pdfjs/issue6127.png a36fa84a22dfd02acd59c8ab9d8cd585
 raster/pdfjs/issue6132.png b725c3f6b8ecb092742750e2c2edc490
 raster/pdfjs/issue6165.png 64c3c8b9e696db989eab476158cb9cc6
