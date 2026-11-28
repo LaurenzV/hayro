@@ -296,16 +296,15 @@ impl DecryptorData {
             }
         }
 
-        let stm_f = *mappings
-            .get(dict.get::<Name<'_>>(STM_F)?.deref())
-            .unwrap_or(&CryptDictionary::identity(default_length));
-        let str_f = *mappings
-            .get(dict.get::<Name<'_>>(STR_F)?.deref())
-            .unwrap_or(&CryptDictionary::identity(default_length));
+        let default_filter = |key| {
+            dict.get::<Name<'_>>(key)
+                .and_then(|name| mappings.get(name.deref()).copied())
+                .unwrap_or(CryptDictionary::identity(default_length))
+        };
 
         Some(Self {
-            stream_filter: stm_f,
-            string_filter: str_f,
+            stream_filter: default_filter(STM_F),
+            string_filter: default_filter(STR_F),
             crypt_filters: mappings,
         })
     }
