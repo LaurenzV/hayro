@@ -87,6 +87,14 @@ pub(crate) enum DecryptionTarget<'a> {
 }
 
 impl Decryptor {
+    pub(crate) fn set_metadata_id(&mut self, id: ObjectIdentifier) {
+        if let Self::Aes128 { dict, .. } | Self::Aes256 { dict, .. } = self
+            && !dict.encrypt_metadata
+        {
+            dict.metadata_id = Some(id);
+        }
+    }
+
     pub(crate) fn decrypt(
         &self,
         id: ObjectIdentifier,
@@ -106,6 +114,9 @@ impl Decryptor {
             Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
+                    DecryptionTarget::Stream if dict.metadata_id == Some(id) => {
+                        return Some(data.to_vec());
+                    }
                     DecryptionTarget::Stream => dict.stream_filter,
                     DecryptionTarget::Named(name) => *dict.crypt_filters.get(name)?,
                 };
@@ -155,11 +166,11 @@ fn decryptor(dict: &Dict<'_>, id: &[u8], password: &[u8]) -> Result<Decryptor, D
         2 => (DecryptorTag::Rc4, None),
         4 => (
             DecryptorTag::Aes128,
-            Some(DecryptorData::from_dict(dict, length)?),
+            Some(DecryptorData::from_dict(dict, length, encrypt_metadata)?),
         ),
         5 | 6 => (
             DecryptorTag::Aes256,
-            Some(DecryptorData::from_dict(dict, length)?),
+            Some(DecryptorData::from_dict(dict, length, encrypt_metadata)?),
         ),
         _ => {
             return Err(DecryptionError::UnsupportedAlgorithm);
@@ -289,10 +300,16 @@ pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
     crypt_filters: HashMap<Vec<u8>, CryptDictionary>,
+    encrypt_metadata: bool,
+    metadata_id: Option<ObjectIdentifier>,
 }
 
 impl DecryptorData {
-    fn from_dict(dict: &Dict<'_>, default_length: u16) -> Result<Self, DecryptionError> {
+    fn from_dict(
+        dict: &Dict<'_>,
+        default_length: u16,
+        encrypt_metadata: bool,
+    ) -> Result<Self, DecryptionError> {
         let mut mappings = HashMap::new();
         let mut unsupported = vec![];
 
@@ -333,6 +350,8 @@ impl DecryptorData {
             stream_filter,
             string_filter,
             crypt_filters: mappings,
+            encrypt_metadata,
+            metadata_id: None,
         })
     }
 }
